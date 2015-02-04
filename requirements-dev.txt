@@ -1,0 +1,9 @@
+-r requirements.txt
+coverage
+flake8
+pytest
+mock
+pytest-ipdb
+# older ipython is necessary for py26 compatibility
+ipython<2.0.0
+wheel>=0.22
