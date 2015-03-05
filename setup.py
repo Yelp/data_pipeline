@@ -19,7 +19,7 @@ history = open('HISTORY.rst').read().replace('.. :changelog:', '')
 setup(
     name='data_pipeline',
     version=data_pipeline.__version__,
-    description="Provides an interface to tail and publish to data pipeline topics.",
+    description="Provides an interface to consume and publish to data pipeline topics.",
     long_description=readme + '\n\n' + doclink + '\n\n' + history,
     author=data_pipeline.__author__,
     author_email=data_pipeline.__email__,
@@ -30,6 +30,9 @@ setup(
     package_dir={'data_pipeline': 'data_pipeline'},
     include_package_data=True,
     install_requires=[
+        'avro>=1.7.7',
+        'cached-property>=0.1.2',
+        'enum34>=1.0.4',
     ],
     zip_safe=False,
     keywords='data_pipeline',

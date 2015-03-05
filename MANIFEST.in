@@ -1,5 +1,7 @@
+include schemas/envelope_v1.avsc
 include AUTHORS.rst
 include CONTRIBUTING.rst
 include HISTORY.rst
-include LICENSE
 include README.rst
+include TODO.rst
+include USAGE.rst
