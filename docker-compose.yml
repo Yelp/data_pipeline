@@ -1,0 +1,20 @@
+pypy:
+  build: .
+  links:
+    - kafka
+  volumes:
+      - .:/data
+zookeeper:
+  image: wurstmeister/zookeeper
+  ports:
+    - "2181"
+kafka:
+  image: wurstmeister/kafka:0.8.2.0
+  ports:
+    - "49155:9092"
+  links:
+    - zookeeper:zk
+  environment:
+    KAFKA_ADVERTISED_HOST_NAME: "169.254.255.254"
+  volumes:
+    -  /var/run/docker.sock:/var/run/docker.sock

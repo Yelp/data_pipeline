@@ -5,6 +5,7 @@
 
 # Develoopment Environment
 virtualenv_run
+venv
 
 # Packages
 *.egg
@@ -46,3 +47,6 @@ docs/build
 
 # Vim
 *.swp
+
+# Cache
+__pycache__

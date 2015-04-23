@@ -1,8 +1,12 @@
--r requirements.txt
+-e .
+-i https://pypi-dev.yelpcorp.com/simple/
 coverage
 flake8
 pytest
+pytest-benchmark>=2.3.0
 mock
+terminaltables>=1.0.2
 # older ipython is necessary for py26 compatibility
 ipython<2.0.0
 wheel>=0.22
+ipdb

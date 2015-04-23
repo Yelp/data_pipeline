@@ -1,10 +1,13 @@
+from __future__ import absolute_import
+
 import time
-import libuuid
-from .message_type import MessageType
-from .message_type import ProtectedMessageType
+from data_pipeline.fast_uuid import FastUUID
+from data_pipeline.message_type import MessageType
+from data_pipeline.message_type import ProtectedMessageType
 
 
 class Message(object):
+    fast_uuid = FastUUID()
 
     def __init__(
         self, schema_id, payload, message_type, uuid=None, contains_pii=False,
@@ -26,12 +29,12 @@ class Message(object):
         self.message_type = message_type
 
         if uuid is None:
-            # UUID generation is expensive.  Using libuuid instead of the built
+            # UUID generation is expensive.  Using FastUUID instead of the built
             # in UUID methods increases Messages that can be instantiated per
-            # second from ~25,000 to ~225,000.  Not generating UUIDs at all
+            # second from ~25,000 to ~185,000.  Not generating UUIDs at all
             # increases the throughput further still to about 730,000 per
             # second.
-            uuid = libuuid.uuid4_bytes()
+            uuid = self.fast_uuid.uuid4()
         elif len(uuid) != 16:
             raise ValueError(
                 "UUIDs should be exactly 16 bytes.  Conforming UUID's can be "

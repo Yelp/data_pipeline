@@ -32,7 +32,10 @@ setup(
     install_requires=[
         'avro>=1.7.7',
         'cached-property>=0.1.2',
+        'cffi',
         'enum34>=1.0.4',
+        'kafka-python',
+        'yelp_kafka'
     ],
     zip_safe=False,
     keywords='data_pipeline',
