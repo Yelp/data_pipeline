@@ -11,7 +11,7 @@ zookeeper:
 kafka:
   image: wurstmeister/kafka:0.8.2.0
   ports:
-    - "49155:9092"
+    - "49255:9092"
   links:
     - zookeeper:zk
   environment:

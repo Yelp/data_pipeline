@@ -1,4 +1,3 @@
 -r requirements-dev.txt
 yelp_redshift
 sqlparse
-docker-compose

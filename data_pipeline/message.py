@@ -1,18 +1,52 @@
 from __future__ import absolute_import
 
 import time
-from data_pipeline.fast_uuid import FastUUID
+from data_pipeline.fast_uuid import _FastUUID
 from data_pipeline.message_type import MessageType
-from data_pipeline.message_type import ProtectedMessageType
 
 
 class Message(object):
-    fast_uuid = FastUUID()
+    """Encapsulates a data pipeline message with metadata about the message.
+
+    Validates metadata, but not the payload itself.
+
+    Args:
+        topic (str): Kafka topic to publish into
+        schema_id (int): Identifies the schema used to encode the payload
+        payload (bytes): Avro-encoded message - encoded with schema identified
+            by `schema_id`.
+        message_type (data_pipeline.message_type.MessageType): Identifies the
+            nature of the message.
+        uuid (bytes, optional): Globally-unique 16-byte identifier for the
+            message.  A uuid4 will be generated automatically if this isn't
+            provided.
+        contains_pii (bool, optional): Indicates that the payload contains PII,
+            so the clientlib can properly encrypt the data and mark it as
+            sensitive, default to False.
+        timestamp (int, optional): A unix timestamp for the message.  If this is
+            not provided, a timestamp will be generated automatically.  If the
+            message is coming directly from an upstream source, and the
+            modification time is available in that source, it's appropriate to
+            use that timestamp.  Otherwise, it's probably best to have the
+            timestamp represent when the message was generated.
+    """
+
+    fast_uuid = _FastUUID()
+    """UUID generator - this isn't a @cached_property so it can be serialized"""
 
     def __init__(
-        self, schema_id, payload, message_type, uuid=None, contains_pii=False,
+        self, topic, schema_id, payload, message_type, uuid=None, contains_pii=False,
         timestamp=None
     ):
+        # The decision not to just pack the message to validate it is
+        # intentional here.  We want to perform more sanity checks than avro
+        # does, and in addition, this check is quite a bit faster than
+        # serialization.  Finally, if we do it this way, we can lazily
+        # serialize the payload in a subclass if necessary.
+        if not isinstance(topic, str) or len(topic) == 0:
+            raise ValueError("Topic must be a non-empty string")
+        self.topic = topic
+
         if not isinstance(schema_id, int):
             raise ValueError("Schema id should be an int")
         self.schema_id = schema_id
@@ -53,6 +87,12 @@ class Message(object):
         self.timestamp = timestamp
 
     def get_avro_repr(self):
+        """Prepare the message for packing
+
+        Returns:
+            dict: Dictionary that can be packed by
+                :func:`data_pipeline.envelope.Envelope.pack`.
+        """
         return {
             'uuid': self.uuid,
             'message_type': self.message_type.name,

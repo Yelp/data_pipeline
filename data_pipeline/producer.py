@@ -9,10 +9,9 @@ from collections import namedtuple
 from data_pipeline.config import get_kafka_client
 from data_pipeline.client import Client
 from data_pipeline.envelope import Envelope
-from multiprocessing import Process, Queue, Pool
+from multiprocessing import Process, Queue, Event, Pool
 
 
-TopicAndMessage = namedtuple("TopicAndMessage", ["topic", "message"])
 EnvelopeAndMessage = namedtuple("EnvelopeAndMessage", ["envelope", "message"])
 
 
@@ -23,13 +22,7 @@ class Producer(Client):
         return _KafkaProducer(use_work_pool=self.use_work_pool)
 
     def __init__(self, use_work_pool=False):
-        self.async = async
         self.use_work_pool = use_work_pool
-
-        if self.async:
-            self.queue = Queue(self.max_queue_size)
-            self.async_process = Process(target=self._consume_async_queue, args=(self.queue,))
-            self.async_process.start()
 
     def __enter__(self):
         return self
@@ -39,47 +32,65 @@ class Producer(Client):
         return False  # don't supress the exception, if there is one
 
     def publish(self, topic_and_message):
-        if self.async:
-            self._publish_async(topic_and_message)
-        else:
-            self._publish_sync(topic_and_message)
+        self._kafka_producer.publish(topic_and_message)
 
     def flush(self):
-        if self.async:
-            self.queue.put(self.flush_marker)
-        else:
-            self._kafka_producer.flush_buffered_messages()
+        self._kafka_producer.flush_buffered_messages()
 
     def close(self):
-        if self.async:
-            self.queue.put(self.stop_marker)
-            self.queue.close()
-            self.async_process.join()
-            self.queue = None
-            self.async_process = None
-        else:
-            self._kafka_producer.close()
-
-    def _consume_async_queue(self, queue):
-        item = queue.get()
-        while item != self.stop_marker:
-            topic_and_message = item
-            self._publish_sync(topic_and_message)
-            item = queue.get()
-        queue.close()
         self._kafka_producer.close()
-
-    def _publish_async(self, topic_and_message):
-        self.queue.put(topic_and_message)
-
-    def _publish_sync(self, topic_and_message):
-        self._kafka_producer.publish(topic_and_message)
 
 
 class AsyncProducer(Producer):
+    """AsyncProducer wraps the Producer making many of the operations
+    asynchronous.  The AsyncProducer uses a python multiprocessing queue
+    to pass messages to a subprocess.  The subprocess is responsible for
+    publishing messages to Kafka.
+    """
     stop_marker = 0
     flush_marker = 1
     max_queue_size = 10000  # Double the number of messages to buffer
+
+    def __init__(self, *args, **kwargs):
+        super(AsyncProducer, self).__init__(*args, **kwargs)
+
+        self.queue = Queue(self.max_queue_size)
+
+        # This event is used to block the foreground process until the
+        # background process is able to finish flushing, since flush should
+        # be a syncronous operation
+        self.flush_complete_event = Event()
+
+        self.async_process = Process(target=self._consume_async_queue, args=(self.queue, self.flush_complete_event))
+        self.async_process.start()
+
+    def publish(self, topic_and_message):
+        self.queue.put(topic_and_message)
+
+    def flush(self):
+        self.flush_complete_event.clear()
+        self.queue.put(self.flush_marker)
+        self.flush_complete_event.wait()
+
+    def close(self):
+        self.queue.put(self.stop_marker)
+        self.queue.close()
+        self.async_process.join()
+        self.queue = None
+        self.async_process = None
+
+    def _consume_async_queue(self, queue, flush_complete_event):
+        item = queue.get()
+        while item != self.stop_marker:
+            if item == self.flush_marker:
+                super(AsyncProducer, self).flush()
+                flush_complete_event.set()
+            else:
+                topic_and_message = item
+                super(AsyncProducer, self).publish(topic_and_message)
+            item = queue.get()
+        queue.close()
+        super(AsyncProducer, self).close()
 
 
 # prepapre needs to be in the module top level so it can be serialized for

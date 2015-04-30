@@ -13,7 +13,6 @@ Contents:
 
    installation
    usage
-   example
    contributing
    authors
    history
@@ -26,5 +25,5 @@ If you have any suggestions or questions about **Data Pipeline Clientlib** feel 
 at justinc@yelp.com.
 
 If you encounter any errors or problems with **Data Pipeline Clientlib**, please let me know!
-Create an issue on jira under the **BAM** project at
-https://jira.yelpcorp.com/browse/BAM.
+Create an issue on jira under the **DATAPIPE** project at
+https://jira.yelpcorp.com/browse/DATAPIPE.

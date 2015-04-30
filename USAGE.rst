@@ -16,5 +16,3 @@ And another thing::
 
     >>> from data_pipeline.envelope import Envelope
     >>> envelope = Envelope()
-    >>> envelope.schema()
-    20

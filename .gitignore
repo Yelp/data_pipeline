@@ -44,9 +44,15 @@ output/*/index.html
 
 # Sphinx
 docs/build
+docs/code
 
 # Vim
 *.swp
 
 # Cache
 __pycache__
+
+# tmp
+tmp
+out.txt
+scratch
