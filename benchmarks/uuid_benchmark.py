@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 from cached_property import cached_property
-from data_pipeline.fast_uuid import _FastUUID
+from data_pipeline._fast_uuid import FastUUID
 from benchmarks.benchmarks import Benchmarks
 
 import uuid
@@ -10,7 +10,7 @@ import uuid
 class UUIDBenchmark(object):
     @cached_property
     def fast_uuid(self):
-        return _FastUUID()
+        return FastUUID()
 
     def benchmark_fastuuid_uuid1(self):
         self.fast_uuid.uuid1()

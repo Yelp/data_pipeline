@@ -27,9 +27,3 @@ decrease test time dramatically.
 It is recommended to run `foreman` in a background tab, and `guard` in a
 foreground tab, as `foreman` will let you inspect the logs of the running
 `kafka` containers, while `guard` will show test results as files are changed.
-
-Features
---------
-
-* A fast producer for Kafka
-

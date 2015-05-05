@@ -14,9 +14,8 @@ Contents:
    installation
    usage
    contributing
-   authors
    history
-   todo
+   code/data_pipeline
 
 Feedback
 ========

@@ -56,3 +56,7 @@ __pycache__
 tmp
 out.txt
 scratch
+
+# Artificats
+twistd.pid
+logs/*.log

@@ -13,8 +13,8 @@ Types of Contributions
 Report Bugs
 ~~~~~~~~~~~
 
-Report bugs at https://jira.yelpcorp.com/browse/BAM/,
-on the BAM project.
+Report bugs at https://jira.yelpcorp.com/browse/DATAPIPE/,
+on the DATAPIPE project.
 
 If you are reporting a bug, please include:
 
@@ -37,8 +37,8 @@ Submit Feedback
 ~~~~~~~~~~~~~~~
 
 The best way to send feedback is to file an issue at
-https://jira.yelpcorp.com/browse/BAM/ on the
-BAM project.
+https://jira.yelpcorp.com/browse/DATAPIPE/ on the
+DATAPIPE project.
 
 If you are proposing a feature:
 
@@ -61,6 +61,8 @@ local development.
     $ git checkout -b name-of-your-bugfix-or-feature
 
 Now you can make your changes locally.
+
+See :doc:`index` for information about setting up TDD tools.
 
 3. When you're done making changes, check that your changes pass style and unit
    tests, including testing other Python versions with tox::
@@ -97,4 +99,4 @@ Tips
 
 To run a subset of tests::
 
-     $ py.test test/test_data_pipeline.py
+     $ py.test tests/data_pipeline_test.py

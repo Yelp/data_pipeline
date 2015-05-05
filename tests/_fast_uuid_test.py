@@ -4,13 +4,13 @@ from __future__ import unicode_literals
 
 import pytest
 
-from data_pipeline.fast_uuid import _FastUUID
+from data_pipeline._fast_uuid import FastUUID
 
 
 class TestFastUUID(object):
     @pytest.fixture
     def fast_uuid(self):
-        return _FastUUID()
+        return FastUUID()
 
     def test_uuid1(self, fast_uuid):
         assert self._is_valid_uuid(fast_uuid.uuid1())

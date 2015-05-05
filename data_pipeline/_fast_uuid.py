@@ -1,7 +1,7 @@
 from cffi import FFI
 
 
-class _FastUUID(object):
+class FastUUID(object):
     """Fast c-wrapper for for uuid generation
 
     This class wraps the libuuid (http://linux.die.net/man/3/libuuid)
@@ -60,11 +60,11 @@ class _FastUUID(object):
     def __init__(self):
         # Store these on the class since they should only ever be called
         # once
-        if _FastUUID._ffi is None:
-            _FastUUID._ffi = FFI()
+        if FastUUID._ffi is None:
+            FastUUID._ffi = FFI()
 
             # These definitions are from uuid.h
-            _FastUUID._ffi.cdef("""
+            FastUUID._ffi.cdef("""
                 typedef unsigned char uuid_t[16];
 
                 void uuid_generate(uuid_t out);
@@ -72,7 +72,7 @@ class _FastUUID(object):
                 void uuid_generate_time(uuid_t out);
             """)
 
-            _FastUUID._libuuid = _FastUUID._ffi.verify(
+            FastUUID._libuuid = FastUUID._ffi.verify(
                 "#include <uuid/uuid.h>",
                 libraries=['uuid']
             )
@@ -80,7 +80,7 @@ class _FastUUID(object):
         # Keeping only one copy of this around does result in
         # pretty substantial performance improvements - in the 10,000s of
         # messages per second range
-        self.output = _FastUUID._ffi.new("uuid_t")
+        self.output = FastUUID._ffi.new("uuid_t")
 
     def uuid1(self):
         """Generates a uuid1 - a device specific uuid
@@ -88,7 +88,7 @@ class _FastUUID(object):
         Returns:
             bytes: 16-byte uuid
         """
-        _FastUUID._libuuid.uuid_generate_time(self.output)
+        FastUUID._libuuid.uuid_generate_time(self.output)
         return self._get_output_bytes()
 
     def uuid4(self):
@@ -97,8 +97,8 @@ class _FastUUID(object):
         Returns:
             bytes: 16-byte uuid
         """
-        _FastUUID._libuuid.uuid_generate_random(self.output)
+        FastUUID._libuuid.uuid_generate_random(self.output)
         return self._get_output_bytes()
 
     def _get_output_bytes(self):
-        return bytes(_FastUUID._ffi.buffer(self.output))
+        return bytes(FastUUID._ffi.buffer(self.output))

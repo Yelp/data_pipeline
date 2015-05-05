@@ -6,7 +6,6 @@ import staticconf
 import sys
 from decimal import Decimal
 from terminaltables import AsciiTable
-from terminaltables import UnixTable
 from yelp_redshift import client
 
 

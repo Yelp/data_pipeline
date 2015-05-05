@@ -1,27 +1,59 @@
 from __future__ import absolute_import
 
-import time
-from kafka import create_message
-from kafka.common import ProduceRequest
 from cached_property import cached_property
-from collections import defaultdict
-from collections import namedtuple
-from data_pipeline.config import get_kafka_client
+
+from data_pipeline.config import logger
 from data_pipeline.client import Client
-from data_pipeline.envelope import Envelope
-from multiprocessing import Process, Queue, Event, Pool
-
-
-EnvelopeAndMessage = namedtuple("EnvelopeAndMessage", ["envelope", "message"])
+from data_pipeline._kafka_producer import LoggingKafkaProducer
+from data_pipeline._pooled_kafka_producer import PooledKafkaProducer
 
 
 class Producer(Client):
+    """Producers are context managers, that provide a high level interface for
+    publishing :class:`data_pipeline.message.Message` instances into the data
+    pipeline.
+
+    When messages are handed to a producer via the :meth:`publish` method, they
+    aren't immediately published into Kafka.  Instead, they're buffered until
+    a number of messages are accumulated, or too much time has passed,
+    then published all at once.  This process is designed to be largely
+    transparent to the user.
+
+    **Examples**:
+
+      At it's simplest, start a producer and publish messages to it::
+
+          with Producer() as producer:
+              producer.publish(message)
+
+      Messages are not immediately published, but are buffered.  Consequently,
+      it may sometimes be necessary to flush the buffer before doing some
+      tasks::
+
+          with Producer() as producer:
+              while upstream.has_another_batch_of_messages():
+                  for message in upstream.get_messages_from_upstream():
+                      producer.publish()
+
+                  producer.flush()
+                  upstream.all_those_messages_were published()
+
+    Args:
+      use_work_pool (bool): If true, the process will use a multiprocessing
+        pool to serialize messages in preperation for transport.  The work pool
+        can parallelize some expensive serialization.  Default is false.
+    """
 
     @cached_property
     def _kafka_producer(self):
-        return _KafkaProducer(use_work_pool=self.use_work_pool)
+        if self.use_work_pool:
+            return PooledKafkaProducer(self._notify_messages_published)
+        else:
+            return LoggingKafkaProducer(self._notify_messages_published)
 
     def __init__(self, use_work_pool=False):
+        # TODO: This should call the Client to capture information about the
+        # producer
         self.use_work_pool = use_work_pool
 
     def __enter__(self):
@@ -31,154 +63,81 @@ class Producer(Client):
         self.close()
         return False  # don't supress the exception, if there is one
 
-    def publish(self, topic_and_message):
-        self._kafka_producer.publish(topic_and_message)
+    def publish(self, message):
+        """Adds the message to the buffer to be published.  Messages are
+        published after a number of messages are accumulated or after a
+        slight time delay, whichever passes first.  Passing a message to
+        publish does not guarantee that it will be successfully published into
+        Kafka.
+
+        **TODO**:
+
+        * Point to information about the message accumulation and time
+          delay config.
+        * Include information about checking which messages have actually
+          been published.
+
+        Args:
+            message (data_pipeline.message.Message): message to publish
+        """
+        self._kafka_producer.publish(message)
+
+    def ensure_messages_published(self, messages, topic_offsets):
+        """This method should only be used when recovering after an unclean
+        shutdown, and only if the upstream message source is persistent and can
+        be rewound and replayed.  All messages produced since the last
+        successful checkpoint should be passed as a list into this method,
+        which will then ensure that each message has either already been
+        published into Kafka, or will publish each message into Kafka.
+
+        The call will block until all messages are published successfully.
+
+        Args:
+            messages (list of :class:`data_pipeline.message.Message`): List of
+                messages to ensure are published.
+            topic_offsets (dict of str to int): The topic offsets should be a
+                dictionary containing the offset of the next message that would
+                be published in each topic.  This should be in the format of
+                :attr:`data_pipeline.position_data.PositionData.topic_to_kafka_offset_map`.
+        """
+        raise NotImplementedError
 
     def flush(self):
+        """Block until all data pipeline messages have been
+        successfully published into Kafka.
+        """
         self._kafka_producer.flush_buffered_messages()
 
     def close(self):
+        """Closes the producer, flushing all buffered messages into Kafka.
+        Calling this method directly is not recommended, instead, use the
+        producer as a context manager::
+
+            with Producer() as producer:
+                producer.publish(message)
+                ...
+                producer.publish(message)
+        """
         self._kafka_producer.close()
 
+    def get_checkpoint_position_data(self):
+        """
+        returns:
+            PositionData: `PositionData` structure
+                containing details about the last messages published to Kafka,
+                including Kafka offsets and upstream position information.
+        """
+        if not hasattr(self, 'position_data'):
+            self._kafka_producer.wake()
+        return self.position_data
 
-class AsyncProducer(Producer):
-    """AsyncProducer wraps the Producer making many of the operations
-    asynchronous.  The AsyncProducer uses a python multiprocessing queue
-    to pass messages to a subprocess.  The subprocess is responsible for
-    publishing messages to Kafka.
-    """
-    stop_marker = 0
-    flush_marker = 1
-    max_queue_size = 10000  # Double the number of messages to buffer
+    def _notify_messages_published(self, position_data):
+        """Called to notify the producer of successfully published messages.
 
-    def __init__(self, *args, **kwargs):
-        super(AsyncProducer, self).__init__(*args, **kwargs)
-
-        self.queue = Queue(self.max_queue_size)
-
-        # This event is used to block the foreground process until the
-        # background process is able to finish flushing, since flush should
-        # be a syncronous operation
-        self.flush_complete_event = Event()
-
-        self.async_process = Process(target=self._consume_async_queue, args=(self.queue, self.flush_complete_event))
-        self.async_process.start()
-
-    def publish(self, topic_and_message):
-        self.queue.put(topic_and_message)
-
-    def flush(self):
-        self.flush_complete_event.clear()
-        self.queue.put(self.flush_marker)
-        self.flush_complete_event.wait()
-
-    def close(self):
-        self.queue.put(self.stop_marker)
-        self.queue.close()
-        self.async_process.join()
-        self.queue = None
-        self.async_process = None
-
-    def _consume_async_queue(self, queue, flush_complete_event):
-        item = queue.get()
-        while item != self.stop_marker:
-            if item == self.flush_marker:
-                super(AsyncProducer, self).flush()
-                flush_complete_event.set()
-            else:
-                topic_and_message = item
-                super(AsyncProducer, self).publish(topic_and_message)
-            item = queue.get()
-        queue.close()
-        super(AsyncProducer, self).close()
-
-
-# prepapre needs to be in the module top level so it can be serialized for
-# multiprocessing
-def _prepare(envelope_and_message):
-    return create_message(
-        envelope_and_message.envelope.pack(envelope_and_message.message)
-    )
-
-
-class _KafkaProducer(object):
-    message_limit = 5000
-    time_limit = 0.1
-
-    @cached_property
-    def envelope(self):
-        return Envelope()
-
-    def __init__(self, use_work_pool=True):
-        self.kafka_client = get_kafka_client()
-
-        self.use_work_pool = use_work_pool
-        if use_work_pool:
-            self.pool = Pool()
-        self._reset_message_buffer()
-
-    def publish(self, topic_and_message):
-        self._add_message_to_buffer(topic_and_message)
-
-        if self._is_ready_to_flush():
-            self.flush_buffered_messages()
-
-    def flush_buffered_messages(self):
-        responses = self.kafka_client.send_produce_request(
-            payloads=self._generate_produce_requests(),
-            acks=1  # Written to disk on master
-        )
-        self._reset_message_buffer()
-
-    def close(self):
-        self.flush_buffered_messages()
-        self.kafka_client.close()
-
-        if self.use_work_pool:
-            self.pool.close()
-            self.pool.join()
-
-    def _is_ready_to_flush(self):
-        return (
-            (time.time() - self.start_time) >= self.time_limit or
-            self.message_buffer_size >= self.message_limit
-        )
-
-    def _add_message_to_buffer(self, topic_and_message):
-        if self.use_work_pool:
-            message = topic_and_message.message
-        else:
-            message = self._prepare_message(topic_and_message.message)
-
-        self.message_buffer[topic_and_message.topic].append(message)
-        self.message_buffer_size += 1
-
-    def _generate_produce_requests(self):
-        return [
-            ProduceRequest(topic=topic, partition=0, messages=messages)
-            for topic, messages in self._yield_prepared_topic_and_messages()
-        ]
-
-    def _yield_prepared_topic_and_messages(self):
-        if self.use_work_pool:
-            topics_and_messages_result = [
-                (topic, self.pool.map_async(
-                    _prepare,
-                    [
-                        EnvelopeAndMessage(envelope=self.envelope, message=message)
-                        for message in messages
-                    ]
-                )) for topic, messages in self.message_buffer.iteritems()
-            ]
-
-            return ((topic, messages_result.get()) for topic, messages_result in topics_and_messages_result)
-        else:
-            return self.message_buffer.iteritems()
-
-    def _prepare_message(self, message):
-        return _prepare(EnvelopeAndMessage(envelope=self.envelope, message=message))
-
-    def _reset_message_buffer(self):
-        self.start_time = time.time()
-        self.message_buffer = defaultdict(list)
-        self.message_buffer_size = 0
+        Args:
+            position_data (:class:PositionData): PositionData structure
+                containing details about the last messages published to Kafka,
+                including Kafka offsets and upstream position information.
+        """
+        logger.debug("Producer notified of new messages")
+        self.position_data = position_data

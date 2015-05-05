@@ -8,10 +8,8 @@ module ::Guard
       if $?.exitstatus == 0
         UI.info 'Docs built'
       else
-        msg = '`make docs` exited with non-zero status'
-        UI.error msg
+        UI.error '`make docs` exited with non-zero status'
         UI.debug out
-        Notifier.notify(msg, image: :failed)    
         throw :task_has_failed
       end
     end
@@ -50,6 +48,7 @@ end
 guard :pytest do
   # Test the changed file and the corresponding test
   watch(%r{^data_pipeline/(.+)\.py$}) {|m| [m[0], "tests/#{m[1]}_test.py"]  }
+  watch(%r{^data_pipeline/(position_data|_kafka_producer|_position_data_builder)\.py$}) { 'tests/producer_test.py' }
   watch(%r{^tests/(.+)\_test.py$})
   watch(%r{^tests/helpers/(.+).py$}) { :all }
   watch(%r{^tests/conftest.py$}) { :all }
@@ -62,4 +61,6 @@ guard :make_guard do
   watch(%r{^data_pipeline/(.+)\.py$})
   # rst files in root and docs directories only
   watch(%r{^([^/]+|docs/[^/]+)\.rst$})
+  watch('docs/conf.py')
+  watch('tox.ini')
 end

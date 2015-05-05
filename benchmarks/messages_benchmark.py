@@ -14,10 +14,10 @@ class MessagesBenchmark(object):
 
     @cached_property
     def message(self):
-        return Message(10, bytes(10), MessageType.create)
+        return Message(str('topic'), 10, bytes(10), MessageType.create)
 
     def benchmark_messsage_creation(self):
-        Message(10, bytes(10), MessageType.create)
+        Message(str('topic'), 10, bytes(10), MessageType.create)
 
     def benchmark_envelope_packing(self):
         self.envelope.pack(self.message)

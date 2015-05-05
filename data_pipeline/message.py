@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 import time
-from data_pipeline.fast_uuid import _FastUUID
+from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.message_type import MessageType
 
 
@@ -17,6 +17,9 @@ class Message(object):
             by `schema_id`.
         message_type (data_pipeline.message_type.MessageType): Identifies the
             nature of the message.
+        previous_payload (bytes): Avro-encoded message - encoded with schema
+            identified by `schema_id`.  Required when message type is
+            MessageType.update.  Disallowed otherwise.  Defaults to None.
         uuid (bytes, optional): Globally-unique 16-byte identifier for the
             message.  A uuid4 will be generated automatically if this isn't
             provided.
@@ -29,30 +32,102 @@ class Message(object):
             modification time is available in that source, it's appropriate to
             use that timestamp.  Otherwise, it's probably best to have the
             timestamp represent when the message was generated.
+        upstream_position_info (dict, optional): This dict must only contain
+            primitive types.  It is not used internally by the data pipeline,
+            so the content is left to the application.  The clientlib will
+            track these objects and provide them back from the producer to
+            identify the last message that was successfully published, both
+            overall and per topic.
     """
 
-    fast_uuid = _FastUUID()
+    _fast_uuid = FastUUID()
     """UUID generator - this isn't a @cached_property so it can be serialized"""
 
+    @property
+    def topic(self):
+        """The kafka topic the message should be published to."""
+        return self._topic
+
+    @topic.setter
+    def topic(self, topic):
+        if not isinstance(topic, str) or len(topic) == 0:
+            raise ValueError("Topic must be a non-empty string")
+        self._topic = topic
+
+    @property
+    def payload(self):
+        """Avro-encoded message - encoded with schema identified by `schema_id`.
+        """
+        return self._payload
+
+    @payload.setter
+    def payload(self, payload):
+        if len(payload) == 0:
+            raise ValueError("Payload must exist")
+        self._payload = payload
+
+    @property
+    def uuid(self):
+        """Globally-unique 16-byte identifier for the message.  A uuid4 will
+        be generated automatically if this isn't provided.
+        """
+        return self._uuid
+
+    @uuid.setter
+    def uuid(self, uuid):
+        if uuid is None:
+            # UUID generation is expensive.  Using FastUUID instead of the built
+            # in UUID methods increases Messages that can be instantiated per
+            # second from ~25,000 to ~185,000.  Not generating UUIDs at all
+            # increases the throughput further still to about 730,000 per
+            # second.
+            uuid = self._fast_uuid.uuid4()
+        elif len(uuid) != 16:
+            raise ValueError(
+                "UUIDs should be exactly 16 bytes.  Conforming UUID's can be "
+                "generated with `import uuid; uuid.uuid4().bytes`."
+            )
+        self._uuid = uuid
+
+    @property
+    def contains_pii(self):
+        """Boolean indicating that the payload contains PII, so the clientlib
+        can properly encrypt the data and mark it as sensitive."""
+        return self._contains_pii
+
+    @contains_pii.setter
+    def contains_pii(self, contains_pii):
+        if contains_pii:
+            raise NotImplementedError(
+                "Encryption of topics that contain PII has not yet been "
+                "implemented.  See DATAPIPE-62 for details."
+            )
+        self._contains_pii = contains_pii
+
+    @property
+    def schema_id(self):
+        """Integer identifying the schema used to encode the payload"""
+        return self._schema_id
+
+    @schema_id.setter
+    def schema_id(self, schema_id):
+        if not isinstance(schema_id, int):
+            raise ValueError("Schema id should be an int")
+        self._schema_id = schema_id
+
     def __init__(
-        self, topic, schema_id, payload, message_type, uuid=None, contains_pii=False,
-        timestamp=None
+        self, topic, schema_id, payload, message_type, previous_payload=None,
+        uuid=None, contains_pii=False, timestamp=None, upstream_position_info=None
     ):
         # The decision not to just pack the message to validate it is
         # intentional here.  We want to perform more sanity checks than avro
         # does, and in addition, this check is quite a bit faster than
         # serialization.  Finally, if we do it this way, we can lazily
         # serialize the payload in a subclass if necessary.
-        if not isinstance(topic, str) or len(topic) == 0:
-            raise ValueError("Topic must be a non-empty string")
+
+        # TODO: Make all of these properties like above, way cleaner
         self.topic = topic
-
-        if not isinstance(schema_id, int):
-            raise ValueError("Schema id should be an int")
         self.schema_id = schema_id
-
-        if len(payload) == 0:
-            raise ValueError("Payload must exist")
         self.payload = payload
 
         if not (isinstance(message_type, MessageType)):
@@ -62,29 +137,24 @@ class Message(object):
             )
         self.message_type = message_type
 
-        if uuid is None:
-            # UUID generation is expensive.  Using FastUUID instead of the built
-            # in UUID methods increases Messages that can be instantiated per
-            # second from ~25,000 to ~185,000.  Not generating UUIDs at all
-            # increases the throughput further still to about 730,000 per
-            # second.
-            uuid = self.fast_uuid.uuid4()
-        elif len(uuid) != 16:
-            raise ValueError(
-                "UUIDs should be exactly 16 bytes.  Conforming UUID's can be "
-                "generated with `import uuid; uuid.uuid4().bytes`."
-            )
-        self.uuid = uuid
+        if self.message_type != MessageType.update and previous_payload is not None:
+            raise ValueError("Previous payload should only be set for updates")
 
-        if contains_pii:
-            raise NotImplementedError(
-                "Encryption of topics that contain PII has not yet been "
-                "implemented.  See DATAPIPE-62 for details."
-            )
+        if self.message_type == MessageType.update and (
+            previous_payload is None or len(previous_payload) == 0
+        ):
+            raise ValueError("Previous payload must exist for updates")
+            self.previous_payload = previous_payload
+
+        self.uuid = uuid
+        self.contains_pii = contains_pii
 
         if timestamp is None:
             timestamp = int(time.time())
         self.timestamp = timestamp
+
+        # TODO: This should be a property that verifies this is a dict
+        self.upstream_position_info = upstream_position_info
 
     def get_avro_repr(self):
         """Prepare the message for packing
@@ -93,6 +163,11 @@ class Message(object):
             dict: Dictionary that can be packed by
                 :func:`data_pipeline.envelope.Envelope.pack`.
         """
+        if self.message_type == MessageType.update:
+            # TODO: This needs to make sure the previous payload is actually
+            # set.
+            raise NotImplementedError
+
         return {
             'uuid': self.uuid,
             'message_type': self.message_type.name,
