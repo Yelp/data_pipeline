@@ -1,4 +1,6 @@
-.PHONY: help all production clean clean-pyc clean-build clean-docs lint test tests docs coverage
+REBUILD_FLAG =
+
+.PHONY: help all production clean clean-pyc clean-build clean-docs lint test docs coverage install-hooks
 
 help:
 	@echo "clean-build - remove build artifacts"
@@ -9,7 +11,7 @@ help:
 	@echo "coverage - check code coverage"
 	@echo "docs - generate Sphinx HTML documentation, including API docs"
 
-all: production
+all: production install-hooks
 
 production:
 	@true
@@ -32,13 +34,17 @@ clean-docs:
 lint:
 	tox -e style
 
-test:
-	tox
-
-tests:
-	tox
+test:.venv.touch
+	tox $(REBUILD_FLAG)
 
 docs:
 	tox -e docs
 
 coverage: test
+
+.venv.touch: setup.py requirements-dev.txt
+	$(eval REBUILD_FLAG := --recreate)
+	touch .venv.touch
+
+install-hooks:
+	tox -e pre-commit -- install -f --install-hooks

@@ -1,12 +1,10 @@
-#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import
+from __future__ import unicode_literals
 
-try:
-    from setuptools import setup
-except ImportError:
-    from distutils.core import setup
+from setuptools import setup
 
 import data_pipeline
-
 
 readme = open('README.rst').read()
 doclink = """
@@ -17,7 +15,8 @@ The full documentation is at http://servicedocs.yelpcorp.com/docs/data_pipeline/
 history = open('HISTORY.rst').read().replace('.. :changelog:', '')
 
 setup(
-    name='data_pipeline',
+    # py2 + setuptools asserts isinstance(name, str) so this needs str()
+    name=str('data_pipeline'),
     version=data_pipeline.__version__,
     description="Provides an interface to consume and publish to data pipeline topics.",
     long_description=readme + '\n\n' + doclink + '\n\n' + history,
@@ -25,7 +24,7 @@ setup(
     author_email=data_pipeline.__email__,
     url='http://servicedocs.yelpcorp.com/docs/data_pipeline/',
     packages=[
-        'data_pipeline',
+        str('data_pipeline'),
     ],
     package_dir={'data_pipeline': 'data_pipeline'},
     include_package_data=True,
@@ -48,6 +47,7 @@ setup(
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.3',
+        'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: Implementation :: PyPy',
     ],
 )
