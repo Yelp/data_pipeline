@@ -1,10 +1,13 @@
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import
+from __future__ import unicode_literals
 
 from cached_property import cached_property
+
+from benchmarks.benchmarks import Benchmarks
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import Message
 from data_pipeline.message_type import MessageType
-from benchmarks.benchmarks import Benchmarks
 
 
 class MessagesBenchmark(object):

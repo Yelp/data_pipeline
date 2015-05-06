@@ -1,11 +1,13 @@
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import
+from __future__ import unicode_literals
 
 from cached_property import cached_property
 
-from data_pipeline.config import logger
-from data_pipeline.client import Client
 from data_pipeline._kafka_producer import LoggingKafkaProducer
 from data_pipeline._pooled_kafka_producer import PooledKafkaProducer
+from data_pipeline.client import Client
+from data_pipeline.config import logger
 
 
 class Producer(Client):

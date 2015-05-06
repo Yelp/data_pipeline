@@ -1,9 +1,14 @@
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import
+from __future__ import unicode_literals
+
 import subprocess
 import time
 from contextlib import contextmanager
-from kafka.common import KafkaUnavailableError
+
 from kafka import KafkaClient
 from kafka import SimpleConsumer
+from kafka.common import KafkaUnavailableError
 
 from data_pipeline.config import logger
 
@@ -16,6 +21,7 @@ class KafkaDocker(object):
     container if available, and if not, runs a new container for the duration
     of tests.
     """
+
     def __init__(self):
         self.kafka_already_running = self._is_kafka_already_running()
 
@@ -65,14 +71,21 @@ def create_kafka_docker_topic(kafka_docker, topic):
     logger.info("Creating Fake Topic")
     if not isinstance(topic, str):
         raise ValueError("topic must be a str, it cannot be unicode")
+
+    kafka_create_topic_command = (
+        "$KAFKA_HOME/bin/kafka-topics.sh --create --zookeeper zk:2181 "
+        "--replication-factor 1 --partition 1 --topic {topic}"
+    ).format(topic=topic)
+
     subprocess.call([
         "docker",
         "exec",
         "datapipeline_kafka_1",
         "bash",
         "-c",
-        "$KAFKA_HOME/bin/kafka-topics.sh --create --zookeeper zk:2181 --replication-factor 1 --partition 1 --topic {0}".format(topic)
+        kafka_create_topic_command
     ])
+
     logger.info("Waiting for topic")
     kafka_docker.ensure_topic_exists(topic, timeout=5)
     logger.info("Topic Exists")

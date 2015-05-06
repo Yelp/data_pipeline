@@ -1,12 +1,16 @@
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import
+from __future__ import unicode_literals
+
+from contextlib import contextmanager
 
 from cached_property import cached_property
-from contextlib import contextmanager
+
+from benchmarks.benchmarks import Benchmarks
 from data_pipeline.async_producer import AsyncProducer
-from data_pipeline.producer import Producer
 from data_pipeline.message import Message
 from data_pipeline.message_type import MessageType
-from benchmarks.benchmarks import Benchmarks
+from data_pipeline.producer import Producer
 
 
 class ProducerBenchmark(object):

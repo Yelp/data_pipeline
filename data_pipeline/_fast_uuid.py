@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import
+from __future__ import unicode_literals
+
 from cffi import FFI
 
 
@@ -74,7 +78,7 @@ class FastUUID(object):
 
             FastUUID._libuuid = FastUUID._ffi.verify(
                 "#include <uuid/uuid.h>",
-                libraries=['uuid']
+                libraries=[str('uuid')]
             )
 
         # Keeping only one copy of this around does result in

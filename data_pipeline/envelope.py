@@ -1,10 +1,13 @@
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import
-from cached_property import cached_property
+from __future__ import unicode_literals
+
+import cStringIO
+import os
 
 import avro.io
 import avro.schema
-import cStringIO
-import os
+from cached_property import cached_property
 
 
 class Envelope(object):

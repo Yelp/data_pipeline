@@ -1,6 +1,9 @@
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import
+from __future__ import unicode_literals
 
 import time
+
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.message_type import MessageType
 

@@ -3,14 +3,15 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import logging
+
 import mock
 import pytest
 
+import data_pipeline._kafka_producer
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import Message
 from data_pipeline.message_type import MessageType
 from tests.helpers.kafka_docker import KafkaDocker
-import data_pipeline._kafka_producer
 
 
 logging.basicConfig(level=logging.DEBUG, filename='logs/test.log')

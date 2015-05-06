@@ -1,10 +1,13 @@
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import
-
-from cached_property import cached_property
-from data_pipeline._fast_uuid import FastUUID
-from benchmarks.benchmarks import Benchmarks
+from __future__ import unicode_literals
 
 import uuid
+
+from cached_property import cached_property
+
+from benchmarks.benchmarks import Benchmarks
+from data_pipeline._fast_uuid import FastUUID
 
 
 class UUIDBenchmark(object):

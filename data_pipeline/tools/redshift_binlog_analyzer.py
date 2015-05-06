@@ -1,10 +1,15 @@
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import
+from __future__ import unicode_literals
+
 import csv
 import locale
 import logging
-import sqlparse
-import staticconf
 import sys
 from decimal import Decimal
+
+import sqlparse
+import staticconf
 from terminaltables import AsciiTable
 from yelp_redshift import client
 

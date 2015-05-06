@@ -1,4 +1,6 @@
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import
+from __future__ import unicode_literals
 
 from data_pipeline.config import logger
 from data_pipeline.position_data import PositionData
@@ -11,6 +13,7 @@ class PositionDataBuilder(object):
     as published in matched pairs.  Position data can only be retrieved when
     the pairs actually match.
     """
+
     def __init__(self):
         self.last_published_message_position_info = None
         self.topic_to_last_position_info_map = {}

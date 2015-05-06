@@ -1,17 +1,19 @@
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import
+from __future__ import unicode_literals
 
 import time
-
-from cached_property import cached_property
 from collections import defaultdict
 from collections import namedtuple
+
+from cached_property import cached_property
 from kafka import create_message
 from kafka.common import ProduceRequest
 
+from data_pipeline._position_data_builder import PositionDataBuilder
 from data_pipeline.config import get_kafka_client
 from data_pipeline.config import logger
 from data_pipeline.envelope import Envelope
-from data_pipeline._position_data_builder import PositionDataBuilder
 
 
 _EnvelopeAndMessage = namedtuple("_EnvelopeAndMessage", ["envelope", "message"])

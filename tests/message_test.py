@@ -1,4 +1,7 @@
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import
+from __future__ import unicode_literals
+
 import pytest
 
 from data_pipeline.message import Message
@@ -9,7 +12,7 @@ class TestMessage(object):
     @property
     def valid_message_data(self):
         return dict(
-            topic='my-topic',
+            topic=str('my-topic'),
             schema_id=123,
             payload=bytes(10),
             message_type=MessageType.create

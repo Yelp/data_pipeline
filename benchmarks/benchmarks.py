@@ -1,13 +1,16 @@
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import
+from __future__ import unicode_literals
 
-from terminaltables import UnixTable
 import contextlib
 import glob
+import imp
+import inspect
 import locale
 import os
-import inspect
-import imp
 import time
+
+from terminaltables import UnixTable
 
 
 locale.setlocale(locale.LC_ALL, 'en_US')

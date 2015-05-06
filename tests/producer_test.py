@@ -7,8 +7,8 @@ import pytest
 from data_pipeline.async_producer import AsyncProducer
 from data_pipeline.producer import Producer
 from tests.helpers.kafka_docker import capture_new_messages
-from tests.helpers.kafka_docker import setup_capture_new_messages_consumer
 from tests.helpers.kafka_docker import create_kafka_docker_topic
+from tests.helpers.kafka_docker import setup_capture_new_messages_consumer
 
 
 class TestProducer(object):
