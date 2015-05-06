@@ -1,15 +1,19 @@
 -   repo: git@git.yelpcorp.com:mirrors/pre-commit/pre-commit-hooks
-    sha: d3db0385825d4c082bc7117c090ac16cb4840f3e
+    sha: cedcea550c495d536247ca23115035b17074cac7
     hooks:
     -   id: trailing-whitespace
     -   id: end-of-file-fixer
     -   id: autopep8-wrapper
     -   id: check-yaml
     -   id: debug-statements
-    -   id: name-tests-test
     -   id: flake8
+    -   id: check-yaml
+    -   id: check-json
+    -   id: check-merge-conflict
+    -   id: name-tests-test
+        exclude: tests/helpers/(.+).py
 -   repo: git@git.yelpcorp.com:yelp_pre_commit_hooks
-    sha: 593e30fc5782c91f2df2f03e86988375b5a60d8c
+    sha: ff1e848799fc9cf866353b640d50bd13993c58da
     hooks:
     -   id: stop-dollar-html
     -   id: httplib-https-connection
@@ -19,10 +23,11 @@
     -   id: fix-encoding-pragma
     -   id: check-added-large-files
 -   repo: git@git.yelpcorp.com:mirrors/asottile/reorder_python_imports
-    sha: 04ab8446d0c82026e7d7b0c1ba96bab1cca8185e
+    sha: 3d86483455ab5bd06cc1069fdd5ac57be5463f10
     hooks:
     -   id: reorder-python-imports
-        args: [
-            '--add-import', 'from __future__ import absolute_import',
-            '--add-import', 'from __future__ import unicode_literals',
-        ]
+        args:
+        - --add-import
+        - from __future__ import absolute_import
+        - --add-import
+        - from __future__ import unicode_literals
