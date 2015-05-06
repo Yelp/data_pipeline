@@ -1,6 +1,12 @@
+# -*- coding: utf-8 -*-
 """Use this like:
-mysqlbinlog --read-from-remote-server --host 10.69.1.100 -u rbr_test --stop-never --verbose --start-datetime="2015-03-08 00:45:00" mysql-bin.000405 | ~/pypy-2.5.0-linux64/bin/pypy ~/binlog_analyzer.py | ~/pypy-2.5.0-linux64/bin/pypy ~/compressed_stream_rotator.py
+mysqlbinlog --read-from-remote-server --host 10.69.1.100 -u rbr_test \
+    --stop-never --verbose --start-datetime="2015-03-08 00:45:00" \
+    mysql-bin.000405 | ~/pypy-2.5.0-linux64/bin/pypy ~/binlog_analyzer.py \
+    | ~/pypy-2.5.0-linux64/bin/pypy ~/compressed_stream_rotator.py
 """
+from __future__ import absolute_import
+from __future__ import unicode_literals
 
 import datetime
 import errno
@@ -65,7 +71,8 @@ class BinlogParser(object):
         return line.startswith("SET TIMESTAMP=") and line.endswith("/*!*/;")
 
     def _is_header_line(self, line):
-        return re.search("\\#(\\d+)\\s+(\\d+:\\d+:\\d+)\\s+server\\s+id\\s+\\d+.+(Update_rows|Write_rows|Delete_rows)", line) is not None
+        regex = "\\#(\\d+)\\s+(\\d+:\\d+:\\d+)\\s+server\\s+id\\s+\\d+.+(Update_rows|Write_rows|Delete_rows)"
+        return re.search(regex, line) is not None
 
     def _is_updating(self, line):
         return any(line.startswith("### %s " % s) for s in ['INSERT INTO', 'UPDATE', 'DELETE FROM'])
