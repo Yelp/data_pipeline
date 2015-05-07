@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 from multiprocessing import Event
+from multiprocessing import Manager
 from multiprocessing import Process
 from multiprocessing import Queue
 
@@ -29,6 +30,8 @@ class AsyncProducer(Producer):
     def __init__(self, *args, **kwargs):
         super(AsyncProducer, self).__init__(*args, **kwargs)
 
+        self.manager = Manager()
+        self.shared_async_data = self.manager.Namespace()
         self.queue = Queue(self._max_queue_size)
 
         # This event is used to block the foreground process until the
@@ -36,8 +39,19 @@ class AsyncProducer(Producer):
         # be a syncronous operation
         self.flush_complete_event = Event()
 
-        self.async_process = Process(target=self._consume_async_queue, args=(self.queue, self.flush_complete_event))
+        self.async_process = Process(
+            target=self._async_init,
+            args=(self.queue, self.flush_complete_event, self.shared_async_data)
+        )
         self.async_process.start()
+
+        # Flushing here is really just a convenient way to wait for the child
+        # process to start responding.  This also ensures that
+        # `get_checkpoint_position_data` will have position data to return
+        # as soon as the producer is created.  A wake method could potentially
+        # fit the bill for this, but waking shouldn't be syncronous, and it
+        # would add additional unnecessary complexity.
+        self.flush()
 
     def publish(self, message):
         """Asynchronously enqueues a message to be published in a background
@@ -57,10 +71,6 @@ class AsyncProducer(Producer):
             message (data_pipeline.message.Message): message to publish
         """
         self.queue.put(message)
-
-    def ensure_messages_published(self, messages, topic_offsets):
-        """See :meth:`data_pipeline.producer.Producer.ensure_messages_published`"""
-        raise NotImplementedError
 
     def flush(self):
         """See :meth:`data_pipeline.producer.Producer.flush`"""
@@ -88,7 +98,15 @@ class AsyncProducer(Producer):
 
     def get_checkpoint_position_data(self):
         """See :meth:`data_pipeline.producer.Producer.get_checkpoint_position_data`"""
-        raise NotImplementedError
+        return self.shared_async_data.position_data
+
+    def _async_init(self, queue, flush_complete_event, shared_async_data):
+        # See "Explicitly pass resources to child processes" under
+        # https://docs.python.org/2/library/multiprocessing.html#all-platforms
+        # for an explanation of why data used in the child process is passed
+        # in, instead of just accessing it through self
+        self.background_shared_async_data = shared_async_data
+        self._consume_async_queue(queue, flush_complete_event)
 
     def _consume_async_queue(self, queue, flush_complete_event):
         # TODO: the gets should timeout and call wake periodically
@@ -103,3 +121,13 @@ class AsyncProducer(Producer):
             item = queue.get()
         queue.close()
         super(AsyncProducer, self).close()
+
+    def _notify_messages_published(self, position_data):
+        """Called to notify the producer of successfully published messages.
+
+        Args:
+            position_data (:class:PositionData): PositionData structure
+                containing details about the last messages published to Kafka,
+                including Kafka offsets and upstream position information.
+        """
+        self.background_shared_async_data.position_data = position_data

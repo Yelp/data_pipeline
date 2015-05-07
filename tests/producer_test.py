@@ -72,7 +72,7 @@ class TestProducer(object):
             position_data = producer.get_checkpoint_position_data()
 
             # Make sure the position data makes sense
-            assert position_data.last_published_message_position_info is upstream_info
+            assert position_data.last_published_message_position_info == upstream_info
             assert position_data.topic_to_last_position_info_map == {topic: upstream_info}
             kafka_offset = position_data.topic_to_kafka_offset_map[topic]
 
