@@ -16,7 +16,7 @@ from data_pipeline.producer import Producer
 class ProducerBenchmark(object):
     @cached_property
     def message(self):
-        return Message('my-topic', 10, bytes(10), MessageType.create)
+        return Message(str('my-topic'), 10, bytes(10), MessageType.create)
 
     @contextmanager
     def yield_async_producer(self):

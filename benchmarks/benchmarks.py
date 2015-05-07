@@ -13,7 +13,7 @@ import time
 from terminaltables import UnixTable
 
 
-locale.setlocale(locale.LC_ALL, 'en_US')
+locale.setlocale(locale.LC_ALL, str('en_US'))
 
 
 class Benchmarks(object):

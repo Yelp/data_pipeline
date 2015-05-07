@@ -58,6 +58,17 @@ class Message(object):
         self._topic = topic
 
     @property
+    def schema_id(self):
+        """Integer identifying the schema used to encode the payload"""
+        return self._schema_id
+
+    @schema_id.setter
+    def schema_id(self, schema_id):
+        if not isinstance(schema_id, int):
+            raise ValueError("Schema id should be an int")
+        self._schema_id = schema_id
+
+    @property
     def payload(self):
         """Avro-encoded message - encoded with schema identified by `schema_id`.
         """
@@ -68,6 +79,40 @@ class Message(object):
         if len(payload) == 0:
             raise ValueError("Payload must exist")
         self._payload = payload
+
+    @property
+    def message_type(self):
+        """Identifies the nature of the message."""
+        return self._message_type
+
+    @message_type.setter
+    def message_type(self, message_type):
+        if not (isinstance(message_type, MessageType)):
+            message_types = ["MessageType.%s" % t.name for t in MessageType]
+            raise ValueError(
+                "Message type should be one of %s" % ', '.join(message_types)
+            )
+        self._message_type = message_type
+
+    @property
+    def previous_payload(self):
+        """Avro-encoded message - encoded with schema identified by
+        `schema_id`.  Required when message type is `MessageType.update`.
+        Disallowed otherwise.  Defaults to None.
+        """
+        return self._previous_payload
+
+    @previous_payload.setter
+    def previous_payload(self, previous_payload):
+        if self.message_type != MessageType.update and previous_payload is not None:
+            raise ValueError("Previous payload should only be set for updates")
+
+        if self.message_type == MessageType.update and (
+            previous_payload is None or len(previous_payload) == 0
+        ):
+            raise ValueError("Previous payload must exist for updates")
+
+        self._previous_payload = previous_payload
 
     @property
     def uuid(self):
@@ -108,15 +153,35 @@ class Message(object):
         self._contains_pii = contains_pii
 
     @property
-    def schema_id(self):
-        """Integer identifying the schema used to encode the payload"""
-        return self._schema_id
+    def timestamp(self):
+        """A unix timestamp for the message.  If this is not provided, a
+        timestamp will be generated automatically.  If the message is coming
+        directly from an upstream source, and the modification time is
+        available in that source, it's appropriate to use that timestamp.
+        Otherwise, it's probably best to have the timestamp represent when the
+        message was generated.
+        """
+        return self._timestamp
 
-    @schema_id.setter
-    def schema_id(self, schema_id):
-        if not isinstance(schema_id, int):
-            raise ValueError("Schema id should be an int")
-        self._schema_id = schema_id
+    @timestamp.setter
+    def timestamp(self, timestamp):
+        if timestamp is None:
+            timestamp = int(time.time())
+        self._timestamp = timestamp
+
+    @property
+    def upstream_position_info(self):
+        """The clientlib will track these objects and provide them back from
+        the producer to identify the last message that was successfully
+        published, both overall and per topic.
+        """
+        return self._upstream_position_info
+
+    @upstream_position_info.setter
+    def upstream_position_info(self, upstream_position_info):
+        if upstream_position_info is not None and not isinstance(upstream_position_info, dict):
+            raise ValueError("upstream_position_info should be None or a dict")
+        self._upstream_position_info = upstream_position_info
 
     def __init__(
         self, topic, schema_id, payload, message_type, previous_payload=None,
@@ -127,36 +192,14 @@ class Message(object):
         # does, and in addition, this check is quite a bit faster than
         # serialization.  Finally, if we do it this way, we can lazily
         # serialize the payload in a subclass if necessary.
-
-        # TODO: Make all of these properties like above, way cleaner
         self.topic = topic
         self.schema_id = schema_id
         self.payload = payload
-
-        if not (isinstance(message_type, MessageType)):
-            message_types = ["MessageType.%s" % t.name for t in MessageType]
-            raise ValueError(
-                "Message type should be one of %s" % ', '.join(message_types)
-            )
         self.message_type = message_type
-
-        if self.message_type != MessageType.update and previous_payload is not None:
-            raise ValueError("Previous payload should only be set for updates")
-
-        if self.message_type == MessageType.update and (
-            previous_payload is None or len(previous_payload) == 0
-        ):
-            raise ValueError("Previous payload must exist for updates")
-            self.previous_payload = previous_payload
-
+        self.previous_payload = previous_payload
         self.uuid = uuid
         self.contains_pii = contains_pii
-
-        if timestamp is None:
-            timestamp = int(time.time())
         self.timestamp = timestamp
-
-        # TODO: This should be a property that verifies this is a dict
         self.upstream_position_info = upstream_position_info
 
     def get_avro_repr(self):
