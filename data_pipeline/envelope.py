@@ -33,7 +33,7 @@ class Envelope(object):
     def _schema(self):
         schema_path = os.path.join(
             os.path.dirname(__file__),
-            '../schemas/envelope_v1.avsc'
+            'schemas/envelope_v1.avsc'
         )
         return avro.schema.parse(open(schema_path).read())
 

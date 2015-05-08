@@ -38,6 +38,11 @@ setup(
     ],
     zip_safe=False,
     keywords='data_pipeline',
+    package_data={
+        str('data_pipeline'): [
+            'schemas/*.avsc'
+        ]
+    },
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',
