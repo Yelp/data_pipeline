@@ -4,10 +4,8 @@ from __future__ import unicode_literals
 
 import logging
 
-import mock
 import pytest
 
-import data_pipeline._kafka_producer
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import Message
 from data_pipeline.message_type import MessageType
@@ -40,7 +38,4 @@ def envelope():
 @pytest.yield_fixture(scope='session')
 def kafka_docker():
     with KafkaDocker() as get_connection:
-        with mock.patch.object(data_pipeline._kafka_producer, 'get_kafka_client') as client_mock:
-            client = get_connection()
-            client_mock.return_value = client
-            yield client
+        yield get_connection()

@@ -16,7 +16,7 @@ class Envelope(object):
     Example:
         >>> from data_pipeline.message import Message
         >>> from data_pipeline.message_type import MessageType
-        >>> message = Message('topic', 1, "FAKE MESSAGE", MessageType.create)
+        >>> message = Message(str('topic'), 1, bytes("FAKE MESSAGE"), MessageType.create)
         >>> envelope = Envelope()
         >>> packed_message = envelope.pack(message)
         >>> isinstance(packed_message, bytes)

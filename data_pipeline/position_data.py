@@ -37,7 +37,7 @@ class PositionData(namedtuple("PositionData", [
         ...         10,
         ...         bytes(10),
         ...         MessageType.create,
-        ...         upstream_position_info={'upstream_offset': 'offset-info'}
+        ...         upstream_position_info={str('upstream_offset'): str('offset-info')}
         ...     ))
         ...     producer.flush()
         ...     position_data = producer.get_checkpoint_position_data()

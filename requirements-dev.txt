@@ -1,6 +1,5 @@
 -e .
 --extra-index-url https://pypi.python.org/simple/
-coverage
 flake8
 pytest
 mock

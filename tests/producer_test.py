@@ -18,12 +18,12 @@ class TestProducer(object):
         (AsyncProducer, False),
         (AsyncProducer, True)
     ])
-    def producer_instance(self, request):
+    def producer_instance(self, request, kafka_docker):
         producer_klass, use_work_pool = request.param
         return producer_klass(use_work_pool=use_work_pool)
 
     @pytest.yield_fixture
-    def producer(self, producer_instance, kafka_docker):
+    def producer(self, producer_instance):
         with producer_instance as producer:
             yield producer
 

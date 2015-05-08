@@ -7,6 +7,7 @@ from multiprocessing import Manager
 from multiprocessing import Process
 from multiprocessing import Queue
 
+from data_pipeline.config import logger
 from data_pipeline.producer import Producer
 
 
@@ -105,8 +106,14 @@ class AsyncProducer(Producer):
         # https://docs.python.org/2/library/multiprocessing.html#all-platforms
         # for an explanation of why data used in the child process is passed
         # in, instead of just accessing it through self
-        self.background_shared_async_data = shared_async_data
-        self._consume_async_queue(queue, flush_complete_event)
+        try:
+            self.background_shared_async_data = shared_async_data
+            self._consume_async_queue(queue, flush_complete_event)
+        except:
+            # TODO(DATAPIPE-153|justinc): Logging is a start here, but anything
+            # that will kill this process should cause some kind of exception
+            # in the sync process
+            logger.exception("Runner Subprocess Crashed")
 
     def _consume_async_queue(self, queue, flush_complete_event):
         # TODO: the gets should timeout and call wake periodically

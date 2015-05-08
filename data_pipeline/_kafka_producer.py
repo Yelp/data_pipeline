@@ -58,21 +58,25 @@ class KafkaProducer(object):
         self._reset_message_buffer()
 
     def _publish_produce_requests(self, requests):
-        # TODO: This should be a loop, where on each iteration all produce
-        # requests for topics that succeeded are removed, and all produce
-        # requests that failed are retried.  If all haven't succeeded after
-        # a few tries, this should blow up.
-        responses = self.kafka_client.send_produce_request(
-            payloads=requests,
-            acks=1  # Written to disk on master
-        )
-        for response in responses:
-            # TODO: This won't work if the error code is non-zero
-            self.position_data_builder.record_messages_published(
-                response.topic,
-                response.offset,
-                len(self.message_buffer[response.topic])
+        # TODO(DATAPIPE-149|justinc): This should be a loop, where on each
+        # iteration all produce requests for topics that succeeded are removed,
+        # and all produce requests that failed are retried.  If all haven't
+        # succeeded after a few tries, this should blow up.
+        try:
+            responses = self.kafka_client.send_produce_request(
+                payloads=requests,
+                acks=1  # Written to disk on master
             )
+            for response in responses:
+                # TODO(DATAPIPE-149|justinc): This won't work if the error code
+                # is non-zero
+                self.position_data_builder.record_messages_published(
+                    response.topic,
+                    response.offset,
+                    len(self.message_buffer[response.topic])
+                )
+        except:
+            logger.exception("Produce failed... fix in DATAPIPE-149")
 
     def close(self):
         self.flush_buffered_messages()
