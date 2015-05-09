@@ -9,19 +9,19 @@ class FastUUID(object):
     """Fast c-wrapper for for uuid generation
 
     This class wraps the libuuid (http://linux.die.net/man/3/libuuid)
-    C library to generate UUIDs much more quickly than with python alone.  The
+    C library to generate UUIDs much more quickly than with CPython alone.  The
     cffi library was chosen over ctypes because it's the preferred extension
-    method under pypy, and is consequently about twice as fast.
+    method under PyPy, and is consequently about twice as fast.
 
-    python-libuuid won't compile with pypy, which is why this class was
-    created.  This code will work with both pypy and python.
+    python-libuuid won't compile with PyPy, which is why this class was
+    created.  This code will work with both PyPy and CPython.
 
     **Benchmarks**:
 
-    Bottom line - using this UUID4 implementation with pypy is over 15 times
-    faster than using python's UUID1 implementation python
+    Bottom line - using this UUID4 implementation with PyPy is over 15 times
+    faster than using CPython's UUID1 implementation.
 
-    Using pypy::
+    Using PyPy 2.5.0::
 
         FastUUID UUID1
         Total Time (100,000 iters): 3.87426400185 seconds
@@ -39,7 +39,7 @@ class FastUUID(object):
         Total Time (100,000 iters): 0.626512765884 seconds
         Rate: 159,613.67/second
 
-    Using python::
+    Using CPython 2.6.7::
 
         FastUUID UUID1
         Total Time (100,000 iters): 0.798195838928 seconds
