@@ -26,6 +26,7 @@ class AsyncProducer(Producer):
     """
     _stop_marker = 0
     _flush_marker = 1
+    # TODO(DATAPIPE-154|justinc) This should be configured with staticconf
     _max_queue_size = 10000  # Double the number of messages to buffer
 
     def __init__(self, *args, **kwargs):

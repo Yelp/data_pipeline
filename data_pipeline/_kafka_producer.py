@@ -19,7 +19,7 @@ from data_pipeline.envelope import Envelope
 _EnvelopeAndMessage = namedtuple("_EnvelopeAndMessage", ["envelope", "message"])
 
 
-# prepapre needs to be in the module top level so it can be serialized for
+# prepare needs to be in the module top level so it can be serialized for
 # multiprocessing
 def _prepare(envelope_and_message):
     return create_message(

@@ -14,6 +14,6 @@ def get_kafka_client():
     """Handles building a Kafka connection.  By default, this will connect to
     the Kafka instance in the included docker-compose file.
 
-    TODO: This needs to read from configs.
+    TODO(DATAPIPE-154|justinc) This should be configured with staticconf
     """
     return KafkaClient("169.254.255.254:49255")
