@@ -2,7 +2,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from .client import Client
+from data_pipeline.client import Client
 
 
 class Consumer(Client):

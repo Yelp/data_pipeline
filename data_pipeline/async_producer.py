@@ -38,7 +38,7 @@ class AsyncProducer(Producer):
 
         # This event is used to block the foreground process until the
         # background process is able to finish flushing, since flush should
-        # be a syncronous operation
+        # be a synchronous operation
         self.flush_complete_event = Event()
 
         self.async_process = Process(
@@ -51,7 +51,7 @@ class AsyncProducer(Producer):
         # process to start responding.  This also ensures that
         # `get_checkpoint_position_data` will have position data to return
         # as soon as the producer is created.  A wake method could potentially
-        # fit the bill for this, but waking shouldn't be syncronous, and it
+        # fit the bill for this, but waking shouldn't be synchronous, and it
         # would add additional unnecessary complexity.
         self.flush()
 
@@ -62,7 +62,7 @@ class AsyncProducer(Producer):
         Passing a message to publish does not guarantee that it will be
         successfully published into Kafka.
 
-        **TODO**:
+        **TODO(DATAPIPE-155|justinc)**:
 
         * Point to information about the message accumulation and time
           delay config.
@@ -117,7 +117,8 @@ class AsyncProducer(Producer):
             logger.exception("Runner Subprocess Crashed")
 
     def _consume_async_queue(self, queue, flush_complete_event):
-        # TODO: the gets should timeout and call wake periodically
+        # TODO(DATAPIPE-156|justinc): the gets should timeout and call wake
+        # periodically
         item = queue.get()
         while item != self._stop_marker:
             if item == self._flush_marker:
