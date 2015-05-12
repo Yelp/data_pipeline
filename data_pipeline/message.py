@@ -140,7 +140,12 @@ class Message(object):
     @property
     def contains_pii(self):
         """Boolean indicating that the payload contains PII, so the clientlib
-        can properly encrypt the data and mark it as sensitive."""
+        can properly encrypt the data and mark it as sensitive.  The data
+        pipeline consumer will automatically decrypt fields containing PII.
+        This field shouldn't be used to indicate that a topic should be
+        encrypted, because PII information will be used to indicate to various
+        systems how to handle the data, in addition to automatic decryption.
+        """
         return self._contains_pii
 
     @contains_pii.setter
@@ -201,23 +206,3 @@ class Message(object):
         self.contains_pii = contains_pii
         self.timestamp = timestamp
         self.upstream_position_info = upstream_position_info
-
-    def get_avro_repr(self):
-        """Prepare the message for packing
-
-        Returns:
-            dict: Dictionary that can be packed by
-                :func:`data_pipeline.envelope.Envelope.pack`.
-        """
-        if self.message_type == MessageType.update:
-            # TODO: This needs to make sure the previous payload is actually
-            # set.
-            raise NotImplementedError
-
-        return {
-            'uuid': self.uuid,
-            'message_type': self.message_type.name,
-            'schema_id': self.schema_id,
-            'payload': self.payload,
-            'timestamp': self.timestamp
-        }

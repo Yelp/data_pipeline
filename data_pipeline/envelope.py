@@ -9,13 +9,17 @@ import avro.io
 import avro.schema
 from cached_property import cached_property
 
+from data_pipeline.message_type import MessageType
+
 
 class Envelope(object):
     """Envelope used to encode and identify a message for transport.
 
+    Envelope instances are meant to be long-lived and used to encode multiple
+    messages.
+
     Example:
         >>> from data_pipeline.message import Message
-        >>> from data_pipeline.message_type import MessageType
         >>> message = Message(str('topic'), 1, bytes("FAKE MESSAGE"), MessageType.create)
         >>> envelope = Envelope()
         >>> packed_message = envelope.pack(message)
@@ -31,6 +35,8 @@ class Envelope(object):
     """
     @cached_property
     def _schema(self):
+        # Keeping this as an instance method because of issues with sharing
+        # this data across processes.
         schema_path = os.path.join(
             os.path.dirname(__file__),
             'schemas/envelope_v1.avsc'
@@ -57,8 +63,13 @@ class Envelope(object):
             bytes: Avro byte string prepended by magic envelope version byte
         """
         # The initial "magic byte" is currently unused, but is meant to specify
-        # the envelope schema version.  see y/cep342 for details
-        return bytes(0) + self._avro_string_writer.encode(message.get_avro_repr())
+        # the envelope schema version.  see y/cep342 for details.  In other
+        # words, the version number of the current schema is the null byte.  In
+        # the event we need to add additional envelope versions, we'll use this
+        # byte to identify it.
+        return bytes(0) + self._avro_string_writer.encode(
+            self._get_avro_repr(message)
+        )
 
     def unpack(self, packed_message):
         """Decodes a message packed with :func:`pack`.
@@ -75,6 +86,26 @@ class Envelope(object):
         """
         # The initial "magic byte" is ignored, see the comment in `pack`.
         return self._avro_string_reader.decode(packed_message[1:])
+
+    def _get_avro_repr(self, message):
+        """Prepare the message for packing
+
+        Returns:
+            dict: Dictionary that can be packed by
+                :func:`data_pipeline.envelope.Envelope.pack`.
+        """
+        if message.message_type == MessageType.update:
+            # TODO: This needs to make sure the previous payload is actually
+            # set.
+            raise NotImplementedError
+
+        return {
+            'uuid': message.uuid,
+            'message_type': message.message_type.name,
+            'schema_id': message.schema_id,
+            'payload': message.payload,
+            'timestamp': message.timestamp
+        }
 
 
 class _AvroStringWriter(object):

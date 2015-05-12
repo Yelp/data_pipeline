@@ -51,17 +51,6 @@ class SharedMessageTest(object):
         self._assert_invalid_data(upstream_position_info='test')
         self._assert_invalid_data(upstream_position_info=['test'])
 
-    def test_message_can_be_packed(self, message, envelope):
-        assert isinstance(envelope.pack(message), bytes)
-
-    @pytest.mark.pending
-    def test_create_message_successfully_serialized(self):
-        raise NotImplementedError
-
-    @pytest.mark.pending
-    def test_update_message_successfully_serialized(self):
-        raise NotImplementedError
-
 
 class TestMessage(SharedMessageTest):
     @property
