@@ -48,7 +48,7 @@ end
 guard :pytest do
   # Test the changed file and the corresponding test
   watch(%r{^data_pipeline/(.+)\.py$}) {|m| [m[0], "tests/#{m[1]}_test.py"]  }
-  watch(%r{^data_pipeline/(position_data|_kafka_producer|_position_data_builder)\.py$}) { 'tests/producer_test.py' }
+  watch(%r{^data_pipeline/(async_producer|position_data|_kafka_producer|_position_data_builder)\.py$}) { 'tests/producer_test.py' }
   watch(%r{^tests/(.+)\_test.py$})
   watch(%r{^tests/helpers/(.+).py$}) { :all }
   watch(%r{^tests/conftest.py$}) { :all }

@@ -12,7 +12,11 @@ from data_pipeline.message_type import MessageType
 from tests.helpers.kafka_docker import KafkaDocker
 
 
-logging.basicConfig(level=logging.DEBUG, filename='logs/test.log')
+logging.basicConfig(
+    level=logging.DEBUG,
+    filename='logs/test.log',
+    format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
+)
 
 
 @pytest.fixture

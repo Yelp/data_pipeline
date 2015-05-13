@@ -73,6 +73,7 @@ scratch
 # Artificats
 twistd.pid
 logs/*.log
+.bundle
 
 # OS X
 .DS_Store

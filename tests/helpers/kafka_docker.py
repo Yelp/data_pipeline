@@ -68,6 +68,9 @@ def create_kafka_docker_topic(kafka_docker, topic):
     """This method execs in the docker container because it's the only way to
     control how the topic is created.
     """
+    if kafka_docker.has_metadata_for_topic(topic):
+        return
+
     logger.info("Creating Fake Topic")
     if not isinstance(topic, str):
         raise ValueError("topic must be a str, it cannot be unicode")

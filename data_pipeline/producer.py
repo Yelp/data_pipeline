@@ -42,7 +42,7 @@ class Producer(Client):
 
     Args:
       use_work_pool (bool): If true, the process will use a multiprocessing
-        pool to serialize messages in preperation for transport.  The work pool
+        pool to serialize messages in preparation for transport.  The work pool
         can parallelize some expensive serialization.  Default is false.
     """
 
@@ -54,16 +54,25 @@ class Producer(Client):
             return LoggingKafkaProducer(self._notify_messages_published)
 
     def __init__(self, use_work_pool=False):
-        # TODO: This should call the Client to capture information about the
-        # producer
+        # TODO(DATAPIPE-157): This should call the Client to capture information
+        # about the producer
         self.use_work_pool = use_work_pool
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.close()
-        return False  # don't supress the exception, if there is one
+        logger.info("Closing producer...")
+        try:
+            self.close()
+            logger.info("Producer closed")
+        except:
+            logger.exception("Failed to close the Producer.")
+            if exc_type is None:
+                # The exception shouldn't mask the original exception if there
+                # is one, but if an exception occurs, we want it to show up.
+                raise
+        return False  # don't suppress the exception, if there is one
 
     def publish(self, message):
         """Adds the message to the buffer to be published.  Messages are
@@ -102,6 +111,7 @@ class Producer(Client):
                 be published in each topic.  This should be in the format of
                 :attr:`data_pipeline.position_data.PositionData.topic_to_kafka_offset_map`.
         """
+        # TODO(DATAPIPE-164|justinc): Implement this
         raise NotImplementedError
 
     def flush(self):

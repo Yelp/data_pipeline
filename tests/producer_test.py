@@ -2,6 +2,8 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import multiprocessing
+
 import pytest
 
 from data_pipeline.async_producer import AsyncProducer
@@ -9,6 +11,10 @@ from data_pipeline.producer import Producer
 from tests.helpers.kafka_docker import capture_new_messages
 from tests.helpers.kafka_docker import create_kafka_docker_topic
 from tests.helpers.kafka_docker import setup_capture_new_messages_consumer
+
+
+class RandomException(Exception):
+    pass
 
 
 class TestProducer(object):
@@ -26,6 +32,7 @@ class TestProducer(object):
     def producer(self, producer_instance):
         with producer_instance as producer:
             yield producer
+        assert len(multiprocessing.active_children()) == 0
 
     @pytest.fixture(scope='module')
     def topic(self, topic_name, kafka_docker):
@@ -49,12 +56,14 @@ class TestProducer(object):
             with producer_instance as producer:
                 producer.publish(message)
                 producer.flush()
+            assert len(multiprocessing.active_children()) == 0
             assert len(get_messages()) == 1
 
     def test_messages_published_without_flush(self, topic, message, producer_instance):
         with capture_new_messages(topic) as get_messages:
             with producer_instance as producer:
                 producer.publish(message)
+            assert len(multiprocessing.active_children()) == 0
             assert len(get_messages()) == 1
 
     def test_empty_starting_checkpoint_data(self, producer):
@@ -62,6 +71,15 @@ class TestProducer(object):
         assert position_data.last_published_message_position_info is None
         assert position_data.topic_to_last_position_info_map == {}
         assert position_data.topic_to_kafka_offset_map == {}
+
+    def test_child_processes_do_not_survive_an_exception(self, producer_instance, message):
+        with pytest.raises(RandomException):
+            with producer_instance as producer:
+                producer.publish(message)
+                producer.flush()
+                producer.publish(message)
+                raise RandomException()
+        assert len(multiprocessing.active_children()) == 0
 
     def test_get_position_data(self, topic, message, producer):
         upstream_info = {'offset': 'fake'}

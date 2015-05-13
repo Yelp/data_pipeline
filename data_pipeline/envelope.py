@@ -95,8 +95,8 @@ class Envelope(object):
                 :func:`data_pipeline.envelope.Envelope.pack`.
         """
         if message.message_type == MessageType.update:
-            # TODO: This needs to make sure the previous payload is actually
-            # set.
+            # TODO(DATAPIPE-163): This needs to make sure the previous payload
+            # is actually set.
             raise NotImplementedError
 
         return {

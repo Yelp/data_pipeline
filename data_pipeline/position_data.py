@@ -54,7 +54,7 @@ class PositionData(namedtuple("PositionData", [
         :meth:`data_pipeline.producer.Producer.get_checkpoint_position_data` is
         only the source of truth for topics that have messages published to
         them during the current session.  If this data is persisted, it should
-        be merged with data from prior sessions, prefering data from the
+        be merged with data from prior sessions, preferring data from the
         current session only when it is available.
 
     Attributes:
@@ -75,9 +75,9 @@ class PositionData(namedtuple("PositionData", [
 
                     {'gtid': 'UPSTREAM_GTID_INFO', 'offset': 'UPSTREAM_OFFSET_INFO'}
 
-        topic_to_last_position_info_map (dict): Maps from topic to the last
-            :attr:`data_pipeline.message.Message.upstream_position_info` that
-            was successfully published for each topic, where last refers to
+        topic_to_last_position_info_map (dict[str, dict]): Maps from topic to
+            the last :attr:`data_pipeline.message.Message.upstream_position_info`
+            that was successfully published for each topic, where last refers to
             messages sorted by the order they were passed into
             :meth:`Producer.publish`.  The dictionary starts empty, and only
             contains information about topics published into during this
@@ -92,8 +92,8 @@ class PositionData(namedtuple("PositionData", [
 
                     {'my-topic': {'gtid': 'UPSTREAM_GTID_INFO', 'offset': 'UPSTREAM_OFFSET_INFO'}}
 
-        topic_to_kafka_offset_map (dict): This maps from each kafka topic to
-            the offset following the last published message, which will
+        topic_to_kafka_offset_map (dict[str, int]): This maps from each kafka
+            topic to the offset following the last published message, which will
             correspond to the offset of the next message published into the
             topic.
 

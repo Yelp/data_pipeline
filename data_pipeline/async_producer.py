@@ -2,6 +2,9 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import multiprocessing
+import os
+import signal
 from multiprocessing import Event
 from multiprocessing import Manager
 from multiprocessing import Process
@@ -9,6 +12,20 @@ from multiprocessing import Queue
 
 from data_pipeline.config import logger
 from data_pipeline.producer import Producer
+
+
+class UnrecoverableSubprocessError(Exception):
+    """Error occurs when the AsyncProducer background process encounters a fault
+    that it is unable to recover from.  This error is meant to be fatal.
+    Processes that receive it should die, and follow their recovery procedure
+    when they come back online.  These faults are serious, check the log files
+    and see what caused the background process to die.
+
+    Hint:
+
+        grep -A 30 "AsyncProducer Subprocess Crashed"
+    """
+    pass
 
 
 class AsyncProducer(Producer):
@@ -21,7 +38,7 @@ class AsyncProducer(Producer):
 
     Args:
         use_work_pool (bool): If true, the background process will use a
-            multiprocessing pool to serialize messages in preperation for
+            multiprocessing pool to serialize messages in preparation for
             transport.  Default is false.
     """
     _stop_marker = 0
@@ -31,6 +48,8 @@ class AsyncProducer(Producer):
 
     def __init__(self, *args, **kwargs):
         super(AsyncProducer, self).__init__(*args, **kwargs)
+
+        logger.debug("Async producer initialized")
 
         self.manager = Manager()
         self.shared_async_data = self.manager.Namespace()
@@ -45,6 +64,12 @@ class AsyncProducer(Producer):
             target=self._async_runner,
             args=(self.queue, self.flush_complete_event, self.shared_async_data)
         )
+
+        # Register a signal handler for the child, this is used to signal that
+        # the child has crashed.
+        signal.signal(signal.SIGUSR1, self._child_handler)
+
+        logger.debug("Starting async process")
         self.async_process.start()
 
         # Flushing here is really just a convenient way to wait for the child
@@ -77,8 +102,11 @@ class AsyncProducer(Producer):
     def flush(self):
         """See :meth:`data_pipeline.producer.Producer.flush`"""
         self.flush_complete_event.clear()
+        logger.debug("Pushing flush marker")
         self.queue.put(self._flush_marker)
+        logger.debug("Waiting for flush complete event...")
         self.flush_complete_event.wait()
+        logger.debug("Flush complete.")
 
     def close(self):
         """Closes the producer, flushing all buffered messages into Kafka.
@@ -92,11 +120,30 @@ class AsyncProducer(Producer):
 
         This call will block until all messages are successfully flushed.
         """
+        if not self.async_process.is_alive():
+            # This shouldn't happen because of signaling, but if it does,
+            # it is a bug that needs to be fixed.
+            logger.error("Background process has already died.")
+
+        # Clear the queue
+        self.flush()
+
+        # Send the stop marker and wait for the queue to die
         self.queue.put(self._stop_marker)
         self.queue.close()
+        self.queue.join_thread()
+
+        # Wait for the subprocess to exit
         self.async_process.join()
+
+        # Cleanup background processes
         self.queue = None
         self.async_process = None
+        self.manager.shutdown()
+        self.manager = None
+
+        # We should never be leaving processes behind
+        assert len(multiprocessing.active_children()) == 0
 
     def get_checkpoint_position_data(self):
         """See :meth:`data_pipeline.producer.Producer.get_checkpoint_position_data`"""
@@ -107,6 +154,7 @@ class AsyncProducer(Producer):
         # https://docs.python.org/2/library/multiprocessing.html#all-platforms
         # for an explanation of why data used in the child process is passed
         # in, instead of just accessing it through self
+        logger.debug("Producer subprocess started")
         try:
             self.background_shared_async_data = shared_async_data
             self._consume_async_queue(queue, flush_complete_event)
@@ -114,20 +162,30 @@ class AsyncProducer(Producer):
             # TODO(DATAPIPE-153|justinc): Logging is a start here, but anything
             # that will kill this process should cause some kind of exception
             # in the sync process
-            logger.exception("Runner Subprocess Crashed")
+            logger.exception("AsyncProducer Subprocess Crashed")
+            # This doesn't actually kill the parent, it signals that the child
+            # process has died.  Signalling here interrupts whatever else is
+            # going on, in particular, if the parent process is sleeping waiting
+            # for a flush to complete, this will wake it.  SIGCHLD can't be used
+            # here because the multiprocessing.Manager uses it internally, so
+            # adding a handler to that breaks the Manager.
+            os.kill(os.getppid(), signal.SIGUSR1)
 
     def _consume_async_queue(self, queue, flush_complete_event):
         # TODO(DATAPIPE-156|justinc): the gets should timeout and call wake
         # periodically
+        logger.debug("Waiting for jobs from queue")
         item = queue.get()
         while item != self._stop_marker:
             if item == self._flush_marker:
+                logger.debug("Recieved flush marker")
                 super(AsyncProducer, self).flush()
                 flush_complete_event.set()
             else:
                 message = item
                 super(AsyncProducer, self).publish(message)
             item = queue.get()
+        logger.debug("Shutting down the background producer")
         queue.close()
         super(AsyncProducer, self).close()
 
@@ -140,3 +198,18 @@ class AsyncProducer(Producer):
                 including Kafka offsets and upstream position information.
         """
         self.background_shared_async_data.position_data = position_data
+
+    def _child_handler(self, signum, frame):
+        """This method is activated by the USR1 signal when the child process
+        exits uncleanly.  The intention is for it to stop the parent, letting
+        the parent know that a fault happened in the subprocess.  This error is
+        meant to be fatal, processes that receive it should die, then follow
+        their recovery procedure.  justinc considered propogating the exception
+        from the child to the parent process, but choose not to since it's
+        likely to be error prone (e.g. what happens if we try to use a manager
+        to do that, but the fault is that the manager crashed).
+        """
+        # TODO(DATAPIPE-166|justinc): Trigger an alert here
+        raise UnrecoverableSubprocessError(
+            "The subprocess crashed!  See the logs to figure out what happened."
+        )
