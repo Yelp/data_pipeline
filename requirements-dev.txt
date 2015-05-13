@@ -1,4 +1,6 @@
 -e .
+# TODO(DATAPIPE-167): Add the packages that don't exist yet to the interal Pypi
+# and remove this extra-index-url
 --extra-index-url https://pypi.python.org/simple/
 flake8
 pytest
