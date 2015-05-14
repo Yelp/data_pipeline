@@ -34,7 +34,16 @@ class Message(object):
             message is coming directly from an upstream source, and the
             modification time is available in that source, it's appropriate to
             use that timestamp.  Otherwise, it's probably best to have the
-            timestamp represent when the message was generated.
+            timestamp represent when the message was generated.  If the message
+            is derived from an upstream data pipeline message, reuse the
+            timestamp from that upstream message.
+
+            Timestamp is used internally by the clientlib to monitor timings and
+            other metadata about the data pipeline as a system.
+            Consequently, there is no need to store information about when this
+            message passed through individual systems in the message itself,
+            as it is otherwise recorded.  See DATAPIPE-169 for details about
+            monitoring.
         upstream_position_info (dict, optional): This dict must only contain
             primitive types.  It is not used internally by the data pipeline,
             so the content is left to the application.  The clientlib will
@@ -164,7 +173,16 @@ class Message(object):
         directly from an upstream source, and the modification time is
         available in that source, it's appropriate to use that timestamp.
         Otherwise, it's probably best to have the timestamp represent when the
-        message was generated.
+        message was generated.  If the message is derived from an upstream data
+        pipeline message, the timestamp should be the timestamp from that
+        upstream message.
+
+        Timestamp is used internally by the clientlib to monitor timings and
+        other metadata about the data pipeline as a system.
+        Consequently, there is no need to store information about when this
+        message passed through individual systems in the message itself,
+        as it is otherwise recorded.  See DATAPIPE-169 for details about
+        monitoring.
         """
         return self._timestamp
 
