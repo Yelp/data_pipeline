@@ -19,6 +19,18 @@ To run dependent processes, run::
 
   bundle exec foreman start
 
+Installing a more modern ruby version may be necessary.  To do this on a dev 
+machine, from the data_pipeline project root, install ruby-build, ruby 2.2.2, 
+and bundler, then the bundled gems::
+
+  git clone https://github.com/sstephenson/ruby-build.git ~/.rbenv/plugins/ruby-build
+  rbenv build 2.2.2
+  rbenv local 2.2.2
+  rbenv rehash
+  gem install bundler
+  rbenv rehash
+  bundle install --path=.bundle
+
 This will start a docker container with Kafka and a documentation server, 
 accessible at `http://HOST:8001/docs/build/html/`.  Tests will automatically
 reuse a running Kafka container instead of starting a new one, which can
