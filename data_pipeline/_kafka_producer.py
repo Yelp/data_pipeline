@@ -22,9 +22,13 @@ _EnvelopeAndMessage = namedtuple("_EnvelopeAndMessage", ["envelope", "message"])
 # prepare needs to be in the module top level so it can be serialized for
 # multiprocessing
 def _prepare(envelope_and_message):
-    return create_message(
-        envelope_and_message.envelope.pack(envelope_and_message.message)
-    )
+    try:
+        return create_message(
+            envelope_and_message.envelope.pack(envelope_and_message.message)
+        )
+    except:
+        logger.exception('Prepare failed')
+        raise
 
 
 class KafkaProducer(object):
@@ -63,6 +67,7 @@ class KafkaProducer(object):
         # and all produce requests that failed are retried.  If all haven't
         # succeeded after a few tries, this should blow up.
         try:
+            published_messages_count = 0
             responses = self.kafka_client.send_produce_request(
                 payloads=requests,
                 acks=1  # Written to disk on master
@@ -75,8 +80,12 @@ class KafkaProducer(object):
                     response.offset,
                     len(self.message_buffer[response.topic])
                 )
+                published_messages_count += len(self.message_buffer[response.topic])
+            # Don't let this return if we didn't publish all the messages
+            assert published_messages_count == self.message_buffer_size
         except:
             logger.exception("Produce failed... fix in DATAPIPE-149")
+            raise
 
     def close(self):
         self.flush_buffered_messages()

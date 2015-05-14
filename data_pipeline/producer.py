@@ -2,6 +2,8 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import multiprocessing
+
 from cached_property import cached_property
 
 from data_pipeline._kafka_producer import LoggingKafkaProducer
@@ -40,6 +42,20 @@ class Producer(Client):
                   producer.flush()
                   upstream.all_those_messages_were published()
 
+      The Producer is incapable of flushing its own buffers, which can be
+      problematic if messages aren't published relatively constantly.  The
+      :meth:`wake` should be called periodically to allow the Producer to clear
+      its buffer if necessary, in the absence of messages.  If :meth:`wake`
+      isn't called, messages in the buffer could be delayed indefinitely::
+
+          with Producer() as producer:
+              while True:
+                  try:
+                      message = slow_queue.get(block=True, timeout=0.1)
+                      producer.publish(message)
+                  except Empty:
+                      producer.wake()
+
     Args:
       use_work_pool (bool): If true, the process will use a multiprocessing
         pool to serialize messages in preparation for transport.  The work pool
@@ -59,6 +75,14 @@ class Producer(Client):
         self.use_work_pool = use_work_pool
 
     def __enter__(self):
+        # By default, the kafka producer is created lazily, and doesn't
+        # actually do anything until it needs to.  This method is used here to
+        # force the kafka producer to wake up, which will guarantee that
+        # its initialized before it is used.  This is important, since without
+        # it, checkpoint position data won't be passed to the producer until
+        # the user starts publishing messages.
+        self.wake()
+
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -131,6 +155,7 @@ class Producer(Client):
                 producer.publish(message)
         """
         self._kafka_producer.close()
+        assert len(multiprocessing.active_children()) == 0
 
     def get_checkpoint_position_data(self):
         """
@@ -139,9 +164,35 @@ class Producer(Client):
                 containing details about the last messages published to Kafka,
                 including Kafka offsets and upstream position information.
         """
-        if not hasattr(self, 'position_data'):
-            self._kafka_producer.wake()
         return self.position_data
+
+    def wake(self):
+        """The synchronous producer has no mechanism to flush messages on its
+        own, in the absence of other messages being published.  Consequently,
+        if there are gaps where messages aren't published, this method should
+        be called to allow the producer to flush its buffers if it needs to.
+
+        If messages aren't published at least every 250ms, this method should
+        be called about that often, to ensure that messages don't sit in the
+        buffer for longer than that.
+
+        Example::
+
+            If the upstream messages are coming in slowly, or there can be gaps,
+            call wake periodically so the producer has a change to publish
+            messages::
+
+                with Producer() as producer:
+                    while True:
+                        # if no new message arrive after 100ms, wake up the
+                        # producer.
+                        try:
+                            message = slow_queue.get(block=True, timeout=0.1)
+                            producer.publish(message)
+                        except Empty:
+                            producer.wake()
+        """
+        self._kafka_producer.wake()
 
     def _notify_messages_published(self, position_data):
         """Called to notify the producer of successfully published messages.

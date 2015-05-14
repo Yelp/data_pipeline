@@ -149,6 +149,13 @@ class AsyncProducer(Producer):
         """See :meth:`data_pipeline.producer.Producer.get_checkpoint_position_data`"""
         return self.shared_async_data.position_data
 
+    def wake(self):
+        """The AsyncProducer's wake function is a noop.  The background process
+        is capable of periodically waking itself to publish messages, and does
+        so automatically.  There is no need to call this function.
+        """
+        pass
+
     def _async_runner(self, queue, flush_complete_event, shared_async_data):
         # See "Explicitly pass resources to child processes" under
         # https://docs.python.org/2/library/multiprocessing.html#all-platforms

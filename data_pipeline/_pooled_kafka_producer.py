@@ -7,6 +7,7 @@ from multiprocessing import Pool
 from data_pipeline._kafka_producer import _EnvelopeAndMessage
 from data_pipeline._kafka_producer import _prepare
 from data_pipeline._kafka_producer import LoggingKafkaProducer
+from data_pipeline.config import logger
 
 
 class PooledKafkaProducer(LoggingKafkaProducer):
@@ -15,8 +16,15 @@ class PooledKafkaProducer(LoggingKafkaProducer):
         super(PooledKafkaProducer, self).__init__(*args, **kwargs)
 
     def close(self):
+        logger.debug("Starting to close pooled producer")
         super(PooledKafkaProducer, self).close()
+        logger.debug("Closing the pool")
+        assert self.message_buffer_size == 0
         self.pool.close()
+        # Joining pools can be flakey in CPython 2.6, and the message buffer
+        # size is zero here, so terminating the pool is safe and ensure that
+        # join always works.
+        self.pool.terminate()
         self.pool.join()
 
     def _prepare_message(self, message):
@@ -43,4 +51,4 @@ class PooledKafkaProducer(LoggingKafkaProducer):
             )) for topic, messages in self.message_buffer.iteritems()
         ]
 
-        return ((topic, messages_result.get()) for topic, messages_result in topics_and_messages_result)
+        return [(topic, messages_result.get()) for topic, messages_result in topics_and_messages_result]
