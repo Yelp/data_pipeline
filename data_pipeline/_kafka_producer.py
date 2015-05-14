@@ -32,6 +32,9 @@ def _prepare(envelope_and_message):
 
 
 class KafkaProducer(object):
+    """The KafkaProducer deals with buffering messages that need to be published
+    into Kafka, preparing them for publication, and ultimately publishing them.
+    """
     message_limit = 5000
     time_limit = 0.1
 
@@ -61,6 +64,10 @@ class KafkaProducer(object):
         self._publish_produce_requests(self._generate_produce_requests())
         self._reset_message_buffer()
 
+    def close(self):
+        self.flush_buffered_messages()
+        self.kafka_client.close()
+
     def _publish_produce_requests(self, requests):
         # TODO(DATAPIPE-149|justinc): This should be a loop, where on each
         # iteration all produce requests for topics that succeeded are removed,
@@ -86,10 +93,6 @@ class KafkaProducer(object):
         except:
             logger.exception("Produce failed... fix in DATAPIPE-149")
             raise
-
-    def close(self):
-        self.flush_buffered_messages()
-        self.kafka_client.close()
 
     def _is_ready_to_flush(self):
         return (

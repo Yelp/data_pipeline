@@ -11,6 +11,17 @@ from data_pipeline.config import logger
 
 
 class PooledKafkaProducer(LoggingKafkaProducer):
+    """PooledKafkaProducer extends KafkaProducer to use a pool of subprocesses
+    to schematize and pack envelopes, instead of performing those operations
+    synchronously.  Parallelizing and backgrounding these expensive operations
+    can result in a substantial performance improvement.
+
+    See the Quick Start for more information about choosing an appropriate
+    producer.
+
+    TODO(DATAPIPE-171|justinc): Actually write a Quick Start
+    """
+
     def __init__(self, *args, **kwargs):
         self.pool = Pool()
         super(PooledKafkaProducer, self).__init__(*args, **kwargs)

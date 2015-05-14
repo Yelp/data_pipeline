@@ -96,7 +96,12 @@ class Producer(Client):
                 # The exception shouldn't mask the original exception if there
                 # is one, but if an exception occurs, we want it to show up.
                 raise
-        return False  # don't suppress the exception, if there is one
+        # Returning any kind of truthy value will suppress the exception, if
+        # there was one.  The intention of returning False here is to never
+        # suppress the exception.  See:
+        # https://docs.python.org/2/reference/datamodel.html#object.__exit__
+        # for more information.
+        return False
 
     def publish(self, message):
         """Adds the message to the buffer to be published.  Messages are

@@ -24,9 +24,11 @@ machine, from the data_pipeline project root, install ruby-build, ruby 2.2.2,
 and bundler, then the bundled gems::
 
   git clone https://github.com/sstephenson/ruby-build.git ~/.rbenv/plugins/ruby-build
-  rbenv build 2.2.2
+  export RBENV_ROOT=$HOME/.rbenv
+  rbenv install 2.2.2
   rbenv local 2.2.2
   rbenv rehash
+  eval "$(rbenv init -)"
   gem install bundler
   rbenv rehash
   bundle install --path=.bundle
