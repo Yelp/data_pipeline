@@ -4,7 +4,7 @@ from __future__ import unicode_literals
 
 import pytest
 
-from swaggerpy import client
+from data_pipeline.config import get_schematizer_client
 
 from data_pipeline.sample_data_loader import SampleDataLoader
 from data_pipeline.schema_cache import SchemaCache
@@ -14,10 +14,7 @@ class TestSchemaCache(object):
 
     @pytest.fixture
     def api(self):
-        return client.get_client(
-            # TODO: configurable schematizer swagger-py client URL
-            "http://srv1-uswest1adevc:31024/api-docs"
-        )
+        return get_schematizer_client()
 
     @pytest.fixture
     def registered_schema(self, api):
