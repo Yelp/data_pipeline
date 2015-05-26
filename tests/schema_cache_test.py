@@ -5,7 +5,6 @@ from __future__ import unicode_literals
 import pytest
 
 from data_pipeline.config import get_schematizer_client
-
 from data_pipeline.sample_data_loader import SampleDataLoader
 from data_pipeline.schema_cache import SchemaCache
 
@@ -18,7 +17,7 @@ class TestSchemaCache(object):
 
     @pytest.fixture
     def registered_schema(self, api):
-        return api.schemas.register_avro_schema(
+        return api.schemas.register_schema(
             base_schema_id=None,
             schema=SampleDataLoader().get_data('raw_business.avsc'),
             namespace='yelp_db',

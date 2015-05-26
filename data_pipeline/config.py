@@ -6,6 +6,7 @@ import logging
 
 from kafka import KafkaClient
 from swaggerpy import client
+
 from data_pipeline.schema_cache import SchemaCache
 
 logger = logging.getLogger('data_pipeline_clientlib')
