@@ -1,0 +1,9 @@
+{"namespace": "envelope.avro",
+ "type": "record",
+ "name": "envelope",
+ "fields": [
+     {"name": "name", "type": "string"},
+     {"name": "schema_id", "type": "string"},
+     {"name": "payload", "type": "bytes"}
+ ]
+}
