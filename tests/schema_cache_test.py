@@ -17,17 +17,18 @@ class TestSchemaCache(object):
 
     @pytest.fixture
     def registered_schema(self, api):
-        return api.schemas.register_schema(
-            base_schema_id=None,
-            schema=SampleDataLoader().get_data('raw_business.avsc'),
-            namespace='yelp_db',
-            source='business',
-            source_owner_email='test@yelp.com'
+        return api.schemas.register_avro_schema(
+            body={
+                'schema': SampleDataLoader().get_data('raw_business.avsc'),
+                'namespace': 'yelp_db',
+                'source': 'business',
+                'source_owner_email': 'test@yelp.com'
+            }
         ).result()
 
     @pytest.fixture
     def schema_cache(self, api):
-        return SchemaCache(api)
+        return SchemaCache(schematizer_client=api)
 
     def test_get_transformed_schema_id(self, schema_cache):
         assert schema_cache.get_transformed_schema_id(0) is None

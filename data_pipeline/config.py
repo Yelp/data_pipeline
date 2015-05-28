@@ -7,7 +7,6 @@ import logging
 from kafka import KafkaClient
 from swaggerpy import client
 
-from data_pipeline.schema_cache import SchemaCache
 
 logger = logging.getLogger('data_pipeline_clientlib')
 
@@ -22,11 +21,9 @@ def get_kafka_client():
 
 
 def get_schematizer_client():
-    return client.get_client(
         # TODO: configurable schematizer swagger-py client URL
-        "http://srv1-uswest1adevc:31024/api-docs"
+        # For now, running schematizer in local docker:
+        #   https://pb.yelpcorp.com/135571
+    return client.get_client(
+        "http://localhost:1210/api-docs"
     )
-
-
-def get_schema_cache():
-    return SchemaCache(schematizer_client=get_schematizer_client())

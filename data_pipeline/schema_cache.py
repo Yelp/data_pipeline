@@ -43,12 +43,14 @@ class SchemaCache(object):
         Returns:
             (int, string): The new schema_id and the new topic name
         """
-        register_response = self.schematizer_client.schemas.register_schema(
-            base_schema_id=base_schema_id,
-            schema=schema,
-            namespace=namespace,
-            source=source,
-            source_owner_email=owner_email
+        register_response = self.schematizer_client.schemas.register_avro_schema(
+            body={
+                'base_schema_id': base_schema_id,
+                'schema': schema,
+                'namespace': namespace,
+                'source': source,
+                'source_owner_email': owner_email
+            }
         ).result()
         transformed_id = register_response.schema_id
         self.schema_id_to_schema_map[transformed_id] = register_response.schema
