@@ -43,7 +43,7 @@ class SchemaCache(object):
         Returns:
             (int, string): The new schema_id and the new topic name
         """
-        register_response = self.schematizer_client.schemas.register_avro_schema(
+        register_response = self.schematizer_client.schemas.register_schema(
             body={
                 'base_schema_id': base_schema_id,
                 'schema': schema,
@@ -55,8 +55,9 @@ class SchemaCache(object):
         transformed_id = register_response.schema_id
         self.schema_id_to_schema_map[transformed_id] = register_response.schema
         self.base_to_transformed_schema_id_map[base_schema_id] = transformed_id
-        self.schema_id_to_topic_map[transformed_id] = register_response.topic
-        return register_response.schema_id, register_response.topic
+        new_topic_name = register_response.topic.name
+        self.schema_id_to_topic_map[transformed_id] = new_topic_name
+        return register_response.schema_id, new_topic_name
 
     def get_topic_for_schema_id(self, schema_id):
         """ Get the topic name for a given schema_id

@@ -17,7 +17,7 @@ class TestSchemaCache(object):
 
     @pytest.fixture
     def registered_schema(self, api):
-        return api.schemas.register_avro_schema(
+        return api.schemas.register_schema(
             body={
                 'schema': SampleDataLoader().get_data('raw_business.avsc'),
                 'namespace': 'yelp_db',
