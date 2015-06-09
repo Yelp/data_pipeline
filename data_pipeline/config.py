@@ -25,5 +25,5 @@ def get_schematizer_client():
         # For now, running schematizer in local docker:
         #   https://pb.yelpcorp.com/135876
     return client.get_client(
-        "http://localhost:1210/api-docs"
+        "http://localhost:8888/api-docs"
     )
