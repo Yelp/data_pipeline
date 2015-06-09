@@ -3,3 +3,5 @@ include CONTRIBUTING.rst
 include HISTORY.rst
 include README.rst
 include USAGE.rst
+recursive-include data_pipeline/sample_data *.avsc
+recursive-include data_pipeline/sample_data *.p

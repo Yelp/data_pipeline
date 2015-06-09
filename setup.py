@@ -41,6 +41,8 @@ setup(
     keywords='data_pipeline',
     package_data={
         str('data_pipeline'): [
+            'sample_data/*.avsc',
+            'sample_data/*.p',
             'schemas/*.avsc'
         ]
     },
