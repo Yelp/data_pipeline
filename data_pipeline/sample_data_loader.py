@@ -6,7 +6,8 @@ import os.path
 import pickle
 import sys
 
-from data_pipeline.avro_util import decode_payload
+from data_pipeline.envelope import _AvroStringReader
+from data_pipeline.envelope import _get_avro_schema_object
 
 
 class SampleDataLoader(object):
@@ -45,12 +46,24 @@ class SampleDataLoader(object):
         :return: The list of extracted message data and the avro schema
         :rtype: (list[dict], str)
         """
-        envelope_schema = self.get_data('envelope.avsc')
-        business_schema = self.get_data('raw_business.avsc')
+        envelope_schema = _get_avro_schema_object(
+            self.get_data('envelope.avsc')
+        )
+        business_schema = _get_avro_schema_object(
+            self.get_data('raw_business.avsc')
+        )
+        business_reader = _AvroStringReader(
+            reader_schema=business_schema,
+            writer_schema=business_schema
+        )
+        envelope_reader = _AvroStringReader(
+            reader_schema=envelope_schema,
+            writer_schema=envelope_schema
+        )
         kafka_items = pickle.loads(self.get_data('raw_messages.p'))
         sample_data = []
         for item in kafka_items:
-            envelope = decode_payload(item.message.value, envelope_schema)
-            data = decode_payload(envelope['payload'], business_schema)
+            envelope_data = envelope_reader.decode(item.message.value)
+            data = business_reader.decode(envelope_data['payload'])
             sample_data.append(data)
         return sample_data, business_schema

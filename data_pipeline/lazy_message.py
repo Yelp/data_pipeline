@@ -2,6 +2,9 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+from data_pipeline.config import get_schema_cache
+from data_pipeline.envelope import _AvroStringWriter
+from data_pipeline.envelope import _get_avro_schema_object
 from data_pipeline.message import Message
 from data_pipeline.message_type import MessageType
 
@@ -26,9 +29,11 @@ class LazyMessage(Message):
     def payload(self):
         """Avro-encoded message - encoded with schema identified by `schema_id`.
         """
-        # TODO(DATAPIPE-158|justinc): This should serialize payload_data with
-        # the schema from schema_id and return it
-        raise NotImplementedError
+        schema = _get_avro_schema_object(
+            get_schema_cache().get_schema(self.schema_id)
+        )
+        writer = _AvroStringWriter(schema=schema)
+        return writer.encode(self._payload_data)
 
     @property
     def previous_payload(self):
@@ -36,9 +41,14 @@ class LazyMessage(Message):
         `schema_id`.  Required when message type is `MessageType.update`.
         Disallowed otherwise.  Defaults to None.
         """
-        # TODO(DATAPIPE-158|justinc): This should serialize
-        # previous_payload_data with the schema from schema_id and return it
-        raise NotImplementedError
+        if self.message_type == MessageType.update:
+            schema = _get_avro_schema_object(
+                get_schema_cache().get_schema(self.schema_id)
+            )
+            writer = _AvroStringWriter(schema=schema)
+            return writer.encode(self._previous_payload_data)
+        else:
+            return None
 
     @property
     def _payload_data(self):

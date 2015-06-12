@@ -6,7 +6,9 @@ import logging
 
 from kafka import KafkaClient
 from swaggerpy import client
+from yelp_lib.decorators import memoized
 
+from data_pipeline.schema_cache import SchemaCache
 
 logger = logging.getLogger('data_pipeline_clientlib')
 
@@ -27,3 +29,8 @@ def get_schematizer_client():
     return client.get_client(
         "http://localhost:8888/api-docs"
     )
+
+
+@memoized
+def get_schema_cache():
+    return SchemaCache(get_schematizer_client())

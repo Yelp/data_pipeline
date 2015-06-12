@@ -7,6 +7,7 @@ import os
 
 import avro.io
 import avro.schema
+import simplejson
 from cached_property import cached_property
 
 from data_pipeline.message_type import MessageType
@@ -144,3 +145,17 @@ class _AvroStringReader(object):
         stringio = cStringIO.StringIO(encoded_message)
         decoder = avro.io.BinaryDecoder(stringio)
         return self.avro_reader.read(decoder)
+
+
+def _get_avro_schema_object(schema):    # pragma: no cover
+    """ Helper function to simplify dealing with the three ways avro schema may
+        be represented:
+        - a json string
+        - a dictionary (parsed json string)
+        - a parsed avro schema object"""
+    if isinstance(schema, avro.schema.Schema):
+        return schema
+    elif isinstance(schema, basestring):
+        return avro.schema.parse(schema)
+    else:
+        return avro.schema.parse(simplejson.dumps(schema))
