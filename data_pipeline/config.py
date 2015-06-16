@@ -23,9 +23,12 @@ def get_kafka_client():
 
 
 def get_schematizer_client():
-        # TODO: configurable schematizer swagger-py client URL
-        # For now, running schematizer in local docker:
-        #   https://pb.yelpcorp.com/135876
+    """ Returns a swagger-py client for the schematizer api.
+
+    Currently this assumes schematizer is running in local docker as per
+    instructions in https://pb.yelpcorp.com/135876
+    TODO(DATAPIPE-154|joshszep) This should be configured with staticconf
+    """
     return client.get_client(
         "http://localhost:8888/api-docs"
     )

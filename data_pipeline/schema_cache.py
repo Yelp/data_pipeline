@@ -27,7 +27,12 @@ class SchemaCache(object):
         return self.base_to_transformed_schema_id_map.get(schema_id, None)
 
     def register_transformed_schema(
-            self, base_schema_id, namespace, source, schema, owner_email
+            self,
+            base_schema_id,
+            namespace,
+            source,
+            schema,
+            owner_email
     ):
         """ Register a new schema and return it's schema_id and topic
 
@@ -50,7 +55,6 @@ class SchemaCache(object):
             'source': source,
             'source_owner_email': owner_email
         }
-        print 'request_body: ', request_body
         register_response = self.schematizer_client.schemas.register_schema(
             body=request_body
         ).result()
@@ -70,13 +74,12 @@ class SchemaCache(object):
         Returns:
             (str): The topic name for the given schema_id
         """
-        if schema_id in self.schema_id_to_topic_map:
-            return self.schema_id_to_topic_map[schema_id]
-        else:
-            schema_response = self.schematizer_client.schemas.get_schema_by_id(
-                schema_id=schema_id
-            ).result()
-            return schema_response.topic
+        topic_name = self.schema_id_to_topic_map.get(
+            schema_id,
+            self._retrieve_topic_name_from_schematizer(schema_id)
+        )
+        self.schema_id_to_topic_map[schema_id] = topic_name
+        return topic_name
 
     def get_schema(self, schema_id):
         """ Get the schema corresponding to the given schema_id, handling cache
@@ -91,12 +94,18 @@ class SchemaCache(object):
         Returns:
             (str): The schema as a json string
         """
-        if schema_id in self.schema_id_to_schema_map:
-            schema = self.schema_id_to_schema_map[schema_id]
-        else:
-            schema = self._retrieve_schema_from_schematizer(schema_id)
-            self.schema_id_to_schema_map[schema_id] = schema
+        schema = self.schema_id_to_schema_map.get(
+            schema_id,
+            self._retrieve_schema_from_schematizer(schema_id)
+        )
+        self.schema_id_to_schema_map[schema_id] = schema
         return schema
+
+    def _retrieve_topic_name_from_schematizer(self, schema_id):
+        schema_response = self.schematizer_client.schemas.get_schema_by_id(
+            schema_id=schema_id
+        ).result()
+        return schema_response.topic.name
 
     def _retrieve_schema_from_schematizer(self, schema_id):
         schema_response = self.schematizer_client.schemas.get_schema_by_id(

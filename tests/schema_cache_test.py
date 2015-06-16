@@ -40,15 +40,20 @@ class TestSchemaCache(object):
 
     def test_get_topic_for_schema_id(self, registered_schema, schema_cache):
         topic_resp = schema_cache.get_topic_for_schema_id(
-            registered_schema.schema_id)
-        assert topic_resp == registered_schema.topic
+            registered_schema.schema_id
+        )
+        assert topic_resp == registered_schema.topic.name
 
     def test_get_schema(self, registered_schema, schema_cache):
         schema = schema_cache.get_schema(registered_schema.schema_id)
         assert registered_schema.schema == schema
 
     def test_register_transformed_schema(
-            self, api, registered_schema, schema_cache, example_schema
+            self,
+            api,
+            registered_schema,
+            schema_cache,
+            example_schema
     ):
         schema_id, topic = schema_cache.register_transformed_schema(
             base_schema_id=registered_schema.schema_id,
@@ -70,7 +75,10 @@ class TestSchemaCache(object):
         assert schema_response.topic.source.source == 'test_source'
 
     def test_register_transformed_schema_repeated_alternate_source(
-            self, registered_schema, schema_cache, example_schema
+            self,
+            registered_schema,
+            schema_cache,
+            example_schema
     ):
         schema_id, topic = schema_cache.register_transformed_schema(
             base_schema_id=registered_schema.schema_id,
@@ -98,7 +106,10 @@ class TestSchemaCache(object):
         assert topic2 == transformed_topic
 
     def test_register_transformed_schema_repeated_same_source(
-            self, registered_schema, schema_cache, example_schema
+            self,
+            registered_schema,
+            schema_cache,
+            example_schema
     ):
         schema_id, topic = schema_cache.register_transformed_schema(
             base_schema_id=registered_schema.schema_id,
