@@ -1,10 +1,12 @@
 -   repo: git@git.yelpcorp.com:mirrors/pre-commit/pre-commit-hooks
-    sha: cedcea550c495d536247ca23115035b17074cac7
+    sha: 516cc9fa72ad09699f2c03ffbd0aa7f60d75b59a
     hooks:
     -   id: trailing-whitespace
     -   id: end-of-file-fixer
     -   id: autopep8-wrapper
-        args: ['-i', '--ignore=E265,E309,E501']
+        args:
+        - -i
+        - --ignore=E265,E309,E501
     -   id: check-yaml
     -   id: debug-statements
     -   id: flake8
@@ -14,7 +16,7 @@
     -   id: name-tests-test
         exclude: tests/helpers/(.+).py
 -   repo: git@git.yelpcorp.com:yelp_pre_commit_hooks
-    sha: ff1e848799fc9cf866353b640d50bd13993c58da
+    sha: cff7fc91c367ea75e2a38e34a4aafb025cf02781
     hooks:
     -   id: stop-dollar-html
     -   id: httplib-https-connection
