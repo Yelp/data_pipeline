@@ -4,9 +4,9 @@ from __future__ import unicode_literals
 
 import pytest
 
-from data_pipeline.envelope import _AvroStringReader
-from data_pipeline.envelope import _AvroStringWriter
-from data_pipeline.envelope import _get_avro_schema_object
+from data_pipeline._avro_util import AvroStringReader
+from data_pipeline._avro_util import AvroStringWriter
+from data_pipeline._avro_util import get_avro_schema_object
 from data_pipeline.sample_data_loader import SampleDataLoader
 
 
@@ -19,9 +19,9 @@ class TestSampleDataLoader(object):
     def test_get_raw_business_sample_data_and_schema(self, loader):
         data, schema = loader.get_raw_business_sample_data_and_schema()
         assert len(data) > 0
-        avro_schema = _get_avro_schema_object(schema)
-        writer = _AvroStringWriter(schema=avro_schema)
-        reader = _AvroStringReader(reader_schema=avro_schema, writer_schema=avro_schema)
+        avro_schema = get_avro_schema_object(schema)
+        writer = AvroStringWriter(schema=avro_schema)
+        reader = AvroStringReader(reader_schema=avro_schema, writer_schema=avro_schema)
         encoded_payload = writer.encode(data[0])
         decoded_payload = reader.decode(encoded_payload)
         assert data[0] == decoded_payload

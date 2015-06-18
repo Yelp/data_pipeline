@@ -6,8 +6,8 @@ import os.path
 import pickle
 import sys
 
-from data_pipeline.envelope import _AvroStringReader
-from data_pipeline.envelope import _get_avro_schema_object
+from data_pipeline._avro_util import AvroStringReader
+from data_pipeline._avro_util import get_avro_schema_object
 
 
 class SampleDataLoader(object):
@@ -46,17 +46,17 @@ class SampleDataLoader(object):
         :return: The list of extracted message data and the avro schema
         :rtype: (list[dict], str)
         """
-        envelope_schema = _get_avro_schema_object(
+        envelope_schema = get_avro_schema_object(
             self.get_data('envelope.avsc')
         )
-        business_schema = _get_avro_schema_object(
+        business_schema = get_avro_schema_object(
             self.get_data('raw_business.avsc')
         )
-        business_reader = _AvroStringReader(
+        business_reader = AvroStringReader(
             reader_schema=business_schema,
             writer_schema=business_schema
         )
-        envelope_reader = _AvroStringReader(
+        envelope_reader = AvroStringReader(
             reader_schema=envelope_schema,
             writer_schema=envelope_schema
         )

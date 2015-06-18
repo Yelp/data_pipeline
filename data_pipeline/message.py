@@ -4,8 +4,13 @@ from __future__ import unicode_literals
 
 import time
 
+from cached_property import cached_property
+
+from data_pipeline._avro_util import AvroStringReader
+from data_pipeline._avro_util import AvroStringWriter
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.message_type import MessageType
+from data_pipeline.schema_cache import get_schema_cache
 
 
 class Message(object):
@@ -75,6 +80,7 @@ class Message(object):
     def schema_id(self, schema_id):
         if not isinstance(schema_id, int):
             raise ValueError("Schema id should be an int")
+        self._invalidate_cached_properties()
         self._schema_id = schema_id
 
     @property
@@ -205,6 +211,32 @@ class Message(object):
         if upstream_position_info is not None and not isinstance(upstream_position_info, dict):
             raise ValueError("upstream_position_info should be None or a dict")
         self._upstream_position_info = upstream_position_info
+
+    @cached_property
+    def _avro_schema(self):
+        return get_schema_cache().get_schema(self.schema_id)
+
+    @cached_property
+    def _avro_string_writer(self):
+        return AvroStringWriter(
+            schema=self._avro_schema
+        )
+
+    @cached_property
+    def _avro_string_reader(self):
+        return AvroStringReader(
+            reader_schema=self._avro_schema,
+            writer_schema=self._avro_schema
+        )
+
+    def _invalidate_cached_properties(self):
+        # Invalidate the caches for the schema and writer/reader
+        if hasattr(self, '_avro_schema'):
+            del self._avro_schema
+        if hasattr(self, '_avro_string_writer'):
+            del self._avro_string_writer
+        if hasattr(self, '_avro_string_reader'):
+            del self._avro_string_reader
 
     def __init__(
         self, topic, schema_id, payload, message_type, previous_payload=None,

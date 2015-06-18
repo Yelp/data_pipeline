@@ -2,17 +2,26 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+from data_pipeline._avro_util import get_avro_schema_object
+from data_pipeline.config import get_config
+
 
 class SchemaCache(object):
     """ A cache for mapping schema_id's to their schemas and to their
-        transformed schema_ids
+        transformed schema_ids.
+
+        Currently this only holds an in-memory cache.
+        TODO(DATAPIPE-162|joshszep): Implement persistent caching
     """
 
-    def __init__(self, schematizer_client):
-        self.schematizer_client = schematizer_client
+    def __init__(self):
         self.schema_id_to_schema_map = {}
         self.schema_id_to_topic_map = {}
         self.base_to_transformed_schema_id_map = {}
+
+    @property
+    def schematizer_client(self):
+        return get_config().schematizer_client
 
     def get_transformed_schema_id(self, schema_id):
         """ Get the cached transformed schema_id corresponding to the given
@@ -85,30 +94,35 @@ class SchemaCache(object):
         """ Get the schema corresponding to the given schema_id, handling cache
             misses if required
 
-            Note: This will be the point to integrate more sophisticated caching
-            if required
-
         Args:
             schema_id (int): The schema_id to use for lookup.
 
         Returns:
-            (str): The schema as a json string
+            (avro.schema.Schema): The avro Schema object
         """
         schema = self.schema_id_to_schema_map.get(
             schema_id,
-            self._retrieve_schema_from_schematizer(schema_id)
+            self._retrieve_avro_schema_from_schematizer(schema_id)
         )
         self.schema_id_to_schema_map[schema_id] = schema
         return schema
 
-    def _retrieve_topic_name_from_schematizer(self, schema_id):
-        schema_response = self.schematizer_client.schemas.get_schema_by_id(
-            schema_id=schema_id
-        ).result()
-        return schema_response.topic.name
-
     def _retrieve_schema_from_schematizer(self, schema_id):
-        schema_response = self.schematizer_client.schemas.get_schema_by_id(
+        #TODO(DATAPIPE-207|joshszep): Include retry strategy support
+        return self.schematizer_client.schemas.get_schema_by_id(
             schema_id=schema_id
         ).result()
-        return schema_response.schema
+
+    def _retrieve_topic_name_from_schematizer(self, schema_id):
+        return self._retrieve_schema_from_schematizer(schema_id).topic.name
+
+    def _retrieve_avro_schema_from_schematizer(self, schema_id):
+        return get_avro_schema_object(
+            self._retrieve_schema_from_schematizer(schema_id).schema
+        )
+
+_schema_cache = SchemaCache()
+
+
+def get_schema_cache():
+    return _schema_cache

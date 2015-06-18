@@ -5,9 +5,8 @@ from __future__ import unicode_literals
 import pytest
 import simplejson as json
 
-from data_pipeline.config import get_schematizer_client
 from data_pipeline.sample_data_loader import SampleDataLoader
-from data_pipeline.schema_cache import SchemaCache
+from data_pipeline.schema_cache import get_schema_cache
 
 
 class TestSchemaCache(object):
@@ -17,8 +16,8 @@ class TestSchemaCache(object):
         return SampleDataLoader().get_data('raw_business.avsc')
 
     @pytest.fixture
-    def api(self):
-        return get_schematizer_client()
+    def api(self, schema_cache):
+        return schema_cache.schematizer_client
 
     @pytest.fixture
     def registered_schema(self, api, example_schema):
@@ -32,21 +31,21 @@ class TestSchemaCache(object):
         ).result()
 
     @pytest.fixture
-    def schema_cache(self, api):
-        return SchemaCache(schematizer_client=api)
+    def schema_cache(self):
+        return get_schema_cache()
 
     def test_get_transformed_schema_id(self, schema_cache):
         assert schema_cache.get_transformed_schema_id(0) is None
 
     def test_get_topic_for_schema_id(self, registered_schema, schema_cache):
-        topic_resp = schema_cache.get_topic_for_schema_id(
+        actual_topic_name = schema_cache.get_topic_for_schema_id(
             registered_schema.schema_id
         )
-        assert topic_resp == registered_schema.topic.name
+        assert actual_topic_name == registered_schema.topic.name
 
     def test_get_schema(self, registered_schema, schema_cache):
-        schema = schema_cache.get_schema(registered_schema.schema_id)
-        assert registered_schema.schema == schema
+        actual_schema = schema_cache.get_schema(registered_schema.schema_id)
+        assert actual_schema == registered_schema.schema
 
     def test_register_transformed_schema(
             self,

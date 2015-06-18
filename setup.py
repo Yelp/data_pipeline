@@ -35,7 +35,6 @@ setup(
         'enum34>=1.0.4',
         'kafka-python',
         'yelp_kafka',
-        'yelp_lib',
         'swaggerpy'
     ],
     zip_safe=False,
