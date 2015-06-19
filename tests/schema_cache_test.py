@@ -5,7 +5,6 @@ from __future__ import unicode_literals
 import pytest
 import simplejson as json
 
-from data_pipeline.sample_data_loader import SampleDataLoader
 from data_pipeline.schema_cache import get_schema_cache
 
 
@@ -13,7 +12,11 @@ class TestSchemaCache(object):
 
     @pytest.fixture
     def example_schema(self):
-        return SampleDataLoader().get_data('raw_business.avsc')
+        return b'''
+        {"type":"record","namespace":"test","name":"test","fields":[
+            {"type":"int","name":"test"}
+        ]}
+        '''
 
     @pytest.fixture
     def api(self, schema_cache):
@@ -24,8 +27,8 @@ class TestSchemaCache(object):
         return api.schemas.register_schema(
             body={
                 'schema': example_schema,
-                'namespace': 'yelp_db',
-                'source': 'business',
+                'namespace': 'test',
+                'source': 'test',
                 'source_owner_email': 'test@yelp.com'
             }
         ).result()

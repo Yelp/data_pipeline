@@ -108,7 +108,7 @@ class SchemaCache(object):
         return schema
 
     def _retrieve_schema_from_schematizer(self, schema_id):
-        #TODO(DATAPIPE-207|joshszep): Include retry strategy support
+        # TODO(DATAPIPE-207|joshszep): Include retry strategy support
         return self.schematizer_client.schemas.get_schema_by_id(
             schema_id=schema_id
         ).result()
