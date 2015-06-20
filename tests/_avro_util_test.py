@@ -4,11 +4,12 @@ from __future__ import unicode_literals
 
 import pytest
 
+from data_pipeline._avro_util import _avro_primitive_type_to_example_value
 from data_pipeline._avro_util import AvroStringReader
 from data_pipeline._avro_util import AvroStringWriter
-from data_pipeline._avro_util import get_avro_schema_object
 from data_pipeline._avro_util import generate_payload_data
-from data_pipeline._avro_util import _avro_primitive_type_to_example_value
+from data_pipeline._avro_util import get_avro_schema_object
+
 
 class TestGeneratePayloadData(object):
     @pytest.fixture
@@ -91,4 +92,3 @@ class TestGeneratePayloadData(object):
         encoded_payload = writer.encode(payload_data)
         decoded_payload = reader.decode(encoded_payload)
         assert decoded_payload == payload_data
-
