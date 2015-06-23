@@ -7,7 +7,10 @@ from multiprocessing import Pool
 from data_pipeline._kafka_producer import _EnvelopeAndMessage
 from data_pipeline._kafka_producer import _prepare
 from data_pipeline._kafka_producer import LoggingKafkaProducer
-from data_pipeline.config import logger
+from data_pipeline.config import get_config
+
+
+logger = get_config().logger
 
 
 class PooledKafkaProducer(LoggingKafkaProducer):

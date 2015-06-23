@@ -34,7 +34,9 @@ setup(
         'cffi',
         'enum34>=1.0.4',
         'kafka-python',
-        'yelp_kafka'
+        'yelp_kafka',
+        'simplejson',
+        'swaggerpy'
     ],
     zip_safe=False,
     keywords='data_pipeline',

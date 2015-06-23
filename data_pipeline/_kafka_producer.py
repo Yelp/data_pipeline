@@ -11,12 +11,12 @@ from kafka import create_message
 from kafka.common import ProduceRequest
 
 from data_pipeline._position_data_builder import PositionDataBuilder
-from data_pipeline.config import get_kafka_client
-from data_pipeline.config import logger
+from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
 
 
 _EnvelopeAndMessage = namedtuple("_EnvelopeAndMessage", ["envelope", "message"])
+logger = get_config().logger
 
 
 # prepare needs to be in the module top level so it can be serialized for
@@ -44,7 +44,7 @@ class KafkaProducer(object):
 
     def __init__(self, messages_published_callback):
         self.messages_published_callback = messages_published_callback
-        self.kafka_client = get_kafka_client()
+        self.kafka_client = get_config().kafka_client
         self.position_data_builder = PositionDataBuilder()
         self._reset_message_buffer()
 

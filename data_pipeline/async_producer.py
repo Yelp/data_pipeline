@@ -10,8 +10,11 @@ from multiprocessing import Manager
 from multiprocessing import Process
 from multiprocessing import Queue
 
-from data_pipeline.config import logger
+from data_pipeline.config import get_config
 from data_pipeline.producer import Producer
+
+
+logger = get_config().logger
 
 
 class UnrecoverableSubprocessError(Exception):

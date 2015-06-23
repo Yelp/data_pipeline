@@ -10,10 +10,11 @@ from kafka import KafkaClient
 from kafka import SimpleConsumer
 from kafka.common import KafkaUnavailableError
 
-from data_pipeline.config import logger
+from data_pipeline.config import get_config
 
 
 _ONE_MEGABYTE = 1024 * 1024
+logger = get_config().logger
 
 
 class KafkaDocker(object):

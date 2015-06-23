@@ -2,8 +2,11 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from data_pipeline.config import logger
+from data_pipeline.config import get_config
 from data_pipeline.position_data import PositionData
+
+
+logger = get_config().logger
 
 
 class PositionDataBuilder(object):

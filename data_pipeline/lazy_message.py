@@ -26,9 +26,7 @@ class LazyMessage(Message):
     def payload(self):
         """Avro-encoded message - encoded with schema identified by `schema_id`.
         """
-        # TODO(DATAPIPE-158|justinc): This should serialize payload_data with
-        # the schema from schema_id and return it
-        raise NotImplementedError
+        return self._avro_string_writer.encode(self._payload_data)
 
     @property
     def previous_payload(self):
@@ -36,9 +34,10 @@ class LazyMessage(Message):
         `schema_id`.  Required when message type is `MessageType.update`.
         Disallowed otherwise.  Defaults to None.
         """
-        # TODO(DATAPIPE-158|justinc): This should serialize
-        # previous_payload_data with the schema from schema_id and return it
-        raise NotImplementedError
+        if self.message_type == MessageType.update:
+            return self._avro_string_writer.encode(self._previous_payload_data)
+        else:
+            raise ValueError("Previous payload data should only be set for updates")
 
     @property
     def _payload_data(self):
