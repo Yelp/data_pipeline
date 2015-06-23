@@ -15,14 +15,14 @@ class TestGeneratePayloadData(object):
     @pytest.fixture
     def test_schema(self):
         return get_avro_schema_object(
-            b'''{"type": "record", "name": "test_record", "fields":[
+            '''{"type": "record", "name": "test_record", "fields":[
             {"type": ["null","int"], "name": "union_field"},
             {"type": ["null","int"], "name": "union_field_null", "default": null},
             {"type": ["null","int"], "name": "union_field_101", "default": 101},
             {"type": "boolean", "name": "bool_field"},
             {"type": "boolean", "name": "bool_field_F", "default": false},
             {"type": "string", "name": "string_field"},
-            {"type": "string", "name": "string_field_foo", "default": "foo"},
+            {"type": "string", "name": "string_field_foo", "default": "foo❤"},
             {"type": "bytes", "name": "bytes_field"},
             {"type": "bytes", "name": "bytes_field_bar", "default": "bar"},
             {"type": "int", "name": "int_field"},
@@ -43,7 +43,7 @@ class TestGeneratePayloadData(object):
             "bool_field": _avro_primitive_type_to_example_value['boolean'],
             "bool_field_F": False,
             "string_field": _avro_primitive_type_to_example_value['string'],
-            "string_field_foo": 'foo',
+            "string_field_foo": 'foo❤',
             "bytes_field": _avro_primitive_type_to_example_value['bytes'],
             "bytes_field_bar": b'bar',
             "int_field": _avro_primitive_type_to_example_value['int'],

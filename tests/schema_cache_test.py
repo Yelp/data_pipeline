@@ -12,7 +12,7 @@ class TestSchemaCache(object):
 
     @pytest.fixture
     def example_schema(self):
-        return b'''
+        return '''
         {"type":"record","namespace":"test","name":"test","fields":[
             {"type":"int","name":"test"}
         ]}
