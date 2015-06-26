@@ -196,8 +196,10 @@ class AsyncProducer(Producer):
         queue.close()
         super(AsyncProducer, self).close()
 
-    def _notify_messages_published(self, position_data):
-        """Called to notify the producer of successfully published messages.
+    def _set_kafka_producer_position(self, position_data):
+        """Called periodically to update the producer with position data.  This
+        is expected to be called at least once when the KafkaProducer is started,
+        and whenever messages are successfully published.
 
         Args:
             position_data (:class:PositionData): PositionData structure

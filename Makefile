@@ -1,6 +1,6 @@
 REBUILD_FLAG =
 
-.PHONY: help all production clean clean-pyc clean-build clean-docs lint test docs coverage install-hooks
+.PHONY: help all production clean clean-pyc clean-build clean-docs clean-vim lint test docs coverage install-hooks
 
 help:
 	@echo "clean-build - remove build artifacts"
@@ -30,6 +30,10 @@ clean-pyc:
 
 clean-docs:
 	rm -rf docs/build/*
+
+clean-vim:
+	find . -name '*.swp' -exec rm -f {} +
+	find . -name '*.swo' -exec rm -f {} +
 
 lint:
 	tox -e style

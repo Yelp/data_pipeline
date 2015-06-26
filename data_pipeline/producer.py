@@ -65,9 +65,9 @@ class Producer(Client):
     @cached_property
     def _kafka_producer(self):
         if self.use_work_pool:
-            return PooledKafkaProducer(self._notify_messages_published)
+            return PooledKafkaProducer(self._set_kafka_producer_position)
         else:
-            return LoggingKafkaProducer(self._notify_messages_published)
+            return LoggingKafkaProducer(self._set_kafka_producer_position)
 
     def __init__(self, use_work_pool=False):
         # TODO(DATAPIPE-157): This should call the Client to capture information
@@ -199,13 +199,14 @@ class Producer(Client):
         """
         self._kafka_producer.wake()
 
-    def _notify_messages_published(self, position_data):
-        """Called to notify the producer of successfully published messages.
+    def _set_kafka_producer_position(self, position_data):
+        """Called periodically to update the producer with position data.  This
+        is expected to be called at least once when the KafkaProducer is started,
+        and whenever messages are successfully published.
 
         Args:
             position_data (:class:PositionData): PositionData structure
                 containing details about the last messages published to Kafka,
                 including Kafka offsets and upstream position information.
         """
-        logger.debug("Producer notified of new messages")
         self.position_data = position_data

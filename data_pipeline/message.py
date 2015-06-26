@@ -96,8 +96,8 @@ class Message(object):
 
     @message_type.setter
     def message_type(self, message_type):
-        if not (isinstance(message_type, MessageType)):
-            message_types = ["MessageType.%s" % t.name for t in MessageType]
+        if not isinstance(message_type, MessageType):
+            message_types = [str(t) for t in MessageType]
             raise ValueError(
                 "Message type should be one of %s" % ', '.join(message_types)
             )

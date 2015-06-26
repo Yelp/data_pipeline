@@ -6,7 +6,7 @@ from data_pipeline.config import logger
 from data_pipeline.position_data import PositionData
 
 
-class PositionDataBuilder(object):
+class PositionDataTracker(object):
     """Makes it easier to construct and maintain PositionData.
 
     The basic idea is that messages are recorded as buffered, then recorded
