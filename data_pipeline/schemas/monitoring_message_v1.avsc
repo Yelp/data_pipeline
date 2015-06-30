@@ -2,13 +2,14 @@
   "type": "record",
   "namespace": "yelp.data_pipeline",
   "name": "monitoring_message",
-  "doc": "Wraps lazy message's dictionary with schema format for data pipeline monitoring tool.",
-  "fields": 
+  "doc": "Monitoring message that counts the number of messages that are produced/consumed by specific client in a given time frame",
+  "fields":
   [
-    {"name": "topic_id", "type": "int", "doc": "ID of the topic that client is associated with"},
-    {"name": "client_id", "type": "int", "doc": "ID of the client that is publishing/consuming messages"},
-    {"name": "process_type", "type":  {"name": "process_type", "type": "enum", "symbols": ["producer", "consumer"]}, "doc": "flag indicating is the client is a consumer or a producer"},
+    {"name": "topic", "type": "string", "doc": "topic associated with the messages produced/consumed by client"},
+    {"name": "client_id", "type": "string", "doc": "ID of the client that is publishing/consuming messages"},
+    {"name": "process_type", "type":  {"name": "process_type", "type": "enum", "symbols": ["producer", "consumer"]}, "doc": "flag indicating if client is a consumer or a producer"},
     {"name": "message_count", "type": "int", "doc": "number of messages published/consumed by the client"},
-    {"name": "start_timestamp", "type": "int", "doc": "Time the monitoring system started counting messages"}
+    {"name": "start_timestamp", "type": "int", "doc": "Time the monitoring system started counting messages"},
+    {"name": "host_info", "type": "string", "doc": "Host information of client"}
   ]
 }
