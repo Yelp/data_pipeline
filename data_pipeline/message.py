@@ -8,17 +8,19 @@ from collections import namedtuple
 from data_pipeline._avro_util import AvroStringReader
 from data_pipeline._avro_util import AvroStringWriter
 from data_pipeline._fast_uuid import FastUUID
+from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
 from data_pipeline.message_type import MessageType
 from data_pipeline.schema_cache import get_schema_cache
 
+
+logger = get_config().logger
 
 KafkaPositionInfo = namedtuple('KafkaPositionInfo', [
     'offset',               # Offset of the message
     'partition',            # Partition of the topic
     'key'                   # Key of the message
 ])
-
 
 
 class Message(object):
@@ -106,17 +108,23 @@ class Message(object):
     @property
     def payload_data(self):
         if self._payload_data is None:
-            self._payload_data = self._avro_string_reader.decode(
-                encoded_message=self.payload
-            )
+            if self.payload is None:
+                self._payload_data = None
+            else:
+                self._payload_data = self._avro_string_reader.decode(
+                    encoded_message=self.payload
+                )
         return self._payload_data
 
     @property
     def previous_payload_data(self):
         if self._previous_payload_data is None:
-            self._previous_payload_data = self._avro_string_reader.decode(
-                encoded_message=self.previous_payload
-            )
+            if self.previous_payload is None:
+                self._previous_payload_data = None
+            else:
+                self._previous_payload_data = self._avro_string_reader.decode(
+                    encoded_message=self.previous_payload
+                )
         return self._previous_payload_data
 
     @property
@@ -324,12 +332,12 @@ def create_from_kafka_message(
             key=kafka_message.key,
         ),
         uuid=unpacked_message['uuid'],
-        message_type=unpacked_message['message_type'],
+        message_type=MessageType[unpacked_message['message_type']],
         schema_id=unpacked_message['schema_id'],
         payload=unpacked_message['payload'],
         timestamp=unpacked_message['timestamp']
     )
     if force_payload_decoding:
-        _ = message.payload_data
-        _ = message.previous_payload_data
+        _ = message.payload_data  # flake8: noqa
+        _ = message.previous_payload_data  # flake8: noqa
     return message

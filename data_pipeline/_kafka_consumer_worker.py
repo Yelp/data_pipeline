@@ -2,11 +2,16 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from time import sleep
-from yelp_kafka.consumer import KafkaConsumerBase
 from Queue import Full
+from time import sleep
+from traceback import format_exc
 
+from yelp_kafka.consumer import KafkaConsumerBase
+
+from data_pipeline.config import get_config
 from data_pipeline.message import create_from_kafka_message
+
+logger = get_config().logger
 
 
 class KafkaConsumerWorker(KafkaConsumerBase):
@@ -52,11 +57,15 @@ class KafkaConsumerWorker(KafkaConsumerBase):
         self.message_buffer.close()
 
     def process(self, kafka_message):
-        message = create_from_kafka_message(
-            topic=self.topic,
-            kafka_message=kafka_message,
-            force_payload_decoding=self.decode_payload
-        )
+        try:
+            message = create_from_kafka_message(
+                topic=self.topic,
+                kafka_message=kafka_message,
+                force_payload_decoding=self.decode_payload
+            )
+        except Exception as exc:
+            logger.error(format_exc(exc))
+            raise
         while True:
             try:
                 self.message_buffer.put_nowait(message)

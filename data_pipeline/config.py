@@ -46,7 +46,7 @@ class Config(object):
         return ClusterConfig(
             name='data_pipeline',
             broker_list=['169.254.255.254:49255'],
-            zookeeper='zk:2181,zk:2181,zk:2181/kafka'
+            zookeeper='169.254.255.254:32796'
         )
 
 _config = Config()

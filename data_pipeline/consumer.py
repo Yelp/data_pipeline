@@ -2,18 +2,19 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-
 from collections import namedtuple
-from kafka.common import OffsetCommitRequest
 from multiprocessing import Queue
+from Queue import Empty
 from threading import Thread
 from time import time
+
+from kafka.common import OffsetCommitRequest
 from yelp_kafka.config import KafkaConsumerConfig
 from yelp_kafka.consumer_group import MultiprocessingConsumerGroup
-from Queue import Empty
+
+from data_pipeline._kafka_consumer_worker import KafkaConsumerWorker
 from data_pipeline.client import Client
 from data_pipeline.config import get_config
-from data_pipeline._kafka_consumer_worker import KafkaConsumerWorker
 
 
 logger = get_config().logger
@@ -21,10 +22,16 @@ logger = get_config().logger
 CONSUMER_MAX_BUFFER_SIZE_DEFAULT = 1000
 CONSUMER_GET_MESSAGES_TIMEOUT_DEFAULT = 0.1
 
-ConsumerTopicState = namedtuple('ConsumerTopicState', [
-    'partition_offset_map',     # map of partition to last seen offsets
-    'latest_schema_id'          # last seen schema_id
-])
+
+class ConsumerTopicState(object):
+    def __init__(self, partition_offset_map, latest_schema_id):
+        """
+        :param {int:int} partition_offset_map: map of partitions to their last
+        seen offsets
+        :param latest_schema_id: last seen schema_id
+        """
+        self.partition_offset_map = partition_offset_map
+        self.latest_schema_id = latest_schema_id
 
 
 class Consumer(Client):
@@ -76,10 +83,8 @@ class Consumer(Client):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        logger.info("Stopping consumer...")
         try:
             self.stop()
-            logger.info("Consumer stopped")
         except:
             logger.exception("Failed to stop the Consumer.")
             if exc_type is None:
@@ -98,6 +103,7 @@ class Consumer(Client):
         rather the Consumer should be used as a context manager, which will
         start automatically when the context enters.
         """
+        logger.info("Starting Consumer...")
         if self.running:
             raise RuntimeError("Consumer is already running")
 
@@ -110,7 +116,8 @@ class Consumer(Client):
                 group_id=self.group_id,
                 cluster=get_config().cluster_config,
                 auto_offset_reset='smallest',
-                auto_commit=False
+                auto_commit=False,
+                partitioner_cooldown=0.5
             ),
             consumer_factory=KafkaConsumerWorker.create_factory(
                 message_buffer=self.message_buffer,
@@ -129,9 +136,11 @@ class Consumer(Client):
         rather the Consumer should be used as a context manager, which will
         stop automatically when the context exits.
         """
+        logger.info("Stopping consumer...")
         if self.running:
             self.consumer_group.stop_group()
             self.consumer_group_thread.join()
+        logger.info("Consumer stopped")
 
     def __iter__(self):
         while True:
@@ -153,8 +162,12 @@ class Consumer(Client):
         set to True. Set to None to wait indefinitely.
         :rtype data_pipeline.message.Message or None
         """
-        return next(
-            self.get_messages(count=1, blocking=blocking, timeout=timeout),
+        return next(iter(
+            self.get_messages(
+                count=1,
+                blocking=blocking,
+                timeout=timeout
+            )),
             None
         )
 
@@ -248,10 +261,12 @@ class Consumer(Client):
         update ``self.topic_map``
         :return:
         """
-        consumer_topic_state = self.topic_map.get(
-            message.topic,
-            ConsumerTopicState(partition_offset_map={})
-        )
+        consumer_topic_state = self.topic_map.get(message.topic)
+        if consumer_topic_state is None:
+            consumer_topic_state = ConsumerTopicState(
+                partition_offset_map={},
+                latest_schema_id=message.schema_id
+            )
         consumer_topic_state.latest_schema_id = message.schema_id
         consumer_topic_state.partition_offset_map[
             message.kafka_position_info.partition
