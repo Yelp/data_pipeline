@@ -7,7 +7,7 @@ import multiprocessing
 import mock
 import pytest
 
-import data_pipeline.lazy_message as lazy_message
+from data_pipeline import lazy_message
 from data_pipeline.async_producer import AsyncProducer
 from data_pipeline.message_type import MessageType
 from data_pipeline.producer import Producer
@@ -53,26 +53,18 @@ class TestProducer(object):
             yield mock_payload
 
     @pytest.fixture
-    def lazy_message(self):
-        return lazy_message.LazyMessage(str('my-topic'), 10, {1: 100}, MessageType.create)
+    def lazy_message(self, topic_name):
+        return lazy_message.LazyMessage(topic_name, 10, {1: 100}, MessageType.create)
 
     def test_basic_publish_lazy_message(
-            self,
-            topic,
-            lazy_message,
-            patch_payload,
-            producer,
-            envelope):
-        with capture_new_messages(topic) as get_messages:
-            producer.publish(lazy_message)
-            producer.flush()
-
-            messages = get_messages()
-
-        assert len(messages) == 1
-        unpacked_message = envelope.unpack(messages[0].message.value)
-        assert unpacked_message['payload'] == lazy_message.payload
-        assert unpacked_message['schema_id'] == lazy_message.schema_id
+        self,
+        topic,
+        lazy_message,
+        patch_payload,
+        producer,
+        envelope
+    ):
+        self.test_basic_publish(topic, lazy_message, producer, envelope)
 
     def test_basic_publish(self, topic, message, producer, envelope):
         with capture_new_messages(topic) as get_messages:
