@@ -3,7 +3,7 @@
   "namespace": "yelp.data_pipeline",
   "name": "envelope",
   "doc": "Wraps message with schema format for decoding and pipeline metadata.",
-  "fields": 
+  "fields":
   [
     {"name": "uuid", "type": {"name": "uuid", "type": "fixed", "size": 16}, "doc": "Uniquely identifies the message."},
     {"name": "message_type", "type": {"name": "message_type", "type": "enum", "symbols": ["create", "update", "delete", "refresh", "heartbeat", "monitor"]}, "doc": "Identifies the type of message.  Refresh messages are used to bootstrap topics and can be safely ignored by consumers that only care about data updates.  Heartbeats will be emitted periodically on topics without other messages to facilitate auditing - they will not be passed to the consumer."},
