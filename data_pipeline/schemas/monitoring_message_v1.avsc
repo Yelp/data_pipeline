@@ -7,7 +7,7 @@
   [
     {"name": "topic", "type": "string", "doc": "topic associated with the messages produced/consumed by client"},
     {"name": "client_id", "type": "string", "doc": "ID of the client that is publishing/consuming messages"},
-    {"name": "process_type", "type":  {"name": "process_type", "type": "enum", "symbols": ["producer", "consumer"]}, "doc": "flag indicating if client is a consumer or a producer"},
+    {"name": "client_type", "type":  {"name": "client_type", "type": "enum", "symbols": ["producer", "consumer"]}, "doc": "identifies the type of client: a 'consumer' or a 'producer'"},
     {"name": "message_count", "type": "int", "doc": "number of messages published/consumed by the client"},
     {"name": "start_timestamp", "type": "int", "doc": "Time the monitoring system started counting messages"},
     {"name": "host_info", "type": "string", "doc": "Host information of client"}
