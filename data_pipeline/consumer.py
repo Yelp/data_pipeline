@@ -8,6 +8,7 @@ from threading import Thread
 from time import time
 
 from kafka.common import OffsetCommitRequest
+from kafka.util import kafka_bytestring
 from yelp_kafka.config import KafkaConsumerConfig
 from yelp_kafka.consumer_group import MultiprocessingConsumerGroup
 
@@ -102,9 +103,11 @@ class Consumer(Client):
         rather the Consumer should be used as a context manager, which will
         start automatically when the context enters.
         """
-        logger.info("Starting Consumer...")
+        logger.info("Starting Consumer '{0}'...".format(self.group_id))
         if self.running:
-            raise RuntimeError("Consumer is already running")
+            raise RuntimeError("Consumer '{0}' is already running".format(
+                self.group_id
+            ))
 
         self._commit_topic_map_offsets()
 
@@ -129,17 +132,19 @@ class Consumer(Client):
         self.consumer_group_thread.setDaemon(False)
         self.consumer_group_thread.start()
         self.running = True
+        logger.info("Consumer '{0}' started".format(self.group_id))
 
     def stop(self):
         """ Stop the Consumer. Normally this should NOT be called directly,
         rather the Consumer should be used as a context manager, which will
         stop automatically when the context exits.
         """
-        logger.info("Stopping consumer...")
+        logger.info("Stopping consumer '{0}'...".format(self.group_id))
         if self.running:
             self.consumer_group.stop_group()
             self.consumer_group_thread.join()
-        logger.info("Consumer stopped")
+        self.running = False
+        logger.info("Consumer '{0}' stopped".format(self.group_id))
 
     def __iter__(self):
         while True:
@@ -212,17 +217,34 @@ class Consumer(Client):
     def commit_messages(self, messages):
         """ Commit the offset information of a list of messages to Kafka.
 
+        If more than one of the given messages share the same `topic/partition`
+        combination then the message with the highest offset is committed.
+
         :param [data_pipeline.message.Message] messages: List of messages to
         commit
         """
+        topic_map = {}
+        for message in messages:
+            pos_info = message.kafka_position_info
+            partition_offset_map = topic_map.get(message.topic, {})
+            max_offset = partition_offset_map.get(
+                pos_info.partition,
+                0
+            )
+            if pos_info.offset > max_offset:
+                max_offset = pos_info.offset
+            partition_offset_map[pos_info.partition] = max_offset
+            topic_map[message.topic] = partition_offset_map
+
         return self._send_offset_commit_requests(
             offset_commit_request_list=[
                 OffsetCommitRequest(
-                    topic=message.topic,
-                    partition=message.kafka_position_info.partition,
-                    offset=message.kafka_position_info.offset,
+                    topic=kafka_bytestring(topic),
+                    partition=partition,
+                    offset=offset,
                     metadata=None
-                ) for message in messages
+                ) for topic, partition_map in topic_map.iteritems()
+                for partition, offset in partition_map.iteritems()
             ]
         )
 
@@ -290,7 +312,7 @@ class Consumer(Client):
 
     def _send_offset_commit_requests(self, offset_commit_request_list):
         if len(offset_commit_request_list) > 0:
-            get_config().kafka_client().send_offset_commit_request(
-                group=self.group_id,
+            get_config().kafka_client.send_offset_commit_request(
+                group=kafka_bytestring(self.group_id),
                 payloads=offset_commit_request_list
             )

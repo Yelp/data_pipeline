@@ -3,12 +3,14 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import logging
+from uuid import UUID
 
 import pytest
 
 from data_pipeline._avro_util import AvroStringWriter
 from data_pipeline._avro_util import generate_payload_data
 from data_pipeline._avro_util import get_avro_schema_object
+from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import Message
 from data_pipeline.message_type import MessageType
@@ -70,7 +72,7 @@ def payload(example_schema_obj, example_payload_data):
 
 @pytest.fixture(scope='module')
 def topic_name():
-    return str('my-topic')
+    return str(UUID(bytes=FastUUID().uuid4()).hex)
 
 
 @pytest.fixture
