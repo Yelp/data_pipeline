@@ -30,6 +30,8 @@ class BinlogParser(object):
             if e.errno == errno.EPIPE:
                 # just stop if the pipe breaks
                 pass
+            else:
+                raise
 
     def _parse_binlog(self):
         for line in fileinput.input():
@@ -44,6 +46,9 @@ class BinlogParser(object):
         elif self._is_updating(line):
             self._handle_update_line(line)
 
+    def _is_setting_timestamp(self, line):
+        return line.startswith("SET TIMESTAMP=") and line.endswith("/*!*/;")
+
     def _handle_header_line(self, line):
         m = re.search("\\#(\\d+)\\s+(\\d+:\\d+:\\d+)\\s+server\\s+id\\s+\\d+", line)
         datetime_str = "%s %s" % (m.group(1), m.group(2))
@@ -51,10 +56,17 @@ class BinlogParser(object):
         new_header_timestamp = int(time.mktime(dt.timetuple()))
         self.header_timestamp = new_header_timestamp
 
+    def _is_header_line(self, line):
+        regex = "\\#(\\d+)\\s+(\\d+:\\d+:\\d+)\\s+server\\s+id\\s+\\d+.+(Update_rows|Write_rows|Delete_rows)"
+        return re.search(regex, line) is not None
+
     def _handle_timestamp_line(self, line):
         m = re.search("SET\\ TIMESTAMP=(\\d+)/\\*!\\*/;", line)
         new_timestamp = int(m.group(1))
         self.timestamp = new_timestamp
+
+    def _is_updating(self, line):
+        return any(line.startswith("### %s " % s) for s in ['INSERT INTO', 'UPDATE', 'DELETE FROM'])
 
     def _handle_update_line(self, line):
         m = re.search("\\#\\#\\#\\ (DELETE\\ FROM|INSERT\\ INTO|UPDATE)\\ (.+)", line)
@@ -66,16 +78,6 @@ class BinlogParser(object):
             'statement_type': statement_type,
             'table': table
         })
-
-    def _is_setting_timestamp(self, line):
-        return line.startswith("SET TIMESTAMP=") and line.endswith("/*!*/;")
-
-    def _is_header_line(self, line):
-        regex = "\\#(\\d+)\\s+(\\d+:\\d+:\\d+)\\s+server\\s+id\\s+\\d+.+(Update_rows|Write_rows|Delete_rows)"
-        return re.search(regex, line) is not None
-
-    def _is_updating(self, line):
-        return any(line.startswith("### %s " % s) for s in ['INSERT INTO', 'UPDATE', 'DELETE FROM'])
 
 
 if __name__ == "__main__":

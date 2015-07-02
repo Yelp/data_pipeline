@@ -105,4 +105,4 @@ class PositionData(namedtuple("PositionData", [
                     {'topic1': offset1, 'topic2': offset2}
     """
     # This is a class instead of a namedtuple so the docstring can be
-    # overridden.
+    # set.

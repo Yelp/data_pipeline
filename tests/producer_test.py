@@ -20,6 +20,7 @@ class RandomException(Exception):
     pass
 
 
+@pytest.mark.usefixtures("patch_payload")
 class TestProducer(object):
     @pytest.fixture(params=[
         (Producer, False),
@@ -60,13 +61,13 @@ class TestProducer(object):
         self,
         topic,
         lazy_message,
-        patch_payload,
         producer,
         envelope
     ):
-        self.test_basic_publish(topic, lazy_message, producer, envelope, patch_payload)
 
-    def test_basic_publish(self, topic, message, producer, envelope, patch_payload):
+        self.test_basic_publish(topic, lazy_message, producer, envelope)
+
+    def test_basic_publish(self, topic, message, producer, envelope):
         with capture_new_messages(topic) as get_messages:
             producer.publish(message)
             producer.flush()
