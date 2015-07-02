@@ -4,9 +4,12 @@ from __future__ import unicode_literals
 
 import multiprocessing
 
+import mock
 import pytest
 
+from data_pipeline import lazy_message
 from data_pipeline.async_producer import AsyncProducer
+from data_pipeline.message_type import MessageType
 from data_pipeline.producer import Producer
 from tests.helpers.kafka_docker import capture_new_messages
 from tests.helpers.kafka_docker import create_kafka_docker_topic
@@ -17,6 +20,7 @@ class RandomException(Exception):
     pass
 
 
+@pytest.mark.usefixtures("patch_payload")
 class TestProducer(object):
     @pytest.fixture(params=[
         (Producer, False),
@@ -38,6 +42,29 @@ class TestProducer(object):
     def topic(self, topic_name, kafka_docker):
         create_kafka_docker_topic(kafka_docker, topic_name)
         return topic_name
+
+    @pytest.yield_fixture
+    def patch_payload(self):
+        with mock.patch.object(
+            lazy_message.LazyMessage,
+            'payload',
+            new_callable=mock.PropertyMock
+        ) as mock_payload:
+            mock_payload.return_value = bytes(7)
+            yield mock_payload
+
+    @pytest.fixture
+    def lazy_message(self, topic_name):
+        return lazy_message.LazyMessage(topic_name, 10, {1: 100}, MessageType.create)
+
+    def test_basic_publish_lazy_message(
+        self,
+        topic,
+        lazy_message,
+        producer,
+        envelope
+    ):
+        self.test_basic_publish(topic, lazy_message, producer, envelope)
 
     def test_basic_publish(self, topic, message, producer, envelope):
         with capture_new_messages(topic) as get_messages:
