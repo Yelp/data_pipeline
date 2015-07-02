@@ -8,61 +8,13 @@ from cached_property import cached_property
 
 from data_pipeline._kafka_producer import LoggingKafkaProducer
 from data_pipeline._pooled_kafka_producer import PooledKafkaProducer
-from data_pipeline.client import Client
 from data_pipeline.config import get_config
+
 
 logger = get_config().logger
 
 
-class Producer(Client):
-    """Producers are context managers, that provide a high level interface for
-    publishing :class:`data_pipeline.message.Message` instances into the data
-    pipeline.
-
-    When messages are handed to a producer via the :meth:`publish` method, they
-    aren't immediately published into Kafka.  Instead, they're buffered until
-    a number of messages are accumulated, or too much time has passed,
-    then published all at once.  This process is designed to be largely
-    transparent to the user.
-
-    **Examples**:
-
-      At it's simplest, start a producer and publish messages to it::
-
-          with Producer() as producer:
-              producer.publish(message)
-
-      Messages are not immediately published, but are buffered.  Consequently,
-      it may sometimes be necessary to flush the buffer before doing some
-      tasks::
-
-          with Producer() as producer:
-              while upstream.has_another_batch_of_messages():
-                  for message in upstream.get_messages_from_upstream():
-                      producer.publish()
-
-                  producer.flush()
-                  upstream.all_those_messages_were published()
-
-      The Producer is incapable of flushing its own buffers, which can be
-      problematic if messages aren't published relatively constantly.  The
-      :meth:`wake` should be called periodically to allow the Producer to clear
-      its buffer if necessary, in the absence of messages.  If :meth:`wake`
-      isn't called, messages in the buffer could be delayed indefinitely::
-
-          with Producer() as producer:
-              while True:
-                  try:
-                      message = slow_queue.get(block=True, timeout=0.1)
-                      producer.publish(message)
-                  except Empty:
-                      producer.wake()
-
-    Args:
-      use_work_pool (bool): If true, the process will use a multiprocessing
-        pool to serialize messages in preparation for transport.  The work pool
-        can parallelize some expensive serialization.  Default is false.
-    """
+class MonitoringPublisher(object):
 
     @cached_property
     def _kafka_producer(self):
@@ -72,17 +24,6 @@ class Producer(Client):
             return LoggingKafkaProducer(self._notify_messages_published)
 
     def __init__(self, use_work_pool=False):
-        # TODO(DATAPIPE-157): This should call the Client to capture information
-        # about the producer
-        self.monitoring_dict = dict(
-            topic=str("my-topic"),  # TODO: needs to come from messages produced
-            client_id=str("12312312"),  # TODO: need to retrieve assigned client number
-            client_type=Producer,
-            message_count=0,
-            start_timestamp=self.GLOBAL_MONITORING_START_TIME,
-            host_info="My-Mac-Pro-123123"  # TODO: get the host information
-        )
-        super(Producer, self).__init__(self.monitoring_message)
         self.use_work_pool = use_work_pool
 
     def __enter__(self):
@@ -132,11 +73,6 @@ class Producer(Client):
             message (data_pipeline.message.Message): message to publish
         """
         self._kafka_producer.publish(message)
-        if self.monitoring_dict['start_timestamp'] + self.MONITORING_WINDOW_WIDTH < message.timestamp:
-            self.publish_monitoring_results()
-            self.reset_monitoring_dict()
-        else:
-            self.message_count += 1
 
     def ensure_messages_published(self, messages, topic_offsets):
         """This method should only be used when recovering after an unclean

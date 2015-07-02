@@ -7,7 +7,7 @@ import multiprocessing
 import mock
 import pytest
 
-import data_pipeline.lazy_message as lazy_message
+from data_pipeline import lazy_message
 from data_pipeline.async_producer import AsyncProducer
 from data_pipeline.message_type import MessageType
 from data_pipeline.producer import Producer
@@ -53,28 +53,20 @@ class TestProducer(object):
             yield mock_payload
 
     @pytest.fixture
-    def lazy_message(self):
-        return lazy_message.LazyMessage(str('my-topic'), 10, {1: 100}, MessageType.create)
+    def lazy_message(self, topic_name):
+        return lazy_message.LazyMessage(topic_name, 10, {1: 100}, MessageType.create)
 
     def test_basic_publish_lazy_message(
-            self,
-            topic,
-            lazy_message,
-            patch_payload,
-            producer,
-            envelope):
-        with capture_new_messages(topic) as get_messages:
-            producer.publish(lazy_message)
-            producer.flush()
+        self,
+        topic,
+        lazy_message,
+        patch_payload,
+        producer,
+        envelope
+    ):
+        self.test_basic_publish(topic, lazy_message, producer, envelope, patch_payload)
 
-            messages = get_messages()
-
-        assert len(messages) == 1
-        unpacked_message = envelope.unpack(messages[0].message.value)
-        assert unpacked_message['payload'] == lazy_message.payload
-        assert unpacked_message['schema_id'] == lazy_message.schema_id
-
-    def test_basic_publish(self, topic, message, producer, envelope):
+    def test_basic_publish(self, topic, message, producer, envelope, patch_payload):
         with capture_new_messages(topic) as get_messages:
             producer.publish(message)
             producer.flush()
@@ -86,7 +78,7 @@ class TestProducer(object):
         assert unpacked_message['payload'] == message.payload
         assert unpacked_message['schema_id'] == message.schema_id
 
-    def test_messages_not_duplicated(self, topic, message, producer_instance):
+    def test_messages_not_duplicated(self, topic, message, producer_instance, patch_payload):
         with capture_new_messages(topic) as get_messages:
             with producer_instance as producer:
                 producer.publish(message)
@@ -94,20 +86,20 @@ class TestProducer(object):
             assert len(multiprocessing.active_children()) == 0
             assert len(get_messages()) == 1
 
-    def test_messages_published_without_flush(self, topic, message, producer_instance):
+    def test_messages_published_without_flush(self, topic, message, producer_instance, patch_payload):
         with capture_new_messages(topic) as get_messages:
             with producer_instance as producer:
                 producer.publish(message)
             assert len(multiprocessing.active_children()) == 0
             assert len(get_messages()) == 1
 
-    def test_empty_starting_checkpoint_data(self, producer):
+    def test_empty_starting_checkpoint_data(self, producer, patch_payload):
         position_data = producer.get_checkpoint_position_data()
         assert position_data.last_published_message_position_info is None
         assert position_data.topic_to_last_position_info_map == {}
         assert position_data.topic_to_kafka_offset_map == {}
 
-    def test_child_processes_do_not_survive_an_exception(self, producer_instance, message):
+    def test_child_processes_do_not_survive_an_exception(self, producer_instance, message, patch_payload):
         with pytest.raises(RandomException):
             with producer_instance as producer:
                 producer.publish(message)
@@ -116,7 +108,7 @@ class TestProducer(object):
                 raise RandomException()
         assert len(multiprocessing.active_children()) == 0
 
-    def test_get_position_data(self, topic, message, producer):
+    def test_get_position_data(self, topic, message, producer, patch_payload):
         upstream_info = {'offset': 'fake'}
         message.upstream_position_info = upstream_info
         with setup_capture_new_messages_consumer(topic) as consumer:
