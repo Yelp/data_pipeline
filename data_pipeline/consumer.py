@@ -2,7 +2,6 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from collections import namedtuple
 from multiprocessing import Queue
 from Queue import Empty
 from threading import Thread

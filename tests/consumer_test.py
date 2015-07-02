@@ -8,8 +8,8 @@ import pytest
 
 from data_pipeline.consumer import Consumer
 from data_pipeline.consumer import ConsumerTopicState
-from data_pipeline.producer import Producer
 from data_pipeline.message import Message
+from data_pipeline.producer import Producer
 from tests.helpers.kafka_docker import create_kafka_docker_topic
 
 
