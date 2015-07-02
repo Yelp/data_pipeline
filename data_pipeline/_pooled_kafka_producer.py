@@ -55,6 +55,23 @@ class PooledKafkaProducer(LoggingKafkaProducer):
         #
         # publish -> accumulate in buffer -> move to prep area -> async prepare
         #   -> publish to kafka
+        #
+        # clin proposed an alternative approach:
+        # I personally would prefer to pipeline this, and spawn certain number
+        # of workers doing schematizing and packing messages (listen to regular
+        # queue and move items from it to schematized queue), and another
+        # certain number of workers sending messages to kafka (listen to
+        # schematized queue and move items from it to kafka topic). The number
+        # of workers can be configurable so we can treak performance if needed.
+        # One benefit is we can build some metric from it and see the throughput
+        # or identify where the bottleneck is if there is one.
+        #
+        # Also, in this way, it seems the schematizing workers don't have to
+        # work in bulk and can continuously schematize and pack the incoming raw
+        # messages, and move them into schemaized/packed queue (if there are
+        # free workers). The send-requests workers can then send the messages
+        # in bulk or every certain amount of time. The down side is this is a
+        # more complicated approach.
         topics_and_messages_result = [
             (topic, self.pool.map_async(
                 _prepare,

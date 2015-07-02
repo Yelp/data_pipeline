@@ -11,6 +11,13 @@ import os
 
 
 class CompressedStreamRotator(object):
+    """Reads from standard in, compresses the input and writes it to files,
+    rotating the files periodically.  This is designed to take streaming input
+    and convert it to daily files that can be uploaded to s3 and processed with
+    Mycroft or other log tools.
+
+    File status information is output on standard out.
+    """
 
     def __init__(self):
         self.file_start_time = None
@@ -23,6 +30,8 @@ class CompressedStreamRotator(object):
             if e.errno == errno.EPIPE:
                 # just stop if the pipe breaks
                 pass
+            else:
+                raise
         finally:
             self._close_file()
 
@@ -32,11 +41,11 @@ class CompressedStreamRotator(object):
             self._process_line(line)
 
     def _process_line(self, line):
-        self._update_output_file_for_timestamp(json.loads(line)['timestamp'])
+        self._rotate_to_next_output_file(json.loads(line)['timestamp'])
         self.output_file.write(line)
         self.output_file.write("\n")
 
-    def _update_output_file_for_timestamp(self, timestamp):
+    def _rotate_to_next_output_file(self, timestamp):
         current_time = datetime.datetime.fromtimestamp(timestamp)
         if not self._belongs_in_current_file(current_time):
             print current_time, self.file_start_time

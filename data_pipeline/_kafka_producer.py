@@ -10,7 +10,7 @@ from cached_property import cached_property
 from kafka import create_message
 from kafka.common import ProduceRequest
 
-from data_pipeline._position_data_builder import PositionDataBuilder
+from data_pipeline._position_data_tracker import PositionDataTracker
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
 
@@ -34,6 +34,12 @@ def _prepare(envelope_and_message):
 class KafkaProducer(object):
     """The KafkaProducer deals with buffering messages that need to be published
     into Kafka, preparing them for publication, and ultimately publishing them.
+
+    Args:
+      producer_position_callback (function): The producer position callback is
+        called when the KafkaProducer is instantiated, and every time messages
+        are published to notify the producer of current position information of
+        successfully published messages.
     """
     message_limit = 5000
     time_limit = 0.1
@@ -42,10 +48,10 @@ class KafkaProducer(object):
     def envelope(self):
         return Envelope()
 
-    def __init__(self, messages_published_callback):
-        self.messages_published_callback = messages_published_callback
+    def __init__(self, producer_position_callback):
+        self.producer_position_callback = producer_position_callback
         self.kafka_client = get_config().kafka_client
-        self.position_data_builder = PositionDataBuilder()
+        self.position_data_tracker = PositionDataTracker()
         self._reset_message_buffer()
 
     def wake(self):
@@ -57,7 +63,7 @@ class KafkaProducer(object):
 
     def publish(self, message):
         self._add_message_to_buffer(message)
-        self.position_data_builder.record_message_buffered(message)
+        self.position_data_tracker.record_message_buffered(message)
         self._flush_if_necessary()
 
     def flush_buffered_messages(self):
@@ -82,7 +88,7 @@ class KafkaProducer(object):
             for response in responses:
                 # TODO(DATAPIPE-149|justinc): This won't work if the error code
                 # is non-zero
-                self.position_data_builder.record_messages_published(
+                self.position_data_tracker.record_messages_published(
                     response.topic,
                     response.offset,
                     len(self.message_buffer[response.topic])
@@ -124,7 +130,7 @@ class KafkaProducer(object):
         return _prepare(_EnvelopeAndMessage(envelope=self.envelope, message=message))
 
     def _reset_message_buffer(self):
-        self.messages_published_callback(self.position_data_builder.get_position_data())
+        self.producer_position_callback(self.position_data_tracker.get_position_data())
 
         self.start_time = time.time()
         self.message_buffer = defaultdict(list)
