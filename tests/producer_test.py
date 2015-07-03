@@ -79,7 +79,7 @@ class TestProducer(object):
         assert unpacked_message['payload'] == message.payload
         assert unpacked_message['schema_id'] == message.schema_id
 
-    def test_messages_not_duplicated(self, topic, message, producer_instance, patch_payload):
+    def test_messages_not_duplicated(self, topic, message, producer_instance):
         with capture_new_messages(topic) as get_messages:
             with producer_instance as producer:
                 producer.publish(message)
@@ -87,20 +87,20 @@ class TestProducer(object):
             assert len(multiprocessing.active_children()) == 0
             assert len(get_messages()) == 1
 
-    def test_messages_published_without_flush(self, topic, message, producer_instance, patch_payload):
+    def test_messages_published_without_flush(self, topic, message, producer_instance):
         with capture_new_messages(topic) as get_messages:
             with producer_instance as producer:
                 producer.publish(message)
             assert len(multiprocessing.active_children()) == 0
             assert len(get_messages()) == 1
 
-    def test_empty_starting_checkpoint_data(self, producer, patch_payload):
+    def test_empty_starting_checkpoint_data(self, producer):
         position_data = producer.get_checkpoint_position_data()
         assert position_data.last_published_message_position_info is None
         assert position_data.topic_to_last_position_info_map == {}
         assert position_data.topic_to_kafka_offset_map == {}
 
-    def test_child_processes_do_not_survive_an_exception(self, producer_instance, message, patch_payload):
+    def test_child_processes_do_not_survive_an_exception(self, producer_instance, message):
         with pytest.raises(RandomException):
             with producer_instance as producer:
                 producer.publish(message)
@@ -109,7 +109,7 @@ class TestProducer(object):
                 raise RandomException()
         assert len(multiprocessing.active_children()) == 0
 
-    def test_get_position_data(self, topic, message, producer, patch_payload):
+    def test_get_position_data(self, topic, message, producer):
         upstream_info = {'offset': 'fake'}
         message.upstream_position_info = upstream_info
         with setup_capture_new_messages_consumer(topic) as consumer:
