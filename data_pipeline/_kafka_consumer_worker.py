@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import random
 from Queue import Full
 from time import sleep
 from traceback import format_exc
@@ -34,13 +35,14 @@ class KafkaConsumerWorker(KafkaConsumerBase):
         data all asynchronously before adding it to a shared Queue which the
         user of  ``data_pipeline.consumer.Consumer`` pulls messages from.
 
-        :param str topic: Kafka topic name.
-        :param yelp_kafka.config.KafkaConsumerConfig config:
-        :param [] partitions: topic partitions to consumer from.
-        :param multiprocessing.Queue message_buffer: Queue to put messages into
-        :param boolean decode_payload: Determine if the worker is responsible
-        for decoding the payload data
-        :return:
+        Args:
+            topic (str): Kafka topic name.
+            config (yelp_kafka.config.KafkaConsumerConfig): Configuration for the
+                kafka consumer.
+            partitions ([int]): Topic partitions to consume from.
+            message_buffer (multiprocessing.Queue): Queue to put messages into
+            decode_payload (boolean): Determine if the worker is responsible
+                for decoding the payload data
         """
         super(KafkaConsumerWorker, self).__init__(
             topic,
@@ -58,6 +60,7 @@ class KafkaConsumerWorker(KafkaConsumerBase):
 
     def process(self, kafka_message):
         try:
+            # TODO(DATAPIPE-240|joshszep): Add support for specifying a reader schema_id
             message = create_from_kafka_message(
                 topic=self.topic,
                 kafka_message=kafka_message,
@@ -71,7 +74,11 @@ class KafkaConsumerWorker(KafkaConsumerBase):
                 self.message_buffer.put_nowait(message)
                 break
             except Full:
-                sleep(self.DEFAULT_SLEEP_TIME)
+                sleep(
+                    self.DEFAULT_SLEEP_TIME + (
+                        random.random() * self.DEFAULT_SLEEP_TIME
+                    )
+                )
 
     @staticmethod
     def create_factory(

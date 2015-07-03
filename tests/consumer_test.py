@@ -32,7 +32,7 @@ class TestConsumer(object):
     def consumer_instance(self, topic, kafka_docker):
         return Consumer(
             group_id='test_consumer',
-            topic_map={topic: None},
+            topic_to_consumer_topic_state_map={topic: None},
             max_buffer_size=self.test_buffer_size
         )
 
@@ -50,12 +50,12 @@ class TestConsumer(object):
     def test_get_message_none(self, consumer, topic):
         message = consumer.get_message(blocking=True, timeout=self.test_timeout)
         assert message is None
-        assert consumer.get_topic_map()[topic] is None
+        assert consumer.topic_to_consumer_topic_state_map[topic] is None
 
     def test_get_messages_empty(self, consumer, topic):
         messages = consumer.get_messages(count=10, blocking=True, timeout=self.test_timeout)
         assert len(messages) == 0
-        assert consumer.get_topic_map()[topic] is None
+        assert consumer.topic_to_consumer_topic_state_map[topic] is None
 
     def test_basic_iteration(
             self,
@@ -161,9 +161,9 @@ class TestConsumer(object):
 
             # Set the offset to one previous so after we reset_topics we can
             # expect to receive the same message again
-            topic_map = consumer.get_topic_map()
+            topic_map = consumer.topic_to_consumer_topic_state_map
             topic_map[topic].partition_offset_map[0] -= 1
-            consumer.reset_topics(topic_map=topic_map)
+            consumer.reset_topics(topic_to_consumer_topic_state_map=topic_map)
             messages3 = consumer.get_messages(count=1, blocking=True, timeout=self.test_timeout)
             assert consumer.message_buffer.empty()
             assert len(messages3) == 1
@@ -223,7 +223,7 @@ class TestConsumer(object):
             expected_schema_id,
             expected_payload_data
     ):
-        topic_state = consumer.get_topic_map()[expected_topic]
+        topic_state = consumer.topic_to_consumer_topic_state_map[expected_topic]
         assert isinstance(topic_state, ConsumerTopicState)
         assert topic_state.latest_schema_id == expected_schema_id
         for actual_msg in actual_msgs:
