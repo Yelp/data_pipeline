@@ -4,9 +4,9 @@ from __future__ import unicode_literals
 
 from cached_property import cached_property
 
+from data_pipeline._kafka_producer import LoggingKafkaProducer
 from data_pipeline.lazy_message import LazyMessage
 from data_pipeline.message_type import MessageType
-from data_pipeline.monitoring_publisher import MonitoringPublisher
 
 
 class Client(object):
@@ -68,9 +68,9 @@ class Client(object):
         """
         self.monitoring_publisher.publish(self.monitoring_message)
 
-    def reset_monitoring_dict(self):
+    def reset_monitoring_dict(self, updated_start_timestamp):
         self.monitoring_dict['message_count'] = 1
-        self.monitoring_dict['start_timestamp'] += 1
+        self.monitoring_dict['start_timestamp'] = updated_start_timestamp
 
     @property
     def message_count(self):
@@ -84,4 +84,15 @@ class Client(object):
 
     def __init__(self, monitoring_message=None):
         self.monitoring_message = monitoring_message
-        self.monitoring_publisher = MonitoringPublisher()
+        self.monitoring_publisher = LoggingKafkaProducer(self._notify_messages_published)
+
+    def _notify_messages_published(self, position_data):
+        """Called to notify the client of successfully published messages.
+
+        Args:
+            position_data (:class:PositionData): PositionData structure
+                containing details about the last messages published to Kafka,
+                including Kafka offsets and upstream position information.
+        """
+        # logger.debug("Client notified of new messages")
+        self.position_data = position_data

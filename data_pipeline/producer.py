@@ -134,7 +134,7 @@ class Producer(Client):
         self._kafka_producer.publish(message)
         if self.monitoring_dict['start_timestamp'] + self.MONITORING_WINDOW_WIDTH < message.timestamp:
             self.publish_monitoring_results()
-            self.reset_monitoring_dict()
+            self.reset_monitoring_dict(message.timestamp)
         else:
             self.message_count += 1
 
