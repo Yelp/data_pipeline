@@ -31,7 +31,7 @@ class TestConsumer(object):
     @pytest.fixture()
     def consumer_instance(self, topic, kafka_docker):
         return Consumer(
-            group_id='test_consumer',
+            consumer_name='test_consumer',
             topic_to_consumer_topic_state_map={topic: None},
             max_buffer_size=self.test_buffer_size
         )
@@ -42,7 +42,7 @@ class TestConsumer(object):
             yield consumer
         assert len(multiprocessing.active_children()) == 0
 
-    @pytest.fixture()
+    @pytest.fixture(scope='module')
     def topic(self, topic_name, kafka_docker):
         create_kafka_docker_topic(kafka_docker, topic_name)
         return topic_name
@@ -69,17 +69,19 @@ class TestConsumer(object):
         self._publish_messages(producer, message, 1)
         with consumer_instance as consumer:
             for msg in consumer:
-                assert consumer.message_buffer.empty()
-                assert msg is not None
-                self._assert_consumer_state(
-                    consumer=consumer,
-                    actual_msgs=[msg],
-                    expected_msg=message,
-                    expected_topic=topic,
-                    expected_schema_id=registered_schema.schema_id,
-                    expected_payload_data=example_payload_data
-                )
-                consumer.commit_message(msg)
+                if msg is None:
+                    continue
+                with consumer.ensure_committed(msg):
+                    assert consumer.message_buffer.empty()
+                    assert msg is not None
+                    self._assert_consumer_state(
+                        consumer=consumer,
+                        actual_msgs=[msg],
+                        expected_msg=message,
+                        expected_topic=topic,
+                        expected_schema_id=registered_schema.schema_id,
+                        expected_payload_data=example_payload_data
+                    )
                 break
 
     def test_basic_publish_retrieve(
@@ -94,17 +96,17 @@ class TestConsumer(object):
         self._publish_messages(producer, message, 1)
         with consumer_instance as consumer:
             msg = consumer.get_message(blocking=True, timeout=self.test_timeout)
-            assert consumer.message_buffer.empty()
-            assert msg is not None
-            self._assert_consumer_state(
-                consumer=consumer,
-                actual_msgs=[msg],
-                expected_msg=message,
-                expected_topic=topic,
-                expected_schema_id=registered_schema.schema_id,
-                expected_payload_data=example_payload_data
-            )
-            consumer.commit_message(msg)
+            with consumer.ensure_committed(msg):
+                assert consumer.message_buffer.empty()
+                assert msg is not None
+                self._assert_consumer_state(
+                    consumer=consumer,
+                    actual_msgs=[msg],
+                    expected_msg=message,
+                    expected_topic=topic,
+                    expected_schema_id=registered_schema.schema_id,
+                    expected_payload_data=example_payload_data
+                )
 
     def test_basic_publish_retrieve2(
             self,
@@ -118,17 +120,17 @@ class TestConsumer(object):
         self._publish_messages(producer, message, 2)
         with consumer_instance as consumer:
             messages = consumer.get_messages(count=2, blocking=True, timeout=self.test_timeout)
-            assert consumer.message_buffer.empty()
-            assert len(messages) == 2
-            self._assert_consumer_state(
-                consumer=consumer,
-                actual_msgs=messages,
-                expected_msg=message,
-                expected_topic=topic,
-                expected_schema_id=registered_schema.schema_id,
-                expected_payload_data=example_payload_data
-            )
-            consumer.commit_messages(messages)
+            with consumer.ensure_committed(messages):
+                assert consumer.message_buffer.empty()
+                assert len(messages) == 2
+                self._assert_consumer_state(
+                    consumer=consumer,
+                    actual_msgs=messages,
+                    expected_msg=message,
+                    expected_topic=topic,
+                    expected_schema_id=registered_schema.schema_id,
+                    expected_payload_data=example_payload_data
+                )
 
     def test_basic_publish_retrieve_then_reset(
             self,
@@ -142,22 +144,23 @@ class TestConsumer(object):
         self._publish_messages(producer, message, 1)
         with consumer_instance as consumer:
             messages1 = consumer.get_messages(count=1, blocking=True, timeout=self.test_timeout)
-            assert consumer.message_buffer.empty()
-            assert len(messages1) == 1
-            self._assert_consumer_state(
-                consumer=consumer,
-                actual_msgs=messages1,
-                expected_msg=message,
-                expected_topic=topic,
-                expected_schema_id=registered_schema.schema_id,
-                expected_payload_data=example_payload_data
-            )
-            consumer.commit_messages(messages1)
+            with consumer.ensure_committed(messages1):
+                assert consumer.message_buffer.empty()
+                assert len(messages1) == 1
+                self._assert_consumer_state(
+                    consumer=consumer,
+                    actual_msgs=messages1,
+                    expected_msg=message,
+                    expected_topic=topic,
+                    expected_schema_id=registered_schema.schema_id,
+                    expected_payload_data=example_payload_data
+                )
 
             # Verify that we are not going to get any new messages
             messages2 = consumer.get_messages(count=1, blocking=True, timeout=self.test_timeout)
-            assert consumer.message_buffer.empty()
-            assert len(messages2) == 0
+            with consumer.ensure_committed(messages2):
+                assert consumer.message_buffer.empty()
+                assert len(messages2) == 0
 
             # Set the offset to one previous so after we reset_topics we can
             # expect to receive the same message again
@@ -165,17 +168,17 @@ class TestConsumer(object):
             topic_map[topic].partition_offset_map[0] -= 1
             consumer.reset_topics(topic_to_consumer_topic_state_map=topic_map)
             messages3 = consumer.get_messages(count=1, blocking=True, timeout=self.test_timeout)
-            assert consumer.message_buffer.empty()
-            assert len(messages3) == 1
-            self._assert_consumer_state(
-                consumer=consumer,
-                actual_msgs=messages3,
-                expected_msg=message,
-                expected_topic=topic,
-                expected_schema_id=registered_schema.schema_id,
-                expected_payload_data=example_payload_data
-            )
-            consumer.commit_messages(messages3)
+            with consumer.ensure_committed(messages3):
+                assert consumer.message_buffer.empty()
+                assert len(messages3) == 1
+                self._assert_consumer_state(
+                    consumer=consumer,
+                    actual_msgs=messages3,
+                    expected_msg=message,
+                    expected_topic=topic,
+                    expected_schema_id=registered_schema.schema_id,
+                    expected_payload_data=example_payload_data
+                )
 
     def test_maximum_buffer_size(
             self,
@@ -193,21 +196,21 @@ class TestConsumer(object):
                 blocking=True,
                 timeout=self.test_timeout
             )
-            assert len(msgs) <= self.test_buffer_size * 2
-            while len(msgs) < self.test_buffer_size * 2:
-                msg = consumer.get_message(blocking=True, timeout=self.test_timeout)
-                assert msg is not None
-                msgs.append(msg)
-            self._assert_consumer_state(
-                consumer=consumer,
-                actual_msgs=msgs,
-                expected_msg=message,
-                expected_topic=topic,
-                expected_schema_id=registered_schema.schema_id,
-                expected_payload_data=example_payload_data
-            )
-            assert consumer.message_buffer.empty()
-            consumer.commit_messages(msgs)
+            with consumer.ensure_committed(msgs):
+                assert len(msgs) <= self.test_buffer_size * 2
+                while len(msgs) < self.test_buffer_size * 2:
+                    msg = consumer.get_message(blocking=True, timeout=self.test_timeout)
+                    assert msg is not None
+                    msgs.append(msg)
+                self._assert_consumer_state(
+                    consumer=consumer,
+                    actual_msgs=msgs,
+                    expected_msg=message,
+                    expected_topic=topic,
+                    expected_schema_id=registered_schema.schema_id,
+                    expected_payload_data=example_payload_data
+                )
+                assert consumer.message_buffer.empty()
 
     def _publish_messages(self, producer, message, count):
         for _ in xrange(count):
@@ -225,7 +228,7 @@ class TestConsumer(object):
     ):
         topic_state = consumer.topic_to_consumer_topic_state_map[expected_topic]
         assert isinstance(topic_state, ConsumerTopicState)
-        assert topic_state.latest_schema_id == expected_schema_id
+        assert topic_state.last_seen_schema_id == expected_schema_id
         for actual_msg in actual_msgs:
             assert isinstance(actual_msg, Message)
             assert actual_msg.payload == expected_msg.payload

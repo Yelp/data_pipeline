@@ -58,6 +58,27 @@ class Config(object):
         """
         return 0.1
 
+    @property
+    def consumer_partitioner_cooldown_default(self):
+        """ Default partitioner cooldown time. See ``yelp_kafka.partitioner`` for
+        more details.
+        """
+        return 0.5
+
+    @property
+    def consumer_worker_min_sleep_time_default(self):
+        """ Default ``KafkaConsumerWorker`` sleep time minimum. Must be lower
+        than the maximum sleep time.
+        """
+        return 0.1
+
+    @property
+    def consumer_worker_max_sleep_time_default(self):
+        """ Default ``KafkaConsumerWorker`` sleep time maximum. Must be higher
+        than the minimum sleep time.
+        """
+        return 0.2
+
 _config = Config()
 
 

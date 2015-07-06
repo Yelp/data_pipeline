@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+from contextlib import contextmanager
 from multiprocessing import Queue
 from Queue import Empty
 from threading import Thread
@@ -15,22 +16,23 @@ from yelp_kafka.consumer_group import MultiprocessingConsumerGroup
 from data_pipeline._kafka_consumer_worker import KafkaConsumerWorker
 from data_pipeline.client import Client
 from data_pipeline.config import get_config
+from data_pipeline.message import Message
 
 
 logger = get_config().logger
 
 
 class ConsumerTopicState(object):
-    def __init__(self, partition_offset_map, latest_schema_id):
+    def __init__(self, partition_offset_map, last_seen_schema_id):
         """Object which holds the state of consumer topic.
 
         Args:
             partition_offset_map ({int:int}): map of partitions to their last
                 seen offsets.
-            latest_schema_id: The last seen schema_id.
+            last_seen_schema_id: The last seen schema_id.
         """
         self.partition_offset_map = partition_offset_map
-        self.latest_schema_id = latest_schema_id
+        self.last_seen_schema_id = last_seen_schema_id
 
 
 class Consumer(Client):
@@ -42,7 +44,7 @@ class Consumer(Client):
 
     Example:
         with Consumer(
-            group_id='my_group',
+            consumer_name='my_consumer',
             topic_to_consumer_topic_state_map={'topic_a': None, 'topic_b': None}
         ) as consumer:
             while True:
@@ -54,21 +56,25 @@ class Consumer(Client):
 
     def __init__(
             self,
-            group_id,
+            consumer_name,
             topic_to_consumer_topic_state_map,
             max_buffer_size=get_config().consumer_max_buffer_size_default,
             decode_payload_in_workers=True,
-            auto_offset_reset='smallest'):
+            auto_offset_reset='smallest',
+            partitioner_cooldown=get_config().consumer_partitioner_cooldown_default,
+            worker_min_sleep_time=get_config().consumer_worker_min_sleep_time_default,
+            worker_max_sleep_time=get_config().consumer_worker_max_sleep_time_default
+    ):
         """ Creates the Consumer object
 
         Args:
-            group_id (str): The name of the consumer to register with Kafka for
+            consumer_name (str): The name of the consumer to register with Kafka for
                 offset commits.
             topic_to_consumer_topic_state_map ({str:Optional(ConsumerTopicState)}):
                 A map of topic names to ``ConsumerTopicState`` objects which
                 define the offsets to start from. These objects may be `None`,
-                in which case the committed kafka offset for the group_id is
-                used. If there is no committed kafka offset for the group_id
+                in which case the committed kafka offset for the consumer_name is
+                used. If there is no committed kafka offset for the consumer_name
                 the Consumer will begin from the `auto_offset_reset` offset in
                 the topic.
             max_buffer_size (int): Maximum size for the internal
@@ -84,7 +90,7 @@ class Consumer(Client):
                 reset the offset to the latest available message (tail). If
                 'smallest' reset from the earliest (head).
         """
-        self.group_id = group_id
+        self.consumer_name = consumer_name
         self.max_buffer_size = max_buffer_size
         self.topic_to_consumer_topic_state_map = topic_to_consumer_topic_state_map
         self.running = False
@@ -93,6 +99,9 @@ class Consumer(Client):
         self.message_buffer = None
         self.decode_payload_in_workers = decode_payload_in_workers
         self.auto_offset_reset = auto_offset_reset
+        self.partitioner_cooldown = partitioner_cooldown
+        self.worker_min_sleep_time = worker_min_sleep_time
+        self.worker_max_sleep_time = worker_max_sleep_time
 
     def __enter__(self):
         self.start()
@@ -119,10 +128,10 @@ class Consumer(Client):
         rather the Consumer should be used as a context manager, which will
         start automatically when the context enters.
         """
-        logger.info("Starting Consumer '{0}'...".format(self.group_id))
+        logger.info("Starting Consumer '{0}'...".format(self.consumer_name))
         if self.running:
             raise RuntimeError("Consumer '{0}' is already running".format(
-                self.group_id
+                self.consumer_name
             ))
 
         self._commit_topic_map_offsets()
@@ -130,16 +139,12 @@ class Consumer(Client):
         self.message_buffer = Queue(self.max_buffer_size)
         self.consumer_group = MultiprocessingConsumerGroup(
             topics=self.topic_to_consumer_topic_state_map.keys(),
-            config=KafkaConsumerConfig(
-                group_id=self.group_id,
-                cluster=get_config().cluster_config,
-                auto_offset_reset=self.auto_offset_reset,
-                auto_commit=False,
-                partitioner_cooldown=0.5
-            ),
+            config=self._kafka_consumer_config,
             consumer_factory=KafkaConsumerWorker.create_factory(
                 message_buffer=self.message_buffer,
-                decode_payload=self.decode_payload_in_workers
+                decode_payload=self.decode_payload_in_workers,
+                min_sleep_time=self.worker_min_sleep_time,
+                max_sleep_time=self.worker_max_sleep_time
             )
         )
         self.consumer_group_thread = Thread(
@@ -148,23 +153,26 @@ class Consumer(Client):
         self.consumer_group_thread.setDaemon(False)
         self.consumer_group_thread.start()
         self.running = True
-        logger.info("Consumer '{0}' started".format(self.group_id))
+        logger.info("Consumer '{0}' started".format(self.consumer_name))
 
     def stop(self):
         """ Stop the Consumer. Normally this should NOT be called directly,
         rather the Consumer should be used as a context manager, which will
         stop automatically when the context exits.
         """
-        logger.info("Stopping consumer '{0}'...".format(self.group_id))
+        logger.info("Stopping consumer '{0}'...".format(self.consumer_name))
         if self.running:
             self.consumer_group.stop_group()
             self.consumer_group_thread.join()
         self.running = False
-        logger.info("Consumer '{0}' stopped".format(self.group_id))
+        logger.info("Consumer '{0}' stopped".format(self.consumer_name))
 
     def __iter__(self):
         while True:
-            yield self.get_message(blocking=True, timeout=None)
+            yield self.get_message(
+                blocking=True,
+                timeout=get_config().consumer_get_messages_timeout_default
+            )
 
     def get_message(
             self,
@@ -174,6 +182,12 @@ class Consumer(Client):
         """ Retrieve a single message from the message buffer, optionally
         blocking if the buffer is depleted. Returns None if no message could
         be retrieved within the timeout.
+
+        Warning:
+            If `blocking` is True and `timeout` is None this will block until
+            a message is retrieved, potentially blocking forever. Please be
+            absolutely sure this is what you are intending if you use these
+            options!
 
         Args:
             blocking (boolean): Set to True to block while waiting for messages
@@ -204,6 +218,12 @@ class Consumer(Client):
         """ Retrieve a list of messages from the message buffer, optionally
         blocking if the buffer is depleted.
 
+        Warning:
+            If `blocking` is True and `timeout` is None this will block until
+            the requested number of messages is retrieved, potentially blocking
+            forever. Please be absolutely sure this is what you are intending
+            if you use these options!
+
         Args:
             count (int): Number of messages to retrieve
             blocking (boolean): Set to True to block while waiting for messages
@@ -233,19 +253,19 @@ class Consumer(Client):
 
     def commit_message(self, message):
         """ Commit the offset information of a message to Kafka. Until a message
-        is committed the stored kafka offset for this `group_id` is not updated.
+        is committed the stored kafka offset for this `consumer_name` is not updated.
 
         Recommended to avoid calling this too frequently, as it is relatively
         expensive.
 
         Args:
-            message (Message): The message to commit
+            message (data_pipeline.message.Message): The message to commit
         """
         return self.commit_messages([message])
 
     def commit_messages(self, messages):
         """ Commit the offset information of a list of messages to Kafka. Until
-        a message is committed the stored kafka offset for this `group_id` is
+        a message is committed the stored kafka offset for this `consumer_name` is
         not updated.
 
         Recommended to avoid calling this too frequently, as it is relatively
@@ -287,6 +307,27 @@ class Consumer(Client):
             ]
         )
 
+    @contextmanager
+    def ensure_committed(self, messages):
+        """ Context manager which calls `commit_messages` on exit, useful for
+        ensuring a group of messages are committed even if an error is
+        encountered.
+
+        Example:
+            messages = consumer.get_messages()
+            with consumer.ensure_committed(messages):
+                do_things_with_messages(messages)
+
+        Args:
+            messages (list[data_pipeline.message.Message]): Messages to commit
+                when this context manager exits. May also pass a single
+                `data_pipeline.message.Message` object.
+        """
+        yield
+        if isinstance(messages, Message):
+            messages = [messages]
+        self.commit_messages(messages=messages)
+
     def reset_topics(self, topic_to_consumer_topic_state_map):
         """ Stop and restart the Consumer with a new
         topic_to_consumer_topic_state_map, returning the state of previous
@@ -324,15 +365,14 @@ class Consumer(Client):
             topic_to_consumer_topic_state_map ({str:Optional(ConsumerTopicState)}):
                 A map of topic names to ``ConsumerTopicState`` objects which
                 define the offsets to start from. These objects may be `None`,
-                in which case the committed kafka offset for the group_id is
-                used. If there is no committed kafka offset for the group_id
+                in which case the committed kafka offset for the consumer_name is
+                used. If there is no committed kafka offset for the consumer_name
                 the Consumer will begin from the `auto_offset_reset` offset in
                 the topic.
 
         Returns:
             ({str:ConsumerTopicState}): The previous topic_to_consumer_topic_state_map
         """
-
         self.stop()
         previous_topic_map = self.topic_to_consumer_topic_state_map
         self.topic_to_consumer_topic_state_map = topic_to_consumer_topic_state_map
@@ -344,9 +384,9 @@ class Consumer(Client):
         if consumer_topic_state is None:
             consumer_topic_state = ConsumerTopicState(
                 partition_offset_map={},
-                latest_schema_id=message.schema_id
+                last_seen_schema_id=message.schema_id
             )
-        consumer_topic_state.latest_schema_id = message.schema_id
+        consumer_topic_state.last_seen_schema_id = message.schema_id
         consumer_topic_state.partition_offset_map[
             message.kafka_position_info.partition
         ] = message.kafka_position_info.offset
@@ -371,6 +411,26 @@ class Consumer(Client):
     def _send_offset_commit_requests(self, offset_commit_request_list):
         if len(offset_commit_request_list) > 0:
             get_config().kafka_client.send_offset_commit_request(
-                group=kafka_bytestring(self.group_id),
+                group=kafka_bytestring(self.consumer_name),
                 payloads=offset_commit_request_list
             )
+
+    @property
+    def _kafka_consumer_config(self):
+        """ The ``KafkaConsumerConfig`` for the Consumer.
+
+        Notes:
+            This is not a ``@cached_property`` since there is the possibility
+            that the cluster_config could change during runtime and users could
+            leverage this for responding to topology changes.
+
+            ``auto_commit`` is set to False to ensure clients can determine when
+            they want their topic offsets committed via commit_messages(..)
+        """
+        return KafkaConsumerConfig(
+            group_id=self.consumer_name,
+            cluster=get_config().cluster_config,
+            auto_offset_reset=self.auto_offset_reset,
+            auto_commit=False,
+            partitioner_cooldown=self.partitioner_cooldown
+        )

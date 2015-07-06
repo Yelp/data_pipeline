@@ -107,24 +107,18 @@ class Message(object):
 
     @property
     def payload_data(self):
-        if self._payload_data is None:
-            if self.payload is None:
-                self._payload_data = None
-            else:
-                self._payload_data = self._avro_string_reader.decode(
-                    encoded_message=self.payload
-                )
+        if self._payload_data is None and self.payload is not None:
+            self._payload_data = self._avro_string_reader.decode(
+                encoded_message=self.payload
+            )
         return self._payload_data
 
     @property
     def previous_payload_data(self):
-        if self._previous_payload_data is None:
-            if self.previous_payload is None:
-                self._previous_payload_data = None
-            else:
-                self._previous_payload_data = self._avro_string_reader.decode(
-                    encoded_message=self.previous_payload
-                )
+        if self._previous_payload_data is None and self.previous_payload is not None:
+            self._previous_payload_data = self._avro_string_reader.decode(
+                encoded_message=self.previous_payload
+            )
         return self._previous_payload_data
 
     @property
