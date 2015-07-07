@@ -19,14 +19,11 @@ class MessageType(Enum):
         row before removal
       refresh: refresh messages are used to intially populate a topic, they
         do not correspond to any particular data change
-      monitor: monitor messages are used to count the number of messages
-        produced/consumed by client in a given time frame
     """
     create = 1
     update = 2
     delete = 3
     refresh = 4
-    monitor = 6
 
 
 class _ProtectedMessageType(Enum):
@@ -37,5 +34,8 @@ class _ProtectedMessageType(Enum):
       heartbeat: emitted periodically on low volume topics so auditing
         processes can differentiate between slow or stalled topics and
         topics without messages.
+      monitor: monitor messages are used to count the number of messages
+        produced/consumed by client in a given time frame
     """
     heartbeat = 5
+    monitor = 6

@@ -2,11 +2,13 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import socket
+
 from cached_property import cached_property
 
 from data_pipeline._kafka_producer import LoggingKafkaProducer
 from data_pipeline.lazy_message import LazyMessage
-from data_pipeline.message_type import MessageType
+from data_pipeline.message_type import _ProtectedMessageType
 
 
 class Client(object):
@@ -17,7 +19,25 @@ class Client(object):
     """
 
     @property
-    def MONITORING_WINDOW_WIDTH(self):
+    def id(self):
+        return self._id
+
+    @id.setter
+    def id(self, client_id):
+        self._id = client_id
+
+    def __init__(self, client_id='007'):
+        self.monitoring_message = _MonitoringMessage(client_id)
+        self.id = client_id
+
+
+class _MonitoringMessage(object):
+    """The class that implements functionality of monitoring the messages published/
+    consumed by clients using kafka.
+    """
+
+    @property
+    def window_width(self):
         """The duration over which monitoring_message will monitor (i.e count
         the number of messages) published to kafka
 
@@ -27,7 +47,7 @@ class Client(object):
         return 1000
 
     @property
-    def GLOBAL_MONITORING_START_TIME(self):
+    def global_start_time(self):
         """Start time when monitoring_message for every client will start
         monitoring the number of messages produced/consumed
 
@@ -37,54 +57,55 @@ class Client(object):
         return 0
 
     @cached_property
-    def monitoring_message(self):
+    def message(self):
         """Message containing monitoring information about the number
         of messages produced/consumed by the client in the given time frame
         """
-        return LazyMessage(str('monitor-log'), 0, self.monitoring_dict, MessageType.monitor)
+        return LazyMessage(
+            str('monitor-log'),
+            0,
+            self.record,
+            _ProtectedMessageType.monitor
+        )
 
     @property
-    def monitoring_publisher(self):
+    def publisher(self):
         """Publisher responsible for publishing monitoring information into
         Kafka
         """
-        return self._monitoring_publisher
+        return self._publisher
 
-    @monitoring_publisher.setter
-    def monitoring_publisher(self, monitoring_publisher):
-        self._monitoring_publisher = monitoring_publisher
+    @publisher.setter
+    def publisher(self, publisher):
+        self._publisher = publisher
 
     @property
-    def monitoring_dict(self):
-        return self._monitoring_dict
+    def record(self):
+        return self._record
 
-    @monitoring_dict.setter
-    def monitoring_dict(self, monitoring_dict):
-        self._monitoring_dict = monitoring_dict
+    @record.setter
+    def record(self, record):
+        self._record = record
 
-    def publish_monitoring_results(self):
+    def publish(self):
         """Publishing the results stored in the monitoring_message using
         the monitoring_publisher
         """
-        self.monitoring_publisher.publish(self.monitoring_message)
+        self.publisher.publish(self.message)
 
-    def reset_monitoring_dict(self, updated_start_timestamp):
-        self.monitoring_dict['message_count'] = 1
-        self.monitoring_dict['start_timestamp'] = updated_start_timestamp
+    def reset_record(self, updated_start_timestamp):
+        self.record['message_count'] = 1
+        self.record['start_timestamp'] = updated_start_timestamp
 
     @property
     def message_count(self):
         """Number of messages produced/consumed by the client
         """
-        return self.monitoring_dict['message_count']
+        return self.record['message_count']
 
     @message_count.setter
     def message_count(self, message_count):
-        self.monitoring_dict['message_count'] = message_count
-
-    def __init__(self, monitoring_message=None):
-        self.monitoring_message = monitoring_message
-        self.monitoring_publisher = LoggingKafkaProducer(self._notify_messages_published)
+        self.record['message_count'] = message_count
 
     def _notify_messages_published(self, position_data):
         """Called to notify the client of successfully published messages.
@@ -96,3 +117,14 @@ class Client(object):
         """
         # logger.debug("Client notified of new messages")
         self.position_data = position_data
+
+    def __init__(self, client_id):
+        self.publisher = LoggingKafkaProducer(self._notify_messages_published)
+        self.record = dict(
+            topic=str("my-topic"),  # TODO: needs to come from messages produced
+            client_type='Producer',
+            message_count=0,
+            start_timestamp=self.global_start_time,
+            host_info=socket.gethostname(),
+            client_id=client_id
+        )

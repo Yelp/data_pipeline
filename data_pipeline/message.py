@@ -7,6 +7,7 @@ import time
 from data_pipeline._avro_util import AvroStringReader
 from data_pipeline._avro_util import AvroStringWriter
 from data_pipeline._fast_uuid import FastUUID
+from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
 from data_pipeline.schema_cache import get_schema_cache
 
@@ -99,7 +100,7 @@ class Message(object):
 
     @message_type.setter
     def message_type(self, message_type):
-        if not isinstance(message_type, MessageType):
+        if not isinstance(message_type, MessageType) and not isinstance(message_type, _ProtectedMessageType):
             message_types = [str(t) for t in MessageType]
             raise ValueError(
                 "Message type should be one of %s" % ', '.join(message_types)
