@@ -28,12 +28,16 @@ class TestConsumer(object):
             yield producer
         assert len(multiprocessing.active_children()) == 0
 
-    @pytest.fixture()
-    def consumer_instance(self, topic, kafka_docker):
+    @pytest.fixture(params=[
+        {'decode_payload_in_workers': False},
+        {'decode_payload_in_workers': True},
+    ])
+    def consumer_instance(self, request, topic, kafka_docker):
         return Consumer(
             consumer_name='test_consumer',
             topic_to_consumer_topic_state_map={topic: None},
-            max_buffer_size=self.test_buffer_size
+            max_buffer_size=self.test_buffer_size,
+            decode_payload_in_workers=request.param['decode_payload_in_workers']
         )
 
     @pytest.yield_fixture
@@ -55,6 +59,7 @@ class TestConsumer(object):
     def test_get_messages_empty(self, consumer, topic):
         messages = consumer.get_messages(count=10, blocking=True, timeout=self.test_timeout)
         assert len(messages) == 0
+        assert consumer.message_buffer.empty()
         assert consumer.topic_to_consumer_topic_state_map[topic] is None
 
     def test_basic_iteration(
@@ -95,8 +100,9 @@ class TestConsumer(object):
     ):
         self._publish_messages(producer, message, 1)
         with consumer_instance as consumer:
-            msg = consumer.get_message(blocking=True, timeout=self.test_timeout)
-            with consumer.ensure_committed(msg):
+            with consumer.ensure_committed(
+                    consumer.get_message(blocking=True, timeout=self.test_timeout)
+            ) as msg:
                 assert consumer.message_buffer.empty()
                 assert msg is not None
                 self._assert_consumer_state(
@@ -119,10 +125,11 @@ class TestConsumer(object):
     ):
         self._publish_messages(producer, message, 2)
         with consumer_instance as consumer:
-            messages = consumer.get_messages(count=2, blocking=True, timeout=self.test_timeout)
-            with consumer.ensure_committed(messages):
-                assert consumer.message_buffer.empty()
+            with consumer.ensure_committed(
+                    consumer.get_messages(count=2, blocking=True, timeout=self.test_timeout)
+            ) as messages:
                 assert len(messages) == 2
+                assert consumer.message_buffer.empty()
                 self._assert_consumer_state(
                     consumer=consumer,
                     actual_msgs=messages,
@@ -141,12 +148,13 @@ class TestConsumer(object):
             topic,
             example_payload_data
     ):
-        self._publish_messages(producer, message, 1)
+        self._publish_messages(producer, message, 2)
         with consumer_instance as consumer:
-            messages1 = consumer.get_messages(count=1, blocking=True, timeout=self.test_timeout)
-            with consumer.ensure_committed(messages1):
+            with consumer.ensure_committed(
+                    consumer.get_messages(count=10, blocking=True, timeout=self.test_timeout)
+            ) as messages1:
+                assert len(messages1) == 2
                 assert consumer.message_buffer.empty()
-                assert len(messages1) == 1
                 self._assert_consumer_state(
                     consumer=consumer,
                     actual_msgs=messages1,
@@ -157,20 +165,23 @@ class TestConsumer(object):
                 )
 
             # Verify that we are not going to get any new messages
-            messages2 = consumer.get_messages(count=1, blocking=True, timeout=self.test_timeout)
-            with consumer.ensure_committed(messages2):
-                assert consumer.message_buffer.empty()
+
+            with consumer.ensure_committed(
+                consumer.get_messages(count=10, blocking=True, timeout=self.test_timeout)
+            ) as messages2:
                 assert len(messages2) == 0
+                assert consumer.message_buffer.empty()
 
             # Set the offset to one previous so after we reset_topics we can
-            # expect to receive the same message again
+            # expect to receive two messages again
             topic_map = consumer.topic_to_consumer_topic_state_map
             topic_map[topic].partition_offset_map[0] -= 1
             consumer.reset_topics(topic_to_consumer_topic_state_map=topic_map)
-            messages3 = consumer.get_messages(count=1, blocking=True, timeout=self.test_timeout)
-            with consumer.ensure_committed(messages3):
+            with consumer.ensure_committed(
+                consumer.get_messages(count=10, blocking=True, timeout=self.test_timeout)
+            ) as messages3:
+                assert len(messages3) == 2
                 assert consumer.message_buffer.empty()
-                assert len(messages3) == 1
                 self._assert_consumer_state(
                     consumer=consumer,
                     actual_msgs=messages3,
@@ -196,12 +207,14 @@ class TestConsumer(object):
                 blocking=True,
                 timeout=self.test_timeout
             )
+            while len(msgs) < self.test_buffer_size * 2:
+                new_msgs = consumer.get_messages(
+                    count=self.test_buffer_size * 2,
+                    blocking=True,
+                    timeout=self.test_timeout
+                )
+                msgs += new_msgs
             with consumer.ensure_committed(msgs):
-                assert len(msgs) <= self.test_buffer_size * 2
-                while len(msgs) < self.test_buffer_size * 2:
-                    msg = consumer.get_message(blocking=True, timeout=self.test_timeout)
-                    assert msg is not None
-                    msgs.append(msg)
                 self._assert_consumer_state(
                     consumer=consumer,
                     actual_msgs=msgs,

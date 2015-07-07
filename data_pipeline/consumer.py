@@ -34,6 +34,12 @@ class ConsumerTopicState(object):
         self.partition_offset_map = partition_offset_map
         self.last_seen_schema_id = last_seen_schema_id
 
+    def __repr__(self):
+        return '<ConsumerTopicState(last_seen_schema_id: {0}, partition_offset_map: {1})>'.format(
+            self.last_seen_schema_id,
+            self.partition_offset_map
+        )
+
 
 class Consumer(Client):
     """The Consumer deals with buffering messages that need to be consumed
@@ -265,8 +271,8 @@ class Consumer(Client):
 
     def commit_messages(self, messages):
         """ Commit the offset information of a list of messages to Kafka. Until
-        a message is committed the stored kafka offset for this `consumer_name` is
-        not updated.
+        a message is committed the stored kafka offset for this `consumer_name`
+        is not updated.
 
         Recommended to avoid calling this too frequently, as it is relatively
         expensive.
@@ -313,9 +319,16 @@ class Consumer(Client):
         ensuring a group of messages are committed even if an error is
         encountered.
 
+
         Example:
-            messages = consumer.get_messages()
-            with consumer.ensure_committed(messages):
+            for msg in consumer:
+                if msg is None:
+                    continue
+                with consumer.ensure_committed(msg):
+                    do_things_with_message(msg)
+
+        Example:
+            with consumer.ensure_committed(consumer.get_messages()) as messages:
                 do_things_with_messages(messages)
 
         Args:
@@ -323,7 +336,7 @@ class Consumer(Client):
                 when this context manager exits. May also pass a single
                 `data_pipeline.message.Message` object.
         """
-        yield
+        yield messages
         if isinstance(messages, Message):
             messages = [messages]
         self.commit_messages(messages=messages)
