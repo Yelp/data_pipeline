@@ -26,8 +26,8 @@ class Client(object):
     def id(self, client_id):
         self._id = client_id
 
-    def __init__(self, client_id='007'):
-        self.monitoring_message = _MonitoringMessage(client_id)
+    def __init__(self, client_type, client_id='007'):
+        self.monitoring_message = _MonitoringMessage(client_type, client_id)
         self.id = client_id
 
 
@@ -118,11 +118,11 @@ class _MonitoringMessage(object):
         # logger.debug("Client notified of new messages")
         self.position_data = position_data
 
-    def __init__(self, client_id):
+    def __init__(self, client_type, client_id):
         self.publisher = LoggingKafkaProducer(self._notify_messages_published)
         self.record = dict(
             topic=str("my-topic"),  # TODO: needs to come from messages produced
-            client_type='Producer',
+            client_type=client_type,
             message_count=0,
             start_timestamp=self.global_start_time,
             host_info=socket.gethostname(),

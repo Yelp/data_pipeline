@@ -57,6 +57,15 @@ class TestProducer(object):
     def lazy_message(self, topic_name):
         return lazy_message.LazyMessage(topic_name, 10, {1: 100}, MessageType.create)
 
+    def test_monitoring_system(self, topic, message, producer, envelope):
+        with capture_new_messages(topic) as get_messages:
+            for i in xrange(99):
+                producer.publish(message)
+            producer.flush()
+            messages = get_messages()
+        assert producer.monitoring_message.message_count == 99
+        assert len(messages) == 99
+
     def test_basic_publish_lazy_message(
         self,
         topic,
