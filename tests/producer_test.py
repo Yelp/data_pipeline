@@ -63,7 +63,7 @@ class TestProducer(object):
                 producer.publish(message)
             producer.flush()
             messages = get_messages()
-        assert producer.monitoring_message.message_count == 99
+        assert producer.monitoring_message.get_message_count(message.topic) == 99
         assert len(messages) == 99
 
     def test_basic_publish_lazy_message(

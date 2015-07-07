@@ -4,8 +4,6 @@ from __future__ import unicode_literals
 
 import socket
 
-from cached_property import cached_property
-
 from data_pipeline._kafka_producer import LoggingKafkaProducer
 from data_pipeline.lazy_message import LazyMessage
 from data_pipeline.message_type import _ProtectedMessageType
@@ -20,6 +18,7 @@ class Client(object):
 
     @property
     def id(self):
+        """id associated with the client."""
         return self._id
 
     @id.setter
@@ -34,37 +33,52 @@ class Client(object):
 class _MonitoringMessage(object):
     """The class that implements functionality of monitoring the messages published/
     consumed by clients using kafka.
+
+    Args:
+        client_type: type of the client the monitoring_message is associated to.
+            could be either producer or consumer
+        client_id: id of the associated client
+        window_width: the duration for which monitoring_message will monitor
+        start_time: start_time when monitoring_message for client will start
+            counting the number of messages produced/consumed
     """
 
     @property
     def window_width(self):
-        """The duration over which monitoring_message will monitor (i.e count
+        """The duration for which monitoring_message will monitor (i.e count
         the number of messages) published to kafka
 
         TODO: This is set to a random value. Have to discuss this with team
         and finalize a value
         """
-        return 1000
+        return self._window_width
+
+    @window_width.setter
+    def window_width(self, window_width):
+        self._window_width = window_width
 
     @property
-    def global_start_time(self):
-        """Start time when monitoring_message for every client will start
+    def start_time(self):
+        """Start time when monitoring_message for client will start
         monitoring the number of messages produced/consumed
 
         TODO: Have to discuss with the team to finalize a value. One option
         could be to set it to the UNIX time when the project is deployed
         """
-        return 0
+        return self._start_time
 
-    @cached_property
-    def message(self):
+    @start_time.setter
+    def start_time(self, start_time):
+        self._start_time = start_time
+
+    def message(self, topic):
         """Message containing monitoring information about the number
         of messages produced/consumed by the client in the given time frame
         """
         return LazyMessage(
-            str('monitor-log'),
+            str(topic + '-monitor-log'),
             0,
-            self.record,
+            self.record[topic],
             _ProtectedMessageType.monitor
         )
 
@@ -79,33 +93,49 @@ class _MonitoringMessage(object):
     def publisher(self, publisher):
         self._publisher = publisher
 
-    @property
-    def record(self):
-        return self._record
+    def get_record(self, topic):
+        """returns the record associated with the topic for any client.
+        If the topic has no record, a new record is created and returned.
+        """
+        if topic in self.record:
+            return self.record[topic]
+        else:
+            print "record for topic ", topic, " being created"
+            self.record[topic] = dict(
+                topic=topic,
+                client_type=self.client_type,
+                message_count=0,
+                start_timestamp=self.start_time,
+                host_info=socket.gethostname(),
+                client_id=self.client_id
+            )
+            return self.record[topic]
 
-    @record.setter
-    def record(self, record):
-        self._record = record
-
-    def publish(self):
+    def publish(self, topic):
         """Publishing the results stored in the monitoring_message using
         the monitoring_publisher
         """
-        self.publisher.publish(self.message)
+        self.publisher.publish(self.message(topic))
 
-    def reset_record(self, updated_start_timestamp):
-        self.record['message_count'] = 1
-        self.record['start_timestamp'] = updated_start_timestamp
+    def reset_record(self, topic, updated_start_timestamp):
+        """resets the record for a particular topic by resetting
+        message_count to 1 (since the program has already published one
+        message) and updating the start_timestamp to the start_timestamp
+        of the newly published message
+        """
+        self.record[topic]['message_count'] = 1
+        self.record[topic]['start_timestamp'] = updated_start_timestamp
 
-    @property
-    def message_count(self):
+    def get_message_count(self, topic):
         """Number of messages produced/consumed by the client
         """
-        return self.record['message_count']
+        return self.record[topic]['message_count']
 
-    @message_count.setter
-    def message_count(self, message_count):
-        self.record['message_count'] = message_count
+    def increment_message_count(self, topic):
+        """Increments the message_count in the record for the
+        topic.
+        """
+        self.record[topic]['message_count'] += 1
 
     def _notify_messages_published(self, position_data):
         """Called to notify the client of successfully published messages.
@@ -118,13 +148,17 @@ class _MonitoringMessage(object):
         # logger.debug("Client notified of new messages")
         self.position_data = position_data
 
-    def __init__(self, client_type, client_id):
+    def monitor(self, message):
+        if self.get_record(message.topic)['start_timestamp'] + self.window_width < message.timestamp:
+            self.publish(message.topic)
+            self.reset_record(message.topic, message.timestamp)
+        else:
+            self.increment_message_count(message.topic)
+
+    def __init__(self, client_type, client_id, window_width=1000, start_time=0):
         self.publisher = LoggingKafkaProducer(self._notify_messages_published)
-        self.record = dict(
-            topic=str("my-topic"),  # TODO: needs to come from messages produced
-            client_type=client_type,
-            message_count=0,
-            start_timestamp=self.global_start_time,
-            host_info=socket.gethostname(),
-            client_id=client_id
-        )
+        self.record = {}
+        self.client_type = client_type
+        self.client_id = client_id
+        self.window_width = window_width
+        self.start_time = start_time

@@ -75,7 +75,7 @@ class Producer(Client):
     def __init__(self, use_work_pool=False):
         # TODO(DATAPIPE-157): This should call the Client to capture information
         # about the producer
-        super(Producer, self).__init__('producer')
+        super(Producer, self).__init__(str(self.__class__))
         self.use_work_pool = use_work_pool
 
     def __enter__(self):
@@ -125,11 +125,7 @@ class Producer(Client):
             message (data_pipeline.message.Message): message to publish
         """
         self._kafka_producer.publish(message)
-        if self.monitoring_message.record['start_timestamp'] + self.monitoring_message.window_width < message.timestamp:
-            self.monitoring_message.publish()
-            self.monitoring_message.reset_record(message.timestamp)
-        else:
-            self.monitoring_message.message_count += 1
+        self.monitoring_message.monitor(message)
 
     def ensure_messages_published(self, messages, topic_offsets):
         """This method should only be used when recovering after an unclean
