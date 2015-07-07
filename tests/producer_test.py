@@ -64,7 +64,6 @@ class TestProducer(object):
         producer,
         envelope
     ):
-
         self.test_basic_publish(topic, lazy_message, producer, envelope)
 
     def test_basic_publish(self, topic, message, producer, envelope):

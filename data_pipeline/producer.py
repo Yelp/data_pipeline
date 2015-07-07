@@ -11,6 +11,7 @@ from data_pipeline._pooled_kafka_producer import PooledKafkaProducer
 from data_pipeline.client import Client
 from data_pipeline.config import get_config
 
+
 logger = get_config().logger
 
 
