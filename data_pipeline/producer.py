@@ -75,7 +75,7 @@ class Producer(Client):
     def __init__(self, use_work_pool=False):
         # TODO(DATAPIPE-157): This should call the Client to capture information
         # about the producer
-        super(Producer, self).__init__(str(self.__class__))
+        super(Producer, self).__init__('producer')
         self.use_work_pool = use_work_pool
 
     def __enter__(self):
