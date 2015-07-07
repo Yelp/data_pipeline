@@ -89,7 +89,7 @@ class TestConsumer(object):
                     )
                 break
 
-    def test_basic_publish_retrieve(
+    def test_consume_using_get_message(
             self,
             topic,
             message,
@@ -114,7 +114,7 @@ class TestConsumer(object):
                     expected_payload_data=example_payload_data
                 )
 
-    def test_basic_publish_retrieve2(
+    def test_consume_using_get_messages(
             self,
             message,
             producer,

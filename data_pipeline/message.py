@@ -103,7 +103,7 @@ class Message(object):
         if len(payload) == 0:
             raise ValueError("Payload must exist")
         self._payload = payload
-        self._payload_data = None
+        self._payload_data = None  # force payload_data to be re-decoded
 
     @property
     def payload_data(self):
@@ -154,7 +154,7 @@ class Message(object):
             raise ValueError("Previous payload must exist for updates")
 
         self._previous_payload = previous_payload
-        self._previous_payload_data = None
+        self._previous_payload_data = None  # force previous_payload_data to be re-decoded
 
     @property
     def uuid(self):

@@ -343,8 +343,9 @@ class Consumer(Client):
 
     def reset_topics(self, topic_to_consumer_topic_state_map):
         """ Stop and restart the Consumer with a new
-        topic_to_consumer_topic_state_map, returning the state of previous
-        topic_to_consumer_topic_state_map.
+        topic_to_consumer_topic_state_map. This can be used to change topics
+        which are being consumed and/or modifying the offsets of the topics
+        already being consumed.
 
         Example:
             with Consumer('example', {'topic1': None}) as consumer:
@@ -355,7 +356,7 @@ class Consumer(Client):
                         timeout=batch_timeout
                     )
                     process_messages(messages)
-                    if no__new_topics():
+                    if no_new_topics():
                         continue
                     consumer.commit_messages(messages)
                     topic_map = consumer.topic_to_consumer_topic_state_map
@@ -382,15 +383,10 @@ class Consumer(Client):
                 used. If there is no committed kafka offset for the consumer_name
                 the Consumer will begin from the `auto_offset_reset` offset in
                 the topic.
-
-        Returns:
-            ({str:ConsumerTopicState}): The previous topic_to_consumer_topic_state_map
         """
         self.stop()
-        previous_topic_map = self.topic_to_consumer_topic_state_map
         self.topic_to_consumer_topic_state_map = topic_to_consumer_topic_state_map
         self.start()
-        return previous_topic_map
 
     def _update_topic_map(self, message):
         consumer_topic_state = self.topic_to_consumer_topic_state_map.get(message.topic)
