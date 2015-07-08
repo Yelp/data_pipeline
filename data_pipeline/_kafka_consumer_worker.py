@@ -53,10 +53,10 @@ class KafkaConsumerWorker(KafkaConsumerBase):
             config,
             partitions
         )
-        if min_sleep_time > max_sleep_time:
+        if min_sleep_time > max_sleep_time or min_sleep_time < 0.0:
             raise ValueError(
                 "The min_sleep_time ({0}) must not be greater than the "
-                "max_sleep_time ({1})".format(
+                "max_sleep_time ({1}) and both must be positive.".format(
                     min_sleep_time,
                     max_sleep_time
                 )

@@ -17,9 +17,9 @@ from data_pipeline.schema_cache import get_schema_cache
 logger = get_config().logger
 
 KafkaPositionInfo = namedtuple('KafkaPositionInfo', [
-    'offset',               # Offset of the message
-    'partition',            # Partition of the topic
-    'key'                   # Key of the message
+    'offset',               # Offset of the message in the topic
+    'partition',            # Partition of the topic the message was from
+    'key'                   # Key of the message, may be `None`
 ])
 
 
@@ -312,10 +312,18 @@ def create_from_kafka_message(
 ):
     """ Build a data_pipeline.message.Message from a yelp_kafka message
 
-    :param str topic: The topic name from which the message was received.
-    :param yelp_kafka.consumer.Message kafka_message: The message info which
-    has the payload, offset, partition, and key of the received message.
-    :rtype data_pipeline.message.Message
+    Args:
+        topic (str): The topic name from which the message was received.
+        kafka_message (yelp_kafka.consumer.Message): The message info which
+            has the payload, offset, partition, and key of the received
+            message.
+        force_payload_decoding (boolean): If this is set to `True` then
+            we will decode the payload/previous_payload immediately.
+            Otherwise the decoding will happen whenever the lazy *_data
+            properties are accessed.
+
+    Returns (data_pipeline.message.Message):
+        The message object
     """
     unpacked_message = Envelope().unpack(kafka_message.value)
     message = Message(
@@ -332,6 +340,7 @@ def create_from_kafka_message(
         timestamp=unpacked_message['timestamp']
     )
     if force_payload_decoding:
-        _ = message.payload_data  # flake8: noqa
-        _ = message.previous_payload_data  # flake8: noqa
+        # Access the cached, but lazily-calculated, properties
+        message.payload_data
+        message.previous_payload_data
     return message
