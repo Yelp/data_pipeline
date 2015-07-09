@@ -101,7 +101,7 @@ class AsyncProducer(Producer):
             message (data_pipeline.message.Message): message to publish
         """
         self.queue.put(message)
-        self.monitoring_message.monitor(message)
+        self.monitoring_message.record_message(message)
 
     def flush(self):
         """See :meth:`data_pipeline.producer.Producer.flush`"""

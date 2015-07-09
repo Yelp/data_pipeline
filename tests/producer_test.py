@@ -23,14 +23,14 @@ class RandomException(Exception):
 @pytest.mark.usefixtures("patch_payload")
 class TestProducer(object):
     @pytest.fixture(params=[
-        (Producer, False),
-        (Producer, True),
-        (AsyncProducer, False),
-        (AsyncProducer, True)
+        (Producer, 'Producer-1', False),
+        (Producer, 'Producer-1', True),
+        (AsyncProducer, 'Producer-1', False),
+        (AsyncProducer, 'Producer-1', True)
     ])
     def producer_instance(self, request, kafka_docker):
-        producer_klass, use_work_pool = request.param
-        return producer_klass(use_work_pool=use_work_pool)
+        producer_klass, client_name, use_work_pool = request.param
+        return producer_klass(client_name, use_work_pool=use_work_pool)
 
     @pytest.yield_fixture
     def producer(self, producer_instance):

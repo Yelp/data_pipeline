@@ -72,10 +72,10 @@ class Producer(Client):
         else:
             return LoggingKafkaProducer(self._set_kafka_producer_position)
 
-    def __init__(self, use_work_pool=False):
+    def __init__(self, client_name, use_work_pool=False):
         # TODO(DATAPIPE-157): This should call the Client to capture information
         # about the producer
-        super(Producer, self).__init__('producer')
+        super(Producer, self).__init__('producer', client_name)
         self.use_work_pool = use_work_pool
 
     def __enter__(self):
@@ -125,7 +125,7 @@ class Producer(Client):
             message (data_pipeline.message.Message): message to publish
         """
         self.publish_message(message)
-        self.monitoring_message.monitor(message)
+        self.monitoring_message.record_message(message)
 
     def publish_message(self, message):
         self._kafka_producer.publish(message)
