@@ -43,12 +43,12 @@ class _Monitor(object):
     """
 
     def __init__(self, client_type, client_name, monitoring_window_in_sec=1000, start_time=0):
-        self.producer = LoggingKafkaProducer(self._notify_messages_published)
         self.topic_to_tracking_info_map = {}
         self.client_type = client_type
         self.client_id = self._lookup_client_id(client_name)
         self._monitoring_window_in_sec = monitoring_window_in_sec
         self.start_time = start_time
+        self.producer = LoggingKafkaProducer(self._notify_messages_published)
 
     def _lookup_client_id(self, client_name):
         return 7
@@ -121,7 +121,7 @@ class _Monitor(object):
                 containing details about the last messages published to Kafka,
                 including Kafka offsets and upstream position information.
         """
-        logger.debug("Client published its monitoring message")
+        logger.debug("Client " + str(self.client_id) + " published its monitoring message")
 
     def record_message(self, message):
         if self._get_record(message.topic)['start_timestamp'] + self._monitoring_window_in_sec < message.timestamp:
