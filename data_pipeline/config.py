@@ -36,6 +36,14 @@ class Config(object):
             "http://localhost:8888/api-docs"
         )
 
+    @property
+    def monitoring_window_in_sec(self):
+        """Returns the duration(in sec) for which the monitoring system will count
+        the number of messages processed by the client
+        TODO(DATAPIPE-154|pujun) This should be configured with staticconf
+        """
+        return 1000
+
 _config = Config()
 
 

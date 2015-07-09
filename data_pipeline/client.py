@@ -18,8 +18,8 @@ class Client(object):
     responsible for shared producer/consumer registration responsibilities.
 
     Args:
-        client_type: type of the client. Can be producer or consumer
-        client_name: Name associated with the client
+        client_type (str): type of the client. Can be producer or consumer
+        client_name (str): Name associated with the client
     DATAPIPE-157
     """
 
@@ -32,21 +32,25 @@ class _Monitor(object):
     """The class that implements functionality of monitoring the messages published/
     consumed by clients using kafka.
 
+    In current implementation, monitoring_window_in_sec is stored in the staticconf
+    and is the same for every client. As one of the future features, one could add
+    the option to have a custom monitoring_window_in_sec for every client and choose
+    the appropriate duration based on the number of messages published by the client.
+
     Args:
-        client_type: type of the client the monitoring_message is associated to.
+        client_type (str): type of the client the _Monitor object is associated to.
             could be either producer or consumer
-        client_name: name of the associated client
-        monitoring_window_in_sec: the duration (in second) for which monitoring_message
-             will monitor
-        start_time: start_time when monitoring_message for client will start
-            counting the number of messages produced/consumed
+        client_name (str): name of the associated client
+        start_time (int): start_time when _Monitor object will start counting the
+            number of messages produced/consumed by the associated client
+
     """
 
-    def __init__(self, client_type, client_name, monitoring_window_in_sec=1000, start_time=0):
+    def __init__(self, client_type, client_name, start_time=0):
         self.topic_to_tracking_info_map = {}
         self.client_type = client_type
         self.client_id = self._lookup_client_id(client_name)
-        self._monitoring_window_in_sec = monitoring_window_in_sec
+        self._monitoring_window_in_sec = get_config().monitoring_window_in_sec
         self.start_time = start_time
         self.producer = LoggingKafkaProducer(self._notify_messages_published)
 
