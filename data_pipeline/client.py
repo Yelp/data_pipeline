@@ -55,6 +55,11 @@ class _Monitor(object):
         self.producer = LoggingKafkaProducer(self._notify_messages_published)
 
     def _lookup_client_id(self, client_name):
+        """Returns the client_id associated with the client_name.
+
+        TODO(DATAPIPE-273|pujun): Need to implement the functionality
+        to find the client_id of a client from its client_name.
+        """
         return 7
 
     def _get_message(self, topic):
@@ -69,6 +74,8 @@ class _Monitor(object):
         )
 
     def _get_default_record(self, topic):
+        """Creates and returns the default version of the topic_to_tracking_info_map
+        """
         self.topic_to_tracking_info_map[topic] = {
             'topic': topic,
             'client_type': self.client_type,
@@ -80,8 +87,8 @@ class _Monitor(object):
         return self.topic_to_tracking_info_map[topic]
 
     def _get_record(self, topic):
-        """returns the record associated with the topic for any client.
-        If the topic has no record, a new record is created and returned.
+        """returns the record associated with the topic for any client
+        If the topic has no record, a new record is created and returned
         """
         if topic in self.topic_to_tracking_info_map:
             return self.topic_to_tracking_info_map[topic]
@@ -104,6 +111,13 @@ class _Monitor(object):
         self._get_record(topic)['start_timestamp'] = self._get_updated_start_timestamp(timestamp)
 
     def _get_updated_start_timestamp(self, timestamp):
+        """
+        returns the new start_timestamp based on the value of the existing timestamp of the
+        encountered message.
+
+        For instance, if message_timestamp is 2013 and the monitoring_window_in_sec is 1000,
+        2000 will be returned
+        """
         return (timestamp / self._monitoring_window_in_sec) * self._monitoring_window_in_sec
 
     def get_message_count(self, topic):
@@ -128,6 +142,9 @@ class _Monitor(object):
         logger.debug("Client " + str(self.client_id) + " published its monitoring message")
 
     def record_message(self, message):
+        """Used to handle the logic of recording monitoring_message in kafka and resetting
+        it if necessary
+        """
         if self._get_record(message.topic)['start_timestamp'] + self._monitoring_window_in_sec < message.timestamp:
             self._publish(message.topic)
             self._reset_record(message.topic, message.timestamp)
