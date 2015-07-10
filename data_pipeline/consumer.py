@@ -73,6 +73,11 @@ class Consumer(Client):
     ):
         """ Creates the Consumer object
 
+        Notes:
+            worker_min_sleep_time and worker_max_sleep_time exist (rather than
+            a single sleep time) to ensure subprocesses don't always wake up
+            at the same time (aka configurable 'jitter').
+
         Args:
             consumer_name (str): The name of the consumer to register with Kafka for
                 offset commits.
@@ -95,6 +100,16 @@ class Consumer(Client):
             auto_offset_reset (str): Used for offset validation. If 'largest'
                 reset the offset to the latest available message (tail). If
                 'smallest' reset from the earliest (head).
+            partitioner_cooldown (float): Waiting time (in seconds) for the
+                consumer to acquire the partitions. See
+                yelp_kafka/yelp_kafka/partitioner.py for more details
+            worker_min_sleep_time (float): Minimum time (in seconds) for
+                background workers in the consumer to sleep while waiting to
+                retry adding messages to the shared `multiprocess.Queue`
+            worker_max_sleep_time (float): Maximum time (in seconds) for
+                background workers in the consumer to sleep while waiting to
+                retry adding messages to the shared `multiprocess.Queue`
+
         """
         self.consumer_name = consumer_name
         self.max_buffer_size = max_buffer_size
@@ -118,7 +133,7 @@ class Consumer(Client):
             self.stop()
         except:
             logger.exception("Failed to stop the Consumer.")
-            if exc_type is not None:
+            if exc_type is None:
                 # The exception shouldn't mask the original exception if there
                 # is one, but if an exception occurs, we want it to show up.
                 raise
@@ -331,10 +346,12 @@ class Consumer(Client):
                 when this context manager exits. May also pass a single
                 `data_pipeline.message.Message` object.
         """
-        yield messages
-        if isinstance(messages, Message):
-            messages = [messages]
-        self.commit_messages(messages=messages)
+        try:
+            yield messages
+        finally:
+            if isinstance(messages, Message):
+                messages = [messages]
+            self.commit_messages(messages=messages)
 
     def reset_topics(self, topic_to_consumer_topic_state_map):
         """ Stop and restart the Consumer with a new

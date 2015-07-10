@@ -95,7 +95,7 @@ class Producer(Client):
             logger.info("Producer closed")
         except:
             logger.exception("Failed to close the Producer.")
-            if exc_type is not None:
+            if exc_type is None:
                 # The exception shouldn't mask the original exception if there
                 # is one, but if an exception occurs, we want it to show up.
                 raise
