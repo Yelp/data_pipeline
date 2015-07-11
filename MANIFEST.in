@@ -1,4 +1,4 @@
-include schemas/envelope_v1.avsc
+include data_pipeline/schemas/envelope_v1.avsc
 include CONTRIBUTING.rst
 include HISTORY.rst
 include README.rst

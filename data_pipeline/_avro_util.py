@@ -81,10 +81,13 @@ def generate_payload_data(schema, data_spec={}):
     """ Generate a valid payload data dict for a given avro schema, with an
     optional data spec to override defaults.
 
-    :param avro.schema.RecordSchema schema: An avro schema
-    :param dict data_spec: {field_name: value} dictionary of values to use
-    in the resulting payload data dict
-    :rtype: dict
+    Args:
+        schema (avro.schema.RecordSchema): An avro schema
+        data_spec (dict): {field_name: value} dictionary of values to use
+            in the resulting payload data dict
+
+    Returns (dict):
+        A valid payload data example
     """
     assert isinstance(schema, avro.schema.RecordSchema)
     data = {}
@@ -101,8 +104,11 @@ def generate_field_value(field):
     default value specified, that is used, otherwise the first PrimitiveSchema
     definition is used to generate a default valid value.
 
-    :param avro.schema.Field field: An avro field
-    :return: A value which is valid for the given field.
+    Args:
+        field (avro.schema.Field): An avro field
+
+    Returns:
+        A value which is valid for the given field.
     """
     assert isinstance(field, avro.schema.Field)
 
@@ -121,8 +127,10 @@ def get_field_primitive_type(field):
     """ The first PrimitiveSchema definition is used to return the primitive
     type of the field, dealing with single-layer unions
 
-    :param avro.schema.Field field: An avro field
-    :return: the field type
+    Args:
+        field (avro.schema.Field): An avro field
+
+    Returns (str): the primitve field type
     """
     assert isinstance(field, avro.schema.Field)
     if isinstance(field.type, avro.schema.UnionSchema):

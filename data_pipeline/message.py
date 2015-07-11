@@ -3,12 +3,24 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import time
+from collections import namedtuple
 
 from data_pipeline._avro_util import AvroStringReader
 from data_pipeline._avro_util import AvroStringWriter
 from data_pipeline._fast_uuid import FastUUID
+from data_pipeline.config import get_config
+from data_pipeline.envelope import Envelope
 from data_pipeline.message_type import MessageType
 from data_pipeline.schema_cache import get_schema_cache
+
+
+logger = get_config().logger
+
+KafkaPositionInfo = namedtuple('KafkaPositionInfo', [
+    'offset',               # Offset of the message in the topic
+    'partition',            # Partition of the topic the message was from
+    'key'                   # Key of the message, may be `None`
+])
 
 
 class Message(object):
@@ -91,6 +103,23 @@ class Message(object):
         if len(payload) == 0:
             raise ValueError("Payload must exist")
         self._payload = payload
+        self._payload_data = None  # force payload_data to be re-decoded
+
+    @property
+    def payload_data(self):
+        if self._payload_data is None and self.payload is not None:
+            self._payload_data = self._avro_string_reader.decode(
+                encoded_message=self.payload
+            )
+        return self._payload_data
+
+    @property
+    def previous_payload_data(self):
+        if self._previous_payload_data is None and self.previous_payload is not None:
+            self._previous_payload_data = self._avro_string_reader.decode(
+                encoded_message=self.previous_payload
+            )
+        return self._previous_payload_data
 
     @property
     def message_type(self):
@@ -125,6 +154,7 @@ class Message(object):
             raise ValueError("Previous payload must exist for updates")
 
         self._previous_payload = previous_payload
+        self._previous_payload_data = None  # force previous_payload_data to be re-decoded
 
     @property
     def uuid(self):
@@ -210,6 +240,20 @@ class Message(object):
         self._upstream_position_info = upstream_position_info
 
     @property
+    def kafka_position_info(self):
+        """The kafka offset, partition, and key of the message if it
+        was consumed from kafka. This is expected to be None for messages
+        on their way to being published.
+        """
+        return self._kafka_position_info
+
+    @kafka_position_info.setter
+    def kafka_position_info(self, kafka_position_info):
+        if kafka_position_info is not None and not isinstance(kafka_position_info, KafkaPositionInfo):
+            raise ValueError("kafka_position_info should be None or a KafkaPositionInfo")
+        self._kafka_position_info = kafka_position_info
+
+    @property
     def _avro_schema(self):
         return get_schema_cache().get_schema(self.schema_id)
 
@@ -227,9 +271,23 @@ class Message(object):
         )
 
     def __init__(
-        self, topic, schema_id, payload, message_type, previous_payload=None,
-        uuid=None, contains_pii=False, timestamp=None, upstream_position_info=None
+        self,
+        topic,
+        schema_id,
+        payload,
+        message_type,
+        previous_payload=None,
+        uuid=None,
+        contains_pii=False,
+        timestamp=None,
+        upstream_position_info=None,
+        kafka_position_info=None
     ):
+        # payload_data and previous_payload_data are lazily constructed only
+        # on request
+        self._payload_data = None
+        self._previous_payload_data = None
+
         # The decision not to just pack the message to validate it is
         # intentional here.  We want to perform more sanity checks than avro
         # does, and in addition, this check is quite a bit faster than
@@ -244,3 +302,45 @@ class Message(object):
         self.contains_pii = contains_pii
         self.timestamp = timestamp
         self.upstream_position_info = upstream_position_info
+        self.kafka_position_info = kafka_position_info
+
+
+def create_from_kafka_message(
+        topic,
+        kafka_message,
+        force_payload_decoding=True
+):
+    """ Build a data_pipeline.message.Message from a yelp_kafka message
+
+    Args:
+        topic (str): The topic name from which the message was received.
+        kafka_message (yelp_kafka.consumer.Message): The message info which
+            has the payload, offset, partition, and key of the received
+            message.
+        force_payload_decoding (boolean): If this is set to `True` then
+            we will decode the payload/previous_payload immediately.
+            Otherwise the decoding will happen whenever the lazy *_data
+            properties are accessed.
+
+    Returns (data_pipeline.message.Message):
+        The message object
+    """
+    unpacked_message = Envelope().unpack(kafka_message.value)
+    message = Message(
+        topic=topic,
+        kafka_position_info=KafkaPositionInfo(
+            offset=kafka_message.offset,
+            partition=kafka_message.partition,
+            key=kafka_message.key,
+        ),
+        uuid=unpacked_message['uuid'],
+        message_type=MessageType[unpacked_message['message_type']],
+        schema_id=unpacked_message['schema_id'],
+        payload=unpacked_message['payload'],
+        timestamp=unpacked_message['timestamp']
+    )
+    if force_payload_decoding:
+        # Access the cached, but lazily-calculated, properties
+        message.payload_data
+        message.previous_payload_data
+    return message
