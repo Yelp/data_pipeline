@@ -111,7 +111,7 @@ class KafkaProducer(object):
                 -1,
                 message_count
             )
-            logger.debug("Published {0} messages to {1}".format(
+            logger.debug("dry_run mode: Would have published {0} messages to {1}".format(
                 message_count,
                 topic
             ))

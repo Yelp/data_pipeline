@@ -37,7 +37,7 @@ class TestProducer(object):
         return request.param
 
     @pytest.fixture
-    def producer_instance(self, producer_klass, use_work_pool, kafka_docker):
+    def producer_instance(self, producer_klass, use_work_pool):
         return producer_klass(use_work_pool=use_work_pool)
 
     @pytest.yield_fixture
