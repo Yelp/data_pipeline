@@ -2,40 +2,10 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import pytest
 import simplejson as json
-
-from data_pipeline.schema_cache import get_schema_cache
 
 
 class TestSchemaCache(object):
-
-    @pytest.fixture
-    def example_schema(self):
-        return '''
-        {"type":"record","namespace":"test","name":"test","fields":[
-            {"type":"int","name":"test"}
-        ]}
-        '''
-
-    @pytest.fixture
-    def api(self, schema_cache):
-        return schema_cache.schematizer_client
-
-    @pytest.fixture
-    def registered_schema(self, api, example_schema):
-        return api.schemas.register_schema(
-            body={
-                'schema': example_schema,
-                'namespace': 'test',
-                'source': 'test',
-                'source_owner_email': 'test@yelp.com'
-            }
-        ).result()
-
-    @pytest.fixture
-    def schema_cache(self):
-        return get_schema_cache()
 
     def test_get_transformed_schema_id(self, schema_cache):
         assert schema_cache.get_transformed_schema_id(0) is None
@@ -52,7 +22,7 @@ class TestSchemaCache(object):
 
     def test_register_transformed_schema(
             self,
-            api,
+            schematizer_client,
             registered_schema,
             schema_cache,
             example_schema
@@ -64,7 +34,7 @@ class TestSchemaCache(object):
             schema=example_schema,
             owner_email='test_owner@yelp.com'
         )
-        schema_response = api.schemas.get_schema_by_id(
+        schema_response = schematizer_client.schemas.get_schema_by_id(
             schema_id=schema_id
         ).result()
         schema = schema_cache.get_schema(schema_id=schema_id)
