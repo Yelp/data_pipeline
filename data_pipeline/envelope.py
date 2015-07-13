@@ -95,17 +95,11 @@ class Envelope(object):
             dict: Dictionary that can be packed by
                 :func:`data_pipeline.envelope.Envelope.pack`.
         """
-        if message.message_type == MessageType.update:
-            if message.previous_payload is None:
-                raise ValueError("Previous payload data should be set for updates")
-            # TODO(DATAPIPE-163): This needs to make sure the previous payload
-            # is actually set.
-            raise NotImplementedError
-
         return {
             'uuid': message.uuid,
             'message_type': message.message_type.name,
             'schema_id': message.schema_id,
             'payload': message.payload,
+            'previous_payload': message.previous_payload,
             'timestamp': message.timestamp
         }

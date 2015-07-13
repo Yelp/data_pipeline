@@ -141,6 +141,9 @@ class Message(object):
         `schema_id`.  Required when message type is `MessageType.update`.
         Disallowed otherwise.  Defaults to None.
         """
+        if (self.message_type == MessageType.update and
+                self._previous_payload is None):
+            raise ValueError("Previous payload data should be set for updates")
         return self._previous_payload
 
     @previous_payload.setter
