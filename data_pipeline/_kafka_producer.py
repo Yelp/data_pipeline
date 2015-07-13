@@ -48,8 +48,9 @@ class KafkaProducer(object):
     def envelope(self):
         return Envelope()
 
-    def __init__(self, producer_position_callback):
+    def __init__(self, producer_position_callback, dry_run=False):
         self.producer_position_callback = producer_position_callback
+        self.dry_run = dry_run
         self.kafka_client = get_config().kafka_client
         self.position_data_tracker = PositionDataTracker()
         self._reset_message_buffer()
@@ -67,7 +68,8 @@ class KafkaProducer(object):
         self._flush_if_necessary()
 
     def flush_buffered_messages(self):
-        self._publish_produce_requests(self._generate_produce_requests())
+        produce_method = self._publish_produce_requests_dry_run if self.dry_run else self._publish_produce_requests
+        produce_method(self._generate_produce_requests())
         self._reset_message_buffer()
 
     def close(self):
@@ -99,6 +101,20 @@ class KafkaProducer(object):
         except:
             logger.exception("Produce failed... fix in DATAPIPE-149")
             raise
+
+    def _publish_produce_requests_dry_run(self, requests):
+        for request in requests:
+            topic = request.topic
+            message_count = len(request.messages)
+            self.position_data_tracker.record_messages_published(
+                topic,
+                -1,
+                message_count
+            )
+            logger.debug("dry_run mode: Would have published {0} messages to {1}".format(
+                message_count,
+                topic
+            ))
 
     def _is_ready_to_flush(self):
         return (
