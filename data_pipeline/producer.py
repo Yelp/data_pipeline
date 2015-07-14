@@ -60,6 +60,7 @@ class Producer(Client):
                       producer.wake()
 
     Args:
+      producer_name (str): name of the producer client
       use_work_pool (bool): If true, the process will use a multiprocessing
         pool to serialize messages in preparation for transport.  The work pool
         can parallelize some expensive serialization.  Default is false.
@@ -72,10 +73,10 @@ class Producer(Client):
         else:
             return LoggingKafkaProducer(self._set_kafka_producer_position)
 
-    def __init__(self, client_name, use_work_pool=False):
+    def __init__(self, producer_name, use_work_pool=False):
         # TODO(DATAPIPE-157): This should call the Client to capture information
         # about the producer
-        super(Producer, self).__init__('producer', client_name)
+        super(Producer, self).__init__('producer', producer_name)
         self.use_work_pool = use_work_pool
 
     def __enter__(self):

@@ -3,12 +3,15 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import multiprocessing
+import random
 
 import mock
 import pytest
 
 from data_pipeline import lazy_message
 from data_pipeline.async_producer import AsyncProducer
+from data_pipeline.config import get_config
+from data_pipeline.message import Message
 from data_pipeline.message_type import MessageType
 from data_pipeline.producer import Producer
 from tests.helpers.kafka_docker import capture_new_messages
@@ -57,7 +60,30 @@ class TestProducer(object):
     def lazy_message(self, topic_name):
         return lazy_message.LazyMessage(topic_name, 10, {1: 100}, MessageType.create)
 
-    def test_monitoring_system(self, topic, message, producer, envelope):
+    def get_message_with_random_timestamp(self, topic_name, payload, timeslot):
+        """returns a message with a random timestamp within the specified timeslot
+        """
+        return Message(
+            topic_name,
+            10,
+            payload,
+            MessageType.create,
+            timestamp=self.get_random_timestamp_within_timeslot(timeslot)
+        )
+
+    def get_random_timestamp_within_timeslot(self, timeslot):
+        """Given a timeslot start time, it returns a random timestamp within
+        the specified timeslot
+        """
+        return random.randint(timeslot, timeslot + get_config().monitoring_window_in_sec)
+
+    def test_monitoring_system_same_topic_same_timestamp_messages(
+        self,
+        topic,
+        message,
+        producer,
+        envelope
+    ):
         with capture_new_messages(topic) as get_messages:
             for i in xrange(99):
                 producer.publish(message)
@@ -65,6 +91,37 @@ class TestProducer(object):
             messages = get_messages()
         assert producer.monitoring_message.get_message_count(message.topic) == 99
         assert len(messages) == 99
+
+    def test_monitoring_system_same_topic_different_timestamp_messages(
+        self,
+        topic,
+        topic_name,
+        payload,
+        producer,
+        envelope,
+        kafka_docker
+    ):
+        # list of tuples containing number of messages and associated timeslots
+        num_messages_timeslot_list = [
+            (16, 1000),
+            (20, 4000),
+            (30, 6000)
+        ]
+        # create a kafka topic where monitoring_messages can be published
+        create_kafka_docker_topic(kafka_docker, topic_name + "-monitor-log")
+
+        with capture_new_messages(topic) as get_messages:
+            with capture_new_messages(topic + "-monitor-log") as get_monitoring_messages:
+                for num_messages, timeslot in num_messages_timeslot_list:
+                    for i in xrange(num_messages):
+                        producer.publish(self.get_message_with_random_timestamp(topic_name, payload, timeslot))
+                producer.flush()
+                producer.monitoring_message.producer.flush_buffered_messages()
+                monitoring_messages = get_monitoring_messages()
+            messages = get_messages()
+
+        assert len(messages) == 66
+        assert len(monitoring_messages) == 3
 
     def test_basic_publish_lazy_message(
         self,
