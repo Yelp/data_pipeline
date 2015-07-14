@@ -24,7 +24,7 @@ class Client(object):
     """
 
     def __init__(self, client_type, client_name):
-        self.monitoring_message = _Monitor(client_type, client_name)
+        self.monitoring_message = _Monitor(client_type)
         self.client_name = client_name
 
 
@@ -45,22 +45,21 @@ class _Monitor(object):
             number of messages produced/consumed by the associated client
     """
 
-    def __init__(self, client_type, client_name, start_time=0):
+    def __init__(self, client_type, start_time=0):
         self.topic_to_tracking_info_map = {}
         self.client_type = client_type
-        self.client_id = self._lookup_client_id(client_name, client_type)
         self._monitoring_window_in_sec = get_config().monitoring_window_in_sec
         self.start_time = start_time
         self.producer = LoggingKafkaProducer(self._notify_messages_published)
 
-    def _lookup_client_id(self, client_name, client_type):
+    def _set_client_id(self, topic):
         """Returns the client_id associated with the client_name. client_type
         is used to determine if the query for getting id needs to run on the
         producer or the consumer table.
         TODO(DATAPIPE-273|pujun): Need to implement the functionality
         to find the client_id of a client from its client_name.
         """
-        return 7
+        self.client_id = 7
 
     def _get_default_record(self, topic):
         """Returns the default version of the topic_to_tracking_info_map entry
@@ -135,12 +134,13 @@ class _Monitor(object):
                 containing details about the last messages published to Kafka,
                 including Kafka offsets and upstream position information.
         """
-        logger.debug("Client " + str(self.client_id) + " published its monitoring message")
+        logger.debug("Client published its monitoring message")
 
     def record_message(self, message):
         """Used to handle the logic of recording monitoring_message in kafka and resetting
         it if necessary
         """
+        self._set_client_id(message.topic)
         tracking_info = self._get_record(message.topic)
         if tracking_info['start_timestamp'] + self._monitoring_window_in_sec < message.timestamp:
             self._publish(message.topic)
