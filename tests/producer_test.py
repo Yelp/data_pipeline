@@ -77,51 +77,111 @@ class TestProducer(object):
         """
         return random.randint(timeslot, timeslot + get_config().monitoring_window_in_sec)
 
-    def test_monitoring_system_same_topic_same_timestamp_messages(
-        self,
-        topic,
-        message,
-        producer,
-        envelope
-    ):
-        with capture_new_messages(topic) as get_messages:
-            for i in xrange(99):
-                producer.publish(message)
-            producer.flush()
-            messages = get_messages()
-        assert producer.monitoring_message.get_message_count(message.topic) == 99
+    def test_monitoring_message_basic(self, message, topic_name, producer, kafka_docker):
+
+        # create a kafka topic where monitoring_messages can be published
+        create_kafka_docker_topic(kafka_docker, topic_name)
+        create_kafka_docker_topic(kafka_docker, topic_name + "-monitor-log")
+
+        with capture_new_messages(topic_name) as get_messages:
+            with capture_new_messages(topic_name + "-monitor-log") as get_monitoring_messages:
+                for i in xrange(99):
+                    producer.publish(message)
+                producer.flush()
+                producer.monitoring_message.flush_buffered_info()
+                messages = get_messages()
+            monitoring_messages = get_monitoring_messages()
+
         assert len(messages) == 99
+        assert len(monitoring_messages) == 1
+
+        # since the monitoring_message has been published, the current count should be 0
+        assert producer.monitoring_message._get_record(topic_name)["message_count"] == 0
 
     def test_monitoring_system_same_topic_different_timestamp_messages(
         self,
-        topic,
         topic_name,
         payload,
         producer,
-        envelope,
         kafka_docker
     ):
-        # list of tuples containing number of messages and associated timeslots
+        # list of tuples where each tuple consists of the number of messages
+        # and associated timeslots of messages that would be published to topic_name
         num_messages_timeslot_list = [
             (16, 1000),
             (20, 4000),
             (30, 6000)
         ]
         # create a kafka topic where monitoring_messages can be published
+        create_kafka_docker_topic(kafka_docker, topic_name)
         create_kafka_docker_topic(kafka_docker, topic_name + "-monitor-log")
-
-        with capture_new_messages(topic) as get_messages:
-            with capture_new_messages(topic + "-monitor-log") as get_monitoring_messages:
+        with capture_new_messages(topic_name) as get_messages:
+            with capture_new_messages(topic_name + "-monitor-log") as get_monitoring_messages:
                 for num_messages, timeslot in num_messages_timeslot_list:
                     for i in xrange(num_messages):
                         producer.publish(self.get_message_with_random_timestamp(topic_name, payload, timeslot))
                 producer.flush()
-                producer.monitoring_message.producer.flush_buffered_messages()
+                producer.monitoring_message.flush_buffered_info()
                 monitoring_messages = get_monitoring_messages()
             messages = get_messages()
 
         assert len(messages) == 66
         assert len(monitoring_messages) == 3
+
+        # since the monitoring_message has been published, the current count should be zero
+        assert producer.monitoring_message._get_record(topic_name + "-monitor-log")["message_count"] == 0
+
+    def test_monitoring_system_different_topic_different_timestamp_messages(
+        self,
+        payload,
+        producer,
+        kafka_docker
+    ):
+        """list of tuples where each tuple contains:
+            topic name,
+            number of messages published to that topic
+            number of monitoring messages published for that topic
+        """
+        testing_parameters = [
+            (str("topic-0"), 95, 3),
+            (str("topic-1"), 82, 4),
+            (str("topic-2"), 30, 1)
+        ]
+
+        """ list of tuples where each tuple contains
+                number of messages to publish
+                timeslot for messages
+                topic_name where messages need to be published
+        """
+        num_messages_timeslot_topic_name_list = [
+            (16, 1000, str('topic-0')),
+            (20, 4000, str('topic-1')),
+            (30, 6000, str('topic-2')),
+            (16, 1000, str('topic-0')),
+            (23, 5000, str('topic-0')),
+            (30, 5000, str('topic-0')),
+            (10, 8000, str('topic-0')),
+            (20, 5000, str('topic-1')),
+            (20, 6000, str('topic-1')),
+            (20, 6000, str('topic-1')),
+            (2, 9000, str('topic-1')),
+        ]
+
+        for topic_name, expected_message_count, expected_monitoring_message_count in testing_parameters:
+            create_kafka_docker_topic(kafka_docker, topic_name)
+            create_kafka_docker_topic(kafka_docker, str(topic_name + "-monitor-log"))
+            with capture_new_messages(topic_name) as get_messages:
+                with capture_new_messages(topic_name + "-monitor-log") as get_monitoring_messages:
+                    for num_messages, timeslot, topic_name in num_messages_timeslot_topic_name_list:
+                        for i in xrange(num_messages):
+                            producer.publish(self.get_message_with_random_timestamp(topic_name, payload, timeslot))
+                    producer.flush()
+                    producer.monitoring_message.flush_buffered_info()
+                    monitoring_messages = get_monitoring_messages()
+                messages = get_messages()
+
+                assert len(messages) == expected_message_count
+                assert len(monitoring_messages) == expected_monitoring_message_count
 
     def test_basic_publish_lazy_message(
         self,

@@ -143,6 +143,18 @@ class _Monitor(object):
         self._set_client_id(message.topic)
         tracking_info = self._get_record(message.topic)
         if tracking_info['start_timestamp'] + self._monitoring_window_in_sec < message.timestamp:
-            self._publish(message.topic)
+            if self._get_record(message.topic)["message_count"] > 0:
+                self._publish(message.topic)
             self._reset_record(message.topic, message.timestamp)
         tracking_info['message_count'] += 1
+
+    def flush_buffered_info(self):
+        """
+        Called when the producer is exiting/closing. It publishes the buffered information,
+        stored in topic_to_tracking_info_map, to kafka and resets topic_to_tracking_info_map
+        to an empty dictionary
+        """
+        for remaining_monitoring_topic in self.topic_to_tracking_info_map:
+            self._publish(remaining_monitoring_topic)
+        self.producer.flush_buffered_messages()
+        self.topic_to_tracking_info_map = {}

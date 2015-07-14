@@ -168,6 +168,7 @@ class Producer(Client):
                 ...
                 producer.publish(message)
         """
+        self.monitoring_message.flush_buffered_info()
         self._kafka_producer.close()
         assert len(multiprocessing.active_children()) == 0
 
