@@ -68,14 +68,21 @@ class Producer(Client):
     @cached_property
     def _kafka_producer(self):
         if self.use_work_pool:
-            return PooledKafkaProducer(self._set_kafka_producer_position)
+            return PooledKafkaProducer(
+                self._set_kafka_producer_position,
+                dry_run=self.dry_run
+            )
         else:
-            return LoggingKafkaProducer(self._set_kafka_producer_position)
+            return LoggingKafkaProducer(
+                self._set_kafka_producer_position,
+                dry_run=self.dry_run
+            )
 
-    def __init__(self, use_work_pool=False):
+    def __init__(self, use_work_pool=False, dry_run=False):
         # TODO(DATAPIPE-157): This should call the Client to capture information
         # about the producer
         self.use_work_pool = use_work_pool
+        self.dry_run = dry_run
 
     def __enter__(self):
         # By default, the kafka producer is created lazily, and doesn't

@@ -23,13 +23,21 @@ class RandomException(Exception):
 @pytest.mark.usefixtures("patch_payload")
 class TestProducer(object):
     @pytest.fixture(params=[
-        (Producer, False),
-        (Producer, True),
-        (AsyncProducer, False),
-        (AsyncProducer, True)
+        Producer,
+        AsyncProducer
     ])
-    def producer_instance(self, request, kafka_docker):
-        producer_klass, use_work_pool = request.param
+    def producer_klass(self, request):
+        return request.param
+
+    @pytest.fixture(params=[
+        True,
+        False
+    ])
+    def use_work_pool(self, request):
+        return request.param
+
+    @pytest.fixture
+    def producer_instance(self, producer_klass, use_work_pool):
         return producer_klass(use_work_pool=use_work_pool)
 
     @pytest.yield_fixture
@@ -92,6 +100,13 @@ class TestProducer(object):
                 producer.publish(message)
             assert len(multiprocessing.active_children()) == 0
             assert len(get_messages()) == 1
+
+    def test_messages_not_published_in_dry_run_mode(self, producer_klass, use_work_pool, topic, message):
+        with capture_new_messages(topic) as get_messages:
+            with producer_klass(use_work_pool=use_work_pool, dry_run=True) as producer:
+                producer.publish(message)
+            assert len(multiprocessing.active_children()) == 0
+            assert len(get_messages()) == 0
 
     def test_empty_starting_checkpoint_data(self, producer):
         position_data = producer.get_checkpoint_position_data()

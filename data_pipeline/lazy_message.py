@@ -21,15 +21,17 @@ class LazyMessage(Message):
             encoded with schema identified by `schema_id`.  Required when
             message type is MessageType.update.  Disallowed otherwise.
             Defaults to None.
+        dry_run (boolean): When set to True, LazyMessage will return a string
+            representation of the payload and previous payload, instead of
+            the avro encoded message.  This is to avoid loading the schema from
+            the schema store.  Defaults to False.
     """
     @property
     def payload(self):
         """Avro-encoded message - encoded with schema identified by `schema_id`.
         """
         if self._payload is None:
-            self._payload = self._avro_string_writer.encode(
-                message_avro_representation=self.payload_data
-            )
+            self._payload = self._encode_data(self.payload_data)
         return self._payload
 
     @property
@@ -40,9 +42,8 @@ class LazyMessage(Message):
         """
         if self.message_type == MessageType.update:
             if self._previous_payload is None:
-                self._previous_payload = self._avro_string_writer.encode(
-                    message_avro_representation=self._previous_payload_data
-                )
+                self._previous_payload = self._encode_data(self._previous_payload_data)
+
             return self._previous_payload
         else:
             raise ValueError("Previous payload data should only be set for updates")
@@ -76,11 +77,20 @@ class LazyMessage(Message):
         self._previous_payload_data = previous_payload_data
         self._previous_payload = None
 
+    def _encode_data(self, data):
+        """Encodes data, returning a repr in dry_run mode"""
+        if self.dry_run:
+            return repr(data)
+
+        return self._avro_string_writer.encode(message_avro_representation=data)
+
     def __init__(
         self, topic, schema_id, payload_data, message_type,
         previous_payload_data=None, uuid=None, contains_pii=False,
-        timestamp=None, upstream_position_info=None
+        timestamp=None, upstream_position_info=None, dry_run=False
     ):
+        self.dry_run = dry_run
+
         # payload and previous_payload are lazily constructed only on request
         self._payload = None
         self._previous_payload = None
