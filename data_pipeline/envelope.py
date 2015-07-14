@@ -10,7 +10,6 @@ from cached_property import cached_property
 
 from data_pipeline._avro_util import AvroStringReader
 from data_pipeline._avro_util import AvroStringWriter
-from data_pipeline.message_type import MessageType
 
 
 class Envelope(object):
