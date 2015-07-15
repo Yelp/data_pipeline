@@ -24,7 +24,7 @@ class Client(object):
     """
 
     def __init__(self, client_type, client_name):
-        self.monitoring_message = _Monitor(client_type)
+        self.monitoring_message = _Monitor(client_type, client_name)
         self.client_name = client_name
 
 
@@ -45,21 +45,14 @@ class _Monitor(object):
             number of messages produced/consumed by the associated client
     """
 
-    def __init__(self, client_type, start_time=0):
+    def __init__(self, client_type, client_name, start_time=0):
         self.topic_to_tracking_info_map = {}
         self.client_type = client_type
+        self.client_name = client_name
         self._monitoring_window_in_sec = get_config().monitoring_window_in_sec
         self.start_time = start_time
         self.producer = LoggingKafkaProducer(self._notify_messages_published)
-
-    def _set_client_id(self, topic):
-        """Returns the client_id associated with the client_name. client_type
-        is used to determine if the query for getting id needs to run on the
-        producer or the consumer table.
-        TODO(DATAPIPE-273|pujun): Need to implement the functionality
-        to find the client_id of a client from its client_name.
-        """
-        self.client_id = 7
+        self.monitoring_schema_id = self._get_monitoring_schema_id()
 
     def _get_default_record(self, topic):
         """Returns the default version of the topic_to_tracking_info_map entry
@@ -70,7 +63,7 @@ class _Monitor(object):
             'message_count': 0,
             'start_timestamp': self.start_time,
             'host_info': socket.gethostname(),
-            'client_id': self.client_id
+            'client_name': self.client_name
         }
 
     def _get_record(self, topic):
@@ -83,33 +76,33 @@ class _Monitor(object):
             self.topic_to_tracking_info_map[topic] = tracking_info
         return tracking_info
 
-    def _publish(self, topic):
-        """Publishing the results stored in the monitoring_message using
-        the monitoring_publisher
+    def _publish(self, tracking_info):
+        """puclish monitoring results, stored in the monitoring_message, using
+        the producer
         """
         self.producer.publish(
             LazyMessage(
-                str(topic + '-monitor-log'),
-                self._get_schema_id(),
-                self._get_record(topic),
+                str(tracking_info['topic'] + '-monitor-log'),
+                self.monitoring_schema_id,
+                tracking_info,
                 _ProtectedMessageType.monitor
             )
         )
 
-    def _get_schema_id(self):
-        """Returns the schema used to encode the payload
+    def _get_monitoring_schema_id(self):
+        """Returns the schema used to encode the payload.
         TODO(DATAPIPE-274|pujun): return the schema_id associated with
         the monitoring_message avro schema
         """
         return 0
 
-    def _reset_record(self, topic, timestamp):
+    def _reset_monitoring_record(self, tracking_info, timestamp):
         """resets the record for a particular topic by resetting
         message_count to 0 and updating the start_timestamp to the
         start_timestamp of the newly published message
         """
-        self._get_default_record(topic)
-        self._get_record(topic)['start_timestamp'] = self._get_updated_start_timestamp(timestamp)
+        tracking_info['message_count'] = 0
+        tracking_info['start_timestamp'] = self._get_updated_start_timestamp(timestamp)
 
     def _get_updated_start_timestamp(self, timestamp):
         """
@@ -121,11 +114,6 @@ class _Monitor(object):
         """
         return (timestamp / self._monitoring_window_in_sec) * self._monitoring_window_in_sec
 
-    def get_message_count(self, topic):
-        """Number of messages produced/consumed by the client
-        """
-        return self._get_record(topic)['message_count']
-
     def _notify_messages_published(self, position_data):
         """Called to notify the client of successfully published messages.
 
@@ -134,27 +122,31 @@ class _Monitor(object):
                 containing details about the last messages published to Kafka,
                 including Kafka offsets and upstream position information.
         """
-        logger.debug("Client published its monitoring message")
+        logger.info("Client: " + self.client_name + " published monitoring message")
 
     def record_message(self, message):
         """Used to handle the logic of recording monitoring_message in kafka and resetting
         it if necessary
         """
-        self._set_client_id(message.topic)
         tracking_info = self._get_record(message.topic)
         if tracking_info['start_timestamp'] + self._monitoring_window_in_sec < message.timestamp:
-            if self._get_record(message.topic)["message_count"] > 0:
-                self._publish(message.topic)
-            self._reset_record(message.topic, message.timestamp)
+            if tracking_info["message_count"] > 0:
+                self._publish(tracking_info)
+            self._reset_monitoring_record(tracking_info, message.timestamp)
         tracking_info['message_count'] += 1
 
     def flush_buffered_info(self):
-        """
-        Called when the producer is exiting/closing. It publishes the buffered information,
-        stored in topic_to_tracking_info_map, to kafka and resets topic_to_tracking_info_map
-        to an empty dictionary
+        """Publishes the buffered information, stored in topic_to_tracking_info_map,
+        to kafka and resets topic_to_tracking_info_map to an empty dictionary
         """
         for remaining_monitoring_topic in self.topic_to_tracking_info_map:
-            self._publish(remaining_monitoring_topic)
+            self._publish(self._get_record(remaining_monitoring_topic))
         self.producer.flush_buffered_messages()
         self.topic_to_tracking_info_map = {}
+
+    def close(self):
+        """Called when the associated client is exiting/closing. Calls flush_buffered_info
+        and also closes monitoring.producer.
+        """
+        self.flush_buffered_info()
+        self.producer.close()

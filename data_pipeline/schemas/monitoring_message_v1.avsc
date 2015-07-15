@@ -6,7 +6,7 @@
   "fields":
   [
     {"name": "topic", "type": "string", "doc": "topic associated with the messages produced/consumed by client"},
-    {"name": "client_id", "type": "string", "doc": "ID of the client that is publishing/consuming messages"},
+    {"name": "client_name", "type": "string", "doc": "name of the client that is publishing/consuming messages"},
     {"name": "client_type", "type":  {"name": "client_type", "type": "enum", "symbols": ["producer", "consumer"]}, "doc": "identifies the type of client: a 'consumer' or a 'producer'"},
     {"name": "message_count", "type": "int", "doc": "number of messages published/consumed by the client"},
     {"name": "start_timestamp", "type": "int", "doc": "Time the monitoring system started counting messages"},
