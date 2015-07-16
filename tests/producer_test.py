@@ -20,7 +20,6 @@ class RandomException(Exception):
     pass
 
 
-@pytest.mark.usefixtures("patch_payload")
 class TestProducer(object):
     @pytest.fixture(params=[
         Producer,

@@ -6,8 +6,7 @@ from cached_property import cached_property
 
 from benchmarks.benchmarks import Benchmarks
 from data_pipeline.envelope import Envelope
-from data_pipeline.message import Message
-from data_pipeline.message_type import MessageType
+from data_pipeline.message import CreateMessage
 
 
 class MessagesBenchmark(object):
@@ -17,10 +16,10 @@ class MessagesBenchmark(object):
 
     @cached_property
     def message(self):
-        return Message(str('topic'), 10, bytes(10), MessageType.create)
+        return CreateMessage(str('topic'), 10, bytes(10))
 
     def benchmark_messsage_creation(self):
-        Message(str('topic'), 10, bytes(10), MessageType.create)
+        CreateMessage(str('topic'), 10, bytes(10))
 
     def benchmark_envelope_packing(self):
         self.envelope.pack(self.message)

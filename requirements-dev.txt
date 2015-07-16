@@ -4,7 +4,7 @@
 --extra-index-url https://pypi.python.org/simple/
 flake8
 pytest
-mock==1.0.1
+mock
 terminaltables>=1.0.2
 # older ipython is necessary for py26 compatibility
 ipython<2.0.0

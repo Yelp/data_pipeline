@@ -19,8 +19,8 @@ class Envelope(object):
     messages.
 
     Example:
-        >>> from data_pipeline.message import Message
-        >>> message = Message(str('topic'), 1, bytes("FAKE MESSAGE"), MessageType.create)
+        >>> from data_pipeline.message import CreateMessage
+        >>> message = CreateMessage(str('topic'), 1, bytes("FAKE MESSAGE"))
         >>> envelope = Envelope()
         >>> packed_message = envelope.pack(message)
         >>> isinstance(packed_message, bytes)
@@ -94,11 +94,4 @@ class Envelope(object):
             dict: Dictionary that can be packed by
                 :func:`data_pipeline.envelope.Envelope.pack`.
         """
-        return {
-            'uuid': message.uuid,
-            'message_type': message.message_type.name,
-            'schema_id': message.schema_id,
-            'payload': message.payload,
-            'previous_payload': message.previous_payload,
-            'timestamp': message.timestamp
-        }
+        return message._avro_repr

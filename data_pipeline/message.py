@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
@@ -23,21 +24,26 @@ KafkaPositionInfo = namedtuple('KafkaPositionInfo', [
 ])
 
 
+class InvalidOperation(Exception):
+    pass
+
+
 class Message(object):
     """Encapsulates a data pipeline message with metadata about the message.
 
-    Validates metadata, but not the payload itself.
+    Validates metadata, but not the payload itself. This class is not meant
+    to be used directly. Use specific type message class instead: CreateMessage,
+    UpdateMessage, DeleteMessage, and RefreshMessage.
 
     Args:
         topic (str): Kafka topic to publish into
         schema_id (int): Identifies the schema used to encode the payload
         payload (bytes): Avro-encoded message - encoded with schema identified
             by `schema_id`.
+        payload_data (dict): Contents of message.  Message will be lazily
+            encoded with schema identified by `schema_id`.
         message_type (data_pipeline.message_type.MessageType): Identifies the
             nature of the message.
-        previous_payload (bytes): Avro-encoded message - encoded with schema
-            identified by `schema_id`.  Required when message type is
-            MessageType.update.  Disallowed otherwise.  Defaults to None.
         uuid (bytes, optional): Globally-unique 16-byte identifier for the
             message.  A uuid4 will be generated automatically if this isn't
             provided.
@@ -67,6 +73,9 @@ class Message(object):
             overall and per topic.
     """
 
+    _message_type = None
+    """Identifies the nature of the message. It must be set by child class"""
+
     _fast_uuid = FastUUID()
     """UUID generator - this isn't a @cached_property so it can be serialized"""
 
@@ -93,71 +102,9 @@ class Message(object):
         self._schema_id = schema_id
 
     @property
-    def payload(self):
-        """Avro-encoded message - encoded with schema identified by `schema_id`.
-        """
-        return self._payload
-
-    @payload.setter
-    def payload(self, payload):
-        if len(payload) == 0:
-            raise ValueError("Payload must exist")
-        self._payload = payload
-        self._payload_data = None  # force payload_data to be re-decoded
-
-    @property
-    def payload_data(self):
-        if self._payload_data is None and self.payload is not None:
-            self._payload_data = self._avro_string_reader.decode(
-                encoded_message=self.payload
-            )
-        return self._payload_data
-
-    @property
-    def previous_payload_data(self):
-        if self._previous_payload_data is None and self.previous_payload is not None:
-            self._previous_payload_data = self._avro_string_reader.decode(
-                encoded_message=self.previous_payload
-            )
-        return self._previous_payload_data
-
-    @property
     def message_type(self):
         """Identifies the nature of the message."""
         return self._message_type
-
-    @message_type.setter
-    def message_type(self, message_type):
-        if not isinstance(message_type, MessageType):
-            message_types = [str(t) for t in MessageType]
-            raise ValueError(
-                "Message type should be one of %s" % ', '.join(message_types)
-            )
-        self._message_type = message_type
-
-    @property
-    def previous_payload(self):
-        """Avro-encoded message - encoded with schema identified by
-        `schema_id`.  Required when message type is `MessageType.update`.
-        Disallowed otherwise.  Defaults to None.
-        """
-        if (self.message_type == MessageType.update and
-                self._previous_payload is None):
-            raise ValueError("Previous payload data should be set for updates")
-        return self._previous_payload
-
-    @previous_payload.setter
-    def previous_payload(self, previous_payload):
-        if self.message_type != MessageType.update and previous_payload is not None:
-            raise ValueError("Previous payload should only be set for updates")
-
-        if self.message_type == MessageType.update and (
-            previous_payload is None or len(previous_payload) == 0
-        ):
-            raise ValueError("Previous payload must exist for updates")
-
-        self._previous_payload = previous_payload
-        self._previous_payload_data = None  # force previous_payload_data to be re-decoded
 
     @property
     def uuid(self):
@@ -273,23 +220,78 @@ class Message(object):
             writer_schema=self._avro_schema
         )
 
+    @property
+    def payload(self):
+        """Avro-encoded message - encoded with schema identified by `schema_id`.
+        """
+        # return self._payload
+        if self._payload is None:
+            self._payload = self._encode_data(self.payload_data)
+        return self._payload
+
+    @payload.setter
+    def payload(self, payload):
+        if len(payload) == 0:
+            raise ValueError("Payload must exist")
+        self._payload = payload
+        self._payload_data = None  # force payload_data to be re-decoded
+
+    @property
+    def payload_data(self):
+        if self._payload_data is None and self.payload is not None:
+            self._payload_data = self._avro_string_reader.decode(
+                encoded_message=self.payload
+            )
+        return self._payload_data
+
+    @payload_data.setter
+    def payload_data(self, payload_data):
+        if not isinstance(payload_data, dict):
+            raise ValueError("Payload data must be a dict containing data to serialize")
+        self._payload_data = payload_data
+        self._payload = None
+
+    @property
+    def previous_payload(self):
+        raise InvalidOperation("Previous payload is not applicable for message type {0}."
+                               .format(self.message_type.name))
+
+    @previous_payload.setter
+    def previous_payload(self, previous_payload_data):
+        raise InvalidOperation("Previous payload is not applicable for message type {0}."
+                               .format(self.message_type.name))
+
+    @property
+    def previous_payload_data(self):
+        raise InvalidOperation("Previous payload data is not applicable for message type {0}."
+                               .format(self.message_type.name))
+
+    @previous_payload_data.setter
+    def previous_payload_data(self, previous_payload_data):
+        raise InvalidOperation("Previous payload data is not applicable for message type {0}."
+                               .format(self.message_type.name))
+
+    def _encode_data(self, data):
+        """Encodes data, returning a repr in dry_run mode"""
+        if self.dry_run:
+            return repr(data)
+        return self._avro_string_writer.encode(message_avro_representation=data)
+
     def __init__(
         self,
         topic,
         schema_id,
         payload,
-        message_type,
-        previous_payload=None,
         uuid=None,
         contains_pii=False,
         timestamp=None,
         upstream_position_info=None,
-        kafka_position_info=None
+        kafka_position_info=None,
+        dry_run=False
     ):
         # payload_data and previous_payload_data are lazily constructed only
         # on request
         self._payload_data = None
-        self._previous_payload_data = None
 
         # The decision not to just pack the message to validate it is
         # intentional here.  We want to perform more sanity checks than avro
@@ -299,13 +301,130 @@ class Message(object):
         self.topic = topic
         self.schema_id = schema_id
         self.payload = payload
-        self.message_type = message_type
-        self.previous_payload = previous_payload
         self.uuid = uuid
         self.contains_pii = contains_pii
         self.timestamp = timestamp
         self.upstream_position_info = upstream_position_info
         self.kafka_position_info = kafka_position_info
+        self.dry_run = dry_run
+
+    @property
+    def _avro_repr(self):
+        return {
+            'uuid': self.uuid,
+            'message_type': self.message_type.name,
+            'schema_id': self.schema_id,
+            'payload': self.payload,
+            'timestamp': self.timestamp
+        }
+
+    def reload_data(self):
+        self.payload_data
+
+
+class CreateMessage(Message):
+
+    _message_type = MessageType.create
+
+
+class DeleteMessage(Message):
+
+    _message_type = MessageType.delete
+
+
+class RefreshMessage(Message):
+
+    _message_type = MessageType.refresh
+
+
+class UpdateMessage(Message):
+    """Message for update type. This type of message requires previous
+    payload in addition to the payload.
+
+    For complete argument docs, see :class:`data_pipeline.message.Message`.
+
+    Args:
+        previous_payload (bytes): Avro-encoded message - encoded with schema
+            identified by `schema_id`.  Required when message type is
+            MessageType.update.
+    """
+
+    _message_type = MessageType.update
+
+    def __init__(
+        self,
+        topic,
+        schema_id,
+        payload,
+        previous_payload,
+        uuid=None,
+        contains_pii=False,
+        timestamp=None,
+        upstream_position_info=None,
+        kafka_position_info=None,
+        dry_run=False
+    ):
+        super(UpdateMessage, self).__init__(
+            topic,
+            schema_id,
+            payload,
+            uuid=uuid,
+            contains_pii=contains_pii,
+            timestamp=timestamp,
+            upstream_position_info=upstream_position_info,
+            kafka_position_info=kafka_position_info,
+            dry_run=dry_run
+        )
+        self._previous_payload_data = None
+        self.previous_payload = previous_payload
+
+    @property
+    def previous_payload(self):
+        """Avro-encoded message - encoded with schema identified by
+        `schema_id`.  Required when message type is `MessageType.update`.
+        Disallowed otherwise.  Defaults to None.
+        """
+        if self._previous_payload is None:
+            self._previous_payload = self._encode_data(self._previous_payload_data)
+        return self._previous_payload
+
+    @previous_payload.setter
+    def previous_payload(self, previous_payload):
+        if previous_payload is None or len(previous_payload) == 0:
+            raise ValueError("Previous payload must exist for updates")
+        self._previous_payload = previous_payload
+        self._previous_payload_data = None  # force previous_payload_data to be re-decoded
+
+    @property
+    def previous_payload_data(self):
+        if self._previous_payload_data is None and self.previous_payload is not None:
+            self._previous_payload_data = self._avro_string_reader.decode(
+                encoded_message=self.previous_payload
+            )
+        return self._previous_payload_data
+
+    @previous_payload_data.setter
+    def previous_payload_data(self, previous_payload_data):
+        if not isinstance(previous_payload_data, dict):
+            raise ValueError("Previous payload data must be a dict for updates")
+
+        self._previous_payload_data = previous_payload_data
+        self._previous_payload = None
+
+    @property
+    def _avro_repr(self):
+        return {
+            'uuid': self.uuid,
+            'message_type': self.message_type.name,
+            'schema_id': self.schema_id,
+            'payload': self.payload,
+            'previous_payload': self.previous_payload,
+            'timestamp': self.timestamp
+        }
+
+    def reload_data(self):
+        super(UpdateMessage, self).reload_data()
+        self.previous_payload_data
 
 
 def create_from_kafka_message(
@@ -329,7 +448,11 @@ def create_from_kafka_message(
         The message object
     """
     unpacked_message = Envelope().unpack(kafka_message.value)
-    message = Message(
+    message_class = next(
+        o for o in Message.__subclasses__()
+        if o._message_type and o._message_type.name == unpacked_message['message_type']
+    )
+    message = message_class(
         topic=topic,
         kafka_position_info=KafkaPositionInfo(
             offset=kafka_message.offset,
@@ -337,13 +460,11 @@ def create_from_kafka_message(
             key=kafka_message.key,
         ),
         uuid=unpacked_message['uuid'],
-        message_type=MessageType[unpacked_message['message_type']],
         schema_id=unpacked_message['schema_id'],
         payload=unpacked_message['payload'],
         timestamp=unpacked_message['timestamp']
     )
     if force_payload_decoding:
         # Access the cached, but lazily-calculated, properties
-        message.payload_data
-        message.previous_payload_data
+        message.reload_data()
     return message

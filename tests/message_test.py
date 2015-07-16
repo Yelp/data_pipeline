@@ -4,11 +4,12 @@ from __future__ import unicode_literals
 
 import pytest
 
-from data_pipeline.message import Message
+from data_pipeline import message as dp_message
 from data_pipeline.message_type import MessageType
 
 
 class SharedMessageTest(object):
+
     @pytest.fixture
     def message(self):
         return self.message_class(**self.valid_message_data)
@@ -19,7 +20,7 @@ class SharedMessageTest(object):
     def test_rejects_empty_topic(self):
         self._assert_invalid_data(topic=str(''))
 
-    def test_rejects_nonnumeric_schema_id(self):
+    def test_rejects_non_numeric_schema_id(self):
         self._assert_invalid_data(schema_id='123')
 
     def test_rejects_junk_uuid(self):
@@ -51,11 +52,78 @@ class SharedMessageTest(object):
         self._assert_invalid_data(upstream_position_info='test')
         self._assert_invalid_data(upstream_position_info=['test'])
 
+    def test_message_type(self, message):
+        assert message.message_type == self.expected_message_type
 
-class TestMessage(SharedMessageTest):
+
+class PayloadOnlyMessageTest(SharedMessageTest):
+
+    @property
+    def valid_message_data(self):
+        return {
+            'topic': str('my-topic'),
+            'schema_id': 123,
+            'payload': bytes(10),
+        }
+
+    def test_rejects_message_without_payload(self):
+        self._assert_invalid_data(payload='')
+
+    def test_rejects_previous_payload(self, message):
+        with pytest.raises(dp_message.InvalidOperation):
+            message.previous_payload
+        with pytest.raises(dp_message.InvalidOperation):
+            message.previous_payload = bytes(10)
+
+    def test_rejects_previous_payload_data(self, message):
+        with pytest.raises(dp_message.InvalidOperation):
+            message.previous_payload_data
+        with pytest.raises(dp_message.InvalidOperation):
+            message.previous_payload_data = {'data': 'test'}
+
+
+class TestCreateMessage(PayloadOnlyMessageTest):
+
     @property
     def message_class(self):
-        return Message
+        return dp_message.CreateMessage
+
+    @property
+    def expected_message_type(self):
+        return MessageType.create
+
+
+class TestRefreshMessage(PayloadOnlyMessageTest):
+
+    @property
+    def message_class(self):
+        return dp_message.RefreshMessage
+
+    @property
+    def expected_message_type(self):
+        return MessageType.refresh
+
+
+class TestDeleteMessage(PayloadOnlyMessageTest):
+
+    @property
+    def message_class(self):
+        return dp_message.DeleteMessage
+
+    @property
+    def expected_message_type(self):
+        return MessageType.delete
+
+
+class TestUpdateMessage(SharedMessageTest):
+
+    @property
+    def message_class(self):
+        return dp_message.UpdateMessage
+
+    @property
+    def expected_message_type(self):
+        return MessageType.update
 
     @property
     def valid_message_data(self):
@@ -63,26 +131,12 @@ class TestMessage(SharedMessageTest):
             topic=str('my-topic'),
             schema_id=123,
             payload=bytes(10),
-            message_type=MessageType.create
+            previous_payload=bytes(100)
         )
 
     def test_rejects_message_without_payload(self):
         self._assert_invalid_data(payload='')
 
-    @pytest.mark.parametrize("message_type", [
-        MessageType.create, MessageType.delete, MessageType.refresh
-    ])
-    def test_rejects_previous_payload_unless_update(self, message_type):
-        self._assert_invalid_data(
-            previous_payload=bytes(10),
-            message_type=message_type
-        )
-
-    def test_previous_payload_when_update(self):
-        valid_update = self._make_message_data(
-            message_type=MessageType.update,
-            previous_payload=bytes(100)
-        )
-        assert isinstance(self.message_class(**valid_update), self.message_class)
-        self._assert_invalid_data(valid_data=valid_update, previous_payload=None)
-        self._assert_invalid_data(valid_data=valid_update, previous_payload="")
+    def test_rejects_message_without_previous_payload(self, message):
+        self._assert_invalid_data(previous_payload=None)
+        self._assert_invalid_data(previous_payload="")

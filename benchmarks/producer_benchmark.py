@@ -8,15 +8,14 @@ from cached_property import cached_property
 
 from benchmarks.benchmarks import Benchmarks
 from data_pipeline.async_producer import AsyncProducer
-from data_pipeline.message import Message
-from data_pipeline.message_type import MessageType
+from data_pipeline.message import CreateMessage
 from data_pipeline.producer import Producer
 
 
 class ProducerBenchmark(object):
     @cached_property
     def message(self):
-        return Message(str('my-topic'), 10, bytes(10), MessageType.create)
+        return CreateMessage(str('my-topic'), 10, bytes(10))
 
     @contextmanager
     def yield_async_producer(self):

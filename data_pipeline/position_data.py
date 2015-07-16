@@ -29,14 +29,12 @@ class PositionData(namedtuple("PositionData", [
 
         :class:`PositionData` will be updated as data is actually published:
 
-        >>> from data_pipeline.message import Message
-        >>> from data_pipeline.message_type import MessageType
+        >>> from data_pipeline.message import CreateMessage
         >>> with Producer() as producer:
-        ...     producer.publish(Message(
+        ...     producer.publish(CreateMessage(
         ...         str('my-topic'),
         ...         10,
         ...         bytes(10),
-        ...         MessageType.create,
         ...         upstream_position_info={str('upstream_offset'): str('offset-info')}
         ...     ))
         ...     producer.flush()
