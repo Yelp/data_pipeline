@@ -13,7 +13,6 @@ from data_pipeline._avro_util import get_avro_schema_object
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import CreateMessage
-from data_pipeline.message_type import MessageType
 from data_pipeline.schema_cache import get_schema_cache
 from tests.helpers.kafka_docker import KafkaDocker
 
