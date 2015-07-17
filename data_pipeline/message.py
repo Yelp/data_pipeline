@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-# -*- coding: utf-8 -*-
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
@@ -224,7 +223,6 @@ class Message(object):
     def payload(self):
         """Avro-encoded message - encoded with schema identified by `schema_id`.
         """
-        # return self._payload
         if self._payload is None:
             self._payload = self._encode_data(self.payload_data)
         return self._payload
