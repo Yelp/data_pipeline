@@ -2,15 +2,14 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import ast
 import multiprocessing
-import random
 
 import mock
 import pytest
 
 from data_pipeline import lazy_message
 from data_pipeline.async_producer import AsyncProducer
-from data_pipeline.config import get_config
 from data_pipeline.message import Message
 from data_pipeline.message_type import MessageType
 from data_pipeline.producer import Producer
@@ -23,17 +22,40 @@ class RandomException(Exception):
     pass
 
 
-@pytest.mark.usefixtures("patch_payload")
+@pytest.mark.usefixtures("patch_dry_run")
 class TestProducer(object):
+
+    @pytest.yield_fixture
+    def patch_dry_run(self):
+        with mock.patch.object(
+            lazy_message.LazyMessage,
+            'dry_run',
+            new_callable=mock.PropertyMock
+        ) as mock_dry_run:
+            mock_dry_run.return_value = True
+            yield mock_dry_run
+
     @pytest.fixture(params=[
-        (Producer, 'Producer-1', False),
-        (Producer, 'Producer-1', True),
-        (AsyncProducer, 'Producer-1', False),
-        (AsyncProducer, 'Producer-1', True)
+        Producer,
+        AsyncProducer
     ])
-    def producer_instance(self, request, kafka_docker):
-        producer_klass, client_name, use_work_pool = request.param
-        return producer_klass(client_name, use_work_pool=use_work_pool)
+    def producer_klass(self, request):
+        return request.param
+
+    @pytest.fixture(params=[
+        True,
+        False
+    ])
+    def use_work_pool(self, request):
+        return request.param
+
+    @pytest.fixture
+    def producer_name(self):
+        return 'producer_1'
+
+    @pytest.fixture
+    def producer_instance(self, producer_klass, producer_name, use_work_pool):
+        return producer_klass(producer_name=producer_name, use_work_pool=use_work_pool)
 
     @pytest.yield_fixture
     def producer(self, producer_instance):
@@ -42,49 +64,37 @@ class TestProducer(object):
         assert len(multiprocessing.active_children()) == 0
 
     @pytest.fixture(scope='module')
-    def topic(self, topic_name, kafka_docker):
+    def topic(self, kafka_docker, topic_name):
         create_kafka_docker_topic(kafka_docker, topic_name)
+        create_kafka_docker_topic(kafka_docker, str('message-monitoring-log'))
         return topic_name
-
-    @pytest.yield_fixture
-    def patch_payload(self):
-        with mock.patch.object(
-            lazy_message.LazyMessage,
-            'payload',
-            new_callable=mock.PropertyMock
-        ) as mock_payload:
-            mock_payload.return_value = bytes(7)
-            yield mock_payload
 
     @pytest.fixture
     def lazy_message(self, topic_name):
-        return lazy_message.LazyMessage(topic_name, 10, {1: 100}, MessageType.create)
+        return lazy_message.LazyMessage(topic_name, 10, {1: 100}, MessageType.create, timestamp=1456)
 
-    def get_message_with_random_timestamp(self, topic_name, payload, timeslot):
-        """returns a message with a random timestamp within the specified timeslot
+    def get_message_with_specified_timestamp(self, topic_name, payload, timestamp):
+        """returns a message with a specified timestamp
         """
         return Message(
             topic_name,
             10,
             payload,
             MessageType.create,
-            timestamp=self.get_random_timestamp_within_timeslot(timeslot)
+            timestamp=timestamp
         )
 
-    def get_random_timestamp_within_timeslot(self, timeslot):
-        """Given a timeslot start time, it returns a random timestamp within
-        the specified timeslot
-        """
-        return random.randint(timeslot, timeslot + get_config().monitoring_window_in_sec)
+    def assert_monitoring_system_checks(self, unpacked_message, message_count, timestamp, topic):
+        assert unpacked_message['message_type'] == 'monitor'
+        decoded_payload = ast.literal_eval(unpacked_message['payload'])
+        assert decoded_payload['message_count'] == message_count
+        assert decoded_payload['client_type'] == 'producer'
+        assert decoded_payload['start_timestamp'] == timestamp
+        assert decoded_payload['topic'] == topic
 
-    def test_monitoring_message_basic(self, message, topic_name, producer, kafka_docker):
-
-        # create a kafka topic where monitoring_messages can be published
-        create_kafka_docker_topic(kafka_docker, topic_name)
-        create_kafka_docker_topic(kafka_docker, topic_name + "-monitor-log")
-
-        with capture_new_messages(topic_name) as get_messages:
-            with capture_new_messages(topic_name + "-monitor-log") as get_monitoring_messages:
+    def test_monitoring_message_basic(self, message, topic, producer, envelope):
+        with capture_new_messages(topic) as get_messages:
+            with capture_new_messages('message-monitoring-log') as get_monitoring_messages:
                 for i in xrange(99):
                     producer.publish(message)
                 producer.flush()
@@ -93,95 +103,124 @@ class TestProducer(object):
             monitoring_messages = get_monitoring_messages()
 
         assert len(messages) == 99
-        assert len(monitoring_messages) == 1
+        assert len(monitoring_messages) == 2
 
-        # since the monitoring_message has been published, the current count should be 0
-        assert producer.monitoring_message._get_record(topic_name)["message_count"] == 0
+        # The first message will have 0 as the message_count
+        # since the timestamp of message is above 1000 (outside the monitored window)
+        unpacked_message = envelope.unpack(monitoring_messages[0].message.value)
+        self.assert_monitoring_system_checks(unpacked_message, 0, 0, topic)
+
+        # second monitoring_message will have 99 as the message_count
+        unpacked_message = envelope.unpack(monitoring_messages[1].message.value)
+        self.assert_monitoring_system_checks(unpacked_message, 99, 1000, topic)
 
     def test_monitoring_system_same_topic_different_timestamp_messages(
         self,
-        topic_name,
+        topic,
         payload,
         producer,
-        kafka_docker
+        envelope
     ):
-        # list of tuples where each tuple consists of the number of messages
-        # and associated timeslots of messages that would be published to topic_name
-        num_messages_timeslot_list = [
-            (16, 1000),
-            (20, 4000),
-            (30, 6000)
-        ]
-        # create a kafka topic where monitoring_messages can be published
-        create_kafka_docker_topic(kafka_docker, topic_name)
-        create_kafka_docker_topic(kafka_docker, topic_name + "-monitor-log")
-        with capture_new_messages(topic_name) as get_messages:
-            with capture_new_messages(topic_name + "-monitor-log") as get_monitoring_messages:
-                for num_messages, timeslot in num_messages_timeslot_list:
-                    for i in xrange(num_messages):
-                        producer.publish(self.get_message_with_random_timestamp(topic_name, payload, timeslot))
+        # list of timestamps for which message will be created and published for
+        # testing purposes
+        timestamp_list = [100, 654, 2010, 2015, 2050]
+        with capture_new_messages(topic) as get_messages:
+            with capture_new_messages('message-monitoring-log') as get_monitoring_messages:
+                for timestamp in timestamp_list:
+                    producer.publish(self.get_message_with_specified_timestamp(topic, payload, timestamp))
                 producer.flush()
                 producer.monitoring_message.flush_buffered_info()
                 monitoring_messages = get_monitoring_messages()
             messages = get_messages()
 
-        assert len(messages) == 66
+        assert len(messages) == 5
         assert len(monitoring_messages) == 3
 
-        # since the monitoring_message has been published, the current count should be zero
-        assert producer.monitoring_message._get_record(topic_name + "-monitor-log")["message_count"] == 0
+        # the first monitoring_message should have count as 2
+        unpacked_message = envelope.unpack(monitoring_messages[0].message.value)
+        self.assert_monitoring_system_checks(unpacked_message, 2, 0, topic)
+
+        # the second monitoring_message should have count as 0
+        # since there are no messages published with timestamp between 1000-2000
+        unpacked_message = envelope.unpack(monitoring_messages[1].message.value)
+        self.assert_monitoring_system_checks(unpacked_message, 0, 1000, topic)
+
+        # the third monitoring_message should have count as 3
+        unpacked_message = envelope.unpack(monitoring_messages[2].message.value)
+        self.assert_monitoring_system_checks(unpacked_message, 3, 2000, topic)
 
     def test_monitoring_system_different_topic_different_timestamp_messages(
         self,
+        topic,
         payload,
         producer,
+        envelope,
         kafka_docker
     ):
-        """list of tuples where each tuple contains:
-            topic name,
-            number of messages published to that topic
-            number of monitoring messages published for that topic
-        """
-        testing_parameters = [
-            (str("topic-0"), 95, 3),
-            (str("topic-1"), 82, 4),
-            (str("topic-2"), 30, 1)
-        ]
-
         """ list of tuples where each tuple contains
-                number of messages to publish
-                timeslot for messages
+                timestamp of message to publish
                 topic_name where messages need to be published
         """
-        num_messages_timeslot_topic_name_list = [
-            (16, 1000, str('topic-0')),
-            (20, 4000, str('topic-1')),
-            (30, 6000, str('topic-2')),
-            (16, 1000, str('topic-0')),
-            (23, 5000, str('topic-0')),
-            (30, 5000, str('topic-0')),
-            (10, 8000, str('topic-0')),
-            (20, 5000, str('topic-1')),
-            (20, 6000, str('topic-1')),
-            (20, 6000, str('topic-1')),
-            (2, 9000, str('topic-1')),
+        timestamp_topic_name_list = [
+            (1020, topic),
+            (1023, str('topic-1')),
+            (1043, topic),
+            (1034, str('topic-1')),
+            (1079, str('topic-1')),
+            (2025, str('topic-1')),
         ]
-
-        for topic_name, expected_message_count, expected_monitoring_message_count in testing_parameters:
-            create_kafka_docker_topic(kafka_docker, topic_name)
-            create_kafka_docker_topic(kafka_docker, str(topic_name + "-monitor-log"))
-            with capture_new_messages(topic_name) as get_messages:
-                with capture_new_messages(topic_name + "-monitor-log") as get_monitoring_messages:
-                    for num_messages, timeslot, topic_name in num_messages_timeslot_topic_name_list:
-                        for i in xrange(num_messages):
-                            producer.publish(self.get_message_with_random_timestamp(topic_name, payload, timeslot))
+        create_kafka_docker_topic(kafka_docker, str('topic-1'))
+        with capture_new_messages('message-monitoring-log') as get_monitoring_messages:
+            with capture_new_messages(topic) as get_messages:
+                with capture_new_messages(str("topic-1")) as get_messages_for_topic_1:
+                    for timestamp, topic_name in timestamp_topic_name_list:
+                        producer.publish(
+                            self.get_message_with_specified_timestamp(
+                                topic_name,
+                                payload,
+                                timestamp
+                            )
+                        )
                     producer.flush()
                     producer.monitoring_message.flush_buffered_info()
-                    monitoring_messages = get_monitoring_messages()
-                messages = get_messages()
+                    topic_1_messages = get_messages_for_topic_1()
+                topic_messages = get_messages()
+            monitoring_messages = get_monitoring_messages()
 
-                assert len(messages) == expected_message_count
-                assert len(monitoring_messages) == expected_monitoring_message_count
+        # verifying messages are published properly
+        assert len(topic_messages) == 2
+        assert len(topic_1_messages) == 4
+
+        # varifying number of monitoring_messages
+        assert len(monitoring_messages) == 5
+
+        # varifying contents of the published monitoring messages
+        # the first message should be for topic and should have count as 0
+        # since no messages of topic 'topic' were published in timeslot 0 - 1000
+        unpacked_message = envelope.unpack(monitoring_messages[0].message.value)
+        self.assert_monitoring_system_checks(unpacked_message, 0, 0, topic)
+
+        # the second message should be for topic-1 and should also have count as 0
+        # since no messages of topic 'topic-1' were published in timeslot 0 - 1000
+        unpacked_message = envelope.unpack(monitoring_messages[1].message.value)
+        self.assert_monitoring_system_checks(unpacked_message, 0, 0, 'topic-1')
+
+        # the third message should be for topic-1 and should have count as 3
+        # since 3 messages of topic 'topic-1' were published in timeslot 1000 - 2000
+        unpacked_message = envelope.unpack(monitoring_messages[2].message.value)
+        self.assert_monitoring_system_checks(unpacked_message, 3, 1000, 'topic-1')
+
+        # the forth message should be for topic-1 and should also have count as 1
+        # since 1 message of topic 'topic-1' was published in timeslot 2000-3000
+        unpacked_message = envelope.unpack(monitoring_messages[3].message.value)
+        self.assert_monitoring_system_checks(unpacked_message, 1, 2000, 'topic-1')
+
+        # the last message should be for topic and should also have count as 2
+        # since 2 messages of topic 'topic' were published in timeslot 0 - 1000
+        # this is the last message since no other messages of topic 'topic' were
+        # encountered and the buffered_monitoring_info was published at the end
+        unpacked_message = envelope.unpack(monitoring_messages[4].message.value)
+        self.assert_monitoring_system_checks(unpacked_message, 2, 1000, topic)
 
     def test_basic_publish_lazy_message(
         self,
@@ -191,6 +230,7 @@ class TestProducer(object):
         envelope
     ):
         self.test_basic_publish(topic, lazy_message, producer, envelope)
+        assert 1 == 1
 
     def test_basic_publish(self, topic, message, producer, envelope):
         with capture_new_messages(topic) as get_messages:

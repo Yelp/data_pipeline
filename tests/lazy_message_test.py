@@ -47,3 +47,19 @@ class TestLazyMessage(SharedMessageTest):
         assert isinstance(self.message_class(**valid_update), self.message_class)
         self._assert_invalid_data(valid_data=valid_update, previous_payload_data=None)
         self._assert_invalid_data(valid_data=valid_update, previous_payload_data=['invalid'])
+
+    @pytest.mark.parametrize("message_type", [
+        MessageType.create, MessageType.delete, MessageType.refresh
+    ])
+    def test_dry_run_unless_update(self, message_type, valid_payload):
+        dry_run_message = LazyMessage(dry_run=True, **self.valid_message_data)
+        assert dry_run_message.payload == repr(valid_payload)
+
+    def test_dry_run_when_update(self, valid_payload):
+        valid_update = self._make_message_data(
+            message_type=MessageType.update,
+            previous_payload_data=valid_payload
+        )
+        dry_run_message = LazyMessage(dry_run=True, **valid_update)
+        assert dry_run_message.payload == repr(valid_payload)
+        assert dry_run_message.previous_payload == repr(valid_payload)

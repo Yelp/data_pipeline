@@ -18,37 +18,39 @@ class Client(object):
     responsible for shared producer/consumer registration responsibilities.
 
     Args:
-        client_type (str): type of the client. Can be producer or consumer
         client_name (str): Name associated with the client
+        client_type (str): type of the client. Can be producer or consumer
     DATAPIPE-157
     """
 
-    def __init__(self, client_type, client_name):
-        self.monitoring_message = _Monitor(client_type, client_name)
+    def __init__(self, client_name, client_type):
+        self.monitoring_message = _Monitor(client_name, client_type)
         self.client_name = client_name
+        self.client_type = client_type
 
 
 class _Monitor(object):
-    """The class that implements functionality of monitoring messages published/
-    consumed by clients using kafka.
+    """The class implements functionality of monitoring messages which are
+    published/consumed by clients using kafka.
 
     In current implementation, monitoring_window_in_sec is stored in the staticconf
     and is the same for every client. As one of the future features, one could add
     the option to have a custom monitoring_window_in_sec for every client and choose
-    the appropriate duration based on the number of messages processed by the client.
+    the appropriate duration based on the average number of messages processed by
+    the client.
 
     Args:
-        client_type (str): type of the client the _Monitor object is associated to.
-            Could be either producer or consumer
         client_name (str): name of the associated client
+        client_type (str): type of the client the _Monitor object is associated to.
+        Could be either producer or consumer
         start_time (int): start_time when _Monitor object will start counting the
             number of messages produced/consumed by the associated client
     """
 
-    def __init__(self, client_type, client_name, start_time=0):
+    def __init__(self, client_name, client_type, start_time=0):
         self.topic_to_tracking_info_map = {}
-        self.client_type = client_type
         self.client_name = client_name
+        self.client_type = client_type
         self._monitoring_window_in_sec = get_config().monitoring_window_in_sec
         self.start_time = start_time
         self.producer = LoggingKafkaProducer(self._notify_messages_published)
@@ -82,7 +84,7 @@ class _Monitor(object):
         """
         self.producer.publish(
             LazyMessage(
-                str(tracking_info['topic'] + '-monitor-log'),
+                str('message-monitoring-log'),
                 self.monitoring_schema_id,
                 tracking_info,
                 _ProtectedMessageType.monitor
@@ -96,23 +98,13 @@ class _Monitor(object):
         """
         return 0
 
-    def _reset_monitoring_record(self, tracking_info, timestamp):
+    def _reset_monitoring_record(self, tracking_info):
         """resets the record for a particular topic by resetting
         message_count to 0 and updating the start_timestamp to the
-        start_timestamp of the newly published message
+        starting point of the next monitoring_window
         """
         tracking_info['message_count'] = 0
-        tracking_info['start_timestamp'] = self._get_updated_start_timestamp(timestamp)
-
-    def _get_updated_start_timestamp(self, timestamp):
-        """
-        returns the new start_timestamp based on the value of the existing timestamp of the
-        encountered message.
-
-        For instance, if message_timestamp is 2013 and the monitoring_window_in_sec is 1000,
-        2000 will be returned
-        """
-        return (timestamp / self._monitoring_window_in_sec) * self._monitoring_window_in_sec
+        tracking_info['start_timestamp'] += self._monitoring_window_in_sec
 
     def _notify_messages_published(self, position_data):
         """Called to notify the client of successfully published messages.
@@ -129,10 +121,9 @@ class _Monitor(object):
         it if necessary
         """
         tracking_info = self._get_record(message.topic)
-        if tracking_info['start_timestamp'] + self._monitoring_window_in_sec < message.timestamp:
-            if tracking_info["message_count"] > 0:
-                self._publish(tracking_info)
-            self._reset_monitoring_record(tracking_info, message.timestamp)
+        while tracking_info['start_timestamp'] + self._monitoring_window_in_sec < message.timestamp:
+            self._publish(tracking_info)
+            self._reset_monitoring_record(tracking_info)
         tracking_info['message_count'] += 1
 
     def flush_buffered_info(self):

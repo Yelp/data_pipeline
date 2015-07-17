@@ -87,6 +87,7 @@ class Config(object):
         """
         return 1000
 
+
 _config = Config()
 
 
