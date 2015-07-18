@@ -11,32 +11,52 @@ from data_pipeline.message_type import MessageType
 class SharedMessageTest(object):
 
     @pytest.fixture
-    def message(self):
-        return self.message_class(**self.valid_message_data)
+    def message(self, valid_message_data):
+        return self.message_class(**valid_message_data)
 
-    def test_rejects_unicode_topic(self):
-        self._assert_invalid_data(topic=unicode('topic'))
+    def test_rejects_unicode_topic(self, valid_message_data):
+        self._assert_invalid_data(valid_message_data, topic=unicode('topic'))
 
-    def test_rejects_empty_topic(self):
-        self._assert_invalid_data(topic=str(''))
+    def test_rejects_empty_topic(self, valid_message_data):
+        self._assert_invalid_data(valid_message_data, topic=str(''))
 
-    def test_rejects_non_numeric_schema_id(self):
-        self._assert_invalid_data(schema_id='123')
+    def test_rejects_non_numeric_schema_id(self, valid_message_data):
+        self._assert_invalid_data(valid_message_data, schema_id='123')
 
-    def test_rejects_junk_uuid(self):
-        self._assert_invalid_data(uuid='junk')
+    def test_rejects_junk_uuid(self, valid_message_data):
+        self._assert_invalid_data(valid_message_data, uuid='junk')
 
-    def test_rejects_pii_data(self):
-        self._assert_invalid_data(NotImplementedError, contains_pii=True)
+    def test_rejects_pii_data(self, valid_message_data):
+        self._assert_invalid_data(valid_message_data, NotImplementedError, contains_pii=True)
 
-    def _assert_invalid_data(self, error=ValueError, valid_data=None, **data_overrides):
-        invalid_message_data = self._make_message_data(valid_data, **data_overrides)
+    @pytest.mark.parametrize("invalid_upstream_pos_info", ['test', ['test']])
+    def test_rejects_non_dicts_in_upstream_position_info(
+        self,
+        valid_message_data,
+        invalid_upstream_pos_info
+    ):
+        self._assert_invalid_data(
+            valid_message_data,
+            upstream_position_info=invalid_upstream_pos_info
+        )
+
+    def test_rejects_non_kafka_position_info(self, valid_message_data):
+        self._assert_invalid_data(valid_message_data, kafka_position_info=123)
+
+    @pytest.mark.parametrize("empty_payload", [None, "", {}])
+    def test_rejects_message_without_payload(self, valid_message_data, empty_payload):
+        self._assert_invalid_data(valid_message_data, payload=empty_payload)
+
+    @pytest.mark.parametrize("invalid_payload", [100, ['test']])
+    def test_rejects_non_dict_or_bytes_payload(self, valid_message_data, invalid_payload):
+        self._assert_invalid_data(valid_message_data, payload=invalid_payload)
+
+    def _assert_invalid_data(self, valid_data, error=ValueError, **data_overrides):
+        invalid_data = self._make_message_data(valid_data, **data_overrides)
         with pytest.raises(error):
-            self.message_class(**invalid_message_data)
+            self.message_class(**invalid_data)
 
-    def _make_message_data(self, valid_data=None, **overrides):
-        if valid_data is None:
-            valid_data = self.valid_message_data
+    def _make_message_data(self, valid_data, **overrides):
         message_data = dict(valid_data)
         message_data.update(**overrides)
         return message_data
@@ -44,30 +64,37 @@ class SharedMessageTest(object):
     def test_generates_uuid(self, message):
         assert isinstance(message.uuid, bytes) and len(message.uuid) == 16
 
-    def test_accepts_only_dicts_in_upstream_position_info(self):
-        valid_update = self._make_message_data(
+    def test_accepts_dicts_in_upstream_position_info(self, valid_message_data):
+        message_data = self._make_message_data(
+            valid_message_data,
             upstream_position_info=dict(something='some_unicode')
         )
-        assert isinstance(self.message_class(**valid_update), self.message_class)
-        self._assert_invalid_data(upstream_position_info='test')
-        self._assert_invalid_data(upstream_position_info=['test'])
+        message = self.message_class(**message_data)
+        assert isinstance(message, self.message_class)
 
     def test_message_type(self, message):
         assert message.message_type == self.expected_message_type
 
+    def test_dry_run(self, valid_message_data):
+        payload_data = {'data': 'test'}
+        message_data = self._make_message_data(
+            valid_message_data,
+            payload=payload_data,
+            dry_run=True
+        )
+        dry_run_message = self.message_class(**message_data)
+        assert dry_run_message.payload == repr(payload_data)
+
 
 class PayloadOnlyMessageTest(SharedMessageTest):
 
-    @property
-    def valid_message_data(self):
+    @pytest.fixture(params=[bytes(10), {'data': 'test'}])
+    def valid_message_data(self, request):
         return {
             'topic': str('my-topic'),
             'schema_id': 123,
-            'payload': bytes(10),
+            'payload': request.param,
         }
-
-    def test_rejects_message_without_payload(self):
-        self._assert_invalid_data(payload='')
 
     def test_rejects_previous_payload(self, message):
         with pytest.raises(dp_message.InvalidOperation):
@@ -125,18 +152,37 @@ class TestUpdateMessage(SharedMessageTest):
     def expected_message_type(self):
         return MessageType.update
 
-    @property
-    def valid_message_data(self):
+    @pytest.fixture(params=[
+        (bytes(10), bytes(100)),
+        ({'data': 'test'}, {'data': 'foo'})
+    ])
+    def valid_message_data(self, request):
+        payload, previous_payload = request.param
         return dict(
             topic=str('my-topic'),
             schema_id=123,
-            payload=bytes(10),
-            previous_payload=bytes(100)
+            payload=payload,
+            previous_payload=previous_payload
         )
 
-    def test_rejects_message_without_payload(self):
-        self._assert_invalid_data(payload='')
+    @pytest.mark.parametrize("empty_previous_payload", [None, "", {}])
+    def test_rejects_message_without_payload(
+        self,
+        valid_message_data,
+        empty_previous_payload
+    ):
+        self._assert_invalid_data(
+            valid_message_data,
+            previous_payload=empty_previous_payload
+        )
 
-    def test_rejects_message_without_previous_payload(self, message):
-        self._assert_invalid_data(previous_payload=None)
-        self._assert_invalid_data(previous_payload="")
+    @pytest.mark.parametrize("invalid_previous_payload", [100, ['test']])
+    def test_rejects_non_dict_or_bytes_previous_payload(
+        self,
+        valid_message_data,
+        invalid_previous_payload
+    ):
+        self._assert_invalid_data(
+            valid_message_data,
+            previous_payload=invalid_previous_payload
+        )

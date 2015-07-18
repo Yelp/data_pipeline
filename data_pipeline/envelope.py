@@ -94,4 +94,4 @@ class Envelope(object):
             dict: Dictionary that can be packed by
                 :func:`data_pipeline.envelope.Envelope.pack`.
         """
-        return message._avro_repr
+        return message.avro_repr

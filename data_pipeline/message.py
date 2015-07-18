@@ -70,7 +70,11 @@ class Message(object):
             track these objects and provide them back from the producer to
             identify the last message that was successfully published, both
             overall and per topic.
-    """
+        dry_run (boolean): When set to True, Message will return a string
+            representation of the payload and previous payload, instead of
+            the avro encoded message.  This is to avoid loading the schema
+            from the schema store.  Defaults to False.
+   """
 
     _message_type = None
     """Identifies the nature of the message. It must be set by child class"""
@@ -229,8 +233,8 @@ class Message(object):
 
     @payload.setter
     def payload(self, payload):
-        if len(payload) == 0:
-            raise ValueError("Payload must exist")
+        if not isinstance(payload, bytes) or not payload:
+            raise ValueError("Payload must be non-empty bytes")
         self._payload = payload
         self._payload_data = None  # force payload_data to be re-decoded
 
@@ -244,8 +248,8 @@ class Message(object):
 
     @payload_data.setter
     def payload_data(self, payload_data):
-        if not isinstance(payload_data, dict):
-            raise ValueError("Payload data must be a dict containing data to serialize")
+        if not isinstance(payload_data, dict) or not payload_data:
+            raise ValueError("Payload data must be a non-empty dict")
         self._payload_data = payload_data
         self._payload = None
 
@@ -287,10 +291,10 @@ class Message(object):
         kafka_position_info=None,
         dry_run=False
     ):
-        # payload_data and previous_payload_data are lazily constructed only
-        # on request
-        self._payload_data = None
-
+        """The `payload` argument can be either bytes (payload) or dictionary
+        (payload_data) that contains the message content. The message will be
+        constructed accordingly based on the argument type.
+        """
         # The decision not to just pack the message to validate it is
         # intentional here.  We want to perform more sanity checks than avro
         # does, and in addition, this check is quite a bit faster than
@@ -298,16 +302,23 @@ class Message(object):
         # serialize the payload in a subclass if necessary.
         self.topic = topic
         self.schema_id = schema_id
-        self.payload = payload
         self.uuid = uuid
         self.contains_pii = contains_pii
         self.timestamp = timestamp
         self.upstream_position_info = upstream_position_info
         self.kafka_position_info = kafka_position_info
         self.dry_run = dry_run
+        self._initialize_payload_or_payload_data(payload)
+
+    def _initialize_payload_or_payload_data(self, payload_or_payload_data):
+        # payload or payload_data are lazily constructed only on request
+        try:
+            self.payload_data = payload_or_payload_data
+        except ValueError:
+            self.payload = payload_or_payload_data
 
     @property
-    def _avro_repr(self):
+    def avro_repr(self):
         return {
             'uuid': self.uuid,
             'message_type': self.message_type.name,
@@ -373,8 +384,15 @@ class UpdateMessage(Message):
             kafka_position_info=kafka_position_info,
             dry_run=dry_run
         )
-        self._previous_payload_data = None
-        self.previous_payload = previous_payload
+        self._initialize_previous_payload_or_payload_data(previous_payload)
+
+    def _initialize_previous_payload_or_payload_data(self, previous_payload_or_payload_data):
+        # previous_payload or previous_payload_data are lazily constructed
+        # only on request
+        try:
+            self.previous_payload_data = previous_payload_or_payload_data
+        except ValueError:
+            self.previous_payload = previous_payload_or_payload_data
 
     @property
     def previous_payload(self):
@@ -388,8 +406,8 @@ class UpdateMessage(Message):
 
     @previous_payload.setter
     def previous_payload(self, previous_payload):
-        if previous_payload is None or len(previous_payload) == 0:
-            raise ValueError("Previous payload must exist for updates")
+        if not isinstance(previous_payload, bytes) or not previous_payload:
+            raise ValueError("Previous payload must be non-empty bytes")
         self._previous_payload = previous_payload
         self._previous_payload_data = None  # force previous_payload_data to be re-decoded
 
@@ -403,14 +421,14 @@ class UpdateMessage(Message):
 
     @previous_payload_data.setter
     def previous_payload_data(self, previous_payload_data):
-        if not isinstance(previous_payload_data, dict):
-            raise ValueError("Previous payload data must be a dict for updates")
+        if not isinstance(previous_payload_data, dict) or not previous_payload_data:
+            raise ValueError("Previous payload data must be a non-empty dict")
 
         self._previous_payload_data = previous_payload_data
         self._previous_payload = None
 
     @property
-    def _avro_repr(self):
+    def avro_repr(self):
         return {
             'uuid': self.uuid,
             'message_type': self.message_type.name,
