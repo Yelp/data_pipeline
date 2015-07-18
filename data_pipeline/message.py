@@ -308,9 +308,9 @@ class Message(object):
         self.upstream_position_info = upstream_position_info
         self.kafka_position_info = kafka_position_info
         self.dry_run = dry_run
-        self._initialize_payload_or_payload_data(payload)
+        self._set_payload_or_payload_data(payload)
 
-    def _initialize_payload_or_payload_data(self, payload_or_payload_data):
+    def _set_payload_or_payload_data(self, payload_or_payload_data):
         # payload or payload_data are lazily constructed only on request
         try:
             self.payload_data = payload_or_payload_data
@@ -384,9 +384,9 @@ class UpdateMessage(Message):
             kafka_position_info=kafka_position_info,
             dry_run=dry_run
         )
-        self._initialize_previous_payload_or_payload_data(previous_payload)
+        self._set_previous_payload_or_payload_data(previous_payload)
 
-    def _initialize_previous_payload_or_payload_data(self, previous_payload_or_payload_data):
+    def _set_previous_payload_or_payload_data(self, previous_payload_or_payload_data):
         # previous_payload or previous_payload_data are lazily constructed
         # only on request
         try:
