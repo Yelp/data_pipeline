@@ -33,7 +33,7 @@ class Config(object):
         instructions in https://pb.yelpcorp.com/135876
         """
         return client.get_client(
-            'http://localhost:8888/api-docs'
+            'http://169.254.255.254:49256/api-docs'
         )
 
     @property
