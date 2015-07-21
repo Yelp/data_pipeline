@@ -19,11 +19,19 @@ class Config(object):
         return logging.getLogger('data_pipeline_clientlib')
 
     @property
+    def yocalhost(self):
+        return '169.254.255.254'
+
+    @property
     def kafka_client(self):
         """Handles building a Kafka connection.  By default, this will connect to
         the Kafka instance in the included docker-compose file.
         """
         return KafkaClient(self.cluster_config.broker_list)
+
+    @property
+    def schematizer_host_and_port(self):
+        return '{0}:49256'.format(self.yocalhost)
 
     @property
     def schematizer_client(self):
@@ -33,7 +41,7 @@ class Config(object):
         instructions in https://pb.yelpcorp.com/135876
         """
         return client.get_client(
-            'http://169.254.255.254:49256/api-docs'
+            'http://{0}/api-docs'.format(self.schematizer_host_and_port)
         )
 
     @property
@@ -42,8 +50,8 @@ class Config(object):
         """
         return ClusterConfig(
             name='data_pipeline',
-            broker_list=['169.254.255.254:49255'],
-            zookeeper='169.254.255.254:32796'
+            broker_list=['{0}:49255'.format(self.yocalhost)],
+            zookeeper='{0}:32796'.format(self.yocalhost)
         )
 
     @property

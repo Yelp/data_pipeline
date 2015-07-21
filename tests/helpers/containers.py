@@ -60,7 +60,9 @@ class Containers(object):
         logger.info("Waiting for schematizer to pass health check")
         while end_time > time.time():
             try:
-                r = requests.get("http://169.254.255.254:49256/status")
+                r = requests.get(
+                    "http://{0}/status".format(get_config().schematizer_host_and_port)
+                )
                 if 200 <= r.status_code < 300:
                     return
             except:

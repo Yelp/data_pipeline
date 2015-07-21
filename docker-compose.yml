@@ -19,11 +19,11 @@ kafka:
     KAFKA_ADVERTISED_PORT: 49255
     KAFKA_BROKER_ID: 1
 schematizerdatabase:
-  image: docker-dev.yelpcorp.com/schematizer_database:v1
+  image: docker-dev.yelpcorp.com/schematizer_database:latest
 schematizerconfigs:
-  image: docker-dev.yelpcorp.com/schematizer_configs:v1
+  image: docker-dev.yelpcorp.com/schematizer_configs:latest
 schematizer:
-  image: docker-dev.yelpcorp.com/schematizer_service:v1
+  image: docker-dev.yelpcorp.com/schematizer_service:latest
   ports:
     - "49256:8888"
   links:
