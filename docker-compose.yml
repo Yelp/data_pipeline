@@ -18,3 +18,16 @@ kafka:
     KAFKA_ADVERTISED_HOST_NAME: "169.254.255.254"
     KAFKA_ADVERTISED_PORT: 49255
     KAFKA_BROKER_ID: 1
+schematizerdatabase:
+  image: docker-dev.yelpcorp.com/schematizer_database:latest
+schematizerconfigs:
+  image: docker-dev.yelpcorp.com/schematizer_configs:latest
+schematizer:
+  image: docker-dev.yelpcorp.com/schematizer_service:latest
+  ports:
+    - "49256:8888"
+  links:
+    - schematizerdatabase
+  volumes_from:
+    - schematizerconfigs
+  command: "/code/virtualenv_run/bin/python /code/serviceinit.d/schematizer start-dev"
