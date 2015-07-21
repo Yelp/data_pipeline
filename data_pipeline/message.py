@@ -28,8 +28,10 @@ class Message(object):
 
     Validates metadata, but not the payload itself. This class is not meant
     to be used directly. Use specific type message class instead:
-    :class:`CreateMessage`, :class:`UpdateMessage`, :class:`DeleteMessage`,
-    and :class:`RefreshMessage`.
+    :class:`data_pipeline.message.CreateMessage`,
+    :class:`data_pipeline.message.UpdateMessage`,
+    :class:`data_pipeline.message.DeleteMessage`, and
+    :class:`data_pipeline.message.RefreshMessage`.
 
     Args:
         topic (str): Kafka topic to publish into
@@ -270,10 +272,6 @@ class Message(object):
         kafka_position_info=None,
         dry_run=False
     ):
-        """The `payload` argument can be either bytes (payload) or dictionary
-        (payload_data) that contains the message content. The message will be
-        constructed accordingly based on the argument type.
-        """
         # The decision not to just pack the message to validate it is
         # intentional here.  We want to perform more sanity checks than avro
         # does, and in addition, this check is quite a bit faster than
@@ -308,7 +306,7 @@ class Message(object):
 
     def _encode_payload_data_if_necessary(self):
         if self._payload is None:
-            self._payload = self._encode_data(self.payload_data)
+            self._payload = self._encode_data(self._payload_data)
 
     def _encode_data(self, data):
         """Encodes data, returning a repr in dry_run mode"""
@@ -319,7 +317,7 @@ class Message(object):
     def _decode_payload_if_necessary(self):
         if self._payload_data is None:
             self._payload_data = self._avro_string_reader.decode(
-                encoded_message=self.payload
+                encoded_message=self._payload
             )
 
     def reload_data(self):
@@ -351,9 +349,11 @@ class UpdateMessage(Message):
     For complete argument docs, see :class:`data_pipeline.message.Message`.
 
     Args:
-        previous_payload (bytes): Avro-encoded message - encoded with schema
-            identified by `schema_id`.  Required when message type is
-            MessageType.update.
+        previous_payload_or_payload_data (bytes or dict): It accepts either
+            Avro-encoded message (bytes previous payload) - encoded with schema
+            identified by `schema_id`, or the contents of message (dict previous
+            payload data), which will be lazily encoded with schema identified
+            by `schema_id`.  Required when message type is MessageType.update.
     """
 
     _message_type = MessageType.update
@@ -440,7 +440,7 @@ class UpdateMessage(Message):
     def _decode_previous_payload_if_necessary(self):
         if self._previous_payload_data is None:
             self._previous_payload_data = self._avro_string_reader.decode(
-                encoded_message=self.previous_payload
+                encoded_message=self._previous_payload
             )
 
     def reload_data(self):
