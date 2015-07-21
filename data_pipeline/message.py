@@ -71,7 +71,13 @@ class Message(object):
             representation of the payload and previous payload, instead of
             the avro encoded message.  This is to avoid loading the schema
             from the schema store.  Defaults to False.
-   """
+
+    Remarks:
+        Although `previous_payload` and `previous_payload_data` are not
+        applicable and do not exist in non-update type Message classes,
+        these classes does not prevent them from being added dynamically.
+        Ensure not to use these attributes for non-update type Message classes.
+    """
 
     _message_type = None
     """Identifies the nature of the message. The valid value is one of the
@@ -252,14 +258,6 @@ class Message(object):
         self._payload_data = payload_data
         self._payload = None  # force payload to be re-encoded
 
-    def __setattr__(self, key, value):
-        """Prevent `previous_payload` and `previous_payload_data` from being
-        added dynamically.
-        """
-        if key in ('previous_payload', 'previous_payload_data'):
-            raise TypeError("Cannot set " + key)
-        super(Message, self).__setattr__(key, value)
-
     def __init__(
         self,
         topic,
@@ -395,13 +393,6 @@ class UpdateMessage(Message):
             self.previous_payload_data = previous_payload_or_payload_data
         except ValueError:
             self.previous_payload = previous_payload_or_payload_data
-
-    def __setattr__(self, key, value):
-        """Revert to original `__setattr` functionality because the parent class
-        :class:Message prevents `previous_payload` and `previous_payload_data`
-        from being added dynamically.
-        """
-        object.__setattr__(self, key, value)
 
     @property
     def previous_payload(self):

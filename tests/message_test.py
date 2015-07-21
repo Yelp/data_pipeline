@@ -99,14 +99,10 @@ class PayloadOnlyMessageTest(SharedMessageTest):
     def test_rejects_previous_payload(self, message):
         with pytest.raises(AttributeError):
             message.previous_payload
-        with pytest.raises(TypeError):
-            message.previous_payload = bytes(10)
 
     def test_rejects_previous_payload_data(self, message):
         with pytest.raises(AttributeError):
             message.previous_payload_data
-        with pytest.raises(TypeError):
-            message.previous_payload_data = {'data': 'test'}
 
 
 class TestCreateMessage(PayloadOnlyMessageTest):
