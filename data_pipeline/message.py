@@ -365,7 +365,7 @@ class UpdateMessage(Message):
         topic,
         schema_id,
         payload_or_payload_data,
-        previous_payload_or_previous_payload_data,
+        previous_payload_or_payload_data,
         uuid=None,
         contains_pii=False,
         timestamp=None,
@@ -385,7 +385,7 @@ class UpdateMessage(Message):
             dry_run=dry_run
         )
         self._set_previous_payload_or_payload_data(
-            previous_payload_or_previous_payload_data
+            previous_payload_or_payload_data
         )
 
     def _set_previous_payload_or_payload_data(self, previous_payload_or_payload_data):

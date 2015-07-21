@@ -162,7 +162,7 @@ class TestUpdateMessage(SharedMessageTest):
             topic=str('my-topic'),
             schema_id=123,
             payload_or_payload_data=payload,
-            previous_payload_or_previous_payload_data=previous_payload
+            previous_payload_or_payload_data=previous_payload
         )
 
     @pytest.mark.parametrize("empty_previous_payload", [None, "", {}])
@@ -173,7 +173,7 @@ class TestUpdateMessage(SharedMessageTest):
     ):
         self._assert_invalid_data(
             valid_message_data,
-            previous_payload_or_previous_payload_data=empty_previous_payload
+            previous_payload_or_payload_data=empty_previous_payload
         )
 
     @pytest.mark.parametrize("invalid_previous_payload", [100, ['test']])
@@ -184,5 +184,5 @@ class TestUpdateMessage(SharedMessageTest):
     ):
         self._assert_invalid_data(
             valid_message_data,
-            previous_payload_or_previous_payload_data=invalid_previous_payload
+            previous_payload_or_payload_data=invalid_previous_payload
         )
