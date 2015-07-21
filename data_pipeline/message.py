@@ -40,8 +40,6 @@ class Message(object):
             message (bytes payload) - encoded with schema identified by `schema_id`,
             or the contents of message (dict payload data), which will be lazily
             encoded with schema identified by `schema_id`.
-        message_type (data_pipeline.message_type.MessageType): Identifies the
-            nature of the message.
         uuid (bytes, optional): Globally-unique 16-byte identifier for the
             message.  A uuid4 will be generated automatically if this isn't
             provided.

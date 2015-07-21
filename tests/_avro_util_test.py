@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import pytest
+from avro.io import AvroTypeException
 
 from data_pipeline._avro_util import _avro_primitive_type_to_example_value
 from data_pipeline._avro_util import AvroStringReader
@@ -92,3 +93,18 @@ class TestGeneratePayloadData(object):
         encoded_payload = writer.encode(payload_data)
         decoded_payload = reader.decode(encoded_payload)
         assert decoded_payload == payload_data
+
+    def test_rejects_empty_avro_representation_for_writing(self, test_schema):
+        avro_schema = get_avro_schema_object(test_schema)
+        writer = AvroStringWriter(schema=avro_schema)
+        with pytest.raises(AvroTypeException):
+            writer.encode(message_avro_representation=None)
+
+    def test_rejects_empty_encoded_message_for_reading(self, test_schema):
+        avro_schema = get_avro_schema_object(test_schema)
+        reader = AvroStringReader(
+            reader_schema=avro_schema,
+            writer_schema=avro_schema
+        )
+        with pytest.raises(TypeError):
+            reader.decode(encoded_message=None)
