@@ -14,6 +14,7 @@ from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.async_producer import AsyncProducer
 from data_pipeline.message_type import MessageType
 from data_pipeline.producer import Producer
+from data_pipeline.producer import PublicationUnensurableError
 from tests.helpers.kafka_docker import capture_new_messages
 from tests.helpers.kafka_docker import create_kafka_docker_topic
 from tests.helpers.kafka_docker import setup_capture_new_messages_consumer
@@ -227,7 +228,7 @@ class TestEnsureMessagesPublished(TestProducerBase):
             producer.publish(message)
             producer.flush()
 
-        with pytest.raises(AssertionError):
+        with pytest.raises(PublicationUnensurableError):
             producer.ensure_messages_published(messages[:2], topic_offsets)
 
     def _assert_all_messages_published(self, consumer, envelope):

@@ -17,6 +17,10 @@ from data_pipeline.config import get_config
 logger = get_config().logger
 
 
+class PublicationUnensurableError(Exception):
+    pass
+
+
 class Producer(Client):
     """Producers are context managers, that provide a high level interface for
     publishing :class:`data_pipeline.message.Message` instances into the data
@@ -158,9 +162,9 @@ class Producer(Client):
                 :attr:`data_pipeline.position_data.PositionData.topic_to_kafka_offset_map`.
 
         Raises:
-            AssertionError: If any topics already have more messages published
-                than would be published by this method, an assertion will
-                fail.  This should never happen in practice.  If it
+            PublicationUnensurableError: If any topics already have more messages
+                published than would be published by this method, an assertion
+                will fail.  This should never happen in practice.  If it
                 does, it means that there has either been another publisher
                 writing to the topic, which breaks the data pipeline contract,
                 or there weren't enough messages passed into this method.  In
@@ -169,11 +173,14 @@ class Producer(Client):
                 published.
         """
         topic_messages_map = self._generate_topic_messages_map(messages)
-        topic_watermarks_map = self._get_high_water_mark_for_messages(topic_messages_map)
+        topic_watermarks_map = self._get_high_water_mark_for_messages(
+            topic_messages_map.keys()
+        )
 
         for topic, messages in topic_messages_map.iteritems():
             already_published_count = topic_watermarks_map[topic] - topic_offsets.get(topic, 0)
-            assert already_published_count >= 0 and already_published_count <= len(messages)
+            if already_published_count < 0 or already_published_count > len(messages):
+                raise PublicationUnensurableError()
             for message in messages[already_published_count:]:
                 self.publish(message)
 
@@ -253,8 +260,8 @@ class Producer(Client):
             topic_messages_map[message.topic].append(message)
         return topic_messages_map
 
-    def _get_high_water_mark_for_messages(self, topic_messages_map):
+    def _get_high_water_mark_for_messages(self, topic_list):
         kafka_client = get_config().kafka_client
-        topic_watermarks = get_topics_watermarks(kafka_client, topic_messages_map.keys())
+        topic_watermarks = get_topics_watermarks(kafka_client, topic_list)
 
         return {topic: partition_offsets[0].highmark for topic, partition_offsets in topic_watermarks.iteritems()}
