@@ -79,7 +79,7 @@ def message(topic_name, payload, registered_schema):
     return CreateMessage(
         topic=topic_name,
         schema_id=registered_schema.schema_id,
-        payload=payload,
+        payload_or_payload_data=payload
     )
 
 

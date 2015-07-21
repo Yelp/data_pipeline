@@ -45,11 +45,11 @@ class SharedMessageTest(object):
 
     @pytest.mark.parametrize("empty_payload", [None, "", {}])
     def test_rejects_message_without_payload(self, valid_message_data, empty_payload):
-        self._assert_invalid_data(valid_message_data, payload=empty_payload)
+        self._assert_invalid_data(valid_message_data, payload_or_payload_data=empty_payload)
 
     @pytest.mark.parametrize("invalid_payload", [100, ['test']])
     def test_rejects_non_dict_or_bytes_payload(self, valid_message_data, invalid_payload):
-        self._assert_invalid_data(valid_message_data, payload=invalid_payload)
+        self._assert_invalid_data(valid_message_data, payload_or_payload_data=invalid_payload)
 
     def _assert_invalid_data(self, valid_data, error=ValueError, **data_overrides):
         invalid_data = self._make_message_data(valid_data, **data_overrides)
@@ -79,7 +79,7 @@ class SharedMessageTest(object):
         payload_data = {'data': 'test'}
         message_data = self._make_message_data(
             valid_message_data,
-            payload=payload_data,
+            payload_or_payload_data=payload_data,
             dry_run=True
         )
         dry_run_message = self.message_class(**message_data)
@@ -93,19 +93,19 @@ class PayloadOnlyMessageTest(SharedMessageTest):
         return {
             'topic': str('my-topic'),
             'schema_id': 123,
-            'payload': request.param,
+            'payload_or_payload_data': request.param,
         }
 
     def test_rejects_previous_payload(self, message):
-        with pytest.raises(dp_message.InvalidOperation):
+        with pytest.raises(AttributeError):
             message.previous_payload
-        with pytest.raises(dp_message.InvalidOperation):
+        with pytest.raises(TypeError):
             message.previous_payload = bytes(10)
 
     def test_rejects_previous_payload_data(self, message):
-        with pytest.raises(dp_message.InvalidOperation):
+        with pytest.raises(AttributeError):
             message.previous_payload_data
-        with pytest.raises(dp_message.InvalidOperation):
+        with pytest.raises(TypeError):
             message.previous_payload_data = {'data': 'test'}
 
 
@@ -161,8 +161,8 @@ class TestUpdateMessage(SharedMessageTest):
         return dict(
             topic=str('my-topic'),
             schema_id=123,
-            payload=payload,
-            previous_payload=previous_payload
+            payload_or_payload_data=payload,
+            previous_payload_or_previous_payload_data=previous_payload
         )
 
     @pytest.mark.parametrize("empty_previous_payload", [None, "", {}])
@@ -173,7 +173,7 @@ class TestUpdateMessage(SharedMessageTest):
     ):
         self._assert_invalid_data(
             valid_message_data,
-            previous_payload=empty_previous_payload
+            previous_payload_or_previous_payload_data=empty_previous_payload
         )
 
     @pytest.mark.parametrize("invalid_previous_payload", [100, ['test']])
@@ -184,5 +184,5 @@ class TestUpdateMessage(SharedMessageTest):
     ):
         self._assert_invalid_data(
             valid_message_data,
-            previous_payload=invalid_previous_payload
+            previous_payload_or_previous_payload_data=invalid_previous_payload
         )

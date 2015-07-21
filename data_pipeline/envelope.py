@@ -67,9 +67,7 @@ class Envelope(object):
         # words, the version number of the current schema is the null byte.  In
         # the event we need to add additional envelope versions, we'll use this
         # byte to identify it.
-        return bytes(0) + self._avro_string_writer.encode(
-            self._get_avro_repr(message)
-        )
+        return bytes(0) + self._avro_string_writer.encode(message.avro_repr)
 
     def unpack(self, packed_message):
         """Decodes a message packed with :func:`pack`.
@@ -86,12 +84,3 @@ class Envelope(object):
         """
         # The initial "magic byte" is ignored, see the comment in `pack`.
         return self._avro_string_reader.decode(packed_message[1:])
-
-    def _get_avro_repr(self, message):
-        """Prepare the message for packing
-
-        Returns:
-            dict: Dictionary that can be packed by
-                :func:`data_pipeline.envelope.Envelope.pack`.
-        """
-        return message.avro_repr

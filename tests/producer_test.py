@@ -7,9 +7,8 @@ import multiprocessing
 import mock
 import pytest
 
-from data_pipeline import lazy_message
 from data_pipeline.async_producer import AsyncProducer
-from data_pipeline.message_type import MessageType
+from data_pipeline.message import CreateMessage
 from data_pipeline.producer import Producer
 from tests.helpers.kafka_docker import capture_new_messages
 from tests.helpers.kafka_docker import create_kafka_docker_topic
@@ -50,28 +49,28 @@ class TestProducer(object):
         create_kafka_docker_topic(kafka_docker, topic_name)
         return topic_name
 
-    @pytest.yield_fixture
-    def patch_payload(self):
-        with mock.patch.object(
-            lazy_message.LazyMessage,
-            'payload',
-            new_callable=mock.PropertyMock
-        ) as mock_payload:
-            mock_payload.return_value = bytes(7)
-            yield mock_payload
-
     @pytest.fixture
-    def lazy_message(self, topic_name):
-        return lazy_message.LazyMessage(topic_name, 10, {1: 100}, MessageType.create)
+    def message_with_payload_data(self, topic_name):
+        return CreateMessage(topic_name, 10, {1: 100})
 
-    def test_basic_publish_lazy_message(
+    def test_basic_publish_message_with_payload_data(
         self,
         topic,
-        lazy_message,
+        message_with_payload_data,
         producer,
         envelope
     ):
-        self.test_basic_publish(topic, lazy_message, producer, envelope)
+        with mock.patch.object(
+            message_with_payload_data,
+            'payload',
+            return_value=bytes(7)
+        ):
+            self.test_basic_publish(
+                topic,
+                message_with_payload_data,
+                producer,
+                envelope
+            )
 
     def test_basic_publish(self, topic, message, producer, envelope):
         with capture_new_messages(topic) as get_messages:

@@ -13,7 +13,7 @@ class TestEnvelope(object):
         (dp_message.CreateMessage, {}),
         (dp_message.RefreshMessage, {}),
         (dp_message.DeleteMessage, {}),
-        (dp_message.UpdateMessage, {'previous_payload': bytes(20)})
+        (dp_message.UpdateMessage, {'previous_payload_or_previous_payload_data': bytes(20)})
     ])
     def message(self, request, topic_name, payload):
         message_class, additional_params = request.param
