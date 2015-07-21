@@ -26,6 +26,13 @@ class Containers(object):
     services = ["kafka", "schematizer"]
 
     def __init__(self):
+        # This variable is meant to capture the running/not-running state of
+        # the dependent testing containers when tests start running.  The idea
+        # is, we'll only start and stop containers if they aren't already
+        # running.  If they are running, we'll just use the ones that exist.
+        # It takes a while to start all the containers, so when running lots of
+        # tests, it's best to start them out-of-band and leave them up for the
+        # duration of the session.
         self.containers_already_running = self._are_containers_already_running()
 
     def __enter__(self):
@@ -36,6 +43,7 @@ class Containers(object):
 
     def __exit__(self, type, value, traceback):
         if not self.containers_already_running:
+            # only stop containers that we started
             self._stop_containers()
         return False  # Don't Supress Exception
 
