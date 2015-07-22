@@ -130,7 +130,7 @@ class _Monitor(object):
         """Publishes the buffered information, stored in topic_to_tracking_info_map,
         to kafka and resets topic_to_tracking_info_map to an empty dictionary
         """
-        for remaining_monitoring_topic, tracking_info in sorted(self.topic_to_tracking_info_map.items()):
+        for remaining_monitoring_topic, tracking_info in self.topic_to_tracking_info_map.items():
             self._publish(tracking_info)
         self.producer.flush_buffered_messages()
         self.topic_to_tracking_info_map = {}

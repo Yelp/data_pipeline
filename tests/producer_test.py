@@ -67,13 +67,17 @@ class TestProducer(object):
     @pytest.fixture(scope='module')
     def topic(self, kafka_docker, topic_name):
         create_kafka_docker_topic(kafka_docker, topic_name)
-        create_kafka_docker_topic(kafka_docker, str('message-monitoring-log'))
         return topic_name
 
     @pytest.fixture(scope='module')
     def topic_1(self, kafka_docker):
         create_kafka_docker_topic(kafka_docker, str('topic-1'))
         return str('topic-1')
+
+    @pytest.fixture(scope='module')
+    def monitor(self, kafka_docker):
+        create_kafka_docker_topic(kafka_docker, str('message-monitoring-log'))
+        return str('message-monitoring-log')
 
     @pytest.fixture
     def lazy_message(self, topic_name):
@@ -90,7 +94,7 @@ class TestProducer(object):
             timestamp=timestamp
         )
 
-    def assert_monitoring_system_checks(self, unpacked_message, message_count, message_timeslot, topic):
+    def assert_monitoring_system_checks(self, unpacked_message, topic, message_count, message_timeslot):
         assert unpacked_message['message_type'] == 'monitor'
         decoded_payload = ast.literal_eval(unpacked_message['payload'])
         assert decoded_payload['message_count'] == message_count
@@ -98,9 +102,9 @@ class TestProducer(object):
         assert decoded_payload['start_timestamp'] == message_timeslot * get_config().monitoring_window_in_sec
         assert decoded_payload['topic'] == topic
 
-    def test_monitoring_message_basic(self, message, topic, producer, envelope):
+    def test_monitoring_message_basic(self, message, topic, monitor, producer, envelope):
         with capture_new_messages(topic) as get_messages, \
-                capture_new_messages('message-monitoring-log') as get_monitoring_messages:
+                capture_new_messages(monitor) as get_monitoring_messages:
             for i in xrange(99):
                 producer.publish(message)
             producer.flush()
@@ -111,23 +115,37 @@ class TestProducer(object):
         assert len(messages) == 99
         assert len(monitoring_messages) == 3
 
-        # The first message will have 0 as the message_count
-        # since the timestamp of message is above 600 (outside the monitored window)
+        # first and second monitoring messages will have 0 as the message_count
+        # since the timestamp of published message is 1456
         unpacked_message = envelope.unpack(monitoring_messages[0].message.value)
-        self.assert_monitoring_system_checks(unpacked_message, 0, 0, topic)
+        self.assert_monitoring_system_checks(
+            unpacked_message,
+            topic,
+            message_count=0,
+            message_timeslot=0
+        )
 
-        # second monitoring_message will again have 0 as the message_count
-        # since the message timestamp is outside the 600-1200 timeslot
         unpacked_message = envelope.unpack(monitoring_messages[1].message.value)
-        self.assert_monitoring_system_checks(unpacked_message, 0, 1, topic)
+        self.assert_monitoring_system_checks(
+            unpacked_message,
+            topic,
+            message_count=0,
+            message_timeslot=1
+        )
 
         # third monitoring_message will again have 99 as the message_count
         unpacked_message = envelope.unpack(monitoring_messages[2].message.value)
-        self.assert_monitoring_system_checks(unpacked_message, 99, 2, topic)
+        self.assert_monitoring_system_checks(
+            unpacked_message,
+            topic,
+            message_count=99,
+            message_timeslot=2
+        )
 
     def test_monitoring_system_same_topic_different_timestamp_messages(
         self,
         topic,
+        monitor,
         payload,
         producer,
         envelope
@@ -136,7 +154,7 @@ class TestProducer(object):
         # testing purposes
         timestamp_list = [100, 654, 2010, 2015, 2050]
         with capture_new_messages(topic) as get_messages, \
-                capture_new_messages('message-monitoring-log') as get_monitoring_messages:
+                capture_new_messages(monitor) as get_monitoring_messages:
             for timestamp in timestamp_list:
                 producer.publish(self.create_message_with_specified_timestamp(topic, payload, timestamp))
             producer.flush()
@@ -147,27 +165,47 @@ class TestProducer(object):
         assert len(messages) == 5
         assert len(monitoring_messages) == 4
 
-        # the first monitoring_message should have count as 1
+        # first and second monitoring messages should have count as 1
         unpacked_message = envelope.unpack(monitoring_messages[0].message.value)
-        self.assert_monitoring_system_checks(unpacked_message, 1, 0, topic)
+        self.assert_monitoring_system_checks(
+            unpacked_message,
+            topic,
+            message_count=1,
+            message_timeslot=0
+        )
 
-        # the second monitoring_message should have count as 1
         unpacked_message = envelope.unpack(monitoring_messages[1].message.value)
-        self.assert_monitoring_system_checks(unpacked_message, 1, 1, topic)
+        self.assert_monitoring_system_checks(
+            unpacked_message,
+            topic,
+            message_count=1,
+            message_timeslot=1
+        )
 
-        # the third monitoring_message should have count as 0
+        # third monitoring message should have message_count as 0
         # since no messages are published with the timestamp between 1200-1800
         unpacked_message = envelope.unpack(monitoring_messages[2].message.value)
-        self.assert_monitoring_system_checks(unpacked_message, 0, 2, topic)
+        self.assert_monitoring_system_checks(
+            unpacked_message,
+            topic,
+            message_count=0,
+            message_timeslot=2
+        )
 
-        # the forth message should have message count as 3
+        # forth monitoring message should have message count as 3
         unpacked_message = envelope.unpack(monitoring_messages[3].message.value)
-        self.assert_monitoring_system_checks(unpacked_message, 3, 3, topic)
+        self.assert_monitoring_system_checks(
+            unpacked_message,
+            topic,
+            message_count=3,
+            message_timeslot=3
+        )
 
     def test_monitoring_system_different_topic_different_timestamp_messages(
         self,
         topic,
         topic_1,
+        monitor,
         payload,
         producer,
         envelope,
@@ -181,7 +219,7 @@ class TestProducer(object):
             (1079, topic_1),
             (2025, topic_1),
         ]
-        with capture_new_messages('message-monitoring-log') as get_monitoring_messages, \
+        with capture_new_messages(monitor) as get_monitoring_messages, \
                 capture_new_messages(topic) as get_messages, \
                 capture_new_messages(topic_1) as get_messages_for_topic_1:
             for timestamp, topic_name in timestamp_topic_name_list:
@@ -205,38 +243,78 @@ class TestProducer(object):
         # varifying number of monitoring_messages
         assert len(monitoring_messages) == 6
 
-        # varifying contents of the published monitoring messages
-        # the first message should be for topic and should have count as 0
-        # since no messages of topic 'topic' were published in timeslot 0 - 600
+        # first and second monitoring messages will have 0 message_count
+        # and would be for topic and topic-1 respectively
         unpacked_message = envelope.unpack(monitoring_messages[0].message.value)
-        self.assert_monitoring_system_checks(unpacked_message, 0, 0, topic)
+        self.assert_monitoring_system_checks(
+            unpacked_message,
+            topic,
+            message_count=0,
+            message_timeslot=0
+        )
 
-        # the second message should be for topic-1 and should also have count as 0
-        # since no messages of topic 'topic-1' were published in timeslot 0 - 600
         unpacked_message = envelope.unpack(monitoring_messages[1].message.value)
-        self.assert_monitoring_system_checks(unpacked_message, 0, 0, topic_1)
+        self.assert_monitoring_system_checks(
+            unpacked_message,
+            topic_1,
+            message_count=0,
+            message_timeslot=0
+        )
 
-        # the third message should be for topic-1 and should have count as 3
-        # since 3 messages of topic 'topic-1' were published in timeslot 600 - 1200
+        # third and forth monitoring messages should be for topic-1 and have 3 and 0
+        # as the message_count since 3 messages of topic 'topic-1' were published
+        # in timeslot 600 - 1200 but none for timeslot 1200-1800
         unpacked_message = envelope.unpack(monitoring_messages[2].message.value)
-        self.assert_monitoring_system_checks(unpacked_message, 3, 1, topic_1)
+        self.assert_monitoring_system_checks(
+            unpacked_message,
+            topic_1,
+            message_count=3,
+            message_timeslot=1
+        )
 
-        # the forth message should be for topic-1 and should also have count as 0
-        # since 0 message of topic 'topic-1' was published in timeslot 1200-1800
         unpacked_message = envelope.unpack(monitoring_messages[3].message.value)
-        self.assert_monitoring_system_checks(unpacked_message, 0, 2, topic_1)
+        self.assert_monitoring_system_checks(
+            unpacked_message,
+            topic_1,
+            message_count=0,
+            message_timeslot=2
+        )
 
-        # the fifth message should be for topic with message_count as 2
-        # since 2 messages of topic 'topic' were published in timeslot 600 - 1200
-        # this message is published as a part of flushing the monitoring message
-        # but since this happens in ascending order, topic message is published before
+        # fifth and sixth message would be published as a part of flushing
+        # monitoring_message and should be for topic-1 and topic. However, since
+        # flushing process traverses through the topic_tracking_info_map, one
+        # cannot guarantee which tracking_info will be published first
         unpacked_message = envelope.unpack(monitoring_messages[4].message.value)
-        self.assert_monitoring_system_checks(unpacked_message, 2, 1, topic)
+        decoded_payload = ast.literal_eval(unpacked_message['payload'])
+        if decoded_payload['topic'] == topic:
+            self.assert_monitoring_system_checks(
+                unpacked_message,
+                topic,
+                message_count=2,
+                message_timeslot=1
+            )
 
-        # the sixth message should be for topic-1 with message_count as 1
-        # this is also published when the flush method of monitoring message is called
-        unpacked_message = envelope.unpack(monitoring_messages[5].message.value)
-        self.assert_monitoring_system_checks(unpacked_message, 1, 3, topic_1)
+            unpacked_message = envelope.unpack(monitoring_messages[5].message.value)
+            self.assert_monitoring_system_checks(
+                unpacked_message,
+                topic_1,
+                message_count=1,
+                message_timeslot=3
+            )
+        else:
+            self.assert_monitoring_system_checks(
+                unpacked_message,
+                topic_1,
+                message_count=1,
+                message_timeslot=3
+            )
+            unpacked_message = envelope.unpack(monitoring_messages[5].message.value)
+            self.assert_monitoring_system_checks(
+                unpacked_message,
+                topic,
+                message_count=2,
+                message_timeslot=1
+            )
 
     def test_basic_publish_lazy_message(
         self,
