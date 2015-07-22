@@ -14,6 +14,7 @@ from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import CreateMessage
 from data_pipeline.schema_cache import get_schema_cache
+from tests.helpers.containers import Containers
 from tests.helpers.kafka_docker import KafkaDocker
 
 logging.basicConfig(
@@ -24,7 +25,7 @@ logging.basicConfig(
 
 
 @pytest.fixture
-def schema_cache():
+def schema_cache(containers):
     return get_schema_cache()
 
 
@@ -89,6 +90,11 @@ def envelope():
 
 
 @pytest.yield_fixture(scope='session')
-def kafka_docker():
-    with KafkaDocker() as get_connection:
-        yield get_connection()
+def containers():
+    with Containers():
+        yield
+
+
+@pytest.fixture(scope='session')
+def kafka_docker(containers):
+    return KafkaDocker.get_connection()

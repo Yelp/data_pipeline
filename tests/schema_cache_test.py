@@ -43,7 +43,7 @@ class TestSchemaCache(object):
         assert json.loads(schema_response.schema) == json.loads(example_schema)
         assert schema_response.schema == schema
         assert schema_response.topic.name == topic
-        assert schema_response.topic.source.namespace == 'test_namespace'
+        assert schema_response.topic.source.namespace.name == 'test_namespace'
         assert schema_response.topic.source.source == 'test_source'
 
     def test_register_transformed_schema_repeated_alternate_source(

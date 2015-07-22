@@ -3,8 +3,10 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import multiprocessing
+from collections import defaultdict
 
 from cached_property import cached_property
+from yelp_kafka.offsets import get_topics_watermarks
 
 from data_pipeline._kafka_producer import LoggingKafkaProducer
 from data_pipeline._pooled_kafka_producer import PooledKafkaProducer
@@ -13,6 +15,10 @@ from data_pipeline.config import get_config
 
 
 logger = get_config().logger
+
+
+class PublicationUnensurableError(Exception):
+    pass
 
 
 class Producer(Client):
@@ -142,16 +148,43 @@ class Producer(Client):
 
         The call will block until all messages are published successfully.
 
+        Immediately after calling this method, you should call
+        :meth:`get_checkpoint_position_data` and persist the data.
+
         Args:
             messages (list of :class:`data_pipeline.message.Message`): List of
-                messages to ensure are published.
+                messages to ensure are published.  The order of the messages
+                matters, this code assumes that the messages are in the order
+                they would have been published in.
             topic_offsets (dict of str to int): The topic offsets should be a
                 dictionary containing the offset of the next message that would
                 be published in each topic.  This should be in the format of
                 :attr:`data_pipeline.position_data.PositionData.topic_to_kafka_offset_map`.
+
+        Raises:
+            PublicationUnensurableError: If any topics already have more messages
+                published than would be published by this method, an assertion
+                will fail.  This should never happen in practice.  If it
+                does, it means that there has either been another publisher
+                writing to the topic, which breaks the data pipeline contract,
+                or there weren't enough messages passed into this method.  In
+                either case, manual intervention will be required.  Note that
+                in the event of a failure, some messages may have been
+                published.
         """
-        # TODO(DATAPIPE-164|justinc): Implement this
-        raise NotImplementedError
+        topic_messages_map = self._generate_topic_messages_map(messages)
+        topic_watermarks_map = self._get_high_water_mark_for_messages(
+            topic_messages_map.keys()
+        )
+
+        for topic, messages in topic_messages_map.iteritems():
+            already_published_count = topic_watermarks_map[topic] - topic_offsets.get(topic, 0)
+            if already_published_count < 0 or already_published_count > len(messages):
+                raise PublicationUnensurableError()
+            for message in messages[already_published_count:]:
+                self.publish(message)
+
+        self.flush()
 
     def flush(self):
         """Block until all data pipeline messages have been
@@ -220,3 +253,15 @@ class Producer(Client):
                 including Kafka offsets and upstream position information.
         """
         self.position_data = position_data
+
+    def _generate_topic_messages_map(self, messages):
+        topic_messages_map = defaultdict(list)
+        for message in messages:
+            topic_messages_map[message.topic].append(message)
+        return topic_messages_map
+
+    def _get_high_water_mark_for_messages(self, topic_list):
+        kafka_client = get_config().kafka_client
+        topic_watermarks = get_topics_watermarks(kafka_client, topic_list)
+
+        return {topic: partition_offsets[0].highmark for topic, partition_offsets in topic_watermarks.iteritems()}

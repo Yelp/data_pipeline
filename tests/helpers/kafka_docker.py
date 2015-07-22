@@ -18,39 +18,9 @@ logger = get_config().logger
 
 
 class KafkaDocker(object):
-    """Context manager that gets a connection to an already running kafka docker
-    container if available, and if not, runs a new container for the duration
-    of tests.
+    """Helper for getting a Kafka Docker connection, which will wait for the
+    service to come up.
     """
-
-    def __init__(self):
-        self.kafka_already_running = self._is_kafka_already_running()
-
-    def __enter__(self):
-        if not self.kafka_already_running:
-            self._start_kafka()
-        else:
-            logger.info("Using running Kafka container")
-        return KafkaDocker.get_connection
-
-    def __exit__(self, type, value, traceback):
-        if not self.kafka_already_running:
-            self._stop_kafka()
-        return False  # Don't Supress Exception
-
-    def _is_kafka_already_running(self):
-        process_up_result = subprocess.call("docker-compose ps kafka | grep Up", shell=True)
-        return int(process_up_result) == 0
-
-    def _start_kafka(self):
-        self._stop_kafka()
-        logger.info("Starting Kafka")
-        subprocess.Popen(["docker-compose", "up", "kafka"])
-
-    def _stop_kafka(self):
-        logger.info("Stopping Kafka containers")
-        subprocess.call(["docker-compose", "kill"])
-        subprocess.call(["docker-compose", "rm", "--force"])
 
     @classmethod
     def get_connection(cls, timeout=15):
