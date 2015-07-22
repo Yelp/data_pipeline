@@ -36,10 +36,12 @@ class Message(object):
     Args:
         topic (str): Kafka topic to publish into
         schema_id (int): Identifies the schema used to encode the payload
-        payload_or_payload_data (bytes or dict): It accepts either Avro-encoded
-            message (bytes payload) - encoded with schema identified by `schema_id`,
-            or the contents of message (dict payload data), which will be lazily
-            encoded with schema identified by `schema_id`.
+        payload (bytes): Avro-encoded message - encoded with schema identified
+            by `schema_id`. Either `payload` or `payload_data` must be provided
+            but not both.
+        payload_data (dict): The contents of message, which will be lazily
+            encoded with schema identified by `schema_id`. Either `payload` or
+            `payload_data` must be provided but not both.
         uuid (bytes, optional): Globally-unique 16-byte identifier for the
             message.  A uuid4 will be generated automatically if this isn't
             provided.
@@ -262,7 +264,8 @@ class Message(object):
         self,
         topic,
         schema_id,
-        payload_or_payload_data,
+        payload=None,
+        payload_data=None,
         uuid=None,
         contains_pii=False,
         timestamp=None,
@@ -283,14 +286,18 @@ class Message(object):
         self.upstream_position_info = upstream_position_info
         self.kafka_position_info = kafka_position_info
         self.dry_run = dry_run
-        self._set_payload_or_payload_data(payload_or_payload_data)
+        self._set_payload_or_payload_data(payload, payload_data)
 
-    def _set_payload_or_payload_data(self, payload_or_payload_data):
+    def _set_payload_or_payload_data(self, payload, payload_data):
         # payload or payload_data are lazily constructed only on request
-        try:
-            self.payload_data = payload_or_payload_data
-        except ValueError:
-            self.payload = payload_or_payload_data
+        if payload and payload_data:
+            raise ValueError("Cannot pass both payload and payload_data.")
+        if payload:
+            self.payload = payload
+        elif payload_data:
+            self.payload_data = payload_data
+        else:
+            raise ValueError("Either payload or payload_data must be provided.")
 
     @property
     def avro_repr(self):
@@ -360,8 +367,10 @@ class UpdateMessage(Message):
         self,
         topic,
         schema_id,
-        payload_or_payload_data,
-        previous_payload_or_payload_data,
+        payload=None,
+        payload_data=None,
+        previous_payload=None,
+        previous_payload_data=None,
         uuid=None,
         contains_pii=False,
         timestamp=None,
@@ -372,7 +381,8 @@ class UpdateMessage(Message):
         super(UpdateMessage, self).__init__(
             topic,
             schema_id,
-            payload_or_payload_data,
+            payload=payload,
+            payload_data=payload_data,
             uuid=uuid,
             contains_pii=contains_pii,
             timestamp=timestamp,
@@ -381,16 +391,29 @@ class UpdateMessage(Message):
             dry_run=dry_run
         )
         self._set_previous_payload_or_payload_data(
-            previous_payload_or_payload_data
+            previous_payload,
+            previous_payload_data
         )
 
-    def _set_previous_payload_or_payload_data(self, previous_payload_or_payload_data):
+    def _set_previous_payload_or_payload_data(
+        self,
+        previous_payload,
+        previous_payload_data
+    ):
         # previous_payload or previous_payload_data are lazily constructed
         # only on request
-        try:
-            self.previous_payload_data = previous_payload_or_payload_data
-        except ValueError:
-            self.previous_payload = previous_payload_or_payload_data
+        if previous_payload and previous_payload_data:
+            raise ValueError(
+                "Cannot pass both previous_payload and previous_payload_data."
+            )
+        if previous_payload:
+            self.previous_payload = previous_payload
+        elif previous_payload_data:
+            self.previous_payload_data = previous_payload_data
+        else:
+            raise ValueError(
+                "Either previous_payload or previous_payload_data must be provided."
+            )
 
     @property
     def previous_payload(self):
