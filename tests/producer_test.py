@@ -57,7 +57,7 @@ class TestProducerBase(object):
 class TestProducer(TestProducerBase):
     @pytest.fixture
     def message_with_payload_data(self, topic_name):
-        return CreateMessage(topic_name, 10, {1: 100})
+        return CreateMessage(topic_name, 10, payload_data={1: 100})
 
     def test_basic_publish_message_with_payload_data(
         self,
@@ -66,11 +66,12 @@ class TestProducer(TestProducerBase):
         producer,
         envelope
     ):
-        with mock.patch.object(
+        with mock.patch(
             message_with_payload_data,
             'payload',
-            return_value=bytes(7)
-        ):
+            new_callable=mock.PropertyMock
+        ) as mock_payload:
+            mock_payload.return_value = bytes(7)
             self.test_basic_publish(
                 topic,
                 message_with_payload_data,
