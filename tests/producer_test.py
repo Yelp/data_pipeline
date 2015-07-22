@@ -66,7 +66,7 @@ class TestProducer(TestProducerBase):
         producer,
         envelope
     ):
-        with mock.patch(
+        with mock.patch.object(
             message_with_payload_data,
             'payload',
             new_callable=mock.PropertyMock
