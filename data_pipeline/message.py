@@ -37,10 +37,10 @@ class Message(object):
         topic (str): Kafka topic to publish into
         schema_id (int): Identifies the schema used to encode the payload
         payload (bytes): Avro-encoded message - encoded with schema identified
-            by `schema_id`. Either `payload` or `payload_data` must be provided
+            by `schema_id`.  Either `payload` or `payload_data` must be provided
             but not both.
         payload_data (dict): The contents of message, which will be lazily
-            encoded with schema identified by `schema_id`. Either `payload` or
+            encoded with schema identified by `schema_id`.  Either `payload` or
             `payload_data` must be provided but not both.
         uuid (bytes, optional): Globally-unique 16-byte identifier for the
             message.  A uuid4 will be generated automatically if this isn't
@@ -77,7 +77,7 @@ class Message(object):
     Remarks:
         Although `previous_payload` and `previous_payload_data` are not
         applicable and do not exist in non-update type Message classes,
-        these classes does not prevent them from being added dynamically.
+        these classes do not prevent them from being added dynamically.
         Ensure not to use these attributes for non-update type Message classes.
     """
 
@@ -239,7 +239,7 @@ class Message(object):
 
     @payload.setter
     def payload(self, payload):
-        if not isinstance(payload, bytes) or not payload:
+        if not isinstance(payload, bytes):
             raise ValueError("Payload must be non-empty bytes")
         self._payload = payload
         self._payload_data = None  # force payload_data to be re-decoded
@@ -251,7 +251,7 @@ class Message(object):
 
     @payload_data.setter
     def payload_data(self, payload_data):
-        if not isinstance(payload_data, dict) or not payload_data:
+        if not isinstance(payload_data, dict):
             raise ValueError("Payload data must be a non-empty dict")
         self._payload_data = payload_data
         self._payload = None  # force payload to be re-encoded
@@ -286,11 +286,14 @@ class Message(object):
 
     def _set_payload_or_payload_data(self, payload, payload_data):
         # payload or payload_data are lazily constructed only on request
-        if payload and payload_data:
+        is_not_none_payload = payload is not None
+        is_not_none_payload_data = payload_data is not None
+
+        if is_not_none_payload and is_not_none_payload_data:
             raise ValueError("Cannot pass both payload and payload_data.")
-        if payload:
+        if is_not_none_payload:
             self.payload = payload
-        elif payload_data:
+        elif is_not_none_payload_data:
             self.payload_data = payload_data
         else:
             raise ValueError("Either payload or payload_data must be provided.")
@@ -350,11 +353,14 @@ class UpdateMessage(Message):
     For complete argument docs, see :class:`data_pipeline.message.Message`.
 
     Args:
-        previous_payload_or_payload_data (bytes or dict): It accepts either
-            Avro-encoded message (bytes previous payload) - encoded with schema
-            identified by `schema_id`, or the contents of message (dict previous
-            payload data), which will be lazily encoded with schema identified
-            by `schema_id`.  Required when message type is MessageType.update.
+        previous_payload (bytes): Avro-encoded message - encoded with schema
+            identified by `schema_id`  Required when message type is
+            MessageType.update.  Either `previous_payload` or `previous_payload_data`
+            must be provided but not both.
+        previous_payload_data (dict): The contents of message, which will be
+            lazily encoded with schema identified by `schema_id`.  Required
+            when message type is MessageType.update.  Either `previous_payload`
+            or `previous_payload_data` must be provided but not both.
     """
 
     _message_type = MessageType.update
@@ -398,13 +404,16 @@ class UpdateMessage(Message):
     ):
         # previous_payload or previous_payload_data are lazily constructed
         # only on request
-        if previous_payload and previous_payload_data:
+        is_not_none_previous_payload = previous_payload is not None
+        is_not_none_previous_payload_data = previous_payload_data is not None
+
+        if is_not_none_previous_payload and is_not_none_previous_payload_data:
             raise ValueError(
                 "Cannot pass both previous_payload and previous_payload_data."
             )
-        if previous_payload:
+        if is_not_none_previous_payload:
             self.previous_payload = previous_payload
-        elif previous_payload_data:
+        elif is_not_none_previous_payload_data:
             self.previous_payload_data = previous_payload_data
         else:
             raise ValueError(
@@ -421,7 +430,7 @@ class UpdateMessage(Message):
 
     @previous_payload.setter
     def previous_payload(self, previous_payload):
-        if not isinstance(previous_payload, bytes) or not previous_payload:
+        if not isinstance(previous_payload, bytes):
             raise ValueError("Previous payload must be non-empty bytes")
         self._previous_payload = previous_payload
         self._previous_payload_data = None  # force previous_payload_data to be re-decoded
@@ -433,7 +442,7 @@ class UpdateMessage(Message):
 
     @previous_payload_data.setter
     def previous_payload_data(self, previous_payload_data):
-        if not isinstance(previous_payload_data, dict) or not previous_payload_data:
+        if not isinstance(previous_payload_data, dict):
             raise ValueError("Previous payload data must be a non-empty dict")
 
         self._previous_payload_data = previous_payload_data
