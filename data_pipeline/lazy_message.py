@@ -79,7 +79,11 @@ class LazyMessage(Message):
 
     @property
     def dry_run(self):
-        return self.dry_run
+        return self._dry_run
+
+    @dry_run.setter
+    def dry_run(self, dry_run):
+        self._dry_run = dry_run
 
     def _encode_data(self, data):
         """Encodes data, returning a repr in dry_run mode"""

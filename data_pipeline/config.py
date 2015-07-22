@@ -85,7 +85,7 @@ class Config(object):
         the number of messages processed by the client
         TODO(DATAPIPE-154|pujun) This should be configured with staticconf
         """
-        return 1000
+        return 600
 
 
 _config = Config()
