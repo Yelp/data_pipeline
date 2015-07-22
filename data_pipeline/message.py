@@ -240,7 +240,7 @@ class Message(object):
     @payload.setter
     def payload(self, payload):
         if not isinstance(payload, bytes):
-            raise ValueError("Payload must be non-empty bytes")
+            raise ValueError("Payload must be bytes")
         self._payload = payload
         self._payload_data = None  # force payload_data to be re-decoded
 
@@ -252,7 +252,7 @@ class Message(object):
     @payload_data.setter
     def payload_data(self, payload_data):
         if not isinstance(payload_data, dict):
-            raise ValueError("Payload data must be a non-empty dict")
+            raise ValueError("Payload data must be a dict")
         self._payload_data = payload_data
         self._payload = None  # force payload to be re-encoded
 
@@ -431,7 +431,7 @@ class UpdateMessage(Message):
     @previous_payload.setter
     def previous_payload(self, previous_payload):
         if not isinstance(previous_payload, bytes):
-            raise ValueError("Previous payload must be non-empty bytes")
+            raise ValueError("Previous payload must be bytes")
         self._previous_payload = previous_payload
         self._previous_payload_data = None  # force previous_payload_data to be re-decoded
 
@@ -443,7 +443,7 @@ class UpdateMessage(Message):
     @previous_payload_data.setter
     def previous_payload_data(self, previous_payload_data):
         if not isinstance(previous_payload_data, dict):
-            raise ValueError("Previous payload data must be a non-empty dict")
+            raise ValueError("Previous payload data must be a dict")
 
         self._previous_payload_data = previous_payload_data
         self._previous_payload = None  # force previous_payload to be re-encoded
