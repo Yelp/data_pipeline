@@ -239,8 +239,6 @@ class Message(object):
 
     @payload.setter
     def payload(self, payload):
-        # TODO (DATAPIPE-295|clin): The payload setter and payload_data setter
-        # may be one setter since one of them must have value at any given time.
         if not isinstance(payload, bytes) or not payload:
             raise ValueError("Payload must be non-empty bytes")
         self._payload = payload
@@ -253,8 +251,6 @@ class Message(object):
 
     @payload_data.setter
     def payload_data(self, payload_data):
-        # TODO (DATAPIPE-295|clin): The payload setter and payload_data setter
-        # may be one setter since one of them must have value at any given time.
         if not isinstance(payload_data, dict) or not payload_data:
             raise ValueError("Payload data must be a non-empty dict")
         self._payload_data = payload_data
