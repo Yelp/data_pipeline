@@ -10,6 +10,7 @@
     -   id: check-yaml
     -   id: debug-statements
     -   id: flake8
+        language_version: python2.7
     -   id: check-yaml
     -   id: check-json
     -   id: check-merge-conflict
