@@ -80,7 +80,8 @@ def message(topic_name, payload, registered_schema):
     return CreateMessage(
         topic=topic_name,
         schema_id=registered_schema.schema_id,
-        payload=payload
+        payload=payload,
+        timestamp=1500
     )
 
 

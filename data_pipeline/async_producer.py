@@ -101,6 +101,7 @@ class AsyncProducer(Producer):
             message (data_pipeline.message.Message): message to publish
         """
         self.queue.put(message)
+        self.monitoring_message.record_message(message)
 
     def flush(self):
         """See :meth:`data_pipeline.producer.Producer.flush`"""
@@ -193,7 +194,7 @@ class AsyncProducer(Producer):
                 flush_complete_event.set()
             else:
                 message = item
-                super(AsyncProducer, self).publish(message)
+                super(AsyncProducer, self).publish_message(message)
             item = queue.get()
         logger.debug("Shutting down the background producer")
         queue.close()

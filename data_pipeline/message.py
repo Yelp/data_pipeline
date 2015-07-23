@@ -10,6 +10,7 @@ from data_pipeline._avro_util import AvroStringWriter
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
+from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
 from data_pipeline.schema_cache import get_schema_cache
 
@@ -158,6 +159,14 @@ class Message(object):
                 "implemented.  See DATAPIPE-62 for details."
             )
         self._contains_pii = contains_pii
+
+    @property
+    def dry_run(self):
+        self._dry_run
+
+    @dry_run.setter
+    def dry_run(self, dry_run):
+        self._dry_run = dry_run
 
     @property
     def timestamp(self):
@@ -344,6 +353,10 @@ class DeleteMessage(Message):
 class RefreshMessage(Message):
 
     _message_type = MessageType.refresh
+
+
+class MonitorMessage(Message):
+    _message_type = _ProtectedMessageType.monitor
 
 
 class UpdateMessage(Message):

@@ -66,6 +66,7 @@ class Producer(Client):
                       producer.wake()
 
     Args:
+      producer_name (str): name of the producer client
       use_work_pool (bool): If true, the process will use a multiprocessing
         pool to serialize messages in preparation for transport.  The work pool
         can parallelize some expensive serialization.  Default is false.
@@ -84,9 +85,10 @@ class Producer(Client):
                 dry_run=self.dry_run
             )
 
-    def __init__(self, use_work_pool=False, dry_run=False):
+    def __init__(self, producer_name, use_work_pool=False, dry_run=False):
         # TODO(DATAPIPE-157): This should call the Client to capture information
         # about the producer
+        super(Producer, self).__init__(producer_name, 'producer')
         self.use_work_pool = use_work_pool
         self.dry_run = dry_run
 
@@ -136,6 +138,10 @@ class Producer(Client):
         Args:
             message (data_pipeline.message.Message): message to publish
         """
+        self.publish_message(message)
+        self.monitoring_message.record_message(message)
+
+    def publish_message(self, message):
         self._kafka_producer.publish(message)
 
     def ensure_messages_published(self, messages, topic_offsets):
@@ -202,6 +208,7 @@ class Producer(Client):
                 ...
                 producer.publish(message)
         """
+        self.monitoring_message.close()
         self._kafka_producer.close()
         assert len(multiprocessing.active_children()) == 0
 

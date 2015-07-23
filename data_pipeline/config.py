@@ -87,6 +87,15 @@ class Config(object):
         """
         return 0.2
 
+    @property
+    def monitoring_window_in_sec(self):
+        """Returns the duration(in sec) for which the monitoring system will count
+        the number of messages processed by the client
+        TODO(DATAPIPE-154|pujun) This should be configured with staticconf
+        """
+        return 600
+
+
 _config = Config()
 
 
