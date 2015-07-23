@@ -480,7 +480,7 @@ class UpdateMessage(Message):
 
 
 _message_type_to_class_map = {
-    o._message_type: o for o in Message.__subclasses__() if o._message_type
+    o._message_type.name: o for o in Message.__subclasses__() if o._message_type
 }
 
 

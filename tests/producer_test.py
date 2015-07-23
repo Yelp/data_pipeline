@@ -10,7 +10,6 @@ import pytest
 
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.async_producer import AsyncProducer
-from data_pipeline.message import CreateMessage
 from data_pipeline.producer import Producer
 from data_pipeline.producer import PublicationUnensurableError
 from tests.helpers.kafka_docker import capture_new_messages
@@ -54,11 +53,7 @@ class TestProducerBase(object):
 
 
 class TestProducer(TestProducerBase):
-    @pytest.fixture
-    def message_with_payload_data(self, topic_name):
-        return CreateMessage(topic_name, 10, payload_data={1: 100})
 
-    @pytest.mark.skipif(True, reason='will fix it in DATAPIPE-301')
     def test_basic_publish_message_with_payload_data(
         self,
         topic,
@@ -66,7 +61,7 @@ class TestProducer(TestProducerBase):
         producer,
         envelope
     ):
-        self.test_basic_publish(
+        self._publish_and_assert_message(
             topic,
             message_with_payload_data,
             producer,
@@ -74,6 +69,9 @@ class TestProducer(TestProducerBase):
         )
 
     def test_basic_publish(self, topic, message, producer, envelope):
+        self._publish_and_assert_message(topic, message, producer, envelope)
+
+    def _publish_and_assert_message(self, topic, message, producer, envelope):
         with capture_new_messages(topic) as get_messages:
             producer.publish(message)
             producer.flush()
