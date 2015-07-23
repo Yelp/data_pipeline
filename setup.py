@@ -35,7 +35,7 @@ setup(
         'enum34>=1.0.4',
         'kafka-python',
         'yelp_kafka',
-        'requests',
+        'requests<2.7',
         'simplejson',
         'swaggerpy'
     ],

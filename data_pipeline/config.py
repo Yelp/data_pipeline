@@ -87,6 +87,11 @@ class Config(object):
         """
         return 0.2
 
+    @property
+    def topic_creation_wait_timeout(self):
+        """Maximum time to wait for a kafka topic to be created during tests."""
+        return 60
+
 _config = Config()
 
 
