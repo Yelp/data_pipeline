@@ -2,10 +2,10 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import subprocess
 import time
 from contextlib import contextmanager
 
+from docker import Client
 from kafka import KafkaClient
 from kafka import SimpleConsumer
 from kafka.common import KafkaUnavailableError
@@ -51,19 +51,32 @@ def create_kafka_docker_topic(kafka_docker, topic):
         "--replication-factor 1 --partition 1 --topic {topic}"
     ).format(topic=topic)
 
-    subprocess.call([
-        "docker",
-        "exec",
-        "datapipeline_kafka_1",
-        "bash",
-        "-c",
-        kafka_create_topic_command
-    ])
+    _exec_docker_command(kafka_create_topic_command, 'datapipeline', 'kafka')
 
     logger.info("Waiting for topic")
-    kafka_docker.ensure_topic_exists(topic, timeout=5)
+    kafka_docker.ensure_topic_exists(
+        topic,
+        timeout=get_config().topic_creation_wait_timeout
+    )
     logger.info("Topic Exists")
     assert kafka_docker.has_metadata_for_topic(topic)
+
+
+def _exec_docker_command(command, project, service):
+    """Execs the command in the project and service container running under
+    docker-compose.
+    """
+    docker_client = Client(version='auto')
+    # intentionally letting this blow up if it can't find the container
+    # - we can't do anything if the container doesn't exist
+    container_id = next(
+        c['Id'] for c in docker_client.containers() if
+        c['Labels'].get('com.docker.compose.project') == project and
+        c['Labels'].get('com.docker.compose.service') == service
+    )
+
+    exec_id = docker_client.exec_create(container_id, command)['Id']
+    docker_client.exec_start(exec_id)
 
 
 @contextmanager
