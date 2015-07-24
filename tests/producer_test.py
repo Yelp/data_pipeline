@@ -84,9 +84,6 @@ class TestProducerBase(object):
 
 
 class TestProducer(TestProducerBase):
-    @pytest.fixture
-    def message_with_payload_data(self, topic_name):
-        return CreateMessage(topic_name, 10, payload_data={1: 100})
 
     def create_message_with_specified_timestamp(self, topic_name, payload, timestamp):
         """returns a message with a specified timestamp
@@ -328,7 +325,7 @@ class TestProducer(TestProducerBase):
         producer,
         envelope
     ):
-        self.test_basic_publish(
+        self._publish_and_assert_message(
             topic,
             message_with_payload_data,
             producer,
@@ -336,6 +333,9 @@ class TestProducer(TestProducerBase):
         )
 
     def test_basic_publish(self, topic, message, producer, envelope):
+        self._publish_and_assert_message(topic, message, producer, envelope)
+
+    def _publish_and_assert_message(self, topic, message, producer, envelope):
         with capture_new_messages(topic) as get_messages:
             producer.publish(message)
             producer.flush()

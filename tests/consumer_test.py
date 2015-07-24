@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 import multiprocessing
 import time
 
+import mock
 import pytest
 
 from data_pipeline.consumer import Consumer
@@ -32,15 +33,30 @@ faster and flake-proof
 """
 
 
+@pytest.mark.usefixtures("patch_dry_run")
 class TestConsumer(object):
+
+    @pytest.yield_fixture
+    def patch_dry_run(self):
+        with mock.patch.object(
+            Message,
+            'dry_run',
+            new_callable=mock.PropertyMock
+        ) as mock_dry_run:
+            mock_dry_run.return_value = True
+            yield mock_dry_run
 
     @property
     def test_buffer_size(self):
         return 5
 
+    @pytest.fixture
+    def producer_name(self):
+        return 'producer_1'
+
     @pytest.fixture()
-    def producer_instance(self, kafka_docker):
-        return Producer(use_work_pool=False)
+    def producer_instance(self, kafka_docker, producer_name):
+        return Producer(producer_name=producer_name, use_work_pool=False)
 
     @pytest.yield_fixture
     def producer(self, producer_instance):
@@ -100,6 +116,11 @@ class TestConsumer(object):
         create_kafka_docker_topic(kafka_docker, topic_name)
         return topic_name
 
+    @pytest.fixture(scope='module')
+    def monitor(self, kafka_docker):
+        create_kafka_docker_topic(kafka_docker, str('message-monitoring-log'))
+        return str('message-monitoring-log')
+
     def test_get_message_none(self, consumer, topic):
         message = consumer.get_message(blocking=True, timeout=TIMEOUT)
         assert message is None
@@ -111,11 +132,11 @@ class TestConsumer(object):
         assert consumer.message_buffer.empty()
         assert consumer.topic_to_consumer_topic_state_map[topic] is None
 
-    @pytest.mark.skipif(True, reason="re-enable later")
     def test_basic_iteration(
             self,
             publish_messages,
-            consumer_asserter
+            consumer_asserter,
+            monitor
     ):
         publish_messages(1)
         for msg in consumer_asserter.consumer:
@@ -126,7 +147,6 @@ class TestConsumer(object):
                 )
             break
 
-    @pytest.mark.skipif(True, reason="re-enable later")
     def test_consume_using_get_message(
             self,
             publish_messages,
@@ -142,7 +162,6 @@ class TestConsumer(object):
                 expect_buffer_empty=True
             )
 
-    @pytest.mark.skipif(True, reason="re-enable later")
     def test_consume_using_get_messages(
             self,
             publish_messages,
@@ -155,7 +174,6 @@ class TestConsumer(object):
             expect_buffer_empty=True
         )
 
-    @pytest.mark.skipif(True, reason="re-enable later")
     def test_basic_publish_retrieve_then_reset(
             self,
             publish_messages,
@@ -193,11 +211,11 @@ class TestConsumer(object):
             expect_buffer_empty=True
         )
 
-    @pytest.mark.skipif(True, reason="re-enable later")
     def test_maximum_buffer_size(
             self,
             publish_messages,
-            consumer_asserter
+            consumer_asserter,
+            monitor
     ):
         published_count = self.test_buffer_size + 1
         publish_messages(published_count)

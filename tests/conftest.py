@@ -49,9 +49,14 @@ def registered_schema(schematizer_client, example_schema):
 @pytest.fixture
 def example_schema():
     return '''
-    {"type":"record","namespace":"test","name":"test","fields":[
-        {"type":"int","name":"test"}
-    ]}
+    {
+        "type":"record",
+        "namespace":"test",
+        "name":"test",
+        "fields":[
+            {"type":"int","name":"test"}
+        ]
+    }
     '''
 
 
@@ -82,6 +87,15 @@ def message(topic_name, payload, registered_schema):
         schema_id=registered_schema.schema_id,
         payload=payload,
         timestamp=1500
+    )
+
+
+@pytest.fixture
+def message_with_payload_data(topic_name, registered_schema):
+    return CreateMessage(
+        topic=topic_name,
+        schema_id=registered_schema.schema_id,
+        payload_data={'test': 100}
     )
 
 

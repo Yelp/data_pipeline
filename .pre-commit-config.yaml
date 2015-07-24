@@ -9,7 +9,9 @@
         - --ignore=E265,E309,E501
     -   id: check-yaml
     -   id: debug-statements
+        language_version: python2.7
     -   id: flake8
+        language_version: python2.7
     -   id: check-yaml
     -   id: check-json
     -   id: check-merge-conflict
