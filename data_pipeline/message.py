@@ -162,7 +162,7 @@ class Message(object):
 
     @property
     def dry_run(self):
-        self._dry_run
+        return self._dry_run
 
     @dry_run.setter
     def dry_run(self, dry_run):
