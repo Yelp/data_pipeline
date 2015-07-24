@@ -317,7 +317,6 @@ class TestProducer(TestProducerBase):
                 message_timeslot=1
             )
 
-    @pytest.mark.skipif(True, reason='will fix it in DATAPIPE-301')
     def test_basic_publish_message_with_payload_data(
         self,
         topic,

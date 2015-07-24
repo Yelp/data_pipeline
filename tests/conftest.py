@@ -95,7 +95,8 @@ def message_with_payload_data(topic_name, registered_schema):
     return CreateMessage(
         topic=topic_name,
         schema_id=registered_schema.schema_id,
-        payload_data={'test': 100}
+        payload_data={'test': 100},
+        timestamp=1500
     )
 
 
