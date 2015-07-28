@@ -44,9 +44,6 @@ class SharedMessageTest(object):
     def test_rejects_junk_uuid(self, valid_message_data):
         self._assert_invalid_data(valid_message_data, uuid='junk')
 
-    def test_rejects_pii_data(self, valid_message_data):
-        self._assert_invalid_data(valid_message_data, NotImplementedError, contains_pii=True)
-
     def test_rejects_non_dicts_in_upstream_position_info(self, valid_message_data):
         self._assert_invalid_data(valid_message_data, upstream_position_info='test')
         self._assert_invalid_data(valid_message_data, upstream_position_info=['test'])

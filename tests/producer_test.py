@@ -11,6 +11,7 @@ import mock
 import pytest
 
 from data_pipeline._fast_uuid import FastUUID
+from data_pipeline._kafka_producer import KafkaProducer
 from data_pipeline.async_producer import AsyncProducer
 from data_pipeline.config import get_config
 from data_pipeline.message import CreateMessage
@@ -317,6 +318,23 @@ class TestProducer(TestProducerBase):
                 message_timeslot=1
             )
 
+    def test_basic_publish_message_with_pii(
+        self,
+        topic,
+        message_with_pii,
+        producer,
+        envelope
+    ):
+        with mock.patch.object(
+            KafkaProducer,
+            'skip_message_with_pii',
+            new_callable=mock.PropertyMock
+        ) as mock_config_skip_message_with_pii:
+            mock_config_skip_message_with_pii.return_value = True
+            messages = self._publish_message(topic, message_with_pii, producer)
+
+        assert len(messages) == 0
+
     def test_basic_publish_message_with_payload_data(
         self,
         topic,
@@ -334,12 +352,15 @@ class TestProducer(TestProducerBase):
     def test_basic_publish(self, topic, message, producer, envelope):
         self._publish_and_assert_message(topic, message, producer, envelope)
 
-    def _publish_and_assert_message(self, topic, message, producer, envelope):
+    def _publish_message(self, topic, message, producer):
         with capture_new_messages(topic) as get_messages:
             producer.publish(message)
             producer.flush()
 
-            messages = get_messages()
+            return get_messages()
+
+    def _publish_and_assert_message(self, topic, message, producer, envelope):
+        messages = self._publish_message(topic, message, producer)
 
         assert len(messages) == 1
         unpacked_message = envelope.unpack(messages[0].message.value)

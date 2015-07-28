@@ -102,6 +102,12 @@ class Config(object):
         """
         return 60
 
+    @property
+    def skip_message_with_pii(self):
+        """Return true if we drop the message containing pii in kafka publish.
+        """
+        return True
+
 _config = Config()
 
 
