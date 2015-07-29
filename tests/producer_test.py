@@ -11,7 +11,6 @@ import mock
 import pytest
 
 from data_pipeline._fast_uuid import FastUUID
-from data_pipeline._kafka_producer import KafkaProducer
 from data_pipeline.async_producer import AsyncProducer
 from data_pipeline.config import get_config
 from data_pipeline.message import CreateMessage
@@ -85,6 +84,15 @@ class TestProducerBase(object):
 
 
 class TestProducer(TestProducerBase):
+
+    def create_message_with_pii(self, topic_name, payload):
+        return CreateMessage(
+            topic=topic_name,
+            schema_id=10,
+            payload=payload,
+            timestamp=1500,
+            contains_pii=True
+        )
 
     def create_message_with_specified_timestamp(self, topic_name, payload, timestamp):
         """returns a message with a specified timestamp
@@ -318,20 +326,12 @@ class TestProducer(TestProducerBase):
                 message_timeslot=1
             )
 
-    def test_basic_publish_message_with_pii(
-        self,
-        topic,
-        message_with_pii,
-        producer,
-        envelope
-    ):
-        with mock.patch.object(
-            KafkaProducer,
-            'skip_message_with_pii',
-            new_callable=mock.PropertyMock
-        ) as mock_config_skip_message_with_pii:
-            mock_config_skip_message_with_pii.return_value = True
-            messages = self._publish_message(topic, message_with_pii, producer)
+    def test_basic_publish_message_with_pii(self, topic, payload, producer):
+        messages = self._publish_message(
+            topic,
+            self.create_message_with_pii(topic, payload),
+            producer
+        )
 
         assert len(messages) == 0
 

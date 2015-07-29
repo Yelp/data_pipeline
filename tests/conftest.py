@@ -101,17 +101,6 @@ def message_with_payload_data(topic_name, registered_schema):
 
 
 @pytest.fixture
-def message_with_pii(topic_name, payload, registered_schema):
-    return CreateMessage(
-        topic=topic_name,
-        schema_id=registered_schema.schema_id,
-        payload=payload,
-        timestamp=1500,
-        contains_pii=True
-    )
-
-
-@pytest.fixture
 def envelope():
     return Envelope()
 

@@ -44,17 +44,6 @@ class KafkaProducer(object):
     message_limit = 5000
     time_limit = 0.1
 
-    @property
-    def skip_message_with_pii(self):
-        """Boolean indicating if procuder will drop the message containing pii
-        or not.
-        """
-        return self._skip_message_with_pii
-
-    @skip_message_with_pii.setter
-    def skip_message_with_pii(self, val):
-        self._skip_message_with_pii = val
-
     @cached_property
     def envelope(self):
         return Envelope()

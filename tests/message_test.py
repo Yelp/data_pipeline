@@ -14,6 +14,11 @@ class SharedMessageTest(object):
     def message(self, valid_message_data):
         return self.message_class(**valid_message_data)
 
+    @pytest.fixture
+    def message_with_pii(self, valid_message_data):
+        valid_data = self._make_message_data(valid_message_data, contains_pii=True)
+        return self.message_class(**valid_data)
+
     @pytest.fixture(params=[
         None,
         100,
@@ -99,6 +104,9 @@ class SharedMessageTest(object):
 
     def test_message_type(self, message):
         assert message.message_type == self.expected_message_type
+
+    def test_message_contains_pii(self, message_with_pii):
+        assert message_with_pii.contains_pii is True
 
     def test_dry_run(self, valid_message_data):
         payload_data = {'data': 'test'}
