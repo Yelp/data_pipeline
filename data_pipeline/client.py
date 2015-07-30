@@ -14,15 +14,46 @@ logger = get_config().logger
 
 class Client(object):
     """The client superclasses both the Producer and Consumer, and is largely
-    responsible for shared producer/consumer registration responsibilities.
+    responsible for shared producer/consumer registration responsibilities and
+    monitoring.
+
+    Note:
+
+        Client will be responsible for producer/consumer registration,
+        which will be implemented in DATAPIPE-157.
 
     Args:
-        client_name (str): Name associated with the client
+        client_name (str): Name associated with the client - this name will
+            be used as the client's identifier for producer/consumer
+            registration.  This identifier should be treated as a constant
+            once defined, and should be unique per use case and application.
+
+            For example, if a team has a service with two consumers, each
+            filling a different role, and a consumer in yelp main, all three
+            should have different client names so their activity can be
+            differentiated.
+        team (str): Team name, as defined in `sensu_handlers::teams` (see
+            https://opengrok.yelpcorp.com/xref/sysgit/puppet/hieradata/common.yaml#336).
+            notification_email must be defined for a team to be registered as a
+            producer or consumer.  This information will be used to communicate
+            about data changes impacting the client.
+
+            `sensu_handlers::teams` is the canonical data source for team
+            notifications, and its usage was recommended by ops.  It was also
+            adopted for usage in ec2 instance tagging in y/cep427.
+        expected_frequency (int): How frequently, in seconds, that the client
+            expects to run to produce or consume messages.  Any positive
+            integer value can be used, but some common constants have been
+            defined in :class:`data_pipeline.expected_frequency.ExpectedFrequency`.
         client_type (str): type of the client. Can be producer or consumer
-    DATAPIPE-157
+
+    Raises:
+        InvalidTeamError: If the team specified is either not defined or does
+            not have a notification_email registered.  Ops deputies can modify
+            `sensu_handlers::teams` in puppet to add a team.
     """
 
-    def __init__(self, client_name, client_type):
+    def __init__(self, client_name, team, expected_frequency, client_type):
         self.monitoring_message = _Monitor(client_name, client_type)
         self.client_name = client_name
         self.client_type = client_type

@@ -85,10 +85,10 @@ class Producer(Client):
                 dry_run=self.dry_run
             )
 
-    def __init__(self, producer_name, use_work_pool=False, dry_run=False):
+    def __init__(self, producer_name, team, expected_frequency, use_work_pool=False, dry_run=False):
         # TODO(DATAPIPE-157): This should call the Client to capture information
         # about the producer
-        super(Producer, self).__init__(producer_name, 'producer')
+        super(Producer, self).__init__(producer_name, team, 'producer')
         self.use_work_pool = use_work_pool
         self.dry_run = dry_run
 

@@ -63,6 +63,8 @@ class Consumer(Client):
     def __init__(
             self,
             consumer_name,
+            team,
+            expected_frequency,
             topic_to_consumer_topic_state_map,
             max_buffer_size=get_config().consumer_max_buffer_size_default,
             decode_payload_in_workers=True,
