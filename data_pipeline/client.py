@@ -45,6 +45,8 @@ class Client(object):
             expects to run to produce or consume messages.  Any positive
             integer value can be used, but some common constants have been
             defined in :class:`data_pipeline.expected_frequency.ExpectedFrequency`.
+            See :class:`data_pipeline.expected_frequency.ExpectedFrequency` for
+            additional detail.
         client_type (str): type of the client. Can be producer or consumer
 
     Raises:

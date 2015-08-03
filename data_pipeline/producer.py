@@ -66,7 +66,11 @@ class Producer(Client):
                       producer.wake()
 
     Args:
-      producer_name (str): name of the producer client
+      producer_name (str): See parameter `client_name` in
+        :class:`data_pipeline.client.Client`.
+      team (str): See parameter `team` in :class:`data_pipeline.client.Client`.
+      expected_frequency (str): See parameter `expected_frequency` in
+        :class:`data_pipeline.client.Client`.
       use_work_pool (bool): If true, the process will use a multiprocessing
         pool to serialize messages in preparation for transport.  The work pool
         can parallelize some expensive serialization.  Default is false.
@@ -86,9 +90,7 @@ class Producer(Client):
             )
 
     def __init__(self, producer_name, team, expected_frequency, use_work_pool=False, dry_run=False):
-        # TODO(DATAPIPE-157): This should call the Client to capture information
-        # about the producer
-        super(Producer, self).__init__(producer_name, team, 'producer')
+        super(Producer, self).__init__(producer_name, team, expected_frequency, 'producer')
         self.use_work_pool = use_work_pool
         self.dry_run = dry_run
 

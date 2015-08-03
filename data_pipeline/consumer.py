@@ -81,8 +81,12 @@ class Consumer(Client):
             at the same time (aka configurable 'jitter').
 
         Args:
-            consumer_name (str): The name of the consumer to register with Kafka for
-                offset commits.
+            consumer_name (str): See parameter `client_name` in
+                :class:`data_pipeline.client.Client`.  The `consumer_name` will
+                be registered with Kafka to commit offsets.
+            team (str): See parameter `team` in :class:`data_pipeline.client.Client`.
+            expected_frequency (str): See parameter `expected_frequency` in
+                :class:`data_pipeline.client.Client`.
             topic_to_consumer_topic_state_map ({str:Optional(ConsumerTopicState)}):
                 A map of topic names to ``ConsumerTopicState`` objects which
                 define the offsets to start from. These objects may be `None`,
@@ -113,7 +117,7 @@ class Consumer(Client):
                 retry adding messages to the shared `multiprocess.Queue`
 
         """
-        self.consumer_name = consumer_name
+        super(Consumer, self).__init__(consumer_name, team, expected_frequency, 'consumer')
         self.max_buffer_size = max_buffer_size
         self.topic_to_consumer_topic_state_map = topic_to_consumer_topic_state_map
         self.running = False
@@ -151,10 +155,10 @@ class Consumer(Client):
         rather the Consumer should be used as a context manager, which will
         start automatically when the context enters.
         """
-        logger.info("Starting Consumer '{0}'...".format(self.consumer_name))
+        logger.info("Starting Consumer '{0}'...".format(self.client_name))
         if self.running:
             raise RuntimeError("Consumer '{0}' is already running".format(
-                self.consumer_name
+                self.client_name
             ))
 
         self._commit_topic_map_offsets()
@@ -176,19 +180,19 @@ class Consumer(Client):
         self.consumer_group_thread.setDaemon(False)
         self.consumer_group_thread.start()
         self.running = True
-        logger.info("Consumer '{0}' started".format(self.consumer_name))
+        logger.info("Consumer '{0}' started".format(self.client_name))
 
     def stop(self):
         """ Stop the Consumer. Normally this should NOT be called directly,
         rather the Consumer should be used as a context manager, which will
         stop automatically when the context exits.
         """
-        logger.info("Stopping consumer '{0}'...".format(self.consumer_name))
+        logger.info("Stopping consumer '{0}'...".format(self.client_name))
         if self.running:
             self.consumer_group.stop_group()
             self.consumer_group_thread.join()
         self.running = False
-        logger.info("Consumer '{0}' stopped".format(self.consumer_name))
+        logger.info("Consumer '{0}' stopped".format(self.client_name))
 
     def __iter__(self):
         while True:
@@ -434,7 +438,7 @@ class Consumer(Client):
     def _send_offset_commit_requests(self, offset_commit_request_list):
         if len(offset_commit_request_list) > 0:
             get_config().kafka_client.send_offset_commit_request(
-                group=kafka_bytestring(self.consumer_name),
+                group=kafka_bytestring(self.client_name),
                 payloads=offset_commit_request_list
             )
 
@@ -451,7 +455,7 @@ class Consumer(Client):
             they want their topic offsets committed via commit_messages(..)
         """
         return KafkaConsumerConfig(
-            group_id=self.consumer_name,
+            group_id=self.client_name,
             cluster=get_config().cluster_config,
             auto_offset_reset=self.auto_offset_reset,
             auto_commit=False,
