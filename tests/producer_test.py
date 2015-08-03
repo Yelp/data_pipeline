@@ -85,10 +85,10 @@ class TestProducerBase(object):
 
 class TestProducer(TestProducerBase):
 
-    def create_message_with_pii(self, topic_name, payload):
+    def create_message_with_pii(self, topic_name, payload, registered_schema):
         return CreateMessage(
             topic=topic_name,
-            schema_id=10,
+            schema_id=registered_schema.schema_id,
             payload=payload,
             timestamp=1500,
             contains_pii=True
@@ -326,10 +326,16 @@ class TestProducer(TestProducerBase):
                 message_timeslot=1
             )
 
-    def test_basic_publish_message_with_pii(self, topic, payload, producer):
+    def test_basic_publish_message_with_pii(
+        self,
+        topic,
+        payload,
+        producer,
+        registered_schema
+    ):
         messages = self._publish_message(
             topic,
-            self.create_message_with_pii(topic, payload),
+            self.create_message_with_pii(topic, payload, registered_schema),
             producer
         )
 
