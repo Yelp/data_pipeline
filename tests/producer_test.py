@@ -506,7 +506,7 @@ class TestPublishMessagesWithRetry(TestProducerBase):
         # Set time limit to 10 minutes so it flushes all messages together
         producer.time_limit = 600
         # Remove the delay between retries to speed up tests
-        producer.DEFAULT_RETRY_DELAY_SEC = 0
+        producer.delay_between_retries_in_sec = 0
         yield producer
 
     @pytest.fixture
@@ -518,12 +518,13 @@ class TestPublishMessagesWithRetry(TestProducerBase):
 
     @pytest.fixture
     def message(self, topic, registered_schema):
+        payload = str("message to retry")
         msg = CreateMessage(
             topic=topic,
             schema_id=registered_schema.schema_id,
-            payload=str("message to retry"),
+            payload=payload
         )
-        assert msg.payload == str("message to retry")
+        assert msg.payload == payload
         return msg
 
     @property
@@ -589,8 +590,7 @@ class TestPublishMessagesWithRetry(TestProducerBase):
 
             messages = consumer.get_messages()
             assert len(messages) == 0
-            assert mock_send_request.call_count == \
-                kafka_producer.DEFAULT_MAX_RETRY_COUNT
+            assert mock_send_request.call_count == kafka_producer.max_retry_count
 
     def test_kafka_producer_publish_requests_one_succeeds_another_failed_after_retry(
         self,
@@ -677,8 +677,7 @@ class TestPublishMessagesWithRetry(TestProducerBase):
         ) as producer:
             producer.publish(message)
             producer.flush()
-            assert mock_send_request.call_count == \
-                KafkaProducer.DEFAULT_MAX_RETRY_COUNT
+            assert mock_send_request.call_count == KafkaProducer.max_retry_count
         assert len(multiprocessing.active_children()) == 0
 
     def assert_equal_msgs(self, expected_msgs, actual_msgs):

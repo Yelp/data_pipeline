@@ -143,10 +143,10 @@ class KafkaProducer(object):
             )
 
     def _is_success_response(self, response):
-        """Three possible responses: success, failure, nothing (None).
-        A successful response is the one that is not an exception (for example
-        FailedPayloadsError) and has error == 0. Otherwise, it's a unsuccessful
-        response.
+        """Three possible responses: success, failure, nothing (missing).
+        A successful response is the one that is not an exception, such
+        as FailedPayloadsError, and has error == 0. Otherwise, it is an
+        unsuccessful response.
         """
         return (response and not isinstance(response, Exception) and
                 response.error == 0)
@@ -242,7 +242,7 @@ class LoggingKafkaProducer(KafkaProducer):
         try:
             super(LoggingKafkaProducer, self)._publish_produce_requests(requests)
             logger.info("All messages published successfully")
-        except Exception as e:
+        except PublishMessagesFailedError as e:
             logger.exception(
                 "Failed to publish all produce requests. {0}".format(repr(e))
             )
