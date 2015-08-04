@@ -9,10 +9,15 @@ import multiprocessing
 
 import mock
 import pytest
+from kafka.common import FailedPayloadsError
 
 from data_pipeline._fast_uuid import FastUUID
+from data_pipeline._kafka_producer import KafkaProducer
+from data_pipeline._kafka_producer import PublishMessagesFailedError
 from data_pipeline.async_producer import AsyncProducer
+from data_pipeline.client import _Monitor
 from data_pipeline.config import get_config
+from data_pipeline.envelope import Envelope
 from data_pipeline.message import CreateMessage
 from data_pipeline.message import Message
 from data_pipeline.producer import Producer
@@ -26,7 +31,6 @@ class RandomException(Exception):
     pass
 
 
-@pytest.mark.usefixtures("patch_dry_run")
 class TestProducerBase(object):
 
     @pytest.yield_fixture
@@ -83,6 +87,7 @@ class TestProducerBase(object):
         return str('message-monitoring-log')
 
 
+@pytest.mark.usefixtures("patch_dry_run")
 class TestProducer(TestProducerBase):
 
     def create_message_with_specified_timestamp(self, topic_name, payload, timestamp):
@@ -401,6 +406,7 @@ class TestProducer(TestProducerBase):
             assert len(consumer.get_messages(count=10)) == 1
 
 
+@pytest.mark.usefixtures("patch_dry_run")
 class TestEnsureMessagesPublished(TestProducerBase):
     number_of_messages = 5
 
@@ -483,3 +489,202 @@ class TestEnsureMessagesPublished(TestProducerBase):
             for message in messages
         ]
         assert payloads == range(self.number_of_messages)
+
+
+@pytest.mark.usefixtures("registered_schema")
+class TestPublishMessagesWithRetry(TestProducerBase):
+
+    def no_op(self, position_data):
+        pass
+
+    @pytest.yield_fixture
+    def kafka_producer(self):
+        producer = KafkaProducer(
+            producer_position_callback=self.no_op,
+            dry_run=False
+        )
+        # Set time limit to 10 minutes so it flushes all messages together
+        producer.time_limit = 600
+        # Remove the delay between retries to speed up tests
+        producer.DEFAULT_RETRY_DELAY_SEC = 0
+        yield producer
+
+    @pytest.fixture
+    def topic(self, kafka_docker):
+        uuid = binascii.hexlify(FastUUID().uuid4())
+        topic_name = str("publish.requests.with.retry.{0}".format(uuid))
+        create_kafka_docker_topic(kafka_docker, topic_name)
+        return topic_name
+
+    @pytest.fixture
+    def message(self, topic, registered_schema):
+        msg = CreateMessage(
+            topic=topic,
+            schema_id=registered_schema.schema_id,
+            payload=str("message to retry"),
+        )
+        assert msg.payload == str("message to retry")
+        return msg
+
+    @property
+    def another_topic(self):
+        return str("another.topic.to.publish.requests.with.retry")
+
+    @pytest.yield_fixture(scope='class', autouse=True)
+    def disable_monitor(self):
+        with mock.patch.object(
+            _Monitor,
+            'record_message',
+        ) as mock_message_monitor:
+            yield mock_message_monitor
+
+    def test_publish_all_produce_requests_without_retry(self, topic,
+                                                        message, producer):
+        with capture_new_messages(topic) as get_messages:
+            producer.publish(message)
+            producer.flush()
+            messages = get_messages()
+        self.assert_equal_msgs(expected_msgs=[message], actual_msgs=messages)
+
+    def test_kafka_producer_publish_all_requests_after_retry(self, message,
+                                                             kafka_producer):
+        orig_func = kafka_producer.kafka_client.send_produce_request
+
+        def fail_1st_time_and_succeed_2nd_time(*args, **kwargs):
+            def run_original_func(*args, **kwargs):
+                return orig_func(*args, **kwargs)
+            mock_send_request.side_effect = run_original_func
+            return FailedPayloadsError(payload=mock.Mock())
+
+        with mock.patch.object(
+            kafka_producer.kafka_client,
+            'send_produce_request',
+            side_effect=fail_1st_time_and_succeed_2nd_time
+        ) as mock_send_request, setup_capture_new_messages_consumer(
+            message.topic
+        ) as consumer:
+            # Ensure the mock_send_request call count reflects the send
+            # requests call count during publishing messages only
+            mock_send_request.reset()
+            kafka_producer.publish(message)
+            kafka_producer.flush_buffered_messages()
+
+            messages = consumer.get_messages()
+            self.assert_equal_msgs(expected_msgs=[message], actual_msgs=messages)
+            assert mock_send_request.call_count == 2
+
+    def test_kafka_producer_publish_requests_fails_after_retry(self, message,
+                                                               kafka_producer):
+        with mock.patch.object(
+            kafka_producer.kafka_client,
+            'send_produce_request',
+            side_effect=FailedPayloadsError
+        ) as mock_send_request, setup_capture_new_messages_consumer(
+            message.topic
+        ) as consumer, pytest.raises(
+            PublishMessagesFailedError
+        ):
+            kafka_producer.publish(message)
+            kafka_producer.flush_buffered_messages()
+
+            messages = consumer.get_messages()
+            assert len(messages) == 0
+            assert mock_send_request.call_count == \
+                kafka_producer.DEFAULT_MAX_RETRY_COUNT
+
+    def test_kafka_producer_publish_requests_one_succeeds_another_failed_after_retry(
+        self,
+        message,
+        kafka_producer
+    ):
+        orig_func = kafka_producer.kafka_client._get_leader_for_partition
+
+        def get_good_leader_then_bad_leader(*args, **kwargs):
+            topic = args[0] if args else kwargs['topic']
+            if topic == self.another_topic:
+                return mock.Mock("bad broker", host="-1.1.1.1", port=12345)
+            return orig_func(*args, **kwargs)
+
+        msg_failed_to_be_published = copy.copy(message)
+        msg_failed_to_be_published.topic = self.another_topic
+
+        with mock.patch.object(
+            kafka_producer.kafka_client,
+            '_get_leader_for_partition',
+            side_effect=get_good_leader_then_bad_leader
+        ), setup_capture_new_messages_consumer(
+            message.topic
+        ) as consumer, pytest.raises(
+            PublishMessagesFailedError
+        ):
+            kafka_producer.publish(message)
+            kafka_producer.publish(msg_failed_to_be_published)
+            kafka_producer.flush_buffered_messages()
+
+            messages = consumer.get_messages()
+            self.assert_equal_msgs(expected_msgs=[message], actual_msgs=messages)
+
+    def test_publish_all_produce_requests_after_retry(
+        self,
+        topic,
+        message,
+        producer
+    ):
+        # TODO: enable AsyncProducer to handle exceptions
+        if isinstance(producer, AsyncProducer):
+            return
+
+        # for async_producer, this has to be the func from another process
+        orig_func = producer._kafka_producer.kafka_client.send_produce_request
+
+        def fail_1st_time_and_succeed_2nd_time(*args, **kwargs):
+            def run_original_func(*args, **kwargs):
+                return orig_func(*args, **kwargs)
+            mock_send_request.side_effect = run_original_func
+            return FailedPayloadsError(payload=mock.Mock())
+
+        with mock.patch(
+            'kafka.client.KafkaClient.send_produce_request',
+            side_effect=fail_1st_time_and_succeed_2nd_time
+        ) as mock_send_request, setup_capture_new_messages_consumer(
+            topic
+        ) as consumer:
+            mock_send_request.reset()
+            producer.publish(message)
+            producer.flush()
+            messages = consumer.get_messages()
+            assert len(messages) == 1
+            assert mock_send_request.call_count == 2
+
+    def test_producer_publish_message_fails_after_retry(
+        self,
+        message,
+        producer_klass,
+        use_work_pool
+    ):
+        # TODO: enable AsyncProducer to handle exceptions
+        if producer_klass is AsyncProducer:
+            return
+
+        with mock.patch(
+            'kafka.client.KafkaClient.send_produce_request',
+            side_effect=FailedPayloadsError(payload=mock.Mock())
+        ) as mock_send_request, pytest.raises(
+            PublishMessagesFailedError
+        ), producer_klass(
+            producer_name="producer with retry",
+            use_work_pool=use_work_pool
+        ) as producer:
+            producer.publish(message)
+            producer.flush()
+            assert mock_send_request.call_count == \
+                KafkaProducer.DEFAULT_MAX_RETRY_COUNT
+        assert len(multiprocessing.active_children()) == 0
+
+    def assert_equal_msgs(self, expected_msgs, actual_msgs):
+        envelope = Envelope()
+        assert len(actual_msgs) == len(expected_msgs)
+        for i, actual in enumerate(actual_msgs):
+            actual_payload = envelope.unpack(actual.message.value)['payload']
+            expected_payload = expected_msgs[i].payload
+            assert actual_payload == expected_payload

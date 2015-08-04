@@ -30,16 +30,24 @@ class PooledKafkaProducer(LoggingKafkaProducer):
         super(PooledKafkaProducer, self).__init__(*args, **kwargs)
 
     def close(self):
-        logger.debug("Starting to close pooled producer")
-        super(PooledKafkaProducer, self).close()
-        logger.debug("Closing the pool")
-        assert self.message_buffer_size == 0
-        self.pool.close()
-        # Joining pools can be flakey in CPython 2.6, and the message buffer
-        # size is zero here, so terminating the pool is safe and ensure that
-        # join always works.
-        self.pool.terminate()
-        self.pool.join()
+        try:
+            logger.debug("Starting to close pooled producer")
+            super(PooledKafkaProducer, self).close()
+            assert self.message_buffer_size == 0
+            logger.debug("Closing the pool")
+            self.pool.close()
+        except:
+            logger.debug("Exception occurs when closing pooled producer.")
+            raise
+        finally:
+            # The processes in the pool should be cleaned up in all cases. The
+            # exception will be re-thrown if there is one.
+            #
+            # Joining pools can be flaky in CPython 2.6, and the message buffer
+            # size is zero here, so terminating the pool is safe and ensure that
+            # join always works.
+            self.pool.terminate()
+            self.pool.join()
 
     def _prepare_message(self, message):
         """This happens in the pool, so this is a noop"""

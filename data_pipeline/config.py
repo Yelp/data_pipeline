@@ -102,6 +102,21 @@ class Config(object):
         """
         return 60
 
+    @property
+    def delay_between_producer_retries_in_sec(self):
+        """Number of seconds to wait before the producer retries publishing the
+        messages to the kafka topics.
+        """
+        return 0.1
+
+    @property
+    def producer_max_retry_count(self):
+        """Maximum number of times the producer will retry to publish the
+        messages before giving up.
+        """
+        return 5
+
+
 _config = Config()
 
 
