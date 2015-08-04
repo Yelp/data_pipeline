@@ -535,3 +535,38 @@ def create_from_kafka_message(
         # Access the cached, but lazily-calculated, properties
         message.reload_data()
     return message
+
+
+def create_from_offset_and_message(
+        topic,
+        offset_and_message,
+        force_payload_decoding=True
+):
+    """ Build a data_pipeline.message.Message from a kafka.common.OffsetAndMessage
+
+    Args:
+        topic (str): The topic name from which the message was received.
+        offset_and_message (kafka.common.OffsetAndMessage): a namedtuple
+            containing the offset and message. Message contains magic,
+            attributes, keys and values.
+        force_payload_decoding (boolean): If this is set to `True` then
+            we will decode the payload/previous_payload immediately.
+            Otherwise the decoding will happen whenever the lazy *_data
+            properties are accessed.
+
+    Returns (data_pipeline.message.Message):
+        The message object
+    """
+    unpacked_message = Envelope().unpack(offset_and_message.message.value)
+    message_class = _message_type_to_class_map[unpacked_message['message_type']]
+    message = message_class(
+        topic=topic,
+        kafka_position_info=None,
+        uuid=unpacked_message['schema_id'],
+        schema_id=unpacked_message['schema_id'],
+        payload=unpacked_message['payload'],
+        timestamp=unpacked_message['timestamp']
+    )
+    if force_payload_decoding:
+        message.reload_data()
+    return message
