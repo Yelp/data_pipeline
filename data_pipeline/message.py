@@ -562,7 +562,7 @@ def create_from_offset_and_message(
     message = message_class(
         topic=topic,
         kafka_position_info=None,
-        uuid=unpacked_message['schema_id'],
+        uuid=unpacked_message['uuid'],
         schema_id=unpacked_message['schema_id'],
         payload=unpacked_message['payload'],
         timestamp=unpacked_message['timestamp']
