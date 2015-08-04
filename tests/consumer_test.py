@@ -11,6 +11,7 @@ import pytest
 from data_pipeline.consumer import Consumer
 from data_pipeline.consumer import ConsumerTopicState
 from data_pipeline.message import Message
+from data_pipeline.message import UpdateMessage
 from data_pipeline.producer import Producer
 from tests.helpers.kafka_docker import create_kafka_docker_topic
 
@@ -95,21 +96,8 @@ class TestConsumer(object):
         assert len(multiprocessing.active_children()) == 0
 
     @pytest.fixture
-    def consumer_asserter(
-            self,
-            consumer,
-            message,
-            topic,
-            registered_schema,
-            example_payload_data
-    ):
-        return ConsumerAsserter(
-            consumer=consumer,
-            expected_msg=message,
-            expected_topic=topic,
-            expected_schema_id=registered_schema.schema_id,
-            expected_payload_data=example_payload_data
-        )
+    def consumer_asserter(self, consumer, message):
+        return ConsumerAsserter(consumer=consumer, expected_msg=message)
 
     @pytest.fixture(scope='module')
     def topic(self, topic_name, kafka_docker):
@@ -146,6 +134,22 @@ class TestConsumer(object):
                     expect_buffer_empty=True
                 )
             break
+
+    def test_consume_update_message(self, producer, consumer, update_message):
+        producer.publish(update_message)
+        producer.flush()
+        while consumer.message_buffer.empty():
+            time.sleep(TIMEOUT)
+
+        consumer_asserter = ConsumerAsserter(
+            consumer=consumer,
+            expected_msg=update_message
+        )
+        consumer_asserter.get_and_assert_messages(
+            count=1,
+            expected_msg_count=1,
+            expect_buffer_empty=True
+        )
 
     def test_consume_using_get_message(
             self,
@@ -243,19 +247,11 @@ class ConsumerAsserter(object):
     """ Helper class to encapsulate the common assertions in the consumer tests
     """
 
-    def __init__(
-        self,
-        consumer,
-        expected_payload_data,
-        expected_msg,
-        expected_schema_id,
-        expected_topic
-    ):
+    def __init__(self, consumer, expected_msg):
         self.consumer = consumer
-        self.expected_payload_data = expected_payload_data
         self.expected_msg = expected_msg
-        self.expected_schema_id = expected_schema_id
-        self.expected_topic = expected_topic
+        self.expected_topic = expected_msg.topic
+        self.expected_schema_id = expected_msg.schema_id
 
     def get_and_assert_messages(
             self,
@@ -265,11 +261,11 @@ class ConsumerAsserter(object):
             blocking=True
     ):
         with self.consumer.ensure_committed(
-                self.consumer.get_messages(
-                    count=count,
-                    blocking=blocking,
-                    timeout=TIMEOUT
-                )
+            self.consumer.get_messages(
+                count=count,
+                blocking=blocking,
+                timeout=TIMEOUT
+            )
         ) as messages:
             assert len(messages) == expected_msg_count
             self.assert_messages(messages, expect_buffer_empty)
@@ -278,14 +274,18 @@ class ConsumerAsserter(object):
     def assert_messages(self, actual_msgs, expect_buffer_empty=None):
         assert isinstance(actual_msgs, list)
         for actual_msg in actual_msgs:
-            assert isinstance(actual_msg, Message)
-            assert actual_msg.payload == self.expected_msg.payload
-            assert actual_msg.schema_id == self.expected_schema_id
-            assert actual_msg.schema_id == self.expected_schema_id
-            assert actual_msg.topic == self.expected_msg.topic
-            assert actual_msg.topic == self.expected_topic
-            assert actual_msg.payload_data == self.expected_payload_data
+            self.assert_single_message(actual_msg, self.expected_msg)
         self.assert_consumer_state(expect_buffer_empty)
+
+    def assert_single_message(self, actual_msg, expected_msg):
+        assert isinstance(actual_msg, Message)
+        assert actual_msg.payload == expected_msg.payload
+        assert actual_msg.schema_id == expected_msg.schema_id
+        assert actual_msg.topic == expected_msg.topic
+        assert actual_msg.payload_data == expected_msg.payload_data
+        if isinstance(expected_msg, UpdateMessage):
+            assert actual_msg.previous_payload == expected_msg.previous_payload
+            assert actual_msg.previous_payload_data == expected_msg.previous_payload_data
 
     def assert_consumer_state(self, expect_buffer_empty=None):
         consume_topic_state = self.consumer.topic_to_consumer_topic_state_map[

@@ -519,18 +519,23 @@ def create_from_kafka_message(
     """
     unpacked_message = Envelope().unpack(kafka_message.value)
     message_class = _message_type_to_class_map[unpacked_message['message_type']]
-    message = message_class(
-        topic=topic,
-        kafka_position_info=KafkaPositionInfo(
+    message_params = {
+        'topic': topic,
+        'kafka_position_info': KafkaPositionInfo(
             offset=kafka_message.offset,
             partition=kafka_message.partition,
             key=kafka_message.key,
         ),
-        uuid=unpacked_message['uuid'],
-        schema_id=unpacked_message['schema_id'],
-        payload=unpacked_message['payload'],
-        timestamp=unpacked_message['timestamp']
-    )
+        'uuid': unpacked_message['uuid'],
+        'schema_id': unpacked_message['schema_id'],
+        'payload': unpacked_message['payload'],
+        'timestamp': unpacked_message['timestamp']
+    }
+    if message_class is UpdateMessage:
+        message_params.update(
+            {'previous_payload': unpacked_message['previous_payload']}
+        )
+    message = message_class(**message_params)
     if force_payload_decoding:
         # Access the cached, but lazily-calculated, properties
         message.reload_data()
