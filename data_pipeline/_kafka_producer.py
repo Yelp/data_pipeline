@@ -48,6 +48,9 @@ class KafkaProducer(object):
     message_limit = 5000
     time_limit = 0.1
 
+    delay_between_retries_in_sec = get_config().delay_between_producer_retries_in_sec
+    max_retry_count = get_config().producer_max_retry_count
+
     @cached_property
     def envelope(self):
         return Envelope()
@@ -57,8 +60,6 @@ class KafkaProducer(object):
         self.dry_run = dry_run
         self.kafka_client = get_config().kafka_client
         self.position_data_tracker = PositionDataTracker()
-        self.delay_between_retries_in_sec = get_config().delay_between_producer_retries_in_sec
-        self.max_retry_count = get_config().producer_max_retry_count
         self._reset_message_buffer()
 
     def wake(self):
