@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import ast
 import time
 from collections import namedtuple
 
@@ -329,9 +330,12 @@ class Message(object):
 
     def _decode_payload_if_necessary(self):
         if self._payload_data is None:
-            self._payload_data = self._avro_string_reader.decode(
-                encoded_message=self._payload
-            )
+            if self.dry_run:
+                return ast.literal_eval(self._payload)
+            else:
+                self._payload_data = self._avro_string_reader.decode(
+                    encoded_message=self._payload
+                )
 
     def reload_data(self):
         """Encode the payload data or decode the payload if it hasn't done so.
