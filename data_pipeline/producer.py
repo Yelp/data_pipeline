@@ -76,6 +76,11 @@ class Producer(Client):
         can parallelize some expensive serialization.  Default is false.
     """
 
+    def __init__(self, producer_name, team, expected_frequency, use_work_pool=False, dry_run=False):
+        super(Producer, self).__init__(producer_name, team, expected_frequency)
+        self.use_work_pool = use_work_pool
+        self.dry_run = dry_run
+
     @cached_property
     def _kafka_producer(self):
         if self.use_work_pool:
@@ -89,10 +94,10 @@ class Producer(Client):
                 dry_run=self.dry_run
             )
 
-    def __init__(self, producer_name, team, expected_frequency, use_work_pool=False, dry_run=False):
-        super(Producer, self).__init__(producer_name, team, expected_frequency)
-        self.use_work_pool = use_work_pool
-        self.dry_run = dry_run
+    @property
+    def client_type(self):
+        """String identifying the client type."""
+        return 'producer'
 
     def __enter__(self):
         # By default, the kafka producer is created lazily, and doesn't

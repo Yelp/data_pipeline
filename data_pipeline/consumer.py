@@ -130,6 +130,11 @@ class Consumer(Client):
         self.worker_min_sleep_time = worker_min_sleep_time
         self.worker_max_sleep_time = worker_max_sleep_time
 
+    @property
+    def client_type(self):
+        """String identifying the client type."""
+        return "consumer"
+
     def __enter__(self):
         self.start()
         return self

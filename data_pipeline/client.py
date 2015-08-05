@@ -65,8 +65,13 @@ class Client(object):
     """
 
     def __init__(self, client_name, team, expected_frequency):
-        self.monitoring_message = _Monitor(client_name, type(self).__name__.lower())
+        self.monitoring_message = _Monitor(client_name, self.client_type)
         self.client_name = client_name
+
+    @property
+    def client_type(self):
+        """String identifying the client type."""
+        raise NotImplementedError
 
 
 class _Monitor(object):
