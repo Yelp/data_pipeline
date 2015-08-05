@@ -331,7 +331,7 @@ class Message(object):
     def _decode_payload_if_necessary(self):
         if self._payload_data is None:
             if self.dry_run:
-                return ast.literal_eval(self._payload)
+                self.payload_data = ast.literal_eval(self._payload)
             else:
                 self._payload_data = self._avro_string_reader.decode(
                     encoded_message=self._payload
