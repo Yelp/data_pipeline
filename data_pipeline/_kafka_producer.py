@@ -54,6 +54,7 @@ class KafkaProducer(object):
         self.kafka_client = get_config().kafka_client
         self.position_data_tracker = PositionDataTracker()
         self._reset_message_buffer()
+        self.skip_message_with_pii = get_config().skip_message_with_pii
 
     def wake(self):
         """Should be called periodically if we're not otherwise waking up by
@@ -63,6 +64,8 @@ class KafkaProducer(object):
         self._flush_if_necessary()
 
     def publish(self, message):
+        if self.skip_message_with_pii and message.contains_pii:
+            return
         self._add_message_to_buffer(message)
         self.position_data_tracker.record_message_buffered(message)
         self._flush_if_necessary()
