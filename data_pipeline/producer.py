@@ -90,7 +90,7 @@ class Producer(Client):
             )
 
     def __init__(self, producer_name, team, expected_frequency, use_work_pool=False, dry_run=False):
-        super(Producer, self).__init__(producer_name, team, expected_frequency, 'producer')
+        super(Producer, self).__init__(producer_name, team, expected_frequency)
         self.use_work_pool = use_work_pool
         self.dry_run = dry_run
 

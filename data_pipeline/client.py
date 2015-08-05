@@ -31,12 +31,21 @@ class Client(object):
             For example, if a team has a service with two consumers, each
             filling a different role, and a consumer in yelp main, all three
             should have different client names so their activity can be
-            differentiated.
+            differentiated.  Multiple instances of a producer or consumer in the
+            same application should share a client name.  If an application is
+            both consuming and producing for the same purpose (i.e. transforming
+            and republishing a topic), the consumer and producer should share a
+            client name, otherwise the client name should be unique across
+            logical applications.
+
+            There is no need to use different client names in different
+            environments, but we do suggest namespacing.  For example,
+            `services.yelp-main.datawarehouse.rich-transformers` or
+            `services.user_tracking.review_tracker`.
         team (str): Team name, as defined in `sensu_handlers::teams` (see
-            https://opengrok.yelpcorp.com/xref/sysgit/puppet/hieradata/common.yaml#336).
-            notification_email must be defined for a team to be registered as a
-            producer or consumer.  This information will be used to communicate
-            about data changes impacting the client.
+            y/sensu-teams).  notification_email must be defined for a team to be
+            registered as a producer or consumer.  This information will be used
+            to communicate about data changes impacting the client.
 
             `sensu_handlers::teams` is the canonical data source for team
             notifications, and its usage was recommended by ops.  It was also
@@ -45,9 +54,9 @@ class Client(object):
             expects to run to produce or consume messages.  Any positive
             integer value can be used, but some common constants have been
             defined in :class:`data_pipeline.expected_frequency.ExpectedFrequency`.
+
             See :class:`data_pipeline.expected_frequency.ExpectedFrequency` for
             additional detail.
-        client_type (str): type of the client. Can be producer or consumer
 
     Raises:
         InvalidTeamError: If the team specified is either not defined or does
@@ -55,10 +64,9 @@ class Client(object):
             `sensu_handlers::teams` in puppet to add a team.
     """
 
-    def __init__(self, client_name, team, expected_frequency, client_type):
-        self.monitoring_message = _Monitor(client_name, client_type)
+    def __init__(self, client_name, team, expected_frequency):
+        self.monitoring_message = _Monitor(client_name, type(self).__name__.lower())
         self.client_name = client_name
-        self.client_type = client_type
 
 
 class _Monitor(object):
