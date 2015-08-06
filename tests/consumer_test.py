@@ -138,8 +138,6 @@ class TestConsumer(object):
     def test_consume_update_message(self, producer, consumer, update_message):
         producer.publish(update_message)
         producer.flush()
-        while consumer.message_buffer.empty():
-            time.sleep(TIMEOUT)
 
         consumer_asserter = ConsumerAsserter(
             consumer=consumer,
@@ -279,6 +277,7 @@ class ConsumerAsserter(object):
 
     def assert_single_message(self, actual_msg, expected_msg):
         assert isinstance(actual_msg, Message)
+        assert actual_msg.message_type == expected_msg.message_type
         assert actual_msg.payload == expected_msg.payload
         assert actual_msg.schema_id == expected_msg.schema_id
         assert actual_msg.topic == expected_msg.topic

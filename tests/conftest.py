@@ -103,6 +103,8 @@ def message(topic_name, payload, registered_schema, example_payload_data):
         payload=payload,
         timestamp=1500
     )
+    # TODO [DATAPIPE-249|clin] as part of refactoring and cleanup consumer
+    # tests, let's re-visit and see if these assertions are needed.
     assert msg.topic == topic_name
     assert msg.schema_id == registered_schema.schema_id
     assert msg.payload == payload
@@ -120,6 +122,8 @@ def update_message(topic_name, payload, previous_payload, registered_schema,
         previous_payload=previous_payload,
         timestamp=1500
     )
+    # TODO [DATAPIPE-249|clin] as part of refactoring and cleanup consumer
+    # tests, let's re-visit and see if these assertions are needed.
     assert msg.topic == topic_name
     assert msg.schema_id == registered_schema.schema_id
     assert msg.payload == payload
