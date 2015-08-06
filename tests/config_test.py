@@ -17,12 +17,12 @@ class TestConfigBase(object):
     def config(self):
         return get_config()
 
-
-class TestConfigDefaults(TestConfigBase):
     @pytest.fixture
     def yocalhost(self):
         return "169.254.255.254"
 
+
+class TestConfigDefaults(TestConfigBase):
     @pytest.fixture
     def broker_list(self, yocalhost):
         return ["{0}:49255".format(yocalhost)]
@@ -117,9 +117,9 @@ class TestConfigurationOverrides(TestConfigBase):
         with self.reconfigure(schematizer_host_and_port=addr):
             assert config.schematizer_host_and_port == addr
 
-    def test_load_schematizer_host_and_port_from_smartstack(self, config):
+    def test_load_schematizer_host_and_port_from_smartstack(self, config, yocalhost):
         with self.reconfigure(load_schematizer_host_and_port_from_smartstack=True):
-            assert config.schematizer_host_and_port == '169.254.255.254:20912'
+            assert config.schematizer_host_and_port == '{0}:20912'.format(yocalhost)
 
     def test_kafka_discovery(self, config, cluster_name, cluster_type):
         with self.reconfigure(
