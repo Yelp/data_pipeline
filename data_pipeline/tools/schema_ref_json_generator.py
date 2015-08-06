@@ -18,27 +18,22 @@ import csv
 import json
 
 
+def _read_rows_from_file(file_name):
+
+    rows = []
+    with open(file_name, 'rb') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            rows.append(row)
+        return rows
+
+
 if __name__ == '__main__':
 
-    owners_file = open('ref_owners.csv', 'rb')
-    owners_new_file = open('ref_owners_new.csv', 'rb')
-    tables_file = open('ref_tables.csv', 'rb')
-    cols_file = open('ref_cols.csv', 'rb')
-
-    owners_rows, owners_new_rows, tables_rows, cols_rows = [], [], [], []
-
-    reader = csv.reader(owners_file)
-    for row in reader:
-        owners_rows.append(row)
-    reader = csv.reader(owners_new_file)
-    for row in reader:
-        owners_new_rows.append(row)
-    reader = csv.reader(tables_file)
-    for row in reader:
-        tables_rows.append(row)
-    reader = csv.reader(cols_file)
-    for row in reader:
-        cols_rows.append(row)
+    owners_rows = _read_rows_from_file('ref_owners.csv')
+    owners_new_rows = _read_rows_from_file('ref_owners_new.csv')
+    tables_rows = _read_rows_from_file('ref_tables.csv')
+    cols_rows = _read_rows_from_file('ref_cols.csv')
 
     tables_rows = tables_rows[1:]
 
@@ -111,7 +106,7 @@ if __name__ == '__main__':
 
         output['docs'].append(table_output)
 
-    out_file = open('schema_ref.json', 'wb')
-    out_file.write(json.dumps(output))
-    out_file.close()
+    with open('schema_ref.json', 'wb') as outfile:
+        out_file.write(json.dumps(output))
+        out_file.close()
 
