@@ -30,8 +30,12 @@ class Config(object):
         return KafkaClient(self.cluster_config.broker_list)
 
     @property
+    def schematizer_port(self):
+        return 49256
+
+    @property
     def schematizer_host_and_port(self):
-        return '{0}:49256'.format(self.yocalhost)
+        return '{0}:{1}'.format(self.yocalhost, self.schematizer_port)
 
     @property
     def schematizer_client(self):

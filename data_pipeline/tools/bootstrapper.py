@@ -3,273 +3,208 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import glob
+import inspect
 import optparse
+import sys
 from os import path
 from pprint import pformat
+from socket import gethostname
 
 import simplejson as json
 import yelp_batch
-from cached_property import cached_property
 from yelp_batch.batch import batch_command_line_options
-from yelp_batch.batch import batch_configure
 
 from data_pipeline.config import get_config
+from data_pipeline.schema_ref import SchemaRef
 
 
-class Bootstrapper(yelp_batch.batch.Batch):
+class FileBootstrapperBase(object):
 
-    notify_emails = ['bam+batch@yelp.com']
+    log = get_config().logger
 
-    @batch_command_line_options
-    def parse_options(self, option_parser):
-        # Add a new option group and some options for your batch
-        opt_group = optparse.OptionGroup(option_parser, "Bootstrapper Options")
-        opt_group.add_option(
-            '--sql',
-            action='append',
-            type='string',
-            default=[],
-            dest='sql_globs',
-            help='Either a path to a specific MySQL *.sql file, or a glob '
-                 'pattern for a directory of mysql *.sql files. (For example: '
-                 '"/nail/home/USER/pg/yelp-main/schema/yelp_dw/tables/*.sql") '
-                 'Note that this can be provided multiple times.'
-        )
-        opt_group.add_option(
-            '--avsc',
-            action='append',
-            type='string',
-            default=[],
-            dest='avsc_globs',
-            help='Either a path to a specific avro *.avsc file, or a glob '
-                 'pattern for a directory of avro *.avsc files. (For example: '
-                 '"/nail/home/USERNAME/my_avro_schemas/*.avsc")'
-                 'Note that this can be provided multiple times.'
-        )
-        opt_group.add_option(
-            '--schema-ref',
-            type='string',
-            help='File path to load the schema reference json document from.'
-                 'See https://jira.yelpcorp.com/browse/DATAPIPE-259 for more'
-                 'information on the schema reference json format.'
-        )
-        opt_group.add_option(
-            '--source-owner',
-            default='bam@yelp.com',
-            type='string',
-            help='Owner email of the bootstrapped tables, if none provided by '
-                 'the schema-ref. '
-                 'Default is %default'
-        )
-        opt_group.add_option(
-            '--doc-owner',
-            default='bam@yelp.com',
-            type='string',
-            help='Email of the default owner for the documentation of '
-                 'bootstrapped tables, if none is provided by the schema-ref. '
-                 'The documentation owner will be known as the last to update '
-                 'the descriptions and notes within the bootstrapped tables. '
-                 'Default is %default'
-        )
-        opt_group.add_option(
-            '--namespace',
-            type='string',
-            help='Default namespace to register schemas to, if none provided '
-                 'by the schema-ref.'
-        )
-        opt_group.add_option(
-            '--doc-default',
-            default='',
-            type='string',
-            help='Default documentation string for any table descriptions and'
-                 'column descriptions which are not provided by the'
-                 'schema-ref'
-                 'Default is "%default"'
-        )
-        return opt_group
-
-    @batch_configure
-    def configure(self):
-        pass
-
-    @property
-    def api(self):
-        """ Swaggerpy schematizer client api object
+    def __init__(self, schema_ref, file_paths, file_extension=None):
         """
-        return get_config().schematizer_client
-
-    @cached_property
-    def schema_ref(self):
-        """ If a schema ref is specified, load, parse, and return it. Otherwise
-        return an empty dictionary. See DATAPIPE-259 for more information on the
-        schema ref format.
+        Args:
+            schema_ref(SchemaRef): Schema Ref to use for looking up metadata
+            file_paths(list[str]):
+            file_extension(str): Must be specified by subclasses, this should be
+                string specifying the file extension the subclass operates on,
+                for example 'sql' or 'avsc'
         """
-        schema_ref = {}
-        if self.options.schema_ref:
-            with open(self.options.schema_ref) as schema_ref_file:
-                schema_ref = json.load(schema_ref_file)
-        return schema_ref
+        self.api = get_config().schematizer_client
+        self.log = get_config().logger
+        self.schema_ref = schema_ref
+        self.file_extension = file_extension
+        self.file_paths = [
+            file_path
+            for file_path in file_paths
+            if self.is_correct_file_extension(file_path)
+        ]
 
-    @cached_property
-    def source_to_ref_map(self):
-        """ A dictionary that maps source name to schema ref node. If
-        no schema ref is loaded, this will return an empty dictionary.
+    def register_file(self, file_path):
+        """ Register a file specified and return the schema
+        registration results. Subclasses must implement this to handle
+        their own file type appropriately.
         """
-        source_to_ref_map = {
-            ref['source']: ref for ref in self.schema_ref.get('docs', [])
-        }
-        return source_to_ref_map
+        raise NotImplementedError("Subclasses should implement this!")
 
-    @cached_property
-    def doc_owner(self):
-        """ The documentation owner as defined by the schema_ref, falling back
-        to the specified default if none was provided.
-        """
-        return self.schema_ref.get('doc_owner', self.options.doc_owner)
+    def is_correct_file_extension(self, file_path):
+        return file_path.endswith(self.file_extension)
 
-    @cached_property
-    def doc_default(self):
-        """ The default documentation string if none was provided.
-        """
-        return self.options.doc_default
+    def logged_register_file(self, file_path):
+        self.log.info('-' * 40)
+        self.log.info('- Registering *.{0} file: {1}'.format(
+            self.file_extension,
+            file_path
+        ))
+        return self.register_file(file_path)
 
-    @cached_property
-    def sql_file_paths(self):
-        """ A list of file paths to *.sql files which are to be bootstrapped
-        into the schematizer. Possible to be an empty list.
-        """
-        return self.resolve_glob_patterns(self.options.sql_globs)
-
-    @cached_property
-    def avsc_file_paths(self):
-        """ A list of file paths to *.avsc files which are to be bootstrapped
-        into the schematizer. Possible to be an empty list.
-        """
-        return self.resolve_glob_patterns(self.options.avsc_globs)
-
-    def resolve_glob_patterns(self, glob_patterns):
-        file_paths = []
-        for glob_pattern in glob_patterns:
-            file_paths += glob.glob(glob_pattern)
-        return file_paths
-
-    def get_source_owner_for_source(self, source):
-        ref = self.source_to_ref_map.get(source, None)
-        if ref:
-            return ref.get('owner_email', self.options.source_owner)
-        else:
-            return self.options.source_owner
-
-    def get_namespace_for_source(self, source):
-        ref = self.source_to_ref_map.get(source, None)
-        if ref:
-            return ref.get('namespace', self.options.namespace)
-        else:
-            return self.options.namespace
-
-    def register_avsc_files(self):
-        """ Register all *.avsc files specified and return a dictionary mapping
-        the source names to the schema registration results.
+    def bootstrap_files(self):
+        """ Register all specified files and return a list of the final
+        schema results
         """
         self.log.info(
-            'Found the following *.avsc files: {0}'.format(self.avsc_file_paths)
+            'Found the following *.{0} files: {1}'.format(
+                self.file_extension,
+                self.file_paths
+            )
         )
-        source_to_schema_result_map = {}
-        for avsc_file_path in self.avsc_file_paths:
-            self.log.info('-' * 80)
-            self.log.info('- Registering file: {0}'.format(avsc_file_path))
-            with open(avsc_file_path) as avsc_file:
-                avsc_content = avsc_file.read()
-                avsc = json.loads(avsc_content)
-                source = avsc['name']
-                namespace = avsc['namespace']
-                resp = self.register_avsc(
-                    avsc_content=avsc_content,
-                    namespace=namespace,
-                    source=source,
-                    source_owner=self.get_source_owner_for_source(source)
-                )
-                source_to_schema_result_map[source] = resp
-        return source_to_schema_result_map
+        return [self.bootstrap_file(file_path) for file_path in self.file_paths]
 
-    def register_avsc(self, avsc_content, namespace, source, source_owner):
-        self.log.info(
-            '\n - Registering avsc content:\n{}'.format(avsc_content)
+    def bootstrap_file(self, file_path):
+        """ Bootstrap a file with all metadata from schema_ref and
+        return the final swaggerpy schema_result
+        """
+        schema_result = self.logged_register_file(file_path)
+        return self.bootstrap_schema_result(schema_result)
+
+    def bootstrap_schema_result(self, schema_result):
+        """ Bootstraps a swaggerpy schema_result with all metadata from
+        schema_ref (docs, notes, etc) and return the final schema_result.
+        """
+        source_ref = self.schema_ref.get_source_ref(
+            schema_result.topic.source.source
+        )
+        if not source_ref:
+            return schema_result
+
+        # Updating the docs first, since it requires re-registering with
+        # a modified avro schema
+        schema_result = self.register_schema_docs(
+            schema_result=schema_result,
+            source_ref=source_ref
+        )
+
+        # Now we can register other attributes which have their own API
+        # endpoints, such as categories, file_sources, and notes.
+        schema_json = json.loads(schema_result.schema)
+        schema_id = schema_result.schema_id
+        self.register_schema_note(
+            schema_result=schema_result,
+            note=self.schema_ref.get_ref_val(source_ref, 'note')
+        )
+        self.register_category(
+            source_id=schema_result.topic.source.source_id,
+            category=self.schema_ref.get_ref_val(source_ref, 'category')
+        )
+        self.register_file_source(
+            schema_id=schema_id,
+            display=self.schema_ref.get_ref_val(source_ref, 'file_display'),
+            url=self.schema_ref.get_ref_val(source_ref, 'file_url')
+        )
+        self.register_fields_notes(
+            schema_id=schema_id,
+            schema_json=schema_json,
+            fields_ref=source_ref.get('fields', [])
+        )
+        return schema_result
+
+    def logged_api_call(self, api_method, **kwargs):
+        self.log.info(" - Calling {} with args:\n{}".format(
+            repr(api_method),
+            pformat(kwargs)
+        ))
+        result = api_method(**kwargs).result()
+        self.log.info(" - Result: {}".format(result))
+        return result
+
+    def register_schema_docs(self, schema_result, source_ref):
+        """ Update the "doc" attributes of the schema and all it's fields,
+        returning back the result of the register_schema call.
+        """
+        source = schema_result.topic.source.source
+        schema_json = json.loads(schema_result.schema)
+        schema_json['doc'] = self.schema_ref.get_ref_val(source_ref, 'doc')
+        schema_json = self.update_field_docs(
+            schema_json=schema_json,
+            fields_ref=source_ref.get('fields', [])
         )
         return self.logged_api_call(
             self.api.schemas.register_schema,
             body={
-                'schema': avsc_content,
-                'namespace': namespace,
+                'base_schema_id': schema_result.schema_id,
+                'schema': json.dumps(schema_json),
+                'namespace': self.schema_ref.get_source_val(
+                    source,
+                    'namespace'
+                ),
                 'source': source,
-                'source_owner_email': source_owner
+                'source_owner_email': self.schema_ref.get_source_val(
+                    source,
+                    'owner_email'
+                ),
+                'contains_pii': self.schema_ref.get_source_val(
+                    source,
+                    'contains_pii'
+                )
             }
         )
-
-    def register_sql_files(self):
-        """ Register all *.sql files specified and return a dictionary mapping
-        the source names to the schema registration results.
-        """
-        self.log.info(
-            'Found the following *.sql files: {0}'.format(self.sql_file_paths)
-        )
-        source_to_schema_result_map = {
-            self.get_source_from_sql_file_path(sql_file_path):
-                self.register_sql_file(sql_file_path)
-            for sql_file_path in self.sql_file_paths
-        }
-        return source_to_schema_result_map
-
-    def get_source_from_sql_file_path(self, sql_file_path):
-        """ Get a source name for the source by chopping off the `.sql` from
-        the filename. Luckily all our tables follow this naming convention.
-        """
-        return path.split(sql_file_path)[1][:-4]
-
-    def register_sql_file(self, sql_file_path):
-        self.log.info('-' * 80)
-        self.log.info('- Registering file: {}'.format(sql_file_path))
-        with open(sql_file_path) as sql_file:
-            source = self.get_source_from_sql_file_path(sql_file_path)
-            resp = self.register_sql(
-                sql_content=sql_file.read(),
-                namespace=self.get_namespace_for_source(source),
-                source=source,
-                source_owner=self.get_source_owner_for_source(source)
-            )
-        return resp
-
-    def register_sql(self, sql_content, namespace, source, source_owner):
-        self.log.info(
-            '\n - Registering sql content:\n{0}'.format(sql_content)
-        )
-        return self.logged_api_call(
-            self.api.schemas.register_schema_from_mysql_stmts,
-            body={
-                'new_create_table_stmt': sql_content,
-                'namespace': namespace,
-                'source': source,
-                'source_owner_email': source_owner
-            }
-        )
-
-    def register_category(self, schema_id, category):
-        # TODO (joshszep|DATAPIPE-243) - after category API is implemented
-        pass
-
-    def register_file_source(self, schema_id, display, url):
-        # TODO (joshszep|DATAPIPE-324) - after file source API is implemented
-        pass
 
     def update_field_docs(self, schema_json, fields_ref):
+        """ Update the "doc" attributes of the fields of a schema.
+        """
         field_to_ref_map = {
             field_ref['name']: field_ref for field_ref in fields_ref
         }
         for field_json in schema_json['fields']:
-            field_json['doc'] = self.get_doc_for_ref(
-                field_to_ref_map.get(field_json['name'])
-            )
+            field_ref = field_to_ref_map.get(field_json['name'])
+            field_json['doc'] = self.schema_ref.get_ref_val(field_ref, 'doc')
         return schema_json
+
+    def register_schema_note(self, schema_result, note):
+        if note is None:
+            return
+        if schema_result.note:
+            self.logged_api_call(
+                self.api.notes.update_note,
+                note_id=schema_result.note.id,
+                body={
+                    'note': note,
+                    'last_updated_by': self.schema_ref.doc_owner
+                }
+            )
+        else:
+            self.logged_api_call(
+                self.api.notes.create_note,
+                body={
+                    'reference_id': schema_result.schema_id,
+                    'reference_type': 'schema',
+                    'note': note,
+                    'last_updated_by': self.schema_ref.doc_owner
+                }
+            )
+
+    def register_category(self, source_id, category):
+        if category is not None:
+            self.logged_api_call(
+                self.api.sources.update_category,
+                source_id=source_id,
+                body={'category': category}
+            )
+
+    def register_file_source(self, schema_id, display, url):
+        # TODO (joshszep|DATAPIPE-324) - after file source API is implemented
+        pass
 
     def register_fields_notes(self, schema_id, schema_json, fields_ref):
         field_to_ref_map = {
@@ -280,7 +215,8 @@ class Bootstrapper(yelp_batch.batch.Batch):
             schema_id=schema_id
         )
         field_to_schema_element_map = {
-            result.key.split('|')[-1]: result for result in results
+            self.get_field_name_from_schema_element(result): result
+            for result in results
             if result.element_type != 'record'
         }
         for field_json in schema_json['fields']:
@@ -289,18 +225,23 @@ class Bootstrapper(yelp_batch.batch.Batch):
             if not field_ref:
                 continue
             self.upsert_schema_element_note(
-                note=field_ref.get('note', ''),
+                note=self.schema_ref.get_ref_val(field_ref, 'note'),
                 schema_element=field_to_schema_element_map[field_name]
             )
 
+    def get_field_name_from_schema_element(self, schema_element):
+        return schema_element.key.split('|')[-1]
+
     def upsert_schema_element_note(self, note, schema_element):
+        if note is None:
+            return
         if schema_element.note:
             return self.logged_api_call(
                 self.api.notes.update_note,
                 note_id=schema_element.note.id,
                 body={
                     'note': note,
-                    'last_updated_by': self.doc_owner
+                    'last_updated_by': self.schema_ref.doc_owner
                 }
             )
         else:
@@ -310,100 +251,268 @@ class Bootstrapper(yelp_batch.batch.Batch):
                     'reference_id': schema_element.id,
                     'reference_type': 'schema_element',
                     'note': note,
-                    'last_updated_by': self.doc_owner
+                    'last_updated_by': self.schema_ref.doc_owner
                 }
             )
 
-    def upsert_schema_note(self, source, schema_result):
-        ref = self.source_to_ref_map.get(source, {})
-        note = ref.get('note', '')
-        if schema_result.note:
-            return self.logged_api_call(
-                self.api.notes.update_note,
-                note_id=schema_result.note.id,
-                body={
-                    'note': note,
-                    'last_updated_by': self.doc_owner
-                }
+
+class AVSCBootstrapper(FileBootstrapperBase):
+    """ A file bootstrapper to bootstrap Avro *.avsc json files. Expects all
+    files to be formatted following the specification for a data pipeline
+    message. See `data_pipeline/schemas/monitoring_message_v1.avsc` for
+    an example.
+    """
+
+    def __init__(self, schema_ref, file_paths):
+        super(AVSCBootstrapper, self).__init__(
+            schema_ref, file_paths, file_extension='avsc'
+        )
+
+    def register_file(self, file_path):
+        with open(file_path) as avsc_file:
+            avsc_content = avsc_file.read()
+            avsc = json.loads(avsc_content)
+            source = avsc['name']
+            return self.register_avsc(
+                avsc_content=avsc_content,
+                namespace=avsc['namespace'],
+                source=source,
+                source_owner=self.schema_ref.get_source_val(
+                    source,
+                    'owner_email'
+                ),
+                contains_pii=self.schema_ref.get_source_val(
+                    source,
+                    'contains_pii'
+                )
             )
-        else:
-            return self.logged_api_call(
-                self.api.notes.create_note,
-                body={
-                    'reference_id': schema_result.schema_id,
-                    'reference_type': 'schema',
-                    'note': note,
-                    'last_updated_by': self.doc_owner
-                }
-            )
 
-    def logged_api_call(self, api_method, **kwargs):
-        self.log.info(" - Calling {0} with args:\n{1}".format(
-            repr(api_method),
-            pformat(kwargs)
-        ))
-        result = api_method(**kwargs).result()
-        self.log.info(" - Result: {0}".format(result))
-        return result
-
-    def get_doc_for_ref(self, ref):
-        return ref.get('doc', self.doc_default) if ref else self.doc_default
-
-    def update_source_docs(self, source, schema_result, source_ref):
-        """ Update the "doc" attributes of the schema and all it's fields,
-        returning back the result of the register_schema call.
-        """
-        if not source_ref:
-            return schema_result
-        schema_json = json.loads(schema_result.schema)
-        schema_json['doc'] = self.get_doc_for_ref(source_ref)
-        schema_json = self.update_field_docs(
-            schema_json=schema_json,
-            fields_ref=source_ref.get('fields')
+    def register_avsc(
+            self,
+            avsc_content,
+            namespace,
+            source,
+            source_owner,
+            contains_pii
+    ):
+        self.log.info(
+            '\n - Registering avsc content:\n{}'.format(avsc_content)
         )
         return self.logged_api_call(
             self.api.schemas.register_schema,
             body={
-                'base_schema_id': schema_result.schema_id,
-                'schema': json.dumps(schema_json),
-                'namespace': self.get_namespace_for_source(source),
+                'schema': avsc_content,
+                'namespace': namespace,
                 'source': source,
-                'source_owner_email': self.get_source_owner_for_source(source)
+                'source_owner_email': source_owner,
+                'contains_pii': contains_pii
             }
         )
 
+
+class MySQLBootstrapper(FileBootstrapperBase):
+    """ A file bootstrapper to bootstrap MySQL *.sql files. Expects all
+    files to contain a CREATE TABLE statement and nothing more.
+    """
+
+    def __init__(self, schema_ref, file_paths):
+        super(MySQLBootstrapper, self).__init__(
+            schema_ref, file_paths, file_extension='sql'
+        )
+
+    def register_file(self, file_path):
+        with open(file_path) as sql_file:
+            source = self.get_source_from_sql_file_path(file_path)
+            resp = self.register_sql(
+                sql_content=sql_file.read(),
+                namespace=self.schema_ref.get_source_val(
+                    source,
+                    'namespace'
+                ),
+                source=source,
+                source_owner=self.schema_ref.get_source_val(
+                    source,
+                    'owner_email'
+                ),
+                contains_pii=self.schema_ref.get_source_val(
+                    source,
+                    'contains_pii'
+                )
+            )
+        return resp
+
+    def register_sql(
+            self,
+            sql_content,
+            namespace,
+            source,
+            source_owner,
+            contains_pii
+    ):
+        self.log.info(
+            '\n - Registering sql content:\n{}'.format(sql_content)
+        )
+        return self.logged_api_call(
+            self.api.schemas.register_schema_from_mysql_stmts,
+            body={
+                'new_create_table_stmt': sql_content,
+                'namespace': namespace,
+                'source': source,
+                'source_owner_email': source_owner,
+                'contains_pii': contains_pii
+            }
+        )
+
+    def get_source_from_sql_file_path(self, sql_file_path):
+        """ Get a source name for the source by chopping off the `.sql` from
+        the filename. Luckily all our tables follow this naming convention.
+        """
+        return path.split(sql_file_path)[1][:-4]
+
+
+def is_file_bootstrapper_class(obj):
+    return inspect.isclass(obj) and FileBootstrapperBase in obj.__bases__
+
+FILE_BOOTSTRAPPER_CLASSES = [
+    obj for _, obj in inspect.getmembers(sys.modules[__name__], is_file_bootstrapper_class)
+]
+
+
+class BootstrapperBatch(yelp_batch.batch.Batch):
+
+    notify_emails = ['bam+batch@yelp.com']
+
+    @batch_command_line_options
+    def parse_options(self, option_parser):
+        opt_group = optparse.OptionGroup(option_parser, "Bootstrapper Options")
+        opt_group.add_option(
+            '--glob',
+            action='append',
+            type='string',
+            default=[],
+            dest='globs',
+            help='[REQUIRED] Either a path to a specific MySQL *.sql file, a '
+                 'specific Avro *.avsc file, or a glob pattern for a directory '
+                 'containing such files. (For example: '
+                 '"/nail/home/USER/pg/yelp-main/schema/yelp_dw/tables/*.sql") '
+                 'Note --glob may be provided multiple times.'
+        )
+        opt_group.add_option(
+            '--schema-ref',
+            type='string',
+            help='File path to load the schema reference json document from.'
+                 'See https://jira.yelpcorp.com/browse/DATAPIPE-259 for more'
+                 'information on the schema reference json format.'
+        )
+        opt_group.add_option(
+            '--default-source-owner',
+            default='bam@yelp.com',
+            type='string',
+            help='Owner email of the bootstrapped tables, if none provided by '
+                 'the schema-ref. '
+                 'Default is %default'
+        )
+        opt_group.add_option(
+            '--default-doc-owner',
+            default='bam@yelp.com',
+            type='string',
+            help='Email of the default owner for the documentation of '
+                 'bootstrapped tables, if none is provided by the schema-ref. '
+                 'The documentation owner will be known as the last to update '
+                 'the descriptions and notes within the bootstrapped tables. '
+                 'Default is %default'
+        )
+        opt_group.add_option(
+            '--default-namespace',
+            type='string',
+            help='Default namespace to register schemas to, if none provided '
+                 'by the schema-ref.'
+        )
+        opt_group.add_option(
+            '--default-docstring',
+            default='',
+            type='string',
+            help='Default documentation string for any table descriptions and'
+                 'column descriptions which are not provided by the'
+                 'schema-ref. '
+                 'Default is "%default"'
+        )
+        opt_group.add_option(
+            '--default-contains-pii',
+            action="store_true",
+            default=False,
+            help='Default to mark schemas as containing pii, if not otherwise'
+                 'specified by the schema-ref. '
+                 'Default is "%default"'
+        )
+        opt_group.add_option(
+            '--default-category',
+            type='string',
+            default=None,
+            help='Default category for schemas, if none provided by the '
+                 'schema-ref. If this is not provided the schemas will be '
+                 '"[ Uncategorized ]".'
+        )
+        opt_group.add_option(
+            '--http-host',
+            default='http://' + gethostname(),
+            type='string',
+            help='Web hostname. Only used for reporting the links to the doc'
+                 'tool view of the schemas which were registered during the '
+                 'run. '
+                 'Default is "%default"'
+        )
+        return opt_group
+
     def run(self):
-        source_to_schema_result_map = self.register_sql_files()
-        source_to_schema_result_map.update(self.register_avsc_files())
+        """ Primary entry point for the batch
+        """
 
-        source_to_source_ids = {}
-        for source, schema_result in source_to_schema_result_map.iteritems():
-            source_ref = self.source_to_ref_map.get(source, None)
-            result = self.update_source_docs(source, schema_result, source_ref)
-            source_to_source_ids[source] = result.topic.source.source_id
-            if not source_ref:
-                continue
+        schema_ref = SchemaRef.load_from_file(
+            schema_ref_path=self.options.schema_ref,
+            defaults={
+                'doc_owner': self.options.default_doc_owner,
+                'owner_email': self.options.default_source_owner,
+                'namespace': self.options.default_namespace,
+                'doc': self.options.default_docstring,
+                'contains_pii': bool(self.options.default_contains_pii),
+                'category': self.options.default_category
+            }
+        )
+        FileBootstrapperBase.log = self.log  # Specify our logger as the logger
+        file_paths = self.get_files_from_glob_patterns(
+            self.options.globs
+        )
+        schema_results = []
+        for bootstrapper_cls in FILE_BOOTSTRAPPER_CLASSES:
+            bootstrapper = bootstrapper_cls(schema_ref, file_paths)
+            schema_results += bootstrapper.bootstrap_files()
 
-            schema_json = json.loads(result.schema)
-            schema_id = result.schema_id
+        self.log_result_urls(schema_results)
 
-            self.upsert_schema_note(source, result)
-            self.register_category(
-                schema_id=schema_id,
-                category=source_ref.get('category')
+    def get_files_from_glob_patterns(self, glob_patterns):
+        """ Return a list of files matching the given list of glob patterns
+         (for example ["./test.sql", "./other_tables/*.sql"])
+        """
+        file_paths = []
+        for glob_pattern in glob_patterns:
+            file_paths += glob.glob(glob_pattern)
+        return file_paths
+
+    def log_result_urls(self, schema_results):
+        self.log.info("Completed updating the following tables:")
+        for schema_result in schema_results:
+            self.log.info(
+                '{host}/web/#/table?schema={namespace}&table={source}'.format(
+                    host='{}:{}'.format(
+                        self.options.http_host,
+                        get_config().schematizer_port
+                    ),
+                    namespace=schema_result.topic.source.namespace.name,
+                    source=schema_result.topic.source.source
+                )
             )
-            self.register_file_source(
-                schema_id=schema_id,
-                display=source_ref.get('file_display'),
-                url=source_ref.get('file_url')
-            )
-            self.register_fields_notes(
-                schema_id=schema_id,
-                schema_json=schema_json,
-                fields_ref=source_ref.get('fields')
-            )
-        self.log.info(pformat(source_to_source_ids))
 
 
 if __name__ == "__main__":
-    Bootstrapper().start()
+    BootstrapperBatch().start()
