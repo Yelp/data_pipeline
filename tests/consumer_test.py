@@ -8,6 +8,8 @@ import time
 import mock
 import pytest
 
+from data_pipeline._avro_util import AvroStringWriter
+from data_pipeline._avro_util import generate_payload_data
 from data_pipeline.consumer import Consumer
 from data_pipeline.consumer import ConsumerTopicState
 from data_pipeline.message import Message
@@ -134,6 +136,38 @@ class TestConsumer(object):
                     expect_buffer_empty=True
                 )
             break
+
+    @pytest.fixture
+    def example_prev_payload_data(self, example_schema_obj):
+        return generate_payload_data(example_schema_obj)
+
+    @pytest.fixture
+    def previous_payload(self, example_schema_obj, example_prev_payload_data):
+        return AvroStringWriter(
+            example_schema_obj
+        ).encode(
+            example_prev_payload_data
+        )
+
+    @pytest.fixture
+    def update_message(self, topic, payload, previous_payload, registered_schema,
+                       example_payload_data, example_prev_payload_data):
+        msg = UpdateMessage(
+            topic=topic,
+            schema_id=registered_schema.schema_id,
+            payload=payload,
+            previous_payload=previous_payload,
+            timestamp=1500
+        )
+        # TODO [DATAPIPE-249|clin] as part of refactoring and cleanup consumer
+        # tests, let's re-visit and see if these assertions are needed.
+        assert msg.topic == topic
+        assert msg.schema_id == registered_schema.schema_id
+        assert msg.payload == payload
+        assert msg.payload_data == example_payload_data
+        assert msg.previous_payload == previous_payload
+        assert msg.previous_payload_data == example_prev_payload_data
+        return msg
 
     def test_consume_update_message(self, producer, consumer, update_message):
         producer.publish(update_message)
@@ -276,7 +310,6 @@ class ConsumerAsserter(object):
         self.assert_consumer_state(expect_buffer_empty)
 
     def assert_single_message(self, actual_msg, expected_msg):
-        assert isinstance(actual_msg, Message)
         assert actual_msg.message_type == expected_msg.message_type
         assert actual_msg.payload == expected_msg.payload
         assert actual_msg.schema_id == expected_msg.schema_id
