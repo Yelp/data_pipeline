@@ -2,10 +2,21 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import pytest
 import simplejson as json
 
 
 class TestSchemaCache(object):
+
+    @pytest.fixture
+    def schema_id_and_topic(self, schema_cache, registered_schema):
+        return schema_cache.register_schema_from_mysql_stmts(
+            new_create_table_stmt='create table foo(id int(11));',
+            namespace='test_namespace',
+            source='test_source',
+            owner_email='test_owner@yelp.com',
+            contains_pii=False
+        )
 
     def test_get_transformed_schema_id(self, schema_cache):
         assert schema_cache.get_transformed_schema_id(0) is None
@@ -108,3 +119,54 @@ class TestSchemaCache(object):
         assert transformed_id == schema_id
         assert schema_id == schema_id2
         assert topic == topic2
+
+    def test_register_schema_from_mysql_stmts(
+        self,
+        schematizer_client,
+        schema_cache,
+        schema_id_and_topic
+    ):
+        schema_id, topic = schema_id_and_topic
+        schema_response = schematizer_client.schemas.get_schema_by_id(
+            schema_id=schema_id
+        ).result()
+        schema = schema_cache.get_schema(schema_id=schema_id)
+        assert schema_response.schema == schema
+        assert schema_response.topic.name == topic
+        assert schema_response.topic.source.namespace.name == 'test_namespace'
+        assert schema_response.topic.source.source == 'test_source'
+
+    def test_register_schema_from_mysql_stmts_alter(
+        self,
+        schema_cache,
+        schema_id_and_topic
+    ):
+        _, topic_origin = schema_id_and_topic
+        _, topic = schema_cache.register_schema_from_mysql_stmts(
+            new_create_table_stmt='create table foo(id int(1), val int(1));',
+            old_create_table_stmt='create table foo(id int(1));',
+            alter_table_stmt='alter table foo add val int(1);',
+            namespace='test_namespace',
+            source='test_source',
+            owner_email='test_owner@yelp.com',
+            contains_pii=False
+        )
+        assert topic_origin == topic
+
+    def test_register_schema_from_mysql_stmts_different_pii(
+        self,
+        schema_cache,
+        schema_id_and_topic
+    ):
+        _, topic_origin = schema_id_and_topic
+        _, topic = schema_cache.register_schema_from_mysql_stmts(
+            new_create_table_stmt='create table foo(id varchar(1), val int(1));',
+            old_create_table_stmt='create table foo(id int(1), val int(1));',
+            alter_table_stmt='alter table foo alter column id type varchar(1);',
+            namespace='test_namespace',
+            source='test_source',
+            owner_email='test_owner@yelp.com',
+            contains_pii=True
+        )
+        assert topic_origin != topic
+

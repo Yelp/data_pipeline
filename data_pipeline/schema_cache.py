@@ -79,6 +79,49 @@ class SchemaCache(object):
         self.schema_id_to_topic_map[transformed_id] = new_topic_name
         return register_response.schema_id, new_topic_name
 
+    def register_schema_from_mysql_stmts(
+            self,
+            new_create_table_stmt,
+            namespace,
+            source,
+            owner_email,
+            contains_pii,
+            old_create_table_stmt="",
+            alter_table_stmt="",
+    ):
+        """ Register schema based on mysql statements and return it's schema_id
+            and topic.
+
+        Args:
+            new_create_table_stmt (str): the sql statement of creating new table.
+            old_create_table_stmt (str): the sql statement of creating old table.
+            alter_table_stmt (str): the sql statement of altering table schema.
+            namespace (str): The namespace the new schema should be registered to.
+            source (str): The source the new schema should be registered to.
+            owner_email (str): The owner email for the new schema.
+            contains_pii (bool): The flag indicating if schema contains pii.
+
+        Returns:
+            (int, string): The new schema_id and the new topic name
+        """
+        request_body = {
+            'new_create_table_stmt': new_create_table_stmt,
+            'old_create_table_stmt': old_create_table_stmt,
+            'alter_table_stmt': alter_table_stmt,
+            'namespace': namespace,
+            'source': source,
+            'source_owner_email': owner_email,
+            'contains_pii': contains_pii
+        }
+        register_response = self.schematizer_client.schemas.register_schema_from_mysql_stmts(
+            body=request_body
+        ).result()
+        transformed_id = register_response.schema_id
+        self.schema_id_to_schema_map[transformed_id] = register_response.schema
+        new_topic_name = register_response.topic.name
+        self.schema_id_to_topic_map[transformed_id] = new_topic_name
+        return register_response.schema_id, new_topic_name
+
     def get_topic_for_schema_id(self, schema_id):
         """ Get the topic name for a given schema_id
 
