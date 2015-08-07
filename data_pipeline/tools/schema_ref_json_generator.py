@@ -27,6 +27,24 @@ def _read_rows_from_file(file_name):
             rows.append(row)
         return rows
 
+def _parse_col_row(row):
+
+    _, _, col_name, pos, _, nullable, write_once, data_type, _, _, _, _, description, _, notes = row
+
+    if nullable == 'NO':
+        data_type += ' not null'
+    if write_once == 'YES':
+        data_type += ' write once'
+
+    if notes.strip() == '0':
+        notes = ''
+
+    return {
+        'name': col_name,
+        'doc': description,
+        'note': notes,
+    }
+
 
 if __name__ == '__main__':
 
@@ -86,23 +104,7 @@ if __name__ == '__main__':
         col_rows = filter(lambda row: row[0] == schema and row[1] == name, cols_rows)
 
         for row in col_rows:
-
-            _, _, col_name, pos, _, nullable, write_once, data_type, _, _, _, _, description, _, notes = row
-
-            if nullable == 'NO':
-                data_type += ' not null'
-            if write_once == 'YES':
-                data_type += ' write once'
-
-            if notes.strip() == '0':
-                notes = ''
-
-            col_output = {
-                'name': col_name,
-                'doc': description,
-                'note': notes,
-            }
-            table_output['fields'].append(col_output)
+            table_output['fields'].append(_parse_col_row(row))
 
         output['docs'].append(table_output)
 
