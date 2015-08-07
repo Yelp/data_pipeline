@@ -39,7 +39,8 @@ lint:
 	tox -e style
 
 test:.venv.touch
-	tox $(REBUILD_FLAG)
+	# This will timeout after 15 minutes, in case there is a hang on jenkins
+	timeout -9 900 tox $(REBUILD_FLAG)
 
 docs:
 	tox -e docs
