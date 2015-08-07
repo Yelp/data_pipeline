@@ -32,7 +32,8 @@ class TestSchemaCache(object):
             namespace='test_namespace',
             source='test_source',
             schema=example_schema,
-            owner_email='test_owner@yelp.com'
+            owner_email='test_owner@yelp.com',
+            contains_pii=False
         )
         schema_response = schematizer_client.schemas.get_schema_by_id(
             schema_id=schema_id
@@ -57,14 +58,16 @@ class TestSchemaCache(object):
             namespace='test_namespace',
             source='test_source',
             schema=example_schema,
-            owner_email='test_owner@yelp.com'
+            owner_email='test_owner@yelp.com',
+            contains_pii=False,
         )
         schema_id2, topic2 = schema_cache.register_transformed_schema(
             base_schema_id=registered_schema.schema_id,
             namespace='test_namespace2',
             source='test_source2',
             schema=example_schema,
-            owner_email='test_owner@yelp.com'
+            owner_email='test_owner@yelp.com',
+            contains_pii=False,
         )
         transformed_id = schema_cache.get_transformed_schema_id(
             schema_id=registered_schema.schema_id
@@ -88,14 +91,16 @@ class TestSchemaCache(object):
             namespace='test_namespace',
             source='test_source',
             schema=example_schema,
-            owner_email='test_owner@yelp.com'
+            owner_email='test_owner@yelp.com',
+            contains_pii=False,
         )
         schema_id2, topic2 = schema_cache.register_transformed_schema(
             base_schema_id=registered_schema.schema_id,
             namespace='test_namespace',
             source='test_source',
             schema=example_schema,
-            owner_email='test_owner@yelp.com'
+            owner_email='test_owner@yelp.com',
+            contains_pii=False,
         )
         transformed_id = schema_cache.get_transformed_schema_id(
             schema_id=registered_schema.schema_id

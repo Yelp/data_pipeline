@@ -36,12 +36,13 @@ class SchemaCache(object):
         return self.base_to_transformed_schema_id_map.get(schema_id, None)
 
     def register_transformed_schema(
-            self,
-            base_schema_id,
-            namespace,
-            source,
-            schema,
-            owner_email
+        self,
+        base_schema_id,
+        namespace,
+        source,
+        schema,
+        owner_email,
+        contains_pii
     ):
         """ Register a new schema and return it's schema_id and topic
 
@@ -53,6 +54,9 @@ class SchemaCache(object):
             source (str): The source the new schema should be registered to.
             schema (str): The new schema in json string representation.
             owner_email (str): The owner email for the new schema.
+            contains_pii (bool): Indicates that the schema being registered has
+                at least one field that can potentially contain PII.
+                See http://y/pii for help identifying what is or is not PII.
 
         Returns:
             (int, string): The new schema_id and the new topic name
@@ -62,7 +66,8 @@ class SchemaCache(object):
             'schema': schema,
             'namespace': namespace,
             'source': source,
-            'source_owner_email': owner_email
+            'source_owner_email': owner_email,
+            'contains_pii': contains_pii,
         }
         register_response = self.schematizer_client.schemas.register_schema(
             body=request_body

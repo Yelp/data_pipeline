@@ -85,6 +85,15 @@ class TestProducerBase(object):
 
 class TestProducer(TestProducerBase):
 
+    def create_message_with_pii(self, topic_name, payload, registered_schema):
+        return CreateMessage(
+            topic=topic_name,
+            schema_id=registered_schema.schema_id,
+            payload=payload,
+            timestamp=1500,
+            contains_pii=True
+        )
+
     def create_message_with_specified_timestamp(self, topic_name, payload, timestamp):
         """returns a message with a specified timestamp
         """
@@ -317,6 +326,21 @@ class TestProducer(TestProducerBase):
                 message_timeslot=1
             )
 
+    def test_basic_publish_message_with_pii(
+        self,
+        topic,
+        payload,
+        producer,
+        registered_schema
+    ):
+        messages = self._publish_message(
+            topic,
+            self.create_message_with_pii(topic, payload, registered_schema),
+            producer
+        )
+
+        assert len(messages) == 0
+
     def test_basic_publish_message_with_payload_data(
         self,
         topic,
@@ -334,12 +358,15 @@ class TestProducer(TestProducerBase):
     def test_basic_publish(self, topic, message, producer, envelope):
         self._publish_and_assert_message(topic, message, producer, envelope)
 
-    def _publish_and_assert_message(self, topic, message, producer, envelope):
+    def _publish_message(self, topic, message, producer):
         with capture_new_messages(topic) as get_messages:
             producer.publish(message)
             producer.flush()
 
-            messages = get_messages()
+            return get_messages()
+
+    def _publish_and_assert_message(self, topic, message, producer, envelope):
+        messages = self._publish_message(topic, message, producer)
 
         assert len(messages) == 1
         unpacked_message = envelope.unpack(messages[0].message.value)
