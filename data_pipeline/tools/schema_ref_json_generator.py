@@ -65,7 +65,7 @@ if __name__ == '__main__':
 
         schema, name, category, description, _, _, notes, _ = row
         table_output = {
-            'namespace': schema + '_v1',
+            'namespace': schema
             'source': name,
             'doc': description,
             'note': notes,
