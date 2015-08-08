@@ -24,6 +24,7 @@
     -   id: httplib-https-connection
     -   id: use-except-as
     -   id: check_mock_methods
+        language_version: python2.7
     -   id: byte_order_mark
     -   id: fix-encoding-pragma
     -   id: check-added-large-files
