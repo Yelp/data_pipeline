@@ -3,8 +3,12 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import pytest
+from kafka import create_message
+from kafka.common import OffsetAndMessage
 
 from data_pipeline import message as dp_message
+from data_pipeline.envelope import Envelope
+from data_pipeline.message import create_from_offset_and_message
 from data_pipeline.message_type import MessageType
 
 
@@ -13,6 +17,10 @@ class SharedMessageTest(object):
     @pytest.fixture
     def message(self, valid_message_data):
         return self.message_class(**valid_message_data)
+
+    @pytest.fixture
+    def offset_and_message(self, message):
+        return OffsetAndMessage(0, create_message(Envelope().pack(message)))
 
     @pytest.fixture(params=[
         None,
@@ -113,6 +121,14 @@ class SharedMessageTest(object):
         )
         dry_run_message = self.message_class(**message_data)
         assert dry_run_message.payload == repr(payload_data)
+
+    def test_create_from_offset_and_message(self, offset_and_message, valid_message_data):
+        extracted_message = create_from_offset_and_message(
+            topic=str('my-topic'),
+            offset_and_message=offset_and_message
+        )
+        assert extracted_message.topic == valid_message_data['topic']
+        assert extracted_message.schema_id == valid_message_data['schema_id']
 
 
 class PayloadOnlyMessageTest(SharedMessageTest):
