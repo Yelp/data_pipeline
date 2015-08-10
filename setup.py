@@ -34,7 +34,9 @@ setup(
         'cffi',
         'enum34>=1.0.4',
         'kafka-python',
+        'PyStaticConfiguration',
         'yelp_kafka',
+        'yelp_servlib',
         'simplejson',
         'swaggerpy'
     ],
