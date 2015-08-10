@@ -14,6 +14,9 @@ Usage:
         - ref_owners_new.csv    Updated Version
     3. run the script and the output will be in schema_ref.json
 """
+from __future__ import absolute_import
+from __future__ import unicode_literals
+
 import csv
 import json
 
@@ -26,6 +29,7 @@ def _read_rows_from_file(file_name):
         for row in reader:
             rows.append(row)
         return rows
+
 
 def _parse_col_row(row):
 
@@ -109,6 +113,5 @@ if __name__ == '__main__':
         output['docs'].append(table_output)
 
     with open('schema_ref.json', 'wb') as outfile:
-        out_file.write(json.dumps(output))
-        out_file.close()
-
+        outfile.write(json.dumps(output))
+        outfile.close()
