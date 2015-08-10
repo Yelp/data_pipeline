@@ -86,33 +86,35 @@ class SchemaCache(object):
             source,
             owner_email,
             contains_pii,
-            old_create_table_stmt="",
-            alter_table_stmt="",
+            old_create_table_stmt=None,
+            alter_table_stmt=None,
     ):
         """ Register schema based on mysql statements and return it's schema_id
             and topic.
 
         Args:
             new_create_table_stmt (str): the sql statement of creating new table.
-            old_create_table_stmt (str): the sql statement of creating old table.
-            alter_table_stmt (str): the sql statement of altering table schema.
             namespace (str): The namespace the new schema should be registered to.
             source (str): The source the new schema should be registered to.
             owner_email (str): The owner email for the new schema.
             contains_pii (bool): The flag indicating if schema contains pii.
+            old_create_table_stmt (str optional): the sql statement of creating old table.
+            alter_table_stmt (str optional): the sql statement of altering table schema.
 
         Returns:
             (int, string): The new schema_id and the new topic name
         """
         request_body = {
             'new_create_table_stmt': new_create_table_stmt,
-            'old_create_table_stmt': old_create_table_stmt,
-            'alter_table_stmt': alter_table_stmt,
             'namespace': namespace,
             'source': source,
             'source_owner_email': owner_email,
             'contains_pii': contains_pii
         }
+        if old_create_table_stmt:
+            request_body['old_create_table_stmt'] = old_create_table_stmt
+        if alter_table_stmt:
+            request_body['alter_table_stmt'] = alter_table_stmt
         register_response = self.schematizer_client.schemas.register_schema_from_mysql_stmts(
             body=request_body
         ).result()

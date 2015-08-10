@@ -169,4 +169,3 @@ class TestSchemaCache(object):
             contains_pii=True
         )
         assert topic_origin != topic
-
