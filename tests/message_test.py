@@ -19,10 +19,6 @@ class SharedMessageTest(object):
         return self.message_class(**valid_message_data)
 
     @pytest.fixture
-    def offset_and_message(self, message):
-        return OffsetAndMessage(0, create_message(Envelope().pack(message)))
-
-    @pytest.fixture
     def message_with_pii(self, valid_message_data):
         valid_data = self._make_message_data(valid_message_data, contains_pii=True)
         return self.message_class(**valid_data)
@@ -126,14 +122,6 @@ class SharedMessageTest(object):
         )
         dry_run_message = self.message_class(**message_data)
         assert dry_run_message.payload == repr(payload_data)
-
-    def test_create_from_offset_and_message(self, offset_and_message, valid_message_data):
-        extracted_message = create_from_offset_and_message(
-            topic=str('my-topic'),
-            offset_and_message=offset_and_message
-        )
-        assert extracted_message.topic == valid_message_data['topic']
-        assert extracted_message.schema_id == valid_message_data['schema_id']
 
 
 class PayloadOnlyMessageTest(SharedMessageTest):
@@ -243,3 +231,20 @@ class TestUpdateMessage(SharedMessageTest):
             previous_payload=bytes(10),
             previous_payload_data={'foo': 'bar'}
         )
+
+
+class TestCreateFromMessageAndOffset(object):
+
+    @pytest.fixture
+    def offset_and_message(self, message):
+        return OffsetAndMessage(0, create_message(Envelope().pack(message)))
+
+    def test_create_from_offset_and_message(self, offset_and_message, message):
+        extracted_message = create_from_offset_and_message(
+            topic=message.topic,
+            offset_and_message=offset_and_message
+        )
+        assert extracted_message.topic == message.topic
+        assert extracted_message.schema_id == message.schema_id
+        assert extracted_message.payload == message.payload
+        assert extracted_message.payload_data == message.payload_data
