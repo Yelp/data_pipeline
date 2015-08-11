@@ -519,29 +519,12 @@ def create_from_kafka_message(
     Returns (data_pipeline.message.Message):
         The message object
     """
-    unpacked_message = Envelope().unpack(kafka_message.value)
-    message_class = _message_type_to_class_map[unpacked_message['message_type']]
-    message_params = {
-        'topic': topic,
-        'kafka_position_info': KafkaPositionInfo(
-            offset=kafka_message.offset,
-            partition=kafka_message.partition,
-            key=kafka_message.key,
-        ),
-        'uuid': unpacked_message['uuid'],
-        'schema_id': unpacked_message['schema_id'],
-        'payload': unpacked_message['payload'],
-        'timestamp': unpacked_message['timestamp']
-    }
-    if message_class is UpdateMessage:
-        message_params.update(
-            {'previous_payload': unpacked_message['previous_payload']}
-        )
-    message = message_class(**message_params)
-    if force_payload_decoding:
-        # Access the cached, but lazily-calculated, properties
-        message.reload_data()
-    return message
+    return _create_message_helper(
+        topic=topic,
+        packed_message=kafka_message,
+        force_payload_decoding=force_payload_decoding,
+        append_kafka_position_info=True
+    )
 
 
 def create_from_offset_and_message(
@@ -564,16 +547,59 @@ def create_from_offset_and_message(
     Returns (data_pipeline.message.Message):
         The message object
     """
-    unpacked_message = Envelope().unpack(offset_and_message.message.value)
-    message_class = _message_type_to_class_map[unpacked_message['message_type']]
-    message = message_class(
+    return _create_message_helper(
         topic=topic,
-        kafka_position_info=None,
-        uuid=unpacked_message['uuid'],
-        schema_id=unpacked_message['schema_id'],
-        payload=unpacked_message['payload'],
-        timestamp=unpacked_message['timestamp']
+        packed_message=offset_and_message.message,
+        force_payload_decoding=True,
+        append_kafka_position_info=False
     )
+
+
+def _create_message_helper(
+    topic,
+    packed_message,
+    force_payload_decoding,
+    append_kafka_position_info
+):
+    """ Builds a data_pipeline.message.Message from packed_message
+    Args:
+        topic (str): The topic name from which the message was received.
+        packed_message (yelp_kafka.consumer.Message or kafka.common.Message):
+            The message info which has the payload, offset, partition,
+            and key of the received message if of type yelp_kafka.consumer.message
+            or just payload, uuid, schema_id in case of kafka.common.Message.
+        force_payload_decoding (boolean): If this is set to `True` then
+            we will decode the payload/previous_payload immediately.
+            Otherwise the decoding will happen whenever the lazy *_data
+            properties are accessed.
+        append_kafka_position_info (boolean): If this is set to `True` then
+            we will construct kafka_position_info for resulting message
+            from the unpacked_message. Otherwise kafka_position_info will
+            be set to None.
+
+    Returns (data_pipeline.message.Message):
+        The message object
+    """
+    unpacked_message = Envelope().unpack(packed_message.value)
+    message_class = _message_type_to_class_map[unpacked_message['message_type']]
+    message_params = {
+        'topic': topic,
+        'uuid': unpacked_message['uuid'],
+        'schema_id': unpacked_message['schema_id'],
+        'payload': unpacked_message['payload'],
+        'timestamp': unpacked_message['timestamp']
+    }
+    message_params['kafka_position_info'] = KafkaPositionInfo(
+        offset=packed_message.offset,
+        partition=packed_message.partition,
+        key=packed_message.key,
+    ) if append_kafka_position_info else None
+    if message_class is UpdateMessage:
+        message_params.update(
+            {'previous_payload': unpacked_message['previous_payload']}
+        )
+    message = message_class(**message_params)
     if force_payload_decoding:
+        # Access the cached, but lazily-calculated, properties
         message.reload_data()
     return message
