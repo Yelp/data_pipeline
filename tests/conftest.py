@@ -19,6 +19,7 @@ from tests.config_test import reconfigure
 from tests.helpers.containers import Containers
 from tests.helpers.kafka_docker import KafkaDocker
 
+
 logging.basicConfig(
     level=logging.DEBUG,
     filename='logs/test.log',
@@ -78,6 +79,11 @@ def payload(example_schema_obj, example_payload_data):
     return AvroStringWriter(example_schema_obj).encode(example_payload_data)
 
 
+@pytest.fixture
+def example_previous_payload_data(example_schema_obj):
+    return generate_payload_data(example_schema_obj)
+
+
 @pytest.fixture(scope='module')
 def topic_name():
     return str(UUID(bytes=FastUUID().uuid4()).hex)
@@ -89,13 +95,20 @@ def team_name():
 
 
 @pytest.fixture
-def message(topic_name, payload, registered_schema):
-    return CreateMessage(
+def message(topic_name, payload, registered_schema, example_payload_data):
+    msg = CreateMessage(
         topic=topic_name,
         schema_id=registered_schema.schema_id,
         payload=payload,
         timestamp=1500
     )
+    # TODO [DATAPIPE-249|clin] as part of refactoring and cleanup consumer
+    # tests, let's re-visit and see if these assertions are needed.
+    assert msg.topic == topic_name
+    assert msg.schema_id == registered_schema.schema_id
+    assert msg.payload == payload
+    assert msg.payload_data == example_payload_data
+    return msg
 
 
 @pytest.fixture
