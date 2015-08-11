@@ -118,7 +118,12 @@ class Consumer(Client):
                 retry adding messages to the shared `multiprocess.Queue`
 
         """
-        super(Consumer, self).__init__(consumer_name, team_name, expected_frequency)
+        super(Consumer, self).__init__(
+            consumer_name,
+            team_name,
+            expected_frequency,
+            monitoring_enabled=False
+        )
         self.max_buffer_size = max_buffer_size
         self.topic_to_consumer_topic_state_map = topic_to_consumer_topic_state_map
         self.running = False

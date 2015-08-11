@@ -10,11 +10,23 @@ from data_pipeline.expected_frequency import ExpectedFrequency
 
 @pytest.mark.usefixtures('configure_teams')
 class TestClient(object):
+    @property
+    def client_name(self):
+        return 'test_client'
+
+    @property
+    def team_name(self):
+        return 'bam'
+
+    @property
+    def expected_frequency(self):
+        return 0
+
     def _build_client(self, **override_kwargs):
         args = dict(
-            client_name='test_client',
-            team_name='bam',
-            expected_frequency=0,
+            client_name=self.client_name,
+            team_name=self.team_name,
+            expected_frequency=self.expected_frequency,
             monitoring_enabled=False
         )
         args.update(override_kwargs)
@@ -48,6 +60,6 @@ class TestClient(object):
             self._build_client(**client_kwargs)
 
     def _assert_valid(self, client):
-        assert client.client_name == 'test_client'
-        assert client.team_name == 'bam'
-        assert client.expected_frequency == 0
+        assert client.client_name == self.client_name
+        assert client.team_name == self.team_name
+        assert client.expected_frequency == self.expected_frequency
