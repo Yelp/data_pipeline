@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import logging
+import os
 from uuid import UUID
 
 import pytest
@@ -14,6 +15,7 @@ from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import CreateMessage
 from data_pipeline.schema_cache import get_schema_cache
+from tests.config_test import reconfigure
 from tests.helpers.containers import Containers
 from tests.helpers.kafka_docker import KafkaDocker
 
@@ -81,6 +83,11 @@ def topic_name():
     return str(UUID(bytes=FastUUID().uuid4()).hex)
 
 
+@pytest.fixture()
+def team_name():
+    return 'bam'
+
+
 @pytest.fixture
 def message(topic_name, payload, registered_schema):
     return CreateMessage(
@@ -115,3 +122,13 @@ def containers():
 @pytest.fixture(scope='session')
 def kafka_docker(containers):
     return KafkaDocker.get_connection()
+
+
+@pytest.yield_fixture
+def configure_teams():
+    config_path = os.path.join(
+        os.path.dirname(__file__),
+        'config/teams.yaml'
+    )
+    with reconfigure(data_pipeline_teams_config_file_path=config_path):
+        yield

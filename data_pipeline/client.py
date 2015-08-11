@@ -6,7 +6,9 @@ import socket
 
 from data_pipeline._kafka_producer import LoggingKafkaProducer
 from data_pipeline.config import get_config
+from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import MonitorMessage
+from data_pipeline.team import Team
 
 
 logger = get_config().logger
@@ -42,7 +44,7 @@ class Client(object):
             environments, but we do suggest namespacing.  For example,
             `services.yelp-main.datawarehouse.rich-transformers` or
             `services.user_tracking.review_tracker`.
-        team (str): Team name, as defined in `sensu_handlers::teams` (see
+        team_name (str): Team name, as defined in `sensu_handlers::teams` (see
             y/sensu-teams).  notification_email must be defined for a team to be
             registered as a producer or consumer.  This information will be used
             to communicate about data changes impacting the client.
@@ -50,13 +52,19 @@ class Client(object):
             `sensu_handlers::teams` is the canonical data source for team
             notifications, and its usage was recommended by ops.  It was also
             adopted for usage in ec2 instance tagging in y/cep427.
-        expected_frequency (int): How frequently, in seconds, that the client
-            expects to run to produce or consume messages.  Any positive
-            integer value can be used, but some common constants have been
-            defined in :class:`data_pipeline.expected_frequency.ExpectedFrequency`.
+        expected_frequency (int, ExpectedFrequency): How frequently, in seconds,
+            that the client expects to run to produce or consume messages.
+            Any positive integer value can be used, but some common constants
+            have been defined in
+            :class:`data_pipeline.expected_frequency.ExpectedFrequency`.
 
             See :class:`data_pipeline.expected_frequency.ExpectedFrequency` for
             additional detail.
+        monitoring_enabled (bool): Enables the clients emission of monitoring
+            messages.
+
+            TODO(justinc|DATAPIPE-341): khuang will flush out a dry-run mode for
+            monitoring messages in DATAPIPE-341.
 
     Raises:
         InvalidTeamError: If the team specified is either not defined or does
@@ -64,9 +72,53 @@ class Client(object):
             `sensu_handlers::teams` in puppet to add a team.
     """
 
-    def __init__(self, client_name, team, expected_frequency):
-        self.monitoring_message = _Monitor(client_name, self.client_type)
+    def __init__(self, client_name, team_name, expected_frequency, monitoring_enabled=True):
+        if monitoring_enabled:
+            self.monitoring_message = _Monitor(client_name, self.client_type)
         self.client_name = client_name
+        self.team_name = team_name
+        self.expected_frequency = expected_frequency
+
+    @property
+    def client_name(self):
+        """Name associated with the client"""
+        return self._client_name
+
+    @client_name.setter
+    def client_name(self, client_name):
+        if not (isinstance(client_name, str) or isinstance(client_name, unicode)) or len(client_name) == 0:
+            raise ValueError("Client name must be non-empty text")
+        self._client_name = client_name
+
+    @property
+    def team_name(self):
+        """Team associated with the client"""
+        return self._team_name
+
+    @team_name.setter
+    def team_name(self, team_name):
+        if not Team.exists(team_name):
+            raise ValueError(
+                "Team name must exist: see the team_name argument at "
+                "y/dp_client_docs for detailed information about adding a team."
+            )
+        self._team_name = team_name
+
+    @property
+    def expected_frequency(self):
+        """How frequently, in seconds, that the client expects to run to produce
+        or consume messages.
+        """
+        return self._expected_frequency
+
+    @expected_frequency.setter
+    def expected_frequency(self, expected_frequency):
+        if isinstance(expected_frequency, ExpectedFrequency):
+            expected_frequency = expected_frequency.value
+
+        if not (isinstance(expected_frequency, int) and expected_frequency >= 0):
+            raise ValueError("Client name must be non-empty text")
+        self._expected_frequency = expected_frequency
 
     @property
     def client_type(self):

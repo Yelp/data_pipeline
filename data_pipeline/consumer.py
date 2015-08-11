@@ -63,7 +63,7 @@ class Consumer(Client):
     def __init__(
             self,
             consumer_name,
-            team,
+            team_name,
             expected_frequency,
             topic_to_consumer_topic_state_map,
             max_buffer_size=get_config().consumer_max_buffer_size_default,
@@ -84,7 +84,8 @@ class Consumer(Client):
             consumer_name (str): See parameter `client_name` in
                 :class:`data_pipeline.client.Client`.  The `consumer_name` will
                 be registered with Kafka to commit offsets.
-            team (str): See parameter `team` in :class:`data_pipeline.client.Client`.
+            team_name (str): See parameter `team_name` in
+                :class:`data_pipeline.client.Client`.
             expected_frequency (str): See parameter `expected_frequency` in
                 :class:`data_pipeline.client.Client`.
             topic_to_consumer_topic_state_map ({str:Optional(ConsumerTopicState)}):
@@ -117,7 +118,7 @@ class Consumer(Client):
                 retry adding messages to the shared `multiprocess.Queue`
 
         """
-        super(Consumer, self).__init__(consumer_name, team, expected_frequency)
+        super(Consumer, self).__init__(consumer_name, team_name, expected_frequency)
         self.max_buffer_size = max_buffer_size
         self.topic_to_consumer_topic_state_map = topic_to_consumer_topic_state_map
         self.running = False

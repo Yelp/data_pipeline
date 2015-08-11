@@ -9,7 +9,8 @@ To use Data Pipeline Clientlib in a project::
 To use a Consumer::
 
     >>> from data_pipeline.consumer import Consumer
-    >>> Consumer('test', {}) # doctest: +ELLIPSIS
+    >>> from data_pipeline.expected_frequency import ExpectedFrequency
+    >>> Consumer('test', 'bam', ExpectedFrequency.constantly, {}) # doctest: +ELLIPSIS
     <data_pipeline.consumer.Consumer object at 0x...>
 
 And another thing::

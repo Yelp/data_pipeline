@@ -10,6 +10,7 @@ import pytest
 
 from data_pipeline.consumer import Consumer
 from data_pipeline.consumer import ConsumerTopicState
+from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import Message
 from data_pipeline.producer import Producer
 from tests.helpers.kafka_docker import create_kafka_docker_topic
@@ -33,7 +34,7 @@ faster and flake-proof
 """
 
 
-@pytest.mark.usefixtures("patch_dry_run")
+@pytest.mark.usefixtures("patch_dry_run", 'configure_teams')
 class TestConsumer(object):
 
     @pytest.yield_fixture
@@ -55,8 +56,13 @@ class TestConsumer(object):
         return 'producer_1'
 
     @pytest.fixture()
-    def producer_instance(self, kafka_docker, producer_name):
-        return Producer(producer_name=producer_name, use_work_pool=False)
+    def producer_instance(self, kafka_docker, producer_name, team_name):
+        return Producer(
+            producer_name=producer_name,
+            team_name=team_name,
+            expected_frequency=ExpectedFrequency.constantly,
+            use_work_pool=False
+        )
 
     @pytest.yield_fixture
     def producer(self, producer_instance):
@@ -80,9 +86,11 @@ class TestConsumer(object):
         {'decode_payload_in_workers': False},
         {'decode_payload_in_workers': True},
     ])
-    def consumer_instance(self, request, topic, kafka_docker):
+    def consumer_instance(self, request, topic, kafka_docker, team_name):
         return Consumer(
             consumer_name='test_consumer',
+            team_name=team_name,
+            expected_frequency=ExpectedFrequency.constantly,
             topic_to_consumer_topic_state_map={topic: None},
             max_buffer_size=self.test_buffer_size,
             decode_payload_in_workers=request.param['decode_payload_in_workers']
