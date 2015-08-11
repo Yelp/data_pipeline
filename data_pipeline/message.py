@@ -70,6 +70,10 @@ class Message(object):
             track these objects and provide them back from the producer to
             identify the last message that was successfully published, both
             overall and per topic.
+        keys (tuple of str, optional): This should either be a tuple of strings
+            or None.  If it's a tuple of strings, the clientlib will combine
+            those strings and use them as a key when publishing into Kafka.
+            This is currently unimplemented - see DATAPIPE-268 for details.
         dry_run (boolean): When set to True, Message will return a string
             representation of the payload and previous payload, instead of
             the avro encoded message.  This is to avoid loading the schema
@@ -271,6 +275,7 @@ class Message(object):
         timestamp=None,
         upstream_position_info=None,
         kafka_position_info=None,
+        keys=None,
         dry_run=False
     ):
         # The decision not to just pack the message to validate it is
@@ -386,6 +391,7 @@ class UpdateMessage(Message):
         timestamp=None,
         upstream_position_info=None,
         kafka_position_info=None,
+        keys=None,
         dry_run=False
     ):
         super(UpdateMessage, self).__init__(
@@ -398,6 +404,7 @@ class UpdateMessage(Message):
             timestamp=timestamp,
             upstream_position_info=upstream_position_info,
             kafka_position_info=kafka_position_info,
+            keys=keys,
             dry_run=dry_run
         )
         self._set_previous_payload_or_payload_data(
@@ -514,18 +521,23 @@ def create_from_kafka_message(
     """
     unpacked_message = Envelope().unpack(kafka_message.value)
     message_class = _message_type_to_class_map[unpacked_message['message_type']]
-    message = message_class(
-        topic=topic,
-        kafka_position_info=KafkaPositionInfo(
+    message_params = {
+        'topic': topic,
+        'kafka_position_info': KafkaPositionInfo(
             offset=kafka_message.offset,
             partition=kafka_message.partition,
             key=kafka_message.key,
         ),
-        uuid=unpacked_message['uuid'],
-        schema_id=unpacked_message['schema_id'],
-        payload=unpacked_message['payload'],
-        timestamp=unpacked_message['timestamp']
-    )
+        'uuid': unpacked_message['uuid'],
+        'schema_id': unpacked_message['schema_id'],
+        'payload': unpacked_message['payload'],
+        'timestamp': unpacked_message['timestamp']
+    }
+    if message_class is UpdateMessage:
+        message_params.update(
+            {'previous_payload': unpacked_message['previous_payload']}
+        )
+    message = message_class(**message_params)
     if force_payload_decoding:
         # Access the cached, but lazily-calculated, properties
         message.reload_data()
