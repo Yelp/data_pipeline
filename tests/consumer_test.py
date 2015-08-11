@@ -37,7 +37,7 @@ faster and flake-proof
 """
 
 
-@pytest.mark.usefixtures("patch_dry_run", 'configure_teams')
+@pytest.mark.usefixtures("patch_dry_run", "configure_teams")
 class TestConsumer(object):
 
     @pytest.yield_fixture
