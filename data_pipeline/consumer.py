@@ -86,8 +86,8 @@ class Consumer(Client):
                 be registered with Kafka to commit offsets.
             team_name (str): See parameter `team_name` in
                 :class:`data_pipeline.client.Client`.
-            expected_frequency (str): See parameter `expected_frequency` in
-                :class:`data_pipeline.client.Client`.
+            expected_frequency (int, ExpectedFrequency): See parameter
+                `expected_frequency` in :class:`data_pipeline.client.Client`.
             topic_to_consumer_topic_state_map ({str:Optional(ConsumerTopicState)}):
                 A map of topic names to ``ConsumerTopicState`` objects which
                 define the offsets to start from. These objects may be `None`,
