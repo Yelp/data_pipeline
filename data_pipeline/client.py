@@ -86,7 +86,7 @@ class Client(object):
 
     @client_name.setter
     def client_name(self, client_name):
-        if not (isinstance(client_name, str) or isinstance(client_name, unicode)) or len(client_name) == 0:
+        if not client_name or not isinstance(client_name, (str, unicode)):
             raise ValueError("Client name must be non-empty text")
         self._client_name = client_name
 
