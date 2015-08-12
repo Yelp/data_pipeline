@@ -8,14 +8,20 @@ import simplejson as json
 
 class TestSchemaCache(object):
 
+    @property
+    def sample_schema_create_from_mysql_stmts_data(self):
+        return {
+            'new_create_table_stmt': 'create table foo(id int(11));',
+            'namespace': 'test_namespace',
+            'source': 'test_source',
+            'owner_email': 'test_owner@yelp.com',
+            'contains_pii': False
+        }
+
     @pytest.fixture
-    def schema_id_and_topic(self, schema_cache, registered_schema):
+    def schema_id_and_topic(self, schema_cache):
         return schema_cache.register_schema_from_mysql_stmts(
-            new_create_table_stmt='create table foo(id int(11));',
-            namespace='test_namespace',
-            source='test_source',
-            owner_email='test_owner@yelp.com',
-            contains_pii=False
+            **self.sample_schema_create_from_mysql_stmts_data
         )
 
     def test_get_transformed_schema_id(self, schema_cache):
@@ -133,16 +139,22 @@ class TestSchemaCache(object):
         schema = schema_cache.get_schema(schema_id=schema_id)
         assert schema_response.schema == schema
         assert schema_response.topic.name == topic
-        assert schema_response.topic.source.namespace.name == 'test_namespace'
-        assert schema_response.topic.source.source == 'test_source'
+        assert schema_response.topic.contains_pii == \
+            self.sample_schema_create_from_mysql_stmts_data['contains_pii']
+        assert schema_response.topic.source.namespace.name == \
+            self.sample_schema_create_from_mysql_stmts_data['namespace']
+        assert schema_response.topic.source.source == \
+            self.sample_schema_create_from_mysql_stmts_data['source']
+        assert schema_response.topic.source.source_owner_email == \
+            self.sample_schema_create_from_mysql_stmts_data['owner_email']
 
     def test_register_schema_from_mysql_stmts_alter(
         self,
         schema_cache,
         schema_id_and_topic
     ):
-        _, topic_origin = schema_id_and_topic
-        _, topic = schema_cache.register_schema_from_mysql_stmts(
+        schema_id_origin, topic_origin = schema_id_and_topic
+        schema_id, topic = schema_cache.register_schema_from_mysql_stmts(
             new_create_table_stmt='create table foo(id int(1), val int(1));',
             old_create_table_stmt='create table foo(id int(1));',
             alter_table_stmt='alter table foo add val int(1);',
@@ -151,15 +163,18 @@ class TestSchemaCache(object):
             owner_email='test_owner@yelp.com',
             contains_pii=False
         )
+        schema_origin = schema_cache.get_schema(schema_id=schema_id_origin)
+        schema_new = schema_cache.get_schema(schema_id=schema_id)
         assert topic_origin == topic
+        assert schema_origin != schema_new
 
     def test_register_schema_from_mysql_stmts_different_pii(
         self,
         schema_cache,
         schema_id_and_topic
     ):
-        _, topic_origin = schema_id_and_topic
-        _, topic = schema_cache.register_schema_from_mysql_stmts(
+        schema_id_origin, topic_origin = schema_id_and_topic
+        schema_id, topic = schema_cache.register_schema_from_mysql_stmts(
             new_create_table_stmt='create table foo(id varchar(1), val int(1));',
             old_create_table_stmt='create table foo(id int(1), val int(1));',
             alter_table_stmt='alter table foo alter column id type varchar(1);',
@@ -168,4 +183,7 @@ class TestSchemaCache(object):
             owner_email='test_owner@yelp.com',
             contains_pii=True
         )
+        schema_origin = schema_cache.get_schema(schema_id=schema_id_origin)
+        schema_new = schema_cache.get_schema(schema_id=schema_id)
         assert topic_origin != topic
+        assert schema_origin != schema_new
