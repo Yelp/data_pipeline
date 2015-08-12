@@ -63,7 +63,7 @@ class TestConsumer(object):
         return Producer(
             producer_name=producer_name,
             team_name=team_name,
-            expected_frequency=ExpectedFrequency.constantly,
+            expected_frequency_seconds=ExpectedFrequency.constantly,
             use_work_pool=False
         )
 
@@ -93,7 +93,7 @@ class TestConsumer(object):
         return Consumer(
             consumer_name='test_consumer',
             team_name=team_name,
-            expected_frequency=ExpectedFrequency.constantly,
+            expected_frequency_seconds=ExpectedFrequency.constantly,
             topic_to_consumer_topic_state_map={topic: None},
             max_buffer_size=self.test_buffer_size,
             decode_payload_in_workers=request.param['decode_payload_in_workers']

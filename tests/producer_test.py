@@ -63,7 +63,7 @@ class TestProducerBase(object):
         return producer_klass(
             producer_name=producer_name,
             team_name=team_name,
-            expected_frequency=ExpectedFrequency.constantly,
+            expected_frequency_seconds=ExpectedFrequency.constantly,
             use_work_pool=use_work_pool
         )
 

@@ -70,15 +70,26 @@ class Producer(Client):
         :class:`data_pipeline.client.Client`.
       team_name (str): See parameter `team_name` in
         :class:`data_pipeline.client.Client`.
-      expected_frequency (str): See parameter `expected_frequency` in
-        :class:`data_pipeline.client.Client`.
+      expected_frequency_seconds (str): See parameter
+        `expected_frequency_seconds` in :class:`data_pipeline.client.Client`.
       use_work_pool (bool): If true, the process will use a multiprocessing
         pool to serialize messages in preparation for transport.  The work pool
         can parallelize some expensive serialization.  Default is false.
     """
 
-    def __init__(self, producer_name, team_name, expected_frequency, use_work_pool=False, dry_run=False):
-        super(Producer, self).__init__(producer_name, team_name, expected_frequency)
+    def __init__(
+        self,
+        producer_name,
+        team_name,
+        expected_frequency_seconds,
+        use_work_pool=False,
+        dry_run=False
+    ):
+        super(Producer, self).__init__(
+            producer_name,
+            team_name,
+            expected_frequency_seconds
+        )
         self.use_work_pool = use_work_pool
         self.dry_run = dry_run
 

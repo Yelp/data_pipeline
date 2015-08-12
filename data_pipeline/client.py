@@ -52,7 +52,7 @@ class Client(object):
             `sensu_handlers::teams` is the canonical data source for team
             notifications, and its usage was recommended by ops.  It was also
             adopted for usage in ec2 instance tagging in y/cep427.
-        expected_frequency (int, ExpectedFrequency): How frequently, in seconds,
+        expected_frequency_seconds (int, ExpectedFrequency): How frequently, in seconds,
             that the client expects to run to produce or consume messages.
             Any positive integer value can be used, but some common constants
             have been defined in
@@ -72,12 +72,18 @@ class Client(object):
             `sensu_handlers::teams` in puppet to add a team.
     """
 
-    def __init__(self, client_name, team_name, expected_frequency, monitoring_enabled=True):
+    def __init__(
+        self,
+        client_name,
+        team_name,
+        expected_frequency_seconds,
+        monitoring_enabled=True
+    ):
         if monitoring_enabled:
             self.monitoring_message = _Monitor(client_name, self.client_type)
         self.client_name = client_name
         self.team_name = team_name
-        self.expected_frequency = expected_frequency
+        self.expected_frequency_seconds = expected_frequency_seconds
 
     @property
     def client_name(self):
@@ -105,20 +111,20 @@ class Client(object):
         self._team_name = team_name
 
     @property
-    def expected_frequency(self):
+    def expected_frequency_seconds(self):
         """How frequently, in seconds, that the client expects to run to produce
         or consume messages.
         """
-        return self._expected_frequency
+        return self._expected_frequency_seconds
 
-    @expected_frequency.setter
-    def expected_frequency(self, expected_frequency):
-        if isinstance(expected_frequency, ExpectedFrequency):
-            expected_frequency = expected_frequency.value
+    @expected_frequency_seconds.setter
+    def expected_frequency_seconds(self, expected_frequency_seconds):
+        if isinstance(expected_frequency_seconds, ExpectedFrequency):
+            expected_frequency_seconds = expected_frequency_seconds.value
 
-        if not (isinstance(expected_frequency, int) and expected_frequency >= 0):
+        if not (isinstance(expected_frequency_seconds, int) and expected_frequency_seconds >= 0):
             raise ValueError("Client name must be non-empty text")
-        self._expected_frequency = expected_frequency
+        self._expected_frequency_seconds = expected_frequency_seconds
 
     @property
     def client_type(self):

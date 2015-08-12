@@ -19,14 +19,14 @@ class TestClient(object):
         return 'bam'
 
     @property
-    def expected_frequency(self):
+    def expected_frequency_seconds(self):
         return 0
 
     def _build_client(self, **override_kwargs):
         args = dict(
             client_name=self.client_name,
             team_name=self.team_name,
-            expected_frequency=self.expected_frequency,
+            expected_frequency_seconds=self.expected_frequency_seconds,
             monitoring_enabled=False
         )
         args.update(override_kwargs)
@@ -48,12 +48,14 @@ class TestClient(object):
     def test_invalid_team_name(self):
         self._assert_invalid(team_name='bogus_team')
 
-    def test_negative_expected_frequency(self):
-        self._assert_invalid(expected_frequency=-1)
+    def test_negative_expected_frequency_seconds(self):
+        self._assert_invalid(expected_frequency_seconds=-1)
 
-    def test_expected_frequency_constant_is_valid(self):
-        client = self._build_client(expected_frequency=ExpectedFrequency.constantly)
-        assert client.expected_frequency == 0
+    def test_expected_frequency_seconds_constant_is_valid(self):
+        client = self._build_client(
+            expected_frequency_seconds=ExpectedFrequency.constantly
+        )
+        assert client.expected_frequency_seconds == 0
 
     def _assert_invalid(self, **client_kwargs):
         with pytest.raises(ValueError):
@@ -62,4 +64,4 @@ class TestClient(object):
     def _assert_valid(self, client):
         assert client.client_name == self.client_name
         assert client.team_name == self.team_name
-        assert client.expected_frequency == self.expected_frequency
+        assert client.expected_frequency_seconds == self.expected_frequency_seconds
