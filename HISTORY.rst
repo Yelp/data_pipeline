@@ -3,6 +3,11 @@
 History
 -------
 
+0.1.4 (2015-08-12)
+++++++++++++++++++
+
+* Defined consumer/producer registration API
+
 0.1.3 (2015-08-10)
 ++++++++++++++++++
 
