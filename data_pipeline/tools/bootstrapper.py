@@ -22,11 +22,20 @@ class FileBootstrapperBase(object):
 
     log = get_config().logger
 
-    def __init__(self, schema_ref, file_paths, file_extension=None):
+    def __init__(
+            self,
+            schema_ref,
+            file_paths,
+            override_metadata,
+            file_extension=None
+    ):
         """
         Args:
-            schema_ref(SchemaRef): Schema Ref to use for looking up metadata
-            file_paths(list[str]):
+            schema_ref(SchemaRef): SchemaRef to use for looking up metadata
+            file_paths(list[str]): A list of file paths to use for bootstrapping
+            override_metadata(boolean): If True then existing metadata (such as
+                notes, categories, etc) will be overwritten with provided
+                schema_ref, otherwise existing metadata will be preserved.
             file_extension(str): Must be specified by subclasses, this should be
                 string specifying the file extension the subclass operates on,
                 for example 'sql' or 'avsc'
@@ -34,6 +43,7 @@ class FileBootstrapperBase(object):
         self.api = get_config().schematizer_client
         self.log = get_config().logger
         self.schema_ref = schema_ref
+        self.override_metadata = override_metadata
         self.file_extension = file_extension
         self.file_paths = [
             file_path
@@ -49,7 +59,7 @@ class FileBootstrapperBase(object):
         raise NotImplementedError("Subclasses should implement this!")
 
     def is_correct_file_extension(self, file_path):
-        return file_path.endswith(self.file_extension)
+        return file_path.endswith('.{}'.format(self.file_extension))
 
     def logged_register_file(self, file_path):
         self.log.info('-' * 40)
@@ -97,24 +107,22 @@ class FileBootstrapperBase(object):
 
         # Now we can register other attributes which have their own API
         # endpoints, such as categories, file_sources, and notes.
-        schema_json = json.loads(schema_result.schema)
-        schema_id = schema_result.schema_id
         self.register_schema_note(
             schema_result=schema_result,
             note=self.schema_ref.get_ref_val(source_ref, 'note')
         )
         self.register_category(
-            source_id=schema_result.topic.source.source_id,
+            schema_result=schema_result,
             category=self.schema_ref.get_ref_val(source_ref, 'category')
         )
         self.register_file_source(
-            schema_id=schema_id,
+            schema_result=schema_result,
             display=self.schema_ref.get_ref_val(source_ref, 'file_display'),
             url=self.schema_ref.get_ref_val(source_ref, 'file_url')
         )
         self.register_fields_notes(
-            schema_id=schema_id,
-            schema_json=schema_json,
+            schema_result=schema_result,
+            schema_json=json.loads(schema_result.schema),
             fields_ref=source_ref.get('fields', [])
         )
         return schema_result
@@ -134,7 +142,8 @@ class FileBootstrapperBase(object):
         """
         source = schema_result.topic.source.source
         schema_json = json.loads(schema_result.schema)
-        schema_json['doc'] = self.schema_ref.get_ref_val(source_ref, 'doc')
+        if self.override_metadata or not schema_json.get('doc'):
+            schema_json['doc'] = self.schema_ref.get_ref_val(source_ref, 'doc')
         schema_json = self.update_field_docs(
             schema_json=schema_json,
             fields_ref=source_ref.get('fields', [])
@@ -168,21 +177,26 @@ class FileBootstrapperBase(object):
         }
         for field_json in schema_json['fields']:
             field_ref = field_to_ref_map.get(field_json['name'])
-            field_json['doc'] = self.schema_ref.get_ref_val(field_ref, 'doc')
+            if self.override_metadata or not field_json.get('doc'):
+                field_json['doc'] = self.schema_ref.get_ref_val(
+                    field_ref,
+                    'doc'
+                )
         return schema_json
 
     def register_schema_note(self, schema_result, note):
         if note is None:
             return
         if schema_result.note:
-            self.logged_api_call(
-                self.api.notes.update_note,
-                note_id=schema_result.note.id,
-                body={
-                    'note': note,
-                    'last_updated_by': self.schema_ref.doc_owner
-                }
-            )
+            if self.override_metadata:
+                self.logged_api_call(
+                    self.api.notes.update_note,
+                    note_id=schema_result.note.id,
+                    body={
+                        'note': note,
+                        'last_updated_by': self.schema_ref.doc_owner
+                    }
+                )
         else:
             self.logged_api_call(
                 self.api.notes.create_note,
@@ -194,25 +208,29 @@ class FileBootstrapperBase(object):
                 }
             )
 
-    def register_category(self, source_id, category):
-        if category is not None:
+    def register_category(self, schema_result, category):
+        if category is None:
+            return
+        source_result = schema_result.topic.source
+
+        if self.override_metadata or not source_result.category:
             self.logged_api_call(
                 self.api.sources.update_category,
-                source_id=source_id,
+                source_id=source_result.source_id,
                 body={'category': category}
             )
 
-    def register_file_source(self, schema_id, display, url):
+    def register_file_source(self, schema_result, display, url):
         # TODO (joshszep|DATAPIPE-324) - after file source API is implemented
         pass
 
-    def register_fields_notes(self, schema_id, schema_json, fields_ref):
+    def register_fields_notes(self, schema_result, schema_json, fields_ref):
         field_to_ref_map = {
             field_ref['name']: field_ref for field_ref in fields_ref
         }
         results = self.logged_api_call(
             self.api.schemas.get_schema_elements_by_schema_id,
-            schema_id=schema_id
+            schema_id=schema_result.schema_id
         )
         field_to_schema_element_map = {
             self.get_field_name_from_schema_element(result): result
@@ -224,26 +242,27 @@ class FileBootstrapperBase(object):
             field_ref = field_to_ref_map.get(field_name)
             if not field_ref:
                 continue
-            self.upsert_schema_element_note(
-                note=self.schema_ref.get_ref_val(field_ref, 'note'),
-                schema_element=field_to_schema_element_map[field_name]
+            self.register_schema_element_note(
+                schema_element=field_to_schema_element_map[field_name],
+                note=self.schema_ref.get_ref_val(field_ref, 'note')
             )
 
     def get_field_name_from_schema_element(self, schema_element):
         return schema_element.key.split('|')[-1]
 
-    def upsert_schema_element_note(self, note, schema_element):
+    def register_schema_element_note(self, schema_element, note):
         if note is None:
             return
         if schema_element.note:
-            return self.logged_api_call(
-                self.api.notes.update_note,
-                note_id=schema_element.note.id,
-                body={
-                    'note': note,
-                    'last_updated_by': self.schema_ref.doc_owner
-                }
-            )
+            if self.override_metadata:
+                return self.logged_api_call(
+                    self.api.notes.update_note,
+                    note_id=schema_element.note.id,
+                    body={
+                        'note': note,
+                        'last_updated_by': self.schema_ref.doc_owner
+                    }
+                )
         else:
             return self.logged_api_call(
                 self.api.notes.create_note,
@@ -263,49 +282,36 @@ class AVSCBootstrapper(FileBootstrapperBase):
     an example.
     """
 
-    def __init__(self, schema_ref, file_paths):
+    def __init__(self, schema_ref, file_paths, override_metadata):
         super(AVSCBootstrapper, self).__init__(
-            schema_ref, file_paths, file_extension='avsc'
+            schema_ref, file_paths, override_metadata, file_extension='avsc'
         )
 
     def register_file(self, file_path):
         with open(file_path) as avsc_file:
             avsc_content = avsc_file.read()
-            avsc = json.loads(avsc_content)
-            source = avsc['name']
-            return self.register_avsc(
-                avsc_content=avsc_content,
-                namespace=avsc['namespace'],
-                source=source,
-                source_owner=self.schema_ref.get_source_val(
-                    source,
-                    'owner_email'
-                ),
-                contains_pii=self.schema_ref.get_source_val(
-                    source,
-                    'contains_pii'
-                )
-            )
+            return self.register_avsc(avsc_content)
 
-    def register_avsc(
-            self,
-            avsc_content,
-            namespace,
-            source,
-            source_owner,
-            contains_pii
-    ):
+    def register_avsc(self, avsc_content):
         self.log.info(
             '\n - Registering avsc content:\n{}'.format(avsc_content)
         )
+        avsc = json.loads(avsc_content)
+        source = avsc['name']
         return self.logged_api_call(
             self.api.schemas.register_schema,
             body={
                 'schema': avsc_content,
-                'namespace': namespace,
+                'namespace': avsc['namespace'],
                 'source': source,
-                'source_owner_email': source_owner,
-                'contains_pii': contains_pii
+                'source_owner_email': self.schema_ref.get_source_val(
+                    source,
+                    'owner_email'
+                ),
+                'contains_pii': self.schema_ref.get_source_val(
+                    source,
+                    'contains_pii'
+                )
             }
         )
 
@@ -315,40 +321,19 @@ class MySQLBootstrapper(FileBootstrapperBase):
     files to contain a CREATE TABLE statement and nothing more.
     """
 
-    def __init__(self, schema_ref, file_paths):
+    def __init__(self, schema_ref, file_paths, override_metadata):
         super(MySQLBootstrapper, self).__init__(
-            schema_ref, file_paths, file_extension='sql'
+            schema_ref, file_paths, override_metadata, file_extension='sql'
         )
 
     def register_file(self, file_path):
         with open(file_path) as sql_file:
-            source = self.get_source_from_sql_file_path(file_path)
-            resp = self.register_sql(
+            return self.register_sql(
                 sql_content=sql_file.read(),
-                namespace=self.schema_ref.get_source_val(
-                    source,
-                    'namespace'
-                ),
-                source=source,
-                source_owner=self.schema_ref.get_source_val(
-                    source,
-                    'owner_email'
-                ),
-                contains_pii=self.schema_ref.get_source_val(
-                    source,
-                    'contains_pii'
-                )
+                source=self.get_source_from_sql_file_path(file_path)
             )
-        return resp
 
-    def register_sql(
-            self,
-            sql_content,
-            namespace,
-            source,
-            source_owner,
-            contains_pii
-    ):
+    def register_sql(self, sql_content, source):
         self.log.info(
             '\n - Registering sql content:\n{}'.format(sql_content)
         )
@@ -356,10 +341,19 @@ class MySQLBootstrapper(FileBootstrapperBase):
             self.api.schemas.register_schema_from_mysql_stmts,
             body={
                 'new_create_table_stmt': sql_content,
-                'namespace': namespace,
+                'namespace': self.schema_ref.get_source_val(
+                    source,
+                    'namespace'
+                ),
                 'source': source,
-                'source_owner_email': source_owner,
-                'contains_pii': contains_pii
+                'source_owner_email': self.schema_ref.get_source_val(
+                    source,
+                    'owner_email'
+                ),
+                'contains_pii': self.schema_ref.get_source_val(
+                    source,
+                    'contains_pii'
+                )
             }
         )
 
@@ -462,6 +456,15 @@ class BootstrapperBatch(yelp_batch.batch.Batch):
                  'run. '
                  'Default is "%default"'
         )
+        opt_group.add_option(
+            '--override-metadata',
+            action="store_true",
+            default=False,
+            help='Override existing metadata for tables (such as notes, '
+                 'categories, etc) with provided metadata. By default if'
+                 'metadata already exists it will not be changed.'
+                 'Default is "%default"'
+        )
         return opt_group
 
     def run(self):
@@ -485,7 +488,11 @@ class BootstrapperBatch(yelp_batch.batch.Batch):
         )
         schema_results = []
         for bootstrapper_cls in FILE_BOOTSTRAPPER_CLASSES:
-            bootstrapper = bootstrapper_cls(schema_ref, file_paths)
+            bootstrapper = bootstrapper_cls(
+                schema_ref=schema_ref,
+                file_paths=file_paths,
+                override_metadata=self.options.override_metadata
+            )
             schema_results += bootstrapper.bootstrap_files()
 
         self.log_result_urls(schema_results)
