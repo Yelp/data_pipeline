@@ -39,10 +39,6 @@ class TestProducerBase(object):
             mock_dry_run.return_value = True
             yield mock_dry_run
 
-    @pytest.fixture
-    def producer_klass(self):
-        return Producer
-
     @pytest.fixture(params=[
         True,
         False
@@ -55,8 +51,8 @@ class TestProducerBase(object):
         return 'producer_1'
 
     @pytest.fixture
-    def producer_instance(self, producer_klass, producer_name, use_work_pool, team_name):
-        return producer_klass(
+    def producer_instance(self, producer_name, use_work_pool, team_name):
+        return Producer(
             producer_name=producer_name,
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
