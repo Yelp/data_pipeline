@@ -66,11 +66,32 @@ class Producer(Client):
                       producer.wake()
 
     Args:
-      producer_name (str): name of the producer client
+      producer_name (str): See parameter `client_name` in
+        :class:`data_pipeline.client.Client`.
+      team_name (str): See parameter `team_name` in
+        :class:`data_pipeline.client.Client`.
+      expected_frequency_seconds (str): See parameter
+        `expected_frequency_seconds` in :class:`data_pipeline.client.Client`.
       use_work_pool (bool): If true, the process will use a multiprocessing
         pool to serialize messages in preparation for transport.  The work pool
         can parallelize some expensive serialization.  Default is false.
     """
+
+    def __init__(
+        self,
+        producer_name,
+        team_name,
+        expected_frequency_seconds,
+        use_work_pool=False,
+        dry_run=False
+    ):
+        super(Producer, self).__init__(
+            producer_name,
+            team_name,
+            expected_frequency_seconds
+        )
+        self.use_work_pool = use_work_pool
+        self.dry_run = dry_run
 
     @cached_property
     def _kafka_producer(self):
@@ -85,12 +106,10 @@ class Producer(Client):
                 dry_run=self.dry_run
             )
 
-    def __init__(self, producer_name, use_work_pool=False, dry_run=False):
-        # TODO(DATAPIPE-157): This should call the Client to capture information
-        # about the producer
-        super(Producer, self).__init__(producer_name, 'producer')
-        self.use_work_pool = use_work_pool
-        self.dry_run = dry_run
+    @property
+    def client_type(self):
+        """String identifying the client type."""
+        return 'producer'
 
     def __enter__(self):
         # By default, the kafka producer is created lazily, and doesn't
