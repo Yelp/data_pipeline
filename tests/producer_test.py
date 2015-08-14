@@ -11,7 +11,6 @@ import mock
 import pytest
 
 from data_pipeline._fast_uuid import FastUUID
-from data_pipeline.async_producer import AsyncProducer
 from data_pipeline.config import get_config
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import CreateMessage
@@ -41,13 +40,6 @@ class TestProducerBase(object):
             yield mock_dry_run
 
     @pytest.fixture(params=[
-        Producer,
-        AsyncProducer
-    ])
-    def producer_klass(self, request):
-        return request.param
-
-    @pytest.fixture(params=[
         True,
         False
     ])
@@ -59,8 +51,8 @@ class TestProducerBase(object):
         return 'producer_1'
 
     @pytest.fixture
-    def producer_instance(self, producer_klass, producer_name, use_work_pool, team_name):
-        return producer_klass(
+    def producer_instance(self, producer_name, use_work_pool, team_name):
+        return Producer(
             producer_name=producer_name,
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
@@ -331,6 +323,15 @@ class TestProducer(TestProducerBase):
                 message_count=2,
                 message_timeslot=1
             )
+
+    def test_monitoring_system_dry_run(self, producer_name, team_name):
+        producer = Producer(
+            producer_name=producer_name,
+            team_name=team_name,
+            expected_frequency_seconds=ExpectedFrequency.constantly,
+            dry_run=True
+        )
+        assert producer.monitoring_message.dry_run is True
 
     def test_basic_publish_message_with_pii(
         self,

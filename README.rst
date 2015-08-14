@@ -41,3 +41,13 @@ decrease test time dramatically.
 It is recommended to run `foreman` in a background tab, and `guard` in a
 foreground tab, as `foreman` will let you inspect the logs of the running
 `kafka` containers, while `guard` will show test results as files are changed.
+
+Development Decisions
+---------------------
+
+The clientlib used to include an AsyncProducer, which published to Kafka in the
+background.  This producer was somewhat flaky, increased development effort,
+and didn't provide a concrete performance benefit (see
+https://pb.yelpcorp.com/150070 for benchmark results).  If we ever want to
+revive that producer, a SHA containing the producer just before its removal
+has been tagged as before-async-producer-removal.
