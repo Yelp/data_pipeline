@@ -519,11 +519,16 @@ def create_from_kafka_message(
     Returns (data_pipeline.message.Message):
         The message object
     """
-    return _create_message_helper(
+    kafka_position_info = KafkaPositionInfo(
+        offset=kafka_message.offset,
+        partition=kafka_message.partition,
+        key=kafka_message.key,
+    )
+    return _create_message_from_packed_message(
         topic=topic,
         packed_message=kafka_message,
         force_payload_decoding=force_payload_decoding,
-        append_kafka_position_info=True
+        kafka_position_info=kafka_position_info
     )
 
 
@@ -547,19 +552,18 @@ def create_from_offset_and_message(
     Returns (data_pipeline.message.Message):
         The message object
     """
-    return _create_message_helper(
+    return _create_message_from_packed_message(
         topic=topic,
         packed_message=offset_and_message.message,
-        force_payload_decoding=True,
-        append_kafka_position_info=False
+        force_payload_decoding=force_payload_decoding
     )
 
 
-def _create_message_helper(
+def _create_message_from_packed_message(
     topic,
     packed_message,
     force_payload_decoding,
-    append_kafka_position_info
+    kafka_position_info=None
 ):
     """ Builds a data_pipeline.message.Message from packed_message
     Args:
@@ -587,13 +591,9 @@ def _create_message_helper(
         'uuid': unpacked_message['uuid'],
         'schema_id': unpacked_message['schema_id'],
         'payload': unpacked_message['payload'],
-        'timestamp': unpacked_message['timestamp']
+        'timestamp': unpacked_message['timestamp'],
+        'kafka_position_info': kafka_position_info
     }
-    message_params['kafka_position_info'] = KafkaPositionInfo(
-        offset=packed_message.offset,
-        partition=packed_message.partition,
-        key=packed_message.key,
-    ) if append_kafka_position_info else None
     if message_class is UpdateMessage:
         message_params.update(
             {'previous_payload': unpacked_message['previous_payload']}

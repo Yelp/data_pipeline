@@ -244,7 +244,10 @@ class TestCreateFromMessageAndOffset(object):
             topic=message.topic,
             offset_and_message=offset_and_message
         )
-        assert extracted_message.topic == message.topic
-        assert extracted_message.schema_id == message.schema_id
+        assert extracted_message.message_type == message.message_type
         assert extracted_message.payload == message.payload
         assert extracted_message.payload_data == message.payload_data
+        assert extracted_message.schema_id == message.schema_id
+        assert extracted_message.timestamp == message.timestamp
+        assert extracted_message.topic == message.topic
+        assert extracted_message.uuid == message.uuid
