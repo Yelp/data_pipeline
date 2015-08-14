@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 import pytest
 
 from data_pipeline.client import Client
+from data_pipeline.client import MonitoringMode
 from data_pipeline.expected_frequency import ExpectedFrequency
 
 
@@ -27,7 +28,7 @@ class TestClient(object):
             client_name=self.client_name,
             team_name=self.team_name,
             expected_frequency_seconds=self.expected_frequency_seconds,
-            monitoring_enabled=False
+            monitoring_mode=MonitoringMode.disabled
         )
         args.update(override_kwargs)
         return Client(**args)

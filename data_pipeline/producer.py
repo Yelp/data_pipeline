@@ -11,6 +11,7 @@ from yelp_kafka.offsets import get_topics_watermarks
 from data_pipeline._kafka_producer import LoggingKafkaProducer
 from data_pipeline._pooled_kafka_producer import PooledKafkaProducer
 from data_pipeline.client import Client
+from data_pipeline.client import MonitoringMode
 from data_pipeline.config import get_config
 
 
@@ -85,11 +86,14 @@ class Producer(Client):
         use_work_pool=False,
         dry_run=False
     ):
+        kwargs = {}
+        if dry_run:
+            kwargs['monitoring_mode'] = MonitoringMode.dry_run
         super(Producer, self).__init__(
             producer_name,
             team_name,
             expected_frequency_seconds,
-            dry_run=dry_run
+            **kwargs
         )
         self.use_work_pool = use_work_pool
         self.dry_run = dry_run

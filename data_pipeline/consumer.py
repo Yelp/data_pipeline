@@ -15,6 +15,7 @@ from yelp_kafka.consumer_group import MultiprocessingConsumerGroup
 
 from data_pipeline._kafka_consumer_worker import KafkaConsumerWorker
 from data_pipeline.client import Client
+from data_pipeline.client import MonitoringMode
 from data_pipeline.config import get_config
 from data_pipeline.message import Message
 
@@ -122,7 +123,7 @@ class Consumer(Client):
             consumer_name,
             team_name,
             expected_frequency_seconds,
-            monitoring_enabled=False
+            monitoring_mode=MonitoringMode.disabled
         )
         self.max_buffer_size = max_buffer_size
         self.topic_to_consumer_topic_state_map = topic_to_consumer_topic_state_map

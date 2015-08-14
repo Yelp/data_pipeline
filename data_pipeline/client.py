@@ -4,6 +4,8 @@ from __future__ import unicode_literals
 
 import socket
 
+from enum import Enum
+
 from data_pipeline._kafka_producer import LoggingKafkaProducer
 from data_pipeline.config import get_config
 from data_pipeline.expected_frequency import ExpectedFrequency
@@ -12,6 +14,20 @@ from data_pipeline.team import Team
 
 
 logger = get_config().logger
+
+
+class MonitoringMode(Enum):
+    """Monitoring should be created with proper modes.
+
+    Attributes:
+      disabled: disable monitoring message in client
+      enabled: enable monitoring message in client
+      dry_run: set monitoring to dry_run mode so that message will not be
+        published to kafka
+    """
+    disabled = 1
+    enabled = 2
+    dry_run = 3
 
 
 class Client(object):
@@ -60,10 +76,8 @@ class Client(object):
 
             See :class:`data_pipeline.expected_frequency.ExpectedFrequency` for
             additional detail.
-        monitoring_enabled (bool): Enables the clients emission of monitoring
-            messages.
-        dry_run (bool optional): Enables dry_run mode which doesn't publish
-            messages in kafka.
+        monitoring_mode (MonitoringMode optional): mode of monitoring messages.
+            Default is MonitoringMode.enabled.
 
     Raises:
         InvalidTeamError: If the team specified is either not defined or does
@@ -76,14 +90,14 @@ class Client(object):
         client_name,
         team_name,
         expected_frequency_seconds,
-        monitoring_enabled=True,
-        dry_run=False
+        monitoring_mode=MonitoringMode.enabled,
     ):
-        if monitoring_enabled:
+        if monitoring_mode in [MonitoringMode.enabled, MonitoringMode.dry_run]:
+            is_dry_run = monitoring_mode == MonitoringMode.dry_run
             self.monitoring_message = _Monitor(
                 client_name,
                 self.client_type,
-                dry_run=dry_run
+                dry_run=is_dry_run
             )
         self.client_name = client_name
         self.team_name = team_name
