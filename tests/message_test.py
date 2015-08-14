@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 import pytest
 
 from data_pipeline import message as dp_message
+from data_pipeline.message import UpdateMessageDiff
 from data_pipeline.message_type import MessageType
 
 
@@ -227,3 +228,30 @@ class TestUpdateMessage(SharedMessageTest):
             previous_payload=bytes(10),
             previous_payload_data={'foo': 'bar'}
         )
+
+    @pytest.mark.parametrize("message_data_params, expected_diff", [
+        (
+            ({'field1': 'new_value1', 'field2': 'new_value2'}, {'field1': 'old_value1', 'field2': 'old_value2'}),
+            [
+                UpdateMessageDiff(payload_field='field1', old_value='old_value1', current_value='new_value1'),
+                UpdateMessageDiff(payload_field='field2', old_value='old_value2', current_value='new_value2'),
+            ]
+        ),
+        (
+            ({'field': 'same_value'}, {'field': 'same_value'}),
+            []
+        ),
+    ])
+    def test_has_changed(self, message_data_params, expected_diff):
+        payload_data, previous_payload_data = message_data_params
+        message_data = dict(
+            topic=str('my-topic'),
+            schema_id=123,
+            payload=None,
+            payload_data=payload_data,
+            previous_payload=None,
+            previous_payload_data=previous_payload_data
+        )
+        update_message = self.message_class(**message_data)
+        diff = update_message.has_changed()
+        assert len(diff) == len(expected_diff) and set(diff) == set(expected_diff)
