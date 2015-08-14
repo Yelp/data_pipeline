@@ -3,7 +3,6 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import socket
-
 from enum import Enum
 
 from data_pipeline._kafka_producer import LoggingKafkaProducer
