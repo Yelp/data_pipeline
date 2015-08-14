@@ -25,8 +25,8 @@ KafkaPositionInfo = namedtuple('KafkaPositionInfo', [
 
 UpdateMessageDiff = namedtuple('UpdateMessageDiff', [
     'payload_field',        # Name of the field
-    'old_value',            # Value of the field before change
-    'current_value'         # Value of the field after change
+    'old_value',            # Value of the field before update
+    'current_value'         # Value of the field after update
 ])
 
 
@@ -500,15 +500,14 @@ class UpdateMessage(Message):
         self._encode_previous_payload_data_if_necessary()
 
     def has_changed(self):
-        payload_diff = []
-        for key, new_value in self.payload_data.iteritems():
-            if self.previous_payload_data.get(key) != new_value:
-                payload_diff.append(UpdateMessageDiff(
-                    payload_field=key,
-                    old_value=self.previous_payload_data[key],
-                    current_value=new_value,
-                ))
-        return payload_diff
+        return [
+            UpdateMessageDiff(
+                payload_field=key,
+                old_value=self.previous_payload_data[key],
+                current_value=new_value
+            ) for key, new_value in self.payload_data.iteritems()
+            if self.previous_payload_data.get(key) != new_value
+        ]
 
 
 _message_type_to_class_map = {
