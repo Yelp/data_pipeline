@@ -6,7 +6,9 @@ import socket
 
 from data_pipeline._kafka_producer import LoggingKafkaProducer
 from data_pipeline.config import get_config
+from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import MonitorMessage
+from data_pipeline.team import Team
 
 
 logger = get_config().logger
@@ -14,18 +16,120 @@ logger = get_config().logger
 
 class Client(object):
     """The client superclasses both the Producer and Consumer, and is largely
-    responsible for shared producer/consumer registration responsibilities.
+    responsible for shared producer/consumer registration responsibilities and
+    monitoring.
+
+    Note:
+
+        Client will be responsible for producer/consumer registration,
+        which will be implemented in DATAPIPE-157.
 
     Args:
-        client_name (str): Name associated with the client
-        client_type (str): type of the client. Can be producer or consumer
-    DATAPIPE-157
+        client_name (str): Name associated with the client - this name will
+            be used as the client's identifier for producer/consumer
+            registration.  This identifier should be treated as a constant
+            once defined, and should be unique per use case and application.
+
+            For example, if a team has a service with two consumers, each
+            filling a different role, and a consumer in yelp main, all three
+            should have different client names so their activity can be
+            differentiated.  Multiple instances of a producer or consumer in the
+            same application should share a client name.  If an application is
+            both consuming and producing for the same purpose (i.e. transforming
+            and republishing a topic), the consumer and producer should share a
+            client name, otherwise the client name should be unique across
+            logical applications.
+
+            There is no need to use different client names in different
+            environments, but we do suggest namespacing.  For example,
+            `services.yelp-main.datawarehouse.rich-transformers` or
+            `services.user_tracking.review_tracker`.
+        team_name (str): Team name, as defined in `sensu_handlers::teams` (see
+            y/sensu-teams).  notification_email must be defined for a team to be
+            registered as a producer or consumer.  This information will be used
+            to communicate about data changes impacting the client.
+
+            `sensu_handlers::teams` is the canonical data source for team
+            notifications, and its usage was recommended by ops.  It was also
+            adopted for usage in ec2 instance tagging in y/cep427.
+        expected_frequency_seconds (int, ExpectedFrequency): How frequently, in seconds,
+            that the client expects to run to produce or consume messages.
+            Any positive integer value can be used, but some common constants
+            have been defined in
+            :class:`data_pipeline.expected_frequency.ExpectedFrequency`.
+
+            See :class:`data_pipeline.expected_frequency.ExpectedFrequency` for
+            additional detail.
+        monitoring_enabled (bool): Enables the clients emission of monitoring
+            messages.
+
+            TODO(justinc|DATAPIPE-341): khuang will flush out a dry-run mode for
+            monitoring messages in DATAPIPE-341.
+
+    Raises:
+        InvalidTeamError: If the team specified is either not defined or does
+            not have a notification_email registered.  Ops deputies can modify
+            `sensu_handlers::teams` in puppet to add a team.
     """
 
-    def __init__(self, client_name, client_type):
-        self.monitoring_message = _Monitor(client_name, client_type)
+    def __init__(
+        self,
+        client_name,
+        team_name,
+        expected_frequency_seconds,
+        monitoring_enabled=True
+    ):
+        if monitoring_enabled:
+            self.monitoring_message = _Monitor(client_name, self.client_type)
         self.client_name = client_name
-        self.client_type = client_type
+        self.team_name = team_name
+        self.expected_frequency_seconds = expected_frequency_seconds
+
+    @property
+    def client_name(self):
+        """Name associated with the client"""
+        return self._client_name
+
+    @client_name.setter
+    def client_name(self, client_name):
+        if not client_name or not isinstance(client_name, (str, unicode)):
+            raise ValueError("Client name must be non-empty text")
+        self._client_name = client_name
+
+    @property
+    def team_name(self):
+        """Team associated with the client"""
+        return self._team_name
+
+    @team_name.setter
+    def team_name(self, team_name):
+        if not Team.exists(team_name):
+            raise ValueError(
+                "Team name must exist: see the team_name argument at "
+                "y/dp_client_docs for detailed information about adding a team."
+            )
+        self._team_name = team_name
+
+    @property
+    def expected_frequency_seconds(self):
+        """How frequently, in seconds, that the client expects to run to produce
+        or consume messages.
+        """
+        return self._expected_frequency_seconds
+
+    @expected_frequency_seconds.setter
+    def expected_frequency_seconds(self, expected_frequency_seconds):
+        if isinstance(expected_frequency_seconds, ExpectedFrequency):
+            expected_frequency_seconds = expected_frequency_seconds.value
+
+        if not (isinstance(expected_frequency_seconds, int) and expected_frequency_seconds >= 0):
+            raise ValueError("Client name must be non-empty text")
+        self._expected_frequency_seconds = expected_frequency_seconds
+
+    @property
+    def client_type(self):
+        """String identifying the client type."""
+        raise NotImplementedError
 
 
 class _Monitor(object):

@@ -239,6 +239,16 @@ class Config(object):
             default=True
         )
 
+    @property
+    def data_pipeline_teams_config_file_path(self):
+        """Returns the path to the config file which specifies valid teams for
+        the data pipeline.
+        """
+        return data_pipeline_conf.read_string(
+            'data_pipeline_teams_config_file_path',
+            default='/nail/etc/services/data_pipeline/teams.yaml'
+        )
+
 
 def configure_from_dict(config_dict):
     """Configure the :mod:`data_pipeline` clientlib from a dictionary.
@@ -247,7 +257,6 @@ def configure_from_dict(config_dict):
         config_dict (dict): a dict of config data
     """
     staticconf.DictConfiguration(config_dict, namespace=namespace)
-
 
     @property
     def delay_between_producer_retries_in_sec(self):

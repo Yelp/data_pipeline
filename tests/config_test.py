@@ -2,14 +2,11 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from contextlib import contextmanager
-
 import pytest
 import staticconf
 
-from data_pipeline.config import configure_from_dict
 from data_pipeline.config import get_config
-from data_pipeline.config import namespace
+from tests.helpers.config import reconfigure
 
 
 class TestConfigBase(object):
@@ -78,6 +75,9 @@ class TestConfigDefaults(TestConfigBase):
     def test_skip_messages_with_pii(self, config):
         assert config.skip_messages_with_pii
 
+    def test_data_pipeline_teams_config_file_path(self, config):
+        assert config.data_pipeline_teams_config_file_path == '/nail/etc/services/data_pipeline/teams.yaml'
+
 
 class TestConfigurationOverrides(TestConfigBase):
     @classmethod
@@ -102,27 +102,16 @@ class TestConfigurationOverrides(TestConfigBase):
     def cluster_type(self):
         return 'datapipe'
 
-    @contextmanager
-    def reconfigure(self, **kwargs):
-        conf_namespace = staticconf.config.get_namespace(namespace)
-        starting_config = conf_namespace.get_config_values()
-        configure_from_dict(kwargs)
-        try:
-            yield
-        finally:
-            staticconf.config.get_namespace(namespace).clear()
-            configure_from_dict(starting_config)
-
     def test_schematizer_host_and_port(self, config, addr):
-        with self.reconfigure(schematizer_host_and_port=addr):
+        with reconfigure(schematizer_host_and_port=addr):
             assert config.schematizer_host_and_port == addr
 
     def test_load_schematizer_host_and_port_from_smartstack(self, config, yocalhost):
-        with self.reconfigure(load_schematizer_host_and_port_from_smartstack=True):
+        with reconfigure(load_schematizer_host_and_port_from_smartstack=True):
             assert config.schematizer_host_and_port == '{0}:20912'.format(yocalhost)
 
     def test_kafka_discovery(self, config, cluster_name, cluster_type):
-        with self.reconfigure(
+        with reconfigure(
             kafka_cluster_type=cluster_type,
             kafka_cluster_name=cluster_name
         ):
@@ -130,7 +119,7 @@ class TestConfigurationOverrides(TestConfigBase):
             assert cluster_config.name == cluster_name
 
     def test_kafka_discovery_precedence(self, config, addr, cluster_name, cluster_type):
-        with self.reconfigure(
+        with reconfigure(
             kafka_cluster_type=cluster_type,
             kafka_cluster_name=cluster_name,
             kafka_broker_list=[addr],
@@ -142,41 +131,45 @@ class TestConfigurationOverrides(TestConfigBase):
             assert cluster_config.zookeeper != addr
 
     def test_kafka_broker_list(self, config, addr):
-        with self.reconfigure(kafka_broker_list=[addr]):
+        with reconfigure(kafka_broker_list=[addr]):
             assert config.cluster_config.broker_list == [addr]
 
     def test_kafka_zookeeper(self, config, addr):
-        with self.reconfigure(kafka_zookeeper=addr):
+        with reconfigure(kafka_zookeeper=addr):
             assert config.cluster_config.zookeeper == addr
 
     def test_consumer_max_buffer_size_default(self, config):
-        with self.reconfigure(consumer_max_buffer_size_default=10):
+        with reconfigure(consumer_max_buffer_size_default=10):
             assert config.consumer_max_buffer_size_default == 10
 
     def test_consumer_get_messages_timeout_default(self, config):
-        with self.reconfigure(consumer_get_messages_timeout_default=10.0):
+        with reconfigure(consumer_get_messages_timeout_default=10.0):
             assert config.consumer_get_messages_timeout_default == 10.0
 
     def test_consumer_partitioner_cooldown_default(self, config):
-        with self.reconfigure(consumer_partitioner_cooldown_default=10.0):
+        with reconfigure(consumer_partitioner_cooldown_default=10.0):
             assert config.consumer_partitioner_cooldown_default == 10.0
 
     def test_consumer_worker_min_sleep_time_default(self, config):
-        with self.reconfigure(consumer_worker_min_sleep_time_default=10.0):
+        with reconfigure(consumer_worker_min_sleep_time_default=10.0):
             assert config.consumer_worker_min_sleep_time_default == 10.0
 
     def test_consumer_worker_max_sleep_time_default(self, config):
-        with self.reconfigure(consumer_worker_max_sleep_time_default=10.0):
+        with reconfigure(consumer_worker_max_sleep_time_default=10.0):
             assert config.consumer_worker_max_sleep_time_default == 10.0
 
     def test_monitoring_window_in_sec(self, config):
-        with self.reconfigure(monitoring_window_in_sec=10):
+        with reconfigure(monitoring_window_in_sec=10):
             assert config.monitoring_window_in_sec == 10
 
     def test_topic_creation_wait_timeout(self, config):
-        with self.reconfigure(topic_creation_wait_timeout=10):
+        with reconfigure(topic_creation_wait_timeout=10):
             assert config.topic_creation_wait_timeout == 10
 
     def test_skip_messages_with_pii(self, config):
-        with self.reconfigure(skip_messages_with_pii=False):
+        with reconfigure(skip_messages_with_pii=False):
             assert not config.skip_messages_with_pii
+
+    def test_data_pipeline_teams_config_file_path(self, config):
+        with reconfigure(data_pipeline_teams_config_file_path='/some/path'):
+            assert config.data_pipeline_teams_config_file_path == '/some/path'

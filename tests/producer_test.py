@@ -18,6 +18,7 @@ from data_pipeline.async_producer import AsyncProducer
 from data_pipeline.client import _Monitor
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
+from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import CreateMessage
 from data_pipeline.message import Message
 from data_pipeline.producer import Producer
@@ -31,6 +32,7 @@ class RandomException(Exception):
     pass
 
 
+@pytest.mark.usefixtures("patch_dry_run", "configure_teams")
 class TestProducerBase(object):
 
     @pytest.yield_fixture
@@ -44,13 +46,6 @@ class TestProducerBase(object):
             yield mock_dry_run
 
     @pytest.fixture(params=[
-        Producer,
-        AsyncProducer
-    ])
-    def producer_klass(self, request):
-        return request.param
-
-    @pytest.fixture(params=[
         True,
         False
     ])
@@ -62,8 +57,13 @@ class TestProducerBase(object):
         return 'producer_1'
 
     @pytest.fixture
-    def producer_instance(self, producer_klass, producer_name, use_work_pool):
-        return producer_klass(producer_name=producer_name, use_work_pool=use_work_pool)
+    def producer_instance(self, producer_name, use_work_pool, team_name):
+        return Producer(
+            producer_name=producer_name,
+            team_name=team_name,
+            expected_frequency_seconds=ExpectedFrequency.constantly,
+            use_work_pool=use_work_pool
+        )
 
     @pytest.yield_fixture
     def producer(self, producer_instance):
