@@ -125,10 +125,10 @@ class SchemaCache(object):
         register_response = self.schematizer_client.schemas.register_schema_from_mysql_stmts(
             body=request_body
         ).result()
-        transformed_id = register_response.schema_id
-        self.schema_id_to_schema_map[transformed_id] = register_response.schema
+        schema_id = register_response.schema_id
+        self.schema_id_to_schema_map[schema_id] = register_response.schema
         new_topic_name = register_response.topic.name
-        self.schema_id_to_topic_map[transformed_id] = new_topic_name
+        self.schema_id_to_topic_map[schema_id] = new_topic_name
         return SchemaInfo(schema_id=register_response.schema_id, topic_name=new_topic_name)
 
     def get_topic_for_schema_id(self, schema_id):
