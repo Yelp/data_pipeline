@@ -2,8 +2,15 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+from collections import namedtuple
+
 from data_pipeline._avro_util import get_avro_schema_object
 from data_pipeline.config import get_config
+
+SchemaInfo = namedtuple('SchemaInfo', [
+    'schema_id',
+    'topic_name'
+])
 
 
 class SchemaCache(object):
@@ -77,7 +84,52 @@ class SchemaCache(object):
         self.base_to_transformed_schema_id_map[base_schema_id] = transformed_id
         new_topic_name = register_response.topic.name
         self.schema_id_to_topic_map[transformed_id] = new_topic_name
-        return register_response.schema_id, new_topic_name
+        return SchemaInfo(schema_id=register_response.schema_id, topic_name=new_topic_name)
+
+    def register_schema_from_mysql_stmts(
+            self,
+            new_create_table_stmt,
+            namespace,
+            source,
+            owner_email,
+            contains_pii,
+            old_create_table_stmt=None,
+            alter_table_stmt=None,
+    ):
+        """ Register schema based on mysql statements and return it's schema_id
+            and topic.
+
+        Args:
+            new_create_table_stmt (str): the mysql statement of creating new table.
+            namespace (str): The namespace the new schema should be registered to.
+            source (str): The source the new schema should be registered to.
+            owner_email (str): The owner email for the new schema.
+            contains_pii (bool): The flag indicating if schema contains pii.
+            old_create_table_stmt (str optional): the mysql statement of creating old table.
+            alter_table_stmt (str optional): the mysql statement of altering table schema.
+
+        Returns:
+            (int, string): The new schema_id and the new topic name
+        """
+        request_body = {
+            'new_create_table_stmt': new_create_table_stmt,
+            'namespace': namespace,
+            'source': source,
+            'source_owner_email': owner_email,
+            'contains_pii': contains_pii
+        }
+        if old_create_table_stmt:
+            request_body['old_create_table_stmt'] = old_create_table_stmt
+        if alter_table_stmt:
+            request_body['alter_table_stmt'] = alter_table_stmt
+        register_response = self.schematizer_client.schemas.register_schema_from_mysql_stmts(
+            body=request_body
+        ).result()
+        schema_id = register_response.schema_id
+        self.schema_id_to_schema_map[schema_id] = register_response.schema
+        new_topic_name = register_response.topic.name
+        self.schema_id_to_topic_map[schema_id] = new_topic_name
+        return SchemaInfo(schema_id=register_response.schema_id, topic_name=new_topic_name)
 
     def get_topic_for_schema_id(self, schema_id):
         """ Get the topic name for a given schema_id
