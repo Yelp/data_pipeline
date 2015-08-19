@@ -62,6 +62,11 @@ def _sanitize_line(line):
 
 
 class RedshiftFieldLineToAvroFieldConverter(object):
+    """ Converter for a single redshift column definition line in a
+    `CREATE TABLE` statement.
+
+    This should eventually be replaced by DATAPIPE-353.
+    """
 
     def __init__(self, field_line, pkeys):
         """
@@ -198,6 +203,8 @@ class RedshiftSQLToAVSCConverter(object):
     """ Simple converter from redshift *.sql CREATE TABLE definitions (such
     as those in yelp-main/schema/yelp_dw_redshift/tables) to data pipeline
     format Avro *.avsc schemas.
+
+    This should eventually be replaced by DATAPIPE-353.
 
     Notes:
         This makes a number of assumptions about the input content, namely
