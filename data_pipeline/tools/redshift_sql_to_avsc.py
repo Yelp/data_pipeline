@@ -146,9 +146,18 @@ class RedshiftFieldLineToAvroFieldConverter(object):
             if self.sql_default == 'null':
                 meta['default'] = None
             elif self.avro_core_type in ['long', 'int']:
-                meta['default'] = int(self.sql_default)
+                try:
+                    meta['default'] = int(self.sql_default)
+                except ValueError:
+                    # suppress the exception. This can be thrown when the
+                    # default is something like 'getdate()'
+                    pass
             elif self.avro_core_type in ['double', 'float']:
-                meta['default'] = float(self.sql_default)
+                try:
+                    meta['default'] = float(self.sql_default)
+                except ValueError:
+                    # suppress the exception.
+                    pass
             else:
                 meta['default'] = self.sql_default
         return meta
