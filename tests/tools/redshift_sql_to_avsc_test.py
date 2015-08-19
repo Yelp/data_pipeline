@@ -2,13 +2,13 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import copy
-
+import mock
 import pytest
 
 from data_pipeline.tools.redshift_sql_to_avsc import _sanitize_line
 from data_pipeline.tools.redshift_sql_to_avsc \
     import RedshiftFieldLineToAvroFieldConverter
+from data_pipeline.tools.redshift_sql_to_avsc import RedshiftSQLToAVSCBatch
 from data_pipeline.tools.redshift_sql_to_avsc \
     import RedshiftSQLToAVSCConverter
 
@@ -22,7 +22,7 @@ from data_pipeline.tools.redshift_sql_to_avsc \
     ]
 )
 def pkeys(request):
-    return copy.deepcopy(request.param)
+    return request.param
 
 
 @pytest.fixture
@@ -30,39 +30,43 @@ def field_fixtures(pkeys):
     fixtures = [
         {
             'name': 'field_a',
-            'sql_line': 'field_a char(18) NOT NULL encode lzo,',
+            'sql_line': "field_a char(18) NOT NULL default '' encode lzo,",
             'sql_type': 'char',
             'sql_width': 18,
             'avro_type': 'string',
-            'avro_meta': {'fixlen': 18},
-            'nullable': False
+            'avro_meta': {'fixlen': 18, 'default': ''},
+            'nullable': False,
+            'sql_default': ''
         },
         {
             'name': 'field_b',
-            'sql_line': '  field_b   varchar ( 320 )   encode lzo  ,  ',
+            'sql_line': ' field_b  varchar ( 320 ) default NULL encode lzo , ',
             'sql_type': 'varchar',
             'sql_width': 320,
-            'avro_type': ['string', 'null'],
-            'avro_meta': {'maxlen': 320},
-            'nullable': True
+            'avro_type': ['null', 'string'],
+            'avro_meta': {'maxlen': 320, 'default': None},
+            'nullable': True,
+            'sql_default': 'null'
         },
         {
             'name': 'field_c',
-            'sql_line': 'field_c integer,',
+            'sql_line': 'field_c integer DEFAULT NULL,',
             'sql_type': 'integer',
             'sql_width': None,
-            'avro_type': ['int', 'null'],
-            'avro_meta': {},
-            'nullable': True
+            'avro_type': ['null', 'int'],
+            'avro_meta': {'default': None},
+            'nullable': True,
+            'sql_default': 'null'
         },
         {
             'name': 'field_d',
-            'sql_line': 'field_d int   NOT    NULL,',
+            'sql_line': 'field_d int   NOT    NULL  default "1",',
             'sql_type': 'int',
             'sql_width': None,
             'avro_type': 'int',
-            'avro_meta': {},
-            'nullable': False
+            'avro_meta': {'default': 1},
+            'nullable': False,
+            'sql_default': '1'
         },
         {
             'name': 'field_e',
@@ -71,16 +75,18 @@ def field_fixtures(pkeys):
             'sql_width': None,
             'avro_type': 'int',
             'avro_meta': {},
-            'nullable': False
+            'nullable': False,
+            'sql_default': None
         },
         {
             'name': 'field_f',
-            'sql_line': 'field_f SMALLINT NOT NULL,',
+            'sql_line': 'field_f SMALLINT NOT NULL  DEFAULT 42 ,',
             'sql_type': 'smallint',
             'sql_width': None,
             'avro_type': 'int',
-            'avro_meta': {},
-            'nullable': False
+            'avro_meta': {'default': 42},
+            'nullable': False,
+            'sql_default': '42'
         },
         {
             'name': 'field_g',
@@ -89,7 +95,8 @@ def field_fixtures(pkeys):
             'sql_width': None,
             'avro_type': 'int',
             'avro_meta': {},
-            'nullable': False
+            'nullable': False,
+            'sql_default': None
         },
         {
             'name': 'field_h',
@@ -98,7 +105,8 @@ def field_fixtures(pkeys):
             'sql_width': None,
             'avro_type': ['long', 'null'],
             'avro_meta': {},
-            'nullable': True
+            'nullable': True,
+            'sql_default': None
         },
         {
             'name': 'field_i',
@@ -107,7 +115,8 @@ def field_fixtures(pkeys):
             'sql_width': None,
             'avro_type': ['long', 'null'],
             'avro_meta': {},
-            'nullable': True
+            'nullable': True,
+            'sql_default': None
         },
         {
             'name': 'field_j',
@@ -116,7 +125,8 @@ def field_fixtures(pkeys):
             'sql_width': None,
             'avro_type': ['float', 'null'],
             'avro_meta': {},
-            'nullable': True
+            'nullable': True,
+            'sql_default': None
         },
         {
             'name': 'field_k',
@@ -125,7 +135,8 @@ def field_fixtures(pkeys):
             'sql_width': None,
             'avro_type': 'float',
             'avro_meta': {},
-            'nullable': False
+            'nullable': False,
+            'sql_default': None
         },
         {
             'name': 'field_l',
@@ -134,34 +145,38 @@ def field_fixtures(pkeys):
             'sql_width': None,
             'avro_type': 'double',
             'avro_meta': {},
-            'nullable': False
+            'nullable': False,
+            'sql_default': None
         },
         {
             'name': 'field_m',
-            'sql_line': 'field_m   float8      null,',
+            'sql_line': 'field_m   float8      null   default "10.9",',
             'sql_type': 'float8',
             'sql_width': None,
             'avro_type': ['double', 'null'],
-            'avro_meta': {},
-            'nullable': True
+            'avro_meta': {'default': 10.9},
+            'nullable': True,
+            'sql_default': '10.9'
         },
         {
             'name': 'field_n',
-            'sql_line': '   field_n FLOAT,',
+            'sql_line': '   field_n FLOAT default 4.2,',
             'sql_type': 'float',
             'sql_width': None,
             'avro_type': ['double', 'null'],
-            'avro_meta': {},
-            'nullable': True
+            'avro_meta': {'default': 4.2},
+            'nullable': True,
+            'sql_default': '4.2'
         },
         {
             'name': 'field_o',
             'sql_line': 'field_o text NOT null,',
             'sql_type': 'text',
-            'sql_width': None,
+            'sql_width': 256,
             'avro_type': 'string',
-            'avro_meta': {},
-            'nullable': False
+            'avro_meta': {'maxlen': 256},
+            'nullable': False,
+            'sql_default': None
         },
         {
             'name': 'field_p',
@@ -170,7 +185,8 @@ def field_fixtures(pkeys):
             'sql_width': None,
             'avro_type': 'string',
             'avro_meta': {'date': True},
-            'nullable': False
+            'nullable': False,
+            'sql_default': None
         },
         {
             'name': 'field_q',
@@ -179,7 +195,8 @@ def field_fixtures(pkeys):
             'sql_width': None,
             'avro_type': 'long',
             'avro_meta': {'timestamp': True},
-            'nullable': False
+            'nullable': False,
+            'sql_default': None
         },
         {
             'name': 'field_r',
@@ -192,7 +209,8 @@ def field_fixtures(pkeys):
                 'precision': 10,
                 'scale': 5
             },
-            'nullable': False
+            'nullable': False,
+            'sql_default': None
         },
         {
             'name': 'field_s',
@@ -201,10 +219,51 @@ def field_fixtures(pkeys):
             'sql_width': None,
             'avro_type': ['boolean', 'null'],
             'avro_meta': {},
-            'nullable': True
+            'nullable': True,
+            'sql_default': None
+        },
+        {
+            'name': 'field_t',
+            'sql_line': 'field_t character(12),',
+            'sql_type': 'character',
+            'sql_width': 12,
+            'avro_type': ['string', 'null'],
+            'avro_meta': {'fixlen': 12},
+            'nullable': True,
+            'sql_default': None
+        },
+        {
+            'name': 'field_u',
+            'sql_line': 'field_u bpchar,',
+            'sql_type': 'bpchar',
+            'sql_width': 256,
+            'avro_type': ['string', 'null'],
+            'avro_meta': {'fixlen': 256},
+            'nullable': True,
+            'sql_default': None
+        },
+        {
+            'name': 'field_v',
+            'sql_line': 'field_v NCHAR(111) default "test",',
+            'sql_type': 'nchar',
+            'sql_width': 111,
+            'avro_type': ['string', 'null'],
+            'avro_meta': {'fixlen': 111, 'default': 'test'},
+            'nullable': True,
+            'sql_default': 'test'
+        },
+        {
+            'name': 'field_w',
+            'sql_line': "field_w NVARCHAR(42) NOT NULL default ' test ' , ",
+            'sql_type': 'nvarchar',
+            'sql_width': 42,
+            'avro_type': 'string',
+            'avro_meta': {'maxlen': 42, 'default': ' test '},
+            'nullable': False,
+            'sql_default': ' test '
         },
     ]
-    fixtures = copy.deepcopy(fixtures)
+    fixtures = fixtures
     for index, name in enumerate(pkeys):
         pkey_num = index + 1
         for fixture in fixtures:
@@ -256,6 +315,11 @@ def avro_metas(field_fixtures):
 
 
 @pytest.fixture
+def sql_defaults(field_fixtures):
+    return [field['sql_default'] for field in field_fixtures]
+
+
+@pytest.fixture
 def field_sql_lines(field_fixtures):
     return [field['sql_line'] for field in field_fixtures]
 
@@ -272,31 +336,35 @@ class TestRedshiftFieldLineToAvroFieldConverter(object):
             for line in field_sql_lines
         ]
 
-    def test_field_name(self, field_names, field_converters):
+    def test_name(self, field_names, field_converters):
         for field_name, converter in zip(field_names, field_converters):
             assert converter.name == field_name
 
-    def test_field_sql_type(self, sql_types, field_converters):
+    def test_sql_type(self, sql_types, field_converters):
         for sql_type, converter in zip(sql_types, field_converters):
             assert converter.sql_type == sql_type
 
-    def test_field_sql_type_width(self, sql_widths, field_converters):
+    def test_sql_type_width(self, sql_widths, field_converters):
         for width, converter in zip(sql_widths, field_converters):
             assert converter.sql_type_width == width
 
-    def test_field_nullable(self, nullables, field_converters):
+    def test_nullable(self, nullables, field_converters):
         for nullable, converter in zip(nullables, field_converters):
             assert converter.nullable == nullable
 
-    def test_get_field_avro_type(self, avro_types, field_converters):
+    def test_avro_type(self, avro_types, field_converters):
         for avro_type, converter in zip(avro_types, field_converters):
             assert converter.avro_type == avro_type
 
-    def test_get_field_avro_meta_attr(self, avro_metas, field_converters):
+    def test_avro_meta_attr(self, avro_metas, field_converters):
         for meta_attr, converter in zip(avro_metas, field_converters):
             assert converter.avro_meta_attributes == meta_attr
 
-    def test_get_avro_field(self, avro_fields, field_converters):
+    def test_sql_default(self, sql_defaults, field_converters):
+        for sql_default, converter in zip(sql_defaults, field_converters):
+            assert converter.sql_default == sql_default
+
+    def test_avro_field(self, avro_fields, field_converters):
         for avro_field, converter in zip(avro_fields, field_converters):
             assert converter.avro_field == avro_field
 
@@ -450,3 +518,79 @@ class TestRedshiftSQLToAVSCConverter(object):
 
     def test_get_avro(self, avro_record, converter):
         assert converter.avro_record == avro_record
+
+
+class TestRedshiftSQLToAVSCBatch(object):
+    @pytest.fixture
+    def globs(self):
+        return ['test/*.sql']
+
+    @pytest.fixture
+    def sql_file_path(self):
+        return 'test/test.sql'
+
+    @pytest.fixture
+    def avsc_file_path(self):
+        return 'test/test.avsc'
+
+    @pytest.yield_fixture
+    def mock_get_file_paths_from_glob_patterns(self, sql_file_path):
+        with mock.patch(
+            'data_pipeline.tools.redshift_sql_to_avsc.get_file_paths_from_glob_patterns'
+        ) as mock_get_file_paths_from_glob_patterns:
+            mock_get_file_paths_from_glob_patterns.return_value = [sql_file_path]
+            yield mock_get_file_paths_from_glob_patterns
+
+    @pytest.yield_fixture
+    def mock_os_path_exists(self):
+        with mock.patch(
+            'data_pipeline.tools.redshift_sql_to_avsc.os.path.exists'
+        ) as mock_os_path_exists:
+            mock_os_path_exists.return_value = True
+            yield mock_os_path_exists
+
+    @pytest.fixture
+    def mock_batch(self, globs):
+        batch = RedshiftSQLToAVSCBatch()
+        batch.convert_sql_to_avsc = mock.Mock()
+        batch.options = mock.Mock()
+        batch.options.globs = globs
+        return batch
+
+    def test_run_skips_existing_if_overwrite_false(
+            self,
+            avsc_file_path,
+            globs,
+            mock_get_file_paths_from_glob_patterns,
+            mock_os_path_exists,
+            mock_batch
+    ):
+        mock_batch.options.overwrite = False
+        mock_batch.run()
+        assert mock_get_file_paths_from_glob_patterns.mock_calls == [
+            mock.call(glob_patterns=globs)
+        ]
+        assert mock_os_path_exists.mock_calls == [mock.call(avsc_file_path)]
+        assert mock_batch.convert_sql_to_avsc.mock_calls == []
+
+    def test_run_converts_existing_if_overwrite_true(
+            self,
+            sql_file_path,
+            avsc_file_path,
+            globs,
+            mock_get_file_paths_from_glob_patterns,
+            mock_os_path_exists,
+            mock_batch
+    ):
+        mock_batch.options.overwrite = True
+        mock_batch.run()
+        assert mock_get_file_paths_from_glob_patterns.mock_calls == [
+            mock.call(glob_patterns=globs)
+        ]
+        assert mock_os_path_exists.mock_calls == [mock.call(avsc_file_path)]
+        assert mock_batch.convert_sql_to_avsc.mock_calls == [
+            mock.call(
+                avsc_file_path=avsc_file_path,
+                sql_file_path=sql_file_path
+            )
+        ]

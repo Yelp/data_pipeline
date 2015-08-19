@@ -12,8 +12,8 @@ from yelp_batch.batch import batch_command_line_options
 from yelp_batch.batch import os
 
 from data_pipeline.tools._glob_util import get_file_paths_from_glob_patterns
-# See https://regex101.com/r/kC0kZ1
 
+# See https://regex101.com/r/kC0kZ1
 CREATE_TABLE_REGEX = re.compile('^create(\s*table)?\s*((.+)\.)?(\w+)\s*\(?')
 
 # See https://regex101.com/r/zG9kV1
@@ -21,7 +21,7 @@ PRIMARY_KEY_REGEX = re.compile('^primary\s*key\s*\((.+)?\)')
 
 # See https://regex101.com/r/kD8iN5
 FIELD_LINE_REGEX = re.compile(
-    '^(\w+)\s*(\w+)\s*(\(\s*(\d+|\d+\s*\,\s*\d+)\s*\))?\s*(not\s+null|null)?.*\,'  # noqa
+    '^(\w+)\s*(\w+)\s*(\(\s*(\d+|\d+\s*\,\s*\d+)\s*\))?\s*(not\s+null|null)?\s*((default)\s+(\"|\')?(null|\d+\.\d+|\d+|[\w\s]*)(\"|\')?)?(\"|\')?.*,'  # noqa
 )
 
 # See https://regex101.com/r/bN3xL0
@@ -29,6 +29,32 @@ START_FIELDS_REGEX = re.compile('^.*\(')
 
 # See https://regex101.com/r/bR7bH2
 STOP_FIELDS_REGEX = re.compile('^\)')
+
+REDSHIFT_SQL_TO_AVRO_TYPE_MAPPING = {
+    'bigint': 'long',
+    'boolean': 'boolean',
+    'bpchar': 'string',
+    'char': 'string',
+    'character': 'string',
+    'date': 'string',
+    'decimal': 'double',
+    'double': 'double',
+    'float': 'double',
+    'float4': 'float',
+    'float8': 'double',
+    'int': 'int',
+    'int2': 'int',
+    'int4': 'int',
+    'int8': 'long',
+    'integer': 'int',
+    'nchar': 'string',
+    'nvarchar': 'string',
+    'real': 'float',
+    'smallint': 'int',
+    'text': 'string',
+    'timestamp': 'long',
+    'varchar': 'string'
+}
 
 
 def _sanitize_line(line):
@@ -63,38 +89,35 @@ class RedshiftFieldLineToAvroFieldConverter(object):
         return self._regex_matcher.group(1)
 
     @cached_property
+    def avro_core_type(self):
+        return REDSHIFT_SQL_TO_AVRO_TYPE_MAPPING[self.sql_type]
+
+    @cached_property
     def avro_type(self):
-        sql_type = self.sql_type
-        mapping = {
-            'char': 'string',
-            'varchar': 'string',
-            'integer': 'int',
-            'int': 'int',
-            'int4': 'int',
-            'smallint': 'int',
-            'int2': 'int',
-            'bigint': 'long',
-            'int8': 'long',
-            'real': 'float',
-            'float4': 'float',
-            'double': 'double',
-            'float8': 'double',
-            'float': 'double',
-            'text': 'string',
-            'date': 'string',
-            'timestamp': 'long',
-            'decimal': 'double',
-            'boolean': 'boolean'
-        }
-        avro_type = mapping[sql_type]
+        avro_type = self.avro_core_type
         if self.nullable:
-            return [avro_type, 'null']
+            if self.sql_default == 'null':
+                return ['null', avro_type]
+            else:
+                return [avro_type, 'null']
         else:
             return avro_type
 
     @cached_property
     def sql_type(self):
         return self._regex_matcher.group(2)
+
+    @cached_property
+    def sql_default(self):
+        """ Return the default value defined for the column, if any.
+
+            Note:
+                This will succeed only if the 'default' follows the 'NOT NULL'/
+                'NULL' on the column line. I've reached the limits of what
+                black magic I'm willing to deal with in this regex and
+                DATAPIPE-353 should be replacing this eventually anyway. :)
+        """
+        return self._regex_matcher.group(9)
 
     @cached_property
     def nullable(self):
@@ -108,22 +131,39 @@ class RedshiftFieldLineToAvroFieldConverter(object):
         for index, pkey_name in enumerate(self.pkeys):
             if pkey_name == field_name:
                 meta['pkey'] = index + 1
-        sql_type = self.sql_type
-        sql_width = self.sql_type_width
-        if sql_type == 'varchar':
-            meta['maxlen'] = sql_width
-        if sql_type == 'char':
-            meta['fixlen'] = sql_width
-        if sql_type == 'date' or sql_type == 'timestamp':
-            meta[sql_type] = True
-        if sql_type == 'decimal':
+                break
+        if self.sql_type in ['varchar', 'nvarchar', 'text']:
+            meta['maxlen'] = self.sql_type_width
+        if self.sql_type in ['char', 'character', 'nchar', 'bpchar']:
+            meta['fixlen'] = self.sql_type_width
+        if self.sql_type in ['date', 'timestamp']:
+            meta[self.sql_type] = True
+        if self.sql_type == 'decimal':
             meta['fixed_pt'] = True
-            meta['precision'] = sql_width[0]
-            meta['scale'] = sql_width[1]
+            meta['precision'] = self.sql_type_width[0]
+            meta['scale'] = self.sql_type_width[1]
+        if self.sql_default is not None:
+            if self.sql_default == 'null':
+                meta['default'] = None
+            elif self.avro_core_type in ['long', 'int']:
+                meta['default'] = int(self.sql_default)
+            elif self.avro_core_type in ['double', 'float']:
+                meta['default'] = float(self.sql_default)
+            else:
+                meta['default'] = self.sql_default
         return meta
 
     @cached_property
     def sql_type_width(self):
+        """ Return the sql type width, which is an int defining the the
+        maximum size for character types and a (presumably two element) list of
+        ints (the precision and scale) for the decimal type.
+
+        Note:
+            Some redshift sql types have default widths associated to them, see
+            http://docs.aws.amazon.com/redshift/latest/dg/r_Character_types.html
+            for more details
+        """
         width = self._regex_matcher.group(4)
         if width:
             if ',' in width:
@@ -134,6 +174,10 @@ class RedshiftFieldLineToAvroFieldConverter(object):
             else:
                 return int(width)
         else:
+            if self.sql_type in ['text', 'bpchar', 'varchar', 'nvarchar']:
+                return 256
+            if self.sql_type in ['char', 'character', 'nchar']:
+                return 1
             return None
 
     @cached_property
@@ -244,19 +288,20 @@ class RedshiftSQLToAVSCConverter(object):
 
     @cached_property
     def _raw_field_lines(self):
-        in_field_lines = False
         raw_field_lines = []
-        for line in self.sql_lines:
-            line = _sanitize_line(line)
-            if not in_field_lines:
-                if self._is_start_line(line):
-                    in_field_lines = True
-            else:
-                if self._is_stop_line(line):
-                    break
-                elif FIELD_LINE_REGEX.search(line):
-                    raw_field_lines.append(line)
+        for line in self.sql_lines[self._find_field_lines_start_index():]:
+            line = _sanitize_line(line=line)
+            if self._is_stop_line(line=line):
+                break
+            elif FIELD_LINE_REGEX.search(line):
+                raw_field_lines.append(line)
         return raw_field_lines
+
+    def _find_field_lines_start_index(self):
+        for index, line in enumerate(self.sql_lines):
+            line = _sanitize_line(line=line)
+            if self._is_start_line(line=line):
+                return index
 
     def _is_start_line(self, line):
         return bool(START_FIELDS_REGEX.search(line))
@@ -291,7 +336,11 @@ class RedshiftSQLToAVSCBatch(yelp_batch.batch.Batch):
             '--base-namespace',
             type='string',
             default='yelp_dw_redshift',
-            help='[REQUIRED] Base of the namespace. '
+            help='[REQUIRED] Base of the namespace. The namespace will be a '
+                 'combination of "{base-namespace}.{schema}" and it is best to '
+                 'choose a base-namespace which reflects the data store '
+                 'associated with the table (such as yelp_dw_redshift for the '
+                 'yelp datawarehouse redshift tables). '
                  'Default is "%default"'
         )
         opt_group.add_option(
@@ -299,6 +348,8 @@ class RedshiftSQLToAVSCBatch(yelp_batch.batch.Batch):
             type='string',
             default='public',
             help='[REQUIRED] default schema for tables without any specified. '
+                 'The namespace will be a combination of '
+                 '"{base-namespace}.{schema}". '
                  'Default is "%default"'
         )
         opt_group.add_option(
@@ -333,22 +384,28 @@ class RedshiftSQLToAVSCBatch(yelp_batch.batch.Batch):
                     )
                 )
                 continue
-            with open(sql_file_path) as sql_file:
-                sql_content = sql_file.read()
-            converter = RedshiftSQLToAVSCConverter(
-                sql_content=sql_content,
-                base_namespace=self.options.base_namespace,
-                default_schema=self.options.default_schema
+            self.convert_sql_to_avsc(
+                avsc_file_path=avsc_file_path,
+                sql_file_path=sql_file_path
             )
-            avro = converter.avro_record
-            with open(avsc_file_path, 'w') as avsc_file:
-                self.log.info('Writing "{0}"'.format(avsc_file_path))
-                json.dump(
-                    obj=avro,
-                    fp=avsc_file,
-                    indent='    ',
-                    sort_keys=True
-                )
+
+    def convert_sql_to_avsc(self, avsc_file_path, sql_file_path):
+        with open(sql_file_path) as sql_file:
+            sql_content = sql_file.read()
+        converter = RedshiftSQLToAVSCConverter(
+            sql_content=sql_content,
+            base_namespace=self.options.base_namespace,
+            default_schema=self.options.default_schema
+        )
+        avro = converter.avro_record
+        with open(avsc_file_path, 'w') as avsc_file:
+            self.log.info('Writing "{0}"'.format(avsc_file_path))
+            json.dump(
+                obj=avro,
+                fp=avsc_file,
+                indent='    ',
+                sort_keys=True
+            )
 
 if __name__ == "__main__":
     RedshiftSQLToAVSCBatch().start()

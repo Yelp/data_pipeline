@@ -6,10 +6,10 @@ import glob
 
 
 def get_file_paths_from_glob_patterns(glob_patterns):
-    """ Return a list of files matching the given list of glob patterns
+    """ Return a set of files matching the given list of glob patterns
      (for example ["./test.sql", "./other_tables/*.sql"])
     """
-    file_paths = []
+    file_paths = set()
     for glob_pattern in glob_patterns:
-        file_paths += glob.glob(glob_pattern)
+        file_paths |= set(glob.glob(glob_pattern))
     return file_paths
