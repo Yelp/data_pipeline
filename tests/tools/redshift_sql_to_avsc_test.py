@@ -214,13 +214,43 @@ def field_fixtures(pkeys):
         },
         {
             'name': 'field_s',
-            'sql_line': '    field_s    boolean   ,   ',
+            'sql_line': '    field_s    boolean  DEFAULT false  ,   ',
             'sql_type': 'boolean',
             'sql_width': None,
             'avro_type': ['boolean', 'null'],
-            'avro_meta': {},
+            'avro_meta': {'default': False},
             'nullable': True,
-            'sql_default': None
+            'sql_default': 'false'
+        },
+        {
+            'name': 'field_s1',
+            'sql_line': '    field_s1    boolean  DEFAULT 0 ,   ',
+            'sql_type': 'boolean',
+            'sql_width': None,
+            'avro_type': ['boolean', 'null'],
+            'avro_meta': {'default': False},
+            'nullable': True,
+            'sql_default': '0'
+        },
+        {
+            'name': 'field_s2',
+            'sql_line': 'field_s2 boolean default true,',
+            'sql_type': 'boolean',
+            'sql_width': None,
+            'avro_type': ['boolean', 'null'],
+            'avro_meta': {'default': True},
+            'nullable': True,
+            'sql_default': 'true'
+        },
+        {
+            'name': 'field_s3',
+            'sql_line': 'field_s3 boolean default 1,',
+            'sql_type': 'boolean',
+            'sql_width': None,
+            'avro_type': ['boolean', 'null'],
+            'avro_meta': {'default': True},
+            'nullable': True,
+            'sql_default': '1'
         },
         {
             'name': 'field_t',

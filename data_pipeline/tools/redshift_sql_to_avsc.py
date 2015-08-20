@@ -21,7 +21,7 @@ PRIMARY_KEY_REGEX = re.compile('^primary\s*key\s*\((.+)?\)')
 
 # See https://regex101.com/r/kD8iN5
 FIELD_LINE_REGEX = re.compile(
-    '^(\w+)\s*(\w+)\s*(\(\s*(\d+|\d+\s*\,\s*\d+)\s*\))?\s*(not\s+null|null)?\s*((default)\s+(\"|\')?(null|\d+\.\d+|\d+|[\w\s]*)(\"|\')?)?(\"|\')?.*,'  # noqa
+    '^(\w+)\s*(\w+)\s*(\(\s*(\d+|\d+\s*\,\s*\d+)\s*\))?\s*(not\s+null|null)?\s*((default)\s+(\"|\')?(null|false|true|\d+\.\d+|\d+|[\w\s]*)(\"|\')?)?(\"|\')?.*,'  # noqa
 )
 
 # See https://regex101.com/r/bN3xL0
@@ -150,6 +150,17 @@ class RedshiftFieldLineToAvroFieldConverter(object):
         if self.sql_default is not None:
             if self.sql_default == 'null':
                 meta['default'] = None
+            elif self.avro_core_type == 'boolean':
+                if self.sql_default == 'true':
+                    meta['default'] = True
+                elif self.sql_default == 'false':
+                    meta['default'] = False
+                else:
+                    try:
+                        meta['default'] = bool(int(self.sql_default))
+                    except ValueError:
+                        # suppress the exception
+                        pass
             elif self.avro_core_type in ['long', 'int']:
                 try:
                     meta['default'] = int(self.sql_default)
