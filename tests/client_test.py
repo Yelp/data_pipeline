@@ -5,8 +5,13 @@ from __future__ import unicode_literals
 import pytest
 
 from data_pipeline.client import Client
-from data_pipeline.client import MonitoringMode
 from data_pipeline.expected_frequency import ExpectedFrequency
+
+
+class ClientTester(Client):
+    @property
+    def client_type(self):
+        return 'tester'
 
 
 @pytest.mark.usefixtures('configure_teams')
@@ -28,10 +33,10 @@ class TestClient(object):
             client_name=self.client_name,
             team_name=self.team_name,
             expected_frequency_seconds=self.expected_frequency_seconds,
-            monitoring_mode=MonitoringMode.disabled
+            monitoring_enabled=False
         )
         args.update(override_kwargs)
-        return Client(**args)
+        return ClientTester(**args)
 
     def test_default_client_is_valid(self):
         self._assert_valid(self._build_client())

@@ -79,13 +79,12 @@ class Client(object):
         monitoring_enabled=True,
         dry_run=False,
     ):
-        if monitoring_mode in [MonitoringMode.enabled, MonitoringMode.dry_run]:
-            is_dry_run = monitoring_mode == MonitoringMode.dry_run
-            self.monitoring_message = _Monitor(
-                client_name,
-                self.client_type,
-                dry_run=is_dry_run
-            )
+        self.monitoring_message = _Monitor(
+            client_name,
+            self.client_type,
+            monitoring_enabled=monitoring_enabled,
+            dry_run=dry_run
+        )
         self.client_name = client_name
         self.team_name = team_name
         self.expected_frequency_seconds = expected_frequency_seconds
@@ -153,9 +152,23 @@ class _Monitor(object):
         Could be either producer or consumer
         start_time (int): start_time when _Monitor object will start counting the
             number of messages produced/consumed by the associated client
+        monitoring_enabled (Optional[bool]): If true, monitoring will be enabled
+            to record client's activities. Default is true.
+        dry_run (Optional[bool]): If true, client will skip publishing message to
+            kafka. Default is false.
     """
 
-    def __init__(self, client_name, client_type, start_time=0, dry_run=False):
+    def __init__(
+        self,
+        client_name,
+        client_type,
+        start_time=0,
+        monitoring_enabled=True,
+        dry_run=False
+    ):
+        if not monitoring_enabled:
+            return
+
         self.topic_to_tracking_info_map = {}
         self.client_name = client_name
         self.client_type = client_type
@@ -166,6 +179,7 @@ class _Monitor(object):
             dry_run=dry_run
         )
         self.monitoring_schema_id = self._get_monitoring_schema_id()
+        self.monitoring_enabled = monitoring_enabled
         self.dry_run = dry_run
 
     def _get_default_record(self, topic):
@@ -232,6 +246,9 @@ class _Monitor(object):
         """Used to handle the logic of recording monitoring_message in kafka and resetting
         it if necessary
         """
+        if not self.monitoring_enabled:
+            return
+
         tracking_info = self._get_record(message.topic)
         while tracking_info['start_timestamp'] + self._monitoring_window_in_sec < message.timestamp:
             self._publish(tracking_info)
@@ -242,6 +259,9 @@ class _Monitor(object):
         """Publishes the buffered information, stored in topic_to_tracking_info_map,
         to kafka and resets topic_to_tracking_info_map to an empty dictionary
         """
+        if not self.monitoring_enabled:
+            return
+
         for remaining_monitoring_topic, tracking_info in self.topic_to_tracking_info_map.items():
             self._publish(tracking_info)
         self.producer.flush_buffered_messages()
@@ -251,5 +271,8 @@ class _Monitor(object):
         """Called when the associated client is exiting/closing. Calls flush_buffered_info
         and also closes monitoring.producer.
         """
+        if not self.monitoring_enabled:
+            return
+
         self.flush_buffered_info()
         self.producer.close()
