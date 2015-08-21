@@ -41,9 +41,6 @@ class KafkaProducer(object):
         are published to notify the producer of current position information of
         successfully published messages.
     """
-    message_limit = 5000
-    time_limit = 0.1
-
     @cached_property
     def envelope(self):
         return Envelope()
@@ -120,9 +117,10 @@ class KafkaProducer(object):
             ))
 
     def _is_ready_to_flush(self):
+        time_limit = get_config().kafka_producer_flush_time_limit_seconds
         return (
-            (time.time() - self.start_time) >= self.time_limit or
-            self.message_buffer_size >= self.message_limit
+            (time.time() - self.start_time) >= time_limit or
+            self.message_buffer_size >= get_config().kafka_producer_buffer_size
         )
 
     def _flush_if_necessary(self):
