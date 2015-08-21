@@ -23,6 +23,11 @@ KafkaPositionInfo = namedtuple('KafkaPositionInfo', [
     'key'                   # Key of the message, may be `None`
 ])
 
+PayloadFieldDiff = namedtuple('PayloadFieldDiff', [
+    'old_value',            # Value of the field before update
+    'current_value'         # Value of the field after update
+])
+
 
 class Message(object):
     """Encapsulates a data pipeline message with metadata about the message.
@@ -493,6 +498,29 @@ class UpdateMessage(Message):
         self._decode_previous_payload_if_necessary()
         self._encode_previous_payload_data_if_necessary()
 
+    def _has_field_changed(self, field):
+        return self.payload_data[field] != self.previous_payload_data[field]
+
+    def _get_field_diff(self, field):
+        return PayloadFieldDiff(
+            old_value=self.previous_payload_data[field],
+            current_value=self.payload_data[field]
+        )
+
+    @property
+    def has_changed(self):
+        return any(
+            self._has_field_changed(field)
+            for field in self.payload_data.iterkeys()
+        )
+
+    @property
+    def payload_diff(self):
+        return {
+            field: self._get_field_diff(field)
+            for field in self.payload_data.iterkeys()
+            if self._has_field_changed(field)
+        }
 
 _message_type_to_class_map = {
     o._message_type.name: o for o in Message.__subclasses__() if o._message_type
