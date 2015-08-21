@@ -11,7 +11,6 @@ from yelp_kafka.offsets import get_topics_watermarks
 from data_pipeline._kafka_producer import LoggingKafkaProducer
 from data_pipeline._pooled_kafka_producer import PooledKafkaProducer
 from data_pipeline.client import Client
-from data_pipeline.client import MonitoringMode
 from data_pipeline.config import get_config
 
 
@@ -76,6 +75,10 @@ class Producer(Client):
       use_work_pool (bool): If true, the process will use a multiprocessing
         pool to serialize messages in preparation for transport.  The work pool
         can parallelize some expensive serialization.  Default is false.
+      dry_run (Optional[bool]): If true, producer will skip publishing message
+        to kafka. Default is false.
+      monitoring_enabled (Optional[bool]): If true, monitoring will be enabled
+        to record client's activities. Default is true.
     """
 
     def __init__(
@@ -84,16 +87,15 @@ class Producer(Client):
         team_name,
         expected_frequency_seconds,
         use_work_pool=False,
-        dry_run=False
+        dry_run=False,
+        monitoring_enabled=True
     ):
-        kwargs = {}
-        if dry_run:
-            kwargs['monitoring_mode'] = MonitoringMode.dry_run
         super(Producer, self).__init__(
             producer_name,
             team_name,
             expected_frequency_seconds,
-            **kwargs
+            monitoring_enabled,
+            dry_run=dry_run
         )
         self.use_work_pool = use_work_pool
         self.dry_run = dry_run
