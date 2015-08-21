@@ -166,6 +166,7 @@ class _Monitor(object):
         monitoring_enabled=True,
         dry_run=False
     ):
+        self.monitoring_enabled = monitoring_enabled
         if not monitoring_enabled:
             return
 
@@ -179,7 +180,6 @@ class _Monitor(object):
             dry_run=dry_run
         )
         self.monitoring_schema_id = self._get_monitoring_schema_id()
-        self.monitoring_enabled = monitoring_enabled
         self.dry_run = dry_run
 
     def _get_default_record(self, topic):

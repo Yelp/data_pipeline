@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import mock
 import pytest
 
 from data_pipeline.client import Client
@@ -71,3 +72,15 @@ class TestClient(object):
         assert client.client_name == self.client_name
         assert client.team_name == self.team_name
         assert client.expected_frequency_seconds == self.expected_frequency_seconds
+
+    @pytest.mark.parametrize("method, skipped_method, kwargs", [
+        ('record_message', '_get_record', {'message': None}),
+        ('close', 'flush_buffered_info', {}),
+    ])
+    def test_method_call_with_disabled_monitoring(self, method, skipped_method, kwargs):
+        client = self._build_client(
+            expected_frequency_seconds=ExpectedFrequency.constantly
+        )
+        with mock.patch.object(client.monitoring_message, skipped_method) as uncalled_method:
+            getattr(client.monitoring_message, method)(**kwargs)
+            assert uncalled_method.called == 0
