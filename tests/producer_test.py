@@ -415,24 +415,43 @@ class TestProducer(TestProducerBase):
             producer.flush()
             position_data = producer.get_checkpoint_position_data()
 
-            # Make sure the position data makes sense
-            assert position_data.last_published_message_position_info == upstream_info
-            assert position_data.topic_to_last_position_info_map == {topic: upstream_info}
-            kafka_offset = position_data.topic_to_kafka_offset_map[topic]
+            self._verify_position_data(position_data, upstream_info, consumer, producer, message, topic)
 
-            # The pointer is to the next offset where messages will be
-            # published.  There shouldn't be any messages there yet.
-            consumer.seek(kafka_offset, 0)  # kafka_offset from head
-            assert len(consumer.get_messages(count=10)) == 0
-
-            # publish another message, so we can seek to it
-            message.upstream_position_info = {'offset': 'fake2'}
+    def test_position_data_callback(self, topic, message, producer_name, team_name):
+        callback = mock.Mock()
+        producer = Producer(
+            producer_name=producer_name,
+            team_name=team_name,
+            expected_frequency_seconds=ExpectedFrequency.constantly,
+            position_data_callback=callback
+        )
+        upstream_info = {'offset': 'fake'}
+        message.upstream_position_info = upstream_info
+        with setup_capture_new_messages_consumer(topic) as consumer:
             producer.publish(message)
             producer.flush()
+            (position_data,), _ = callback.call_args
 
-            # There should be a message now that we've published one
-            consumer.seek(kafka_offset, 0)  # kafka_offset from head
-            assert len(consumer.get_messages(count=10)) == 1
+            self._verify_position_data(position_data, upstream_info, consumer, producer, message, topic)
+
+    def _verify_position_data(self, position_data, upstream_info, consumer, producer, message, topic):
+        # Make sure the position data makes sense
+        assert position_data.last_published_message_position_info == upstream_info
+        assert position_data.topic_to_last_position_info_map == {topic: upstream_info}
+        kafka_offset = position_data.topic_to_kafka_offset_map[topic]
+
+        # The pointer is to the next offset where messages will be
+        # published.  There shouldn't be any messages there yet.
+        consumer.seek(kafka_offset, 0)  # kafka_offset from head
+        assert len(consumer.get_messages(count=10)) == 0
+
+        # publish another message, so we can seek to it
+        message.upstream_position_info = {'offset': 'fake2'}
+        producer.publish(message)
+        producer.flush()
+
+        # There should be a message now that we've published one
+        consumer.seek(kafka_offset, 0)  # kafka_offset from head
 
 
 class TestEnsureMessagesPublished(TestProducerBase):
