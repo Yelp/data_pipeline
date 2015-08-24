@@ -37,8 +37,6 @@ setup(
         'PyStaticConfiguration',
         'simplejson',
         'swaggerpy',
-        'yelp_clog==1.1',
-        'yelp_batch',
         'yelp_kafka',
         'yelp_servlib',
     ],

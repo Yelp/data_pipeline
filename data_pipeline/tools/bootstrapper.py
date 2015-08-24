@@ -15,7 +15,7 @@ import yelp_batch
 from yelp_batch.batch import batch_command_line_options
 
 from data_pipeline.config import get_config
-from data_pipeline.schema_ref import SchemaRef
+from data_pipeline.tools.schema_ref import SchemaRef
 
 
 class FileBootstrapperBase(object):

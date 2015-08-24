@@ -116,9 +116,24 @@ class SchemaRef(object):
         return self.get_ref_val(self.schema_ref, 'doc_owner')
 
     def get_source_val(self, source, key):
+        """ Get a value for a given key in the given source name, returning
+        defaults where required. For example:
+            ``schema_ref.get_source_val('business_dimension', 'note')`` will
+            return the 'note' value for the object in the 'docs' list with
+            a 'source' == 'business_dimension', or the default note if none
+            is available.
+        """
         return self.get_ref_val(self.get_source_ref(source), key)
 
     def get_ref_val(self, ref, key):
+        """ Get a value for a given key in the given ref object. A ref object
+        is a node in the schema_ref and should either be the top-level ref (aka
+        `self.schema_ref`), a source ref (an object in the 'docs' list), or
+        a field ref (an object in a source ref's 'fields' list.) For example:
+            ``schema_ref.get_ref_val(field_ref, 'note')`` will
+            return the 'note' value for the field_ref object, or the default
+            note if none is available.
+        """
         if ref:
             return ref.get(key, self.defaults.get(key))
         else:

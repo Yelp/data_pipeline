@@ -14,12 +14,12 @@ from data_pipeline.tools.bootstrapper import MySQLBootstrapper
 class TestFileBootstrapperBase(object):
 
     @pytest.fixture()
-    def mock_schema_result(self):
+    def mock_schema_result(self, good_source_ref):
         mock_schema_result = mock.Mock()
         mock_schema_result.schema = '{"doc":"","fields":' \
                                     '[{"name":"good_field"}]}'
         mock_schema_result.schema_id = 1
-        mock_schema_result.topic.source.source = 'good_source'
+        mock_schema_result.topic.source.source = good_source_ref['source']
         return mock_schema_result
 
     @pytest.fixture
@@ -120,7 +120,7 @@ class TestFileBootstrapperBase(object):
             mock.call(
                 bootstrapper.api.schemas.register_schema,
                 body={
-                    'base_schema_id': 1,
+                    'base_schema_id': mock_schema_result.schema_id,
                     'schema': b'{"doc": "Docs for good_source", '
                               b'"fields": [{"doc": "Docs for good_field"'
                               b', "name": "good_field"}]}',
