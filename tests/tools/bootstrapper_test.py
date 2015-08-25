@@ -110,20 +110,22 @@ class TestFileBootstrapperBase(object):
             schema_ref,
             mock_schema_result,
             bootstrapper,
-            good_source_ref
+            good_source_ref,
+            good_field_ref
     ):
         bootstrapper.register_schema_docs(
             schema_result=mock_schema_result,
             source_ref=schema_ref.get_source_ref('good_source')
         )
+        expected_schema_obj = json.loads(mock_schema_result.schema)
+        expected_schema_obj['doc'] = good_source_ref['doc']
+        expected_schema_obj['fields'][0]['doc'] = good_field_ref['doc']
         assert bootstrapper.logged_api_call.mock_calls == [
             mock.call(
                 bootstrapper.api.schemas.register_schema,
                 body={
                     'base_schema_id': mock_schema_result.schema_id,
-                    'schema': b'{"doc": "Docs for good_source", '
-                              b'"fields": [{"doc": "Docs for good_field"'
-                              b', "name": "good_field"}]}',
+                    'schema': json.dumps(expected_schema_obj),
                     'namespace': good_source_ref['namespace'],
                     'source': good_source_ref['source'],
                     'source_owner_email': good_source_ref['owner_email'],
