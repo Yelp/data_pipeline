@@ -452,6 +452,7 @@ class TestProducer(TestProducerBase):
 
         # There should be a message now that we've published one
         consumer.seek(kafka_offset, 0)  # kafka_offset from head
+        assert len(consumer.get_messages(count=10)) == 1
 
 
 class TestEnsureMessagesPublished(TestProducerBase):
