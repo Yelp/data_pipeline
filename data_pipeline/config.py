@@ -293,7 +293,7 @@ class Config(object):
         When used, `upstream_position_info` should always be set, or
         :meth:`skip_position_info_update_when_not_set` should be set to True.
 
-        This can be useful if production into a topic happens from multiple
+        This can be useful if consumption happens from multiple
         upstream sources (such as a partitioned upstream topic), and
         the producer needs to merge information for each of the upstreams.
         """
