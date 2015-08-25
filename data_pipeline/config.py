@@ -117,6 +117,7 @@ class Config(object):
             return get_cluster_by_name(self.kafka_cluster_type, self.kafka_cluster_name)
         else:
             return ClusterConfig(
+                type='standard',
                 name='data_pipeline',
                 broker_list=self.kafka_broker_list,
                 zookeeper=self.kafka_zookeeper

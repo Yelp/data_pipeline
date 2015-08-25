@@ -17,19 +17,29 @@ logging.basicConfig(
 
 
 @pytest.fixture
-def good_source_ref():
+def bad_field_ref():
+    return {
+        "name": "bad_field"
+    }
+
+
+@pytest.fixture
+def good_field_ref():
+    return {
+        "note": "Notes for good_field",
+        "doc": "Docs for good_field",
+        "name": "good_field"
+    }
+
+
+@pytest.fixture
+def good_source_ref(good_field_ref, bad_field_ref):
     return {
         "category": "test_category",
         "file_display": "path/to/test.py",
         "fields": [
-            {
-                "note": "Notes for good_field",
-                "doc": "Docs for good_field",
-                "name": "good_field"
-            },
-            {
-                "name": "bad_field"
-            },
+            good_field_ref,
+            bad_field_ref
         ],
         "owner_email": "test@yelp.com",
         "namespace": "test_namespace",
