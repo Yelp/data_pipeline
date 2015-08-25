@@ -53,6 +53,15 @@ class Config(object):
         return KafkaClient(self.cluster_config.broker_list)
 
     @property
+    def schematizer_port(self):
+        """Port for the schematizer as an int.
+
+        If :meth:`load_schematizer_host_and_port_from_smartstack` is True, this
+        value will be loaded from smartstack instead of read directly.
+        """
+        return int(self.schematizer_host_and_port.split(':')[-1])
+
+    @property
     def schematizer_host_and_port(self):
         """Host and port for the schematizer, in the format `host:port`.
 

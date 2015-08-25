@@ -42,8 +42,8 @@ def registered_schema(schematizer_client, example_schema):
     return schematizer_client.schemas.register_schema(
         body={
             'schema': example_schema,
-            'namespace': 'test',
-            'source': 'test',
+            'namespace': 'test_namespace',
+            'source': 'good_source',
             'source_owner_email': 'test@yelp.com',
             'contains_pii': False
         }
@@ -55,10 +55,10 @@ def example_schema():
     return '''
     {
         "type":"record",
-        "namespace":"test",
-        "name":"test",
+        "namespace":"test_namespace",
+        "name":"good_source",
         "fields":[
-            {"type":"int","name":"test"}
+            {"type":"int","name":"good_field"}
         ]
     }
     '''
