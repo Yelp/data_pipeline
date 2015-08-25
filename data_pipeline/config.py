@@ -258,6 +258,59 @@ class Config(object):
             default='/nail/etc/services/data_pipeline/teams.yaml'
         )
 
+    @property
+    def kafka_producer_buffer_size(self):
+        """The maximum number of messages that the clientlib will buffer
+        before sending them out to kafka.
+        """
+        return data_pipeline_conf.read_int(
+            'kafka_producer_buffer_size',
+            default=5000
+        )
+
+    @property
+    def kafka_producer_flush_time_limit_seconds(self):
+        """The maximum amount of time in seconds that the clientlib will wait
+        for its buffer to fill before forcing a flush to kafka.
+        """
+        return data_pipeline_conf.read_float(
+            'kafka_producer_flush_time_limit_seconds',
+            default=0.1
+        )
+
+    @property
+    def skip_position_info_update_when_not_set(self):
+        """By default, the clientlib will replace upstream position info in the
+        producer with the contents from the last published message, regardless
+        of content.  When this option is True, the producer will not update
+        position info when it's not set in the message.
+
+        This option is useful when a single upstream message can potentially
+        result in multiple downstream messages being produced.  In that case,
+        only the last message should carry upstream position information.
+        """
+        return data_pipeline_conf.read_bool(
+            'skip_position_info_update_when_not_set',
+            default=False
+        )
+
+    @property
+    def merge_position_info_update(self):
+        """By default, the clientlib will replace upstream position info
+        returned by the producer.  When this option is set to True, the
+        producer will instead merge the upstream position info dictionaries.
+        When used, `upstream_position_info` should always be set, or
+        :meth:`skip_position_info_update_when_not_set` should be set to True.
+
+        This can be useful if consumption happens from multiple
+        upstream sources (such as a partitioned upstream topic), and
+        the producer needs to merge information for each of the upstreams.
+        """
+        return data_pipeline_conf.read_bool(
+            'merge_position_info_update',
+            default=False
+        )
+
 
 def configure_from_dict(config_dict):
     """Configure the :mod:`data_pipeline` clientlib from a dictionary.

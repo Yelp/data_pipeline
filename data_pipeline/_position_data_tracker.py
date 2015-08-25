@@ -2,6 +2,8 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+from collections import defaultdict
+
 from data_pipeline.config import get_config
 from data_pipeline.position_data import PositionData
 
@@ -9,7 +11,16 @@ from data_pipeline.position_data import PositionData
 logger = get_config().logger
 
 
-class PositionDataTracker(object):
+def PositionDataTracker():
+    """Factory method for generating PositionDataTracker or subclasses
+    """
+    if get_config().merge_position_info_update:
+        return _MergingPositionDataTracker()
+    else:
+        return _PositionDataTracker()
+
+
+class _PositionDataTracker(object):
     """Makes it easier to construct and maintain PositionData.
 
     The basic idea is that messages are recorded as buffered, then recorded
@@ -18,15 +29,14 @@ class PositionDataTracker(object):
     """
 
     def __init__(self):
-        self.last_published_message_position_info = None
-        self.topic_to_last_position_info_map = {}
-        self.topic_to_kafka_offset_map = {}
         self.unpublished_messages = 0
+        self.topic_to_kafka_offset_map = {}
+        self._setup_position_info()
 
     def record_message_buffered(self, message):
         logger.debug("Message buffered: %s" % message)
-        self.last_published_message_position_info = message.upstream_position_info
-        self.topic_to_last_position_info_map[message.topic] = message.upstream_position_info
+        if self._should_update_position_info(message):
+            self._update_position_info(message)
         self.unpublished_messages += 1
 
     def record_messages_published(self, topic, offset, message_count):
@@ -41,4 +51,32 @@ class PositionDataTracker(object):
             last_published_message_position_info=self.last_published_message_position_info,
             topic_to_last_position_info_map=dict(self.topic_to_last_position_info_map),
             topic_to_kafka_offset_map=dict(self.topic_to_kafka_offset_map)
+        )
+
+    def _setup_position_info(self):
+        self.last_published_message_position_info = None
+        self.topic_to_last_position_info_map = {}
+
+    def _should_update_position_info(self, message):
+        return (
+            message.upstream_position_info is not None or
+            not get_config().skip_position_info_update_when_not_set
+        )
+
+    def _update_position_info(self, message):
+        self.last_published_message_position_info = message.upstream_position_info
+        self.topic_to_last_position_info_map[message.topic] = message.upstream_position_info
+
+
+class _MergingPositionDataTracker(_PositionDataTracker):
+    def _setup_position_info(self):
+        self.last_published_message_position_info = {}
+        self.topic_to_last_position_info_map = defaultdict(dict)
+
+    def _update_position_info(self, message):
+        self.last_published_message_position_info.update(
+            message.upstream_position_info
+        )
+        self.topic_to_last_position_info_map[message.topic].update(
+            message.upstream_position_info
         )
