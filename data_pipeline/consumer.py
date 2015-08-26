@@ -328,6 +328,26 @@ class Consumer(Client):
             partition_offset_map[pos_info.partition] = max(pos_info.offset, max_offset)
             topic_to_partition_offset_map[message.topic] = partition_offset_map
 
+        self.commit_offsets(topic_to_partition_offset_map)
+
+    def commit_offsets(self, topic_to_partition_offset_map):
+        """Commits offset information to kafka.  Allows lower-level control for
+        committing offsets.  In general, :meth:`commit_message` or
+        :meth:`commit_messages` should be used, but this can be useful when paired with
+        :meth:`data_pipeline.position_data.PositionData.topic_to_last_position_info_map`.
+
+        Example::
+            The `topic_to_partition_offset_map` should be formatted like::
+
+                {
+                  'topic1': {0: 83854, 1: 8943892},
+                  'topic2': {0: 190898}
+                }
+
+        Args::
+            topic_to_partition_offset_map (Dict[str, Dict[int, int]]): Maps from
+                topics to a partition and offset map for each topic.
+        """
         return self._send_offset_commit_requests(
             offset_commit_request_list=[
                 OffsetCommitRequest(

@@ -1,3 +1,4 @@
--r requirements-dev.txt
-yelp_redshift
 sqlparse
+yelp_clog==1.1
+yelp_batch
+yelp_redshift

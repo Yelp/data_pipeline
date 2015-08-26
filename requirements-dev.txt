@@ -2,18 +2,19 @@
 # TODO(DATAPIPE-167): Add the packages that don't exist yet to the interal Pypi
 # and remove this extra-index-url
 --extra-index-url https://pypi.python.org/simple/
-flake8
-pytest
-mock
-terminaltables>=1.0.2
-# older ipython is necessary for py26 compatibility
-ipython<2.0.0
-wheel>=0.22
-ipdb
-Sphinx==1.3.1
+-r requirements-tools.txt
 docker-compose==1.3.3
-pre-commit>=0.4.2
-pytest-cov==1.8.1
 docker-py==1.3.1
+flake8
+ipdb
+ipython
+mock
+pre-commit>=0.4.2
+pytest
+pytest-cov==1.8.1
+pytest-raisesregexp
 # requests is locked at <2.7 to satisfy a docker-compose requirement
 requests<2.7
+Sphinx==1.3.1
+terminaltables>=1.0.2
+wheel>=0.22

@@ -75,6 +75,11 @@ class Producer(Client):
       use_work_pool (bool): If true, the process will use a multiprocessing
         pool to serialize messages in preparation for transport.  The work pool
         can parallelize some expensive serialization.  Default is false.
+      position_data_callback (Optional[function]): If provided, the function
+        will be called when the producer starts, and whenever messages are
+        committed to Kafka, with updated position data.  The callback should
+        take a single argument, which will be an instance of
+        :class:`PositionData`.
     """
 
     def __init__(
@@ -83,7 +88,8 @@ class Producer(Client):
         team_name,
         expected_frequency_seconds,
         use_work_pool=False,
-        dry_run=False
+        dry_run=False,
+        position_data_callback=None
     ):
         super(Producer, self).__init__(
             producer_name,
@@ -93,6 +99,7 @@ class Producer(Client):
         )
         self.use_work_pool = use_work_pool
         self.dry_run = dry_run
+        self.position_data_callback = position_data_callback
 
     @cached_property
     def _kafka_producer(self):
@@ -280,6 +287,8 @@ class Producer(Client):
                 including Kafka offsets and upstream position information.
         """
         self.position_data = position_data
+        if self.position_data_callback:
+            self.position_data_callback(position_data)
 
     def _generate_topic_messages_map(self, messages):
         topic_messages_map = defaultdict(list)

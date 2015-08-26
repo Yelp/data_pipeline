@@ -35,10 +35,10 @@ setup(
         'enum34>=1.0.4',
         'kafka-python',
         'PyStaticConfiguration',
+        'simplejson',
+        'swaggerpy',
         'yelp_kafka',
         'yelp_servlib',
-        'simplejson',
-        'swaggerpy'
     ],
     zip_safe=False,
     keywords='data_pipeline',

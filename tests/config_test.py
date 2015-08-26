@@ -84,6 +84,18 @@ class TestConfigDefaults(TestConfigBase):
     def test_producer_max_publish_retry_count(self, config):
         assert config.producer_max_publish_retry_count == 5
 
+    def test_kafka_producer_buffer_size(self, config):
+        assert config.kafka_producer_buffer_size == 5000
+
+    def test_kafka_producer_flush_time_limit_seconds(self, config):
+        assert config.kafka_producer_flush_time_limit_seconds == 0.1
+
+    def test_skip_position_info_update_when_not_set(self, config):
+        assert not config.skip_position_info_update_when_not_set
+
+    def test_merge_position_info_update(self, config):
+        assert not config.merge_position_info_update
+
 
 class TestConfigurationOverrides(TestConfigBase):
     @classmethod
@@ -187,3 +199,19 @@ class TestConfigurationOverrides(TestConfigBase):
     def test_producer_max_publish_retry_count(self, config):
         with reconfigure(producer_max_publish_retry_count=3):
             assert config.producer_max_publish_retry_count == 3
+
+    def test_kafka_producer_buffer_size(self, config):
+        with reconfigure(kafka_producer_buffer_size=10):
+            assert config.kafka_producer_buffer_size == 10
+
+    def test_kafka_producer_flush_time_limit_seconds(self, config):
+        with reconfigure(kafka_producer_flush_time_limit_seconds=3.2):
+            assert config.kafka_producer_flush_time_limit_seconds == 3.2
+
+    def test_skip_position_info_update_when_not_set(self, config):
+        with reconfigure(skip_position_info_update_when_not_set=True):
+            assert config.skip_position_info_update_when_not_set
+
+    def test_merge_position_info_update(self, config):
+        with reconfigure(merge_position_info_update=True):
+            assert config.merge_position_info_update
