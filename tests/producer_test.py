@@ -27,6 +27,7 @@ from data_pipeline.message import Message
 from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.producer import Producer
 from data_pipeline.producer import PublicationUnensurableError
+from tests.helpers.config import reconfigure
 from tests.helpers.kafka_docker import capture_new_messages
 from tests.helpers.kafka_docker import create_kafka_docker_topic
 from tests.helpers.kafka_docker import setup_capture_new_messages_consumer
@@ -566,9 +567,6 @@ class TestPublishMessagesWithRetry(TestProducerBase):
         topic_two,
         producer
     ):
-        # ensure all the messages are published together
-        producer._kafka_producer.time_limit = 10 * 60
-
         mock_response = ProduceResponse(topic, partition=0, error=0, offset=1)
         fail_response = FailedPayloadsError(payload=mock.Mock())
         side_effect = ([[mock_response, fail_response]] +
@@ -577,6 +575,8 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             producer._kafka_producer.kafka_client,
             'send_produce_request',
             side_effect=side_effect
+        ), reconfigure(
+            kafka_producer_flush_time_limit_seconds=10  # publish all msgs together
         ), pytest.raises(
             MaxRetryError
         ) as e:
