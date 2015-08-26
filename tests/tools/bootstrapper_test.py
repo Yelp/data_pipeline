@@ -32,14 +32,17 @@ class TestFileBootstrapperBase(object):
         """
         bootstrapper = FileBootstrapperBase(
             schema_ref=schema_ref,
-            file_paths=[],
+            file_paths=set(),
             override_metadata=True
         )
         bootstrapper.logged_api_call = mock.Mock()
         return bootstrapper
 
-    def test_bootstrap_files_calls_register_file_for_each_file(self, containers):
-        file_paths = ['a.test', 'b.test']
+    def test_bootstrap_files_calls_register_file_for_each_file(
+            self,
+            containers
+    ):
+        file_paths = {'a.test', 'b.test'}
         bootstrapper = FileBootstrapperBase(
             schema_ref=None,
             file_paths=file_paths,
@@ -332,14 +335,14 @@ class TestAVSCBootstrapper(object):
     def bootstrapper(self, schema_ref):
         bootstrapper = AVSCBootstrapper(
             schema_ref=schema_ref,
-            file_paths=['test.avsc', 'test.not_an_avsc'],
+            file_paths={'test.avsc', 'test.avsc', 'test.not_an_avsc'},
             override_metadata=True
         )
         bootstrapper.logged_api_call = mock.Mock()
         return bootstrapper
 
     def test_only_avsc_remain_in_file_paths(self, bootstrapper):
-        assert bootstrapper.file_paths == ['test.avsc']
+        assert bootstrapper.file_paths == {'test.avsc'}
 
     def test_register_avsc(self, bootstrapper, example_schema, good_source_ref):
         bootstrapper.register_avsc(avsc_content=example_schema)
@@ -363,14 +366,14 @@ class TestMySQLBootstrapper(object):
     def bootstrapper(self, schema_ref):
         bootstrapper = MySQLBootstrapper(
             schema_ref=schema_ref,
-            file_paths=['test.sql', 'test.not_a_sql'],
+            file_paths={'test.sql', 'test.not_a_sql'},
             override_metadata=True
         )
         bootstrapper.logged_api_call = mock.Mock()
         return bootstrapper
 
     def test_only_sql_remain_in_file_paths(self, bootstrapper):
-        assert bootstrapper.file_paths == ['test.sql']
+        assert bootstrapper.file_paths == {'test.sql'}
 
     def get_source_from_sql_file_path(self, bootstrapper):
         assert bootstrapper.get_source_from_sql_file_path(

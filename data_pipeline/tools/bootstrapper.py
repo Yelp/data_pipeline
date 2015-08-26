@@ -15,6 +15,7 @@ import yelp_batch
 from yelp_batch.batch import batch_command_line_options
 
 from data_pipeline.config import get_config
+from data_pipeline.tools._glob_util import get_file_paths_from_glob_patterns
 from data_pipeline.tools.schema_ref import SchemaRef
 
 
@@ -32,7 +33,7 @@ class FileBootstrapperBase(object):
         """
         Args:
             schema_ref(SchemaRef): SchemaRef to use for looking up metadata
-            file_paths(list[str]): A list of file paths to use for bootstrapping
+            file_paths(set([str])): A list of file paths to use for bootstrapping
             override_metadata(boolean): If True then existing metadata (such as
                 notes, categories, etc) will be overwritten with provided
                 schema_ref, otherwise existing metadata will be preserved.
@@ -45,11 +46,11 @@ class FileBootstrapperBase(object):
         self.schema_ref = schema_ref
         self.override_metadata = override_metadata
         self.file_extension = file_extension
-        self.file_paths = [
+        self.file_paths = set([
             file_path
             for file_path in file_paths
             if self.is_correct_file_extension(file_path)
-        ]
+        ])
 
     def register_file(self, file_path):
         """ Register a file specified and return the schema
@@ -483,7 +484,7 @@ class BootstrapperBatch(yelp_batch.batch.Batch):
             }
         )
         FileBootstrapperBase.log = self.log  # Specify our logger as the logger
-        file_paths = self.get_files_from_glob_patterns(
+        file_paths = get_file_paths_from_glob_patterns(
             self.options.globs
         )
         schema_results = []
