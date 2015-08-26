@@ -175,7 +175,6 @@ class _Monitor(object):
             self._notify_messages_published,
             dry_run=dry_run
         )
-        # self.monitoring_schema_id = self._get_monitoring_schema_id()
         self.dry_run = dry_run
         self._last_msg_timestamp = None
 

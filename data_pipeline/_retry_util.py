@@ -16,9 +16,6 @@ from data_pipeline.config import get_config
 
 logger = get_config().logger
 
-DEFAULT_INITIAL_RETRY_DELAY_IN_SEC = 1  # 1 second
-DEFAULT_MAX_RETRY_DELAY_IN_SEC = 3 * 60  # 3 minutes
-DEFAULT_BACKOFF_FACTOR = 2
 UNLIMITED = -1
 
 
@@ -57,7 +54,8 @@ class MaxRetryError(Exception):
     it hasn't been successfully finished.
     """
 
-    def __init__(self, last_result=None):
+    def __init__(self, last_result=None, *args):
+        super(MaxRetryError, self).__init__(*args)
         self._last_result = last_result
 
     @property
@@ -267,12 +265,10 @@ def retry_on_exception(retry_policy, retry_exceptions,
         retry_policy.max_runtime_secs
     )
     retry_tracker.start()
-    i = 0
     while True:
         try:
             return func_to_retry(*args, **kwargs)
         except retry_exceptions as e:
-            i += 1
             if not retry_tracker.exceeded_max_retry():
                 retry_tracker.increment_retry_count()
                 time.sleep(retry_policy.backoff_policy.next_backoff_delay())

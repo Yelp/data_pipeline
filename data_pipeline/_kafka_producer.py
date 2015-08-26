@@ -91,18 +91,11 @@ class KafkaProducer(object):
         self.flush_buffered_messages()
         self.kafka_client.close()
 
-    @property
-    def x_publish_retry_policy(self):
-        return RetryPolicy(
-            ExpBackoffPolicy(with_jitter=True),
-            max_retry_count=get_config().producer_max_publish_retry_count
-        )
-
     def _publish_produce_requests(self, requests):
         """It will try to publish all the produce requests for topics, and
         retry a number of times until either all the requests are successfully
-        published or it exceeds the maximum number of retries. If it exceeds
-        the maximum number of retries, the exception will be thrown.
+        published or it can no longer retry, in which case., the exception will
+        be thrown.
 
         Each time the requests that are successfully published in the previous
         round will be removed from the requests and won't be published again.
@@ -209,6 +202,7 @@ class KafkaProducer(object):
     def _add_message_to_buffer(self, message):
         topic = message.topic
         message = self._prepare_message(message)
+
         self.message_buffer[topic].append(message)
         self.message_buffer_size += 1
 

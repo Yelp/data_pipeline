@@ -26,9 +26,6 @@ class TestRetryOnCondition(object):
     def return_true_then_false_func(self):
         return mock.Mock(side_effect=(True, False))
 
-    def retry_when_greater_than_one(self, value):
-        return Predicate(predicate=lambda i: i >= 1, i=value)
-
     @pytest.fixture
     def number_sequence_func(self):
         return mock.Mock(side_effect=(i + 1 for i in xrange(10)))
