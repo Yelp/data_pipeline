@@ -78,6 +78,12 @@ class TestConfigDefaults(TestConfigBase):
     def test_data_pipeline_teams_config_file_path(self, config):
         assert config.data_pipeline_teams_config_file_path == '/nail/etc/services/data_pipeline/teams.yaml'
 
+    def test_kafka_client_ack_count(self, config):
+        assert config.kafka_client_ack_count == -1
+
+    def test_producer_max_publish_retry_count(self, config):
+        assert config.producer_max_publish_retry_count == 5
+
 
 class TestConfigurationOverrides(TestConfigBase):
     @classmethod
@@ -173,3 +179,11 @@ class TestConfigurationOverrides(TestConfigBase):
     def test_data_pipeline_teams_config_file_path(self, config):
         with reconfigure(data_pipeline_teams_config_file_path='/some/path'):
             assert config.data_pipeline_teams_config_file_path == '/some/path'
+
+    def test_kafka_client_ack_count(self, config):
+        with reconfigure(kafka_client_ack_count=1):
+            assert config.kafka_client_ack_count == 1
+
+    def test_producer_max_publish_retry_count(self, config):
+        with reconfigure(producer_max_publish_retry_count=3):
+            assert config.producer_max_publish_retry_count == 3

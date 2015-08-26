@@ -2,25 +2,29 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import ast
 import binascii
 import copy
+import math
 import multiprocessing
 
 import mock
 import pytest
 from kafka.common import FailedPayloadsError
+from kafka.common import ProduceRequest
+from kafka.common import ProduceResponse
 
 from data_pipeline._fast_uuid import FastUUID
-from data_pipeline._kafka_producer import KafkaProducer
-from data_pipeline._kafka_producer import PublishMessagesFailedError
-from data_pipeline.async_producer import AsyncProducer
-from data_pipeline.client import _Monitor
+from data_pipeline._kafka_producer import _EnvelopeAndMessage
+from data_pipeline._kafka_producer import _prepare
+from data_pipeline._retry_util import ExpBackoffPolicy
+from data_pipeline._retry_util import MaxRetryError
+from data_pipeline._retry_util import RetryPolicy
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import CreateMessage
 from data_pipeline.message import Message
+from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.producer import Producer
 from data_pipeline.producer import PublicationUnensurableError
 from tests.helpers.kafka_docker import capture_new_messages
@@ -32,18 +36,11 @@ class RandomException(Exception):
     pass
 
 
-@pytest.mark.usefixtures("patch_dry_run", "configure_teams")
+@pytest.mark.usefixtures(
+    "configure_teams",
+    "patch_monitor_init_start_time_to_zero"
+)
 class TestProducerBase(object):
-
-    @pytest.yield_fixture
-    def patch_dry_run(self):
-        with mock.patch.object(
-            Message,
-            'dry_run',
-            new_callable=mock.PropertyMock
-        ) as mock_dry_run:
-            mock_dry_run.return_value = True
-            yield mock_dry_run
 
     @pytest.fixture(params=[
         True,
@@ -77,17 +74,20 @@ class TestProducerBase(object):
         return topic_name
 
     @pytest.fixture(scope='module')
-    def topic_1(self, kafka_docker):
-        create_kafka_docker_topic(kafka_docker, str('topic-1'))
-        return str('topic-1')
+    def topic_two(self, kafka_docker):
+        topic_one_name = str(binascii.hexlify(FastUUID().uuid4()))
+        create_kafka_docker_topic(kafka_docker, topic_one_name)
+        return topic_one_name
 
-    @pytest.fixture(scope='module')
-    def monitor(self, kafka_docker):
-        create_kafka_docker_topic(kafka_docker, str('message-monitoring-log'))
-        return str('message-monitoring-log')
+    @pytest.yield_fixture
+    def patch_monitor_init_start_time_to_zero(self):
+        with mock.patch(
+            'data_pipeline.client._Monitor.get_monitor_window_start_timestamp',
+            return_value=0
+        ) as patched_start_time:
+            yield patched_start_time
 
 
-@pytest.mark.usefixtures("patch_dry_run")
 class TestProducer(TestProducerBase):
 
     def create_message_with_pii(self, topic_name, payload, registered_schema):
@@ -97,276 +97,6 @@ class TestProducer(TestProducerBase):
             payload=payload,
             timestamp=1500,
             contains_pii=True
-        )
-
-    def create_message_with_specified_timestamp(self, topic_name, payload, timestamp):
-        """returns a message with a specified timestamp
-        """
-        return CreateMessage(
-            topic=topic_name,
-            schema_id=10,
-            payload=payload,
-            timestamp=timestamp
-        )
-
-    def assert_monitoring_system_checks(self, unpacked_message, topic, message_count, message_timeslot):
-        assert unpacked_message['message_type'] == 'monitor'
-        decoded_payload = ast.literal_eval(unpacked_message['payload'])
-        assert decoded_payload['message_count'] == message_count
-        assert decoded_payload['client_type'] == 'producer'
-        assert decoded_payload['start_timestamp'] == message_timeslot * get_config().monitoring_window_in_sec
-        assert decoded_payload['topic'] == topic
-
-    def test_monitoring_message_basic(self, message, topic, monitor, producer, envelope):
-        with capture_new_messages(topic) as get_messages, \
-                capture_new_messages(monitor) as get_monitoring_messages:
-            for i in xrange(99):
-                producer.publish(message)
-            producer.flush()
-            producer.monitoring_message.flush_buffered_info()
-            messages = get_messages()
-            monitoring_messages = get_monitoring_messages()
-
-        assert len(messages) == 99
-        assert len(monitoring_messages) == 3
-
-        # first and second monitoring messages will have 0 as the message_count
-        # since the timestamp of published message is 1500
-        unpacked_message = envelope.unpack(monitoring_messages[0].message.value)
-        self.assert_monitoring_system_checks(
-            unpacked_message,
-            topic,
-            message_count=0,
-            message_timeslot=0
-        )
-
-        unpacked_message = envelope.unpack(monitoring_messages[1].message.value)
-        self.assert_monitoring_system_checks(
-            unpacked_message,
-            topic,
-            message_count=0,
-            message_timeslot=1
-        )
-
-        # third monitoring_message will again have 99 as the message_count
-        unpacked_message = envelope.unpack(monitoring_messages[2].message.value)
-        self.assert_monitoring_system_checks(
-            unpacked_message,
-            topic,
-            message_count=99,
-            message_timeslot=2
-        )
-
-    def test_monitoring_system_same_topic_different_timestamp_messages(
-        self,
-        topic,
-        monitor,
-        payload,
-        producer,
-        envelope
-    ):
-        # list of timestamps for which message will be created and published for
-        # testing purposes
-        timestamp_list = [100, 654, 2010, 2015, 2050]
-        with capture_new_messages(topic) as get_messages, \
-                capture_new_messages(monitor) as get_monitoring_messages:
-            for timestamp in timestamp_list:
-                producer.publish(self.create_message_with_specified_timestamp(topic, payload, timestamp))
-            producer.flush()
-            producer.monitoring_message.flush_buffered_info()
-            monitoring_messages = get_monitoring_messages()
-            messages = get_messages()
-
-        assert len(messages) == 5
-        assert len(monitoring_messages) == 4
-
-        # first and second monitoring messages should have count as 1
-        unpacked_message = envelope.unpack(monitoring_messages[0].message.value)
-        self.assert_monitoring_system_checks(
-            unpacked_message,
-            topic,
-            message_count=1,
-            message_timeslot=0
-        )
-
-        unpacked_message = envelope.unpack(monitoring_messages[1].message.value)
-        self.assert_monitoring_system_checks(
-            unpacked_message,
-            topic,
-            message_count=1,
-            message_timeslot=1
-        )
-
-        # third monitoring message should have message_count as 0
-        # since no messages are published with the timestamp between 1200-1800
-        unpacked_message = envelope.unpack(monitoring_messages[2].message.value)
-        self.assert_monitoring_system_checks(
-            unpacked_message,
-            topic,
-            message_count=0,
-            message_timeslot=2
-        )
-
-        # forth monitoring message should have message count as 3
-        unpacked_message = envelope.unpack(monitoring_messages[3].message.value)
-        self.assert_monitoring_system_checks(
-            unpacked_message,
-            topic,
-            message_count=3,
-            message_timeslot=3
-        )
-
-    def test_monitoring_system_different_topic_different_timestamp_messages(
-        self,
-        topic,
-        topic_1,
-        monitor,
-        payload,
-        producer,
-        envelope,
-        kafka_docker
-    ):
-        timestamp_topic_name_list = [
-            (1020, topic),
-            (1023, topic_1),
-            (1043, topic),
-            (1034, topic_1),
-            (1079, topic_1),
-            (2025, topic_1),
-        ]
-        with capture_new_messages(monitor) as get_monitoring_messages, \
-                capture_new_messages(topic) as get_messages, \
-                capture_new_messages(topic_1) as get_messages_for_topic_1:
-            for timestamp, topic_name in timestamp_topic_name_list:
-                producer.publish(
-                    self.create_message_with_specified_timestamp(
-                        topic_name,
-                        payload,
-                        timestamp
-                    )
-                )
-            producer.flush()
-            producer.monitoring_message.flush_buffered_info()
-            topic_1_messages = get_messages_for_topic_1()
-            topic_messages = get_messages()
-            monitoring_messages = get_monitoring_messages()
-
-        # verifying messages are published properly
-        assert len(topic_messages) == 2
-        assert len(topic_1_messages) == 4
-
-        # varifying number of monitoring_messages
-        assert len(monitoring_messages) == 6
-
-        # first and second monitoring messages will have 0 message_count
-        # and would be for topic and topic-1 respectively
-        unpacked_message = envelope.unpack(monitoring_messages[0].message.value)
-        self.assert_monitoring_system_checks(
-            unpacked_message,
-            topic,
-            message_count=0,
-            message_timeslot=0
-        )
-
-        unpacked_message = envelope.unpack(monitoring_messages[1].message.value)
-        self.assert_monitoring_system_checks(
-            unpacked_message,
-            topic_1,
-            message_count=0,
-            message_timeslot=0
-        )
-
-        # third and forth monitoring messages should be for topic-1 and have 3 and 0
-        # as the message_count since 3 messages of topic 'topic-1' were published
-        # in timeslot 600 - 1200 but none for timeslot 1200-1800
-        unpacked_message = envelope.unpack(monitoring_messages[2].message.value)
-        self.assert_monitoring_system_checks(
-            unpacked_message,
-            topic_1,
-            message_count=3,
-            message_timeslot=1
-        )
-
-        unpacked_message = envelope.unpack(monitoring_messages[3].message.value)
-        self.assert_monitoring_system_checks(
-            unpacked_message,
-            topic_1,
-            message_count=0,
-            message_timeslot=2
-        )
-
-        # fifth and sixth message would be published as a part of flushing
-        # monitoring_message and should be for topic-1 and topic. However, since
-        # flushing process traverses through the topic_tracking_info_map, one
-        # cannot guarantee which tracking_info will be published first
-        unpacked_message = envelope.unpack(monitoring_messages[4].message.value)
-        decoded_payload = ast.literal_eval(unpacked_message['payload'])
-        if decoded_payload['topic'] == topic:
-            self.assert_monitoring_system_checks(
-                unpacked_message,
-                topic,
-                message_count=2,
-                message_timeslot=1
-            )
-
-            unpacked_message = envelope.unpack(monitoring_messages[5].message.value)
-            self.assert_monitoring_system_checks(
-                unpacked_message,
-                topic_1,
-                message_count=1,
-                message_timeslot=3
-            )
-        else:
-            self.assert_monitoring_system_checks(
-                unpacked_message,
-                topic_1,
-                message_count=1,
-                message_timeslot=3
-            )
-            unpacked_message = envelope.unpack(monitoring_messages[5].message.value)
-            self.assert_monitoring_system_checks(
-                unpacked_message,
-                topic,
-                message_count=2,
-                message_timeslot=1
-            )
-
-    def test_monitoring_system_dry_run(self, producer_name, team_name):
-        producer = Producer(
-            producer_name=producer_name,
-            team_name=team_name,
-            expected_frequency_seconds=ExpectedFrequency.constantly,
-            dry_run=True
-        )
-        assert producer.monitoring_message.dry_run is True
-
-    def test_basic_publish_message_with_pii(
-        self,
-        topic,
-        payload,
-        producer,
-        registered_schema
-    ):
-        messages = self._publish_message(
-            topic,
-            self.create_message_with_pii(topic, payload, registered_schema),
-            producer
-        )
-
-        assert len(messages) == 0
-
-    def test_basic_publish_message_with_payload_data(
-        self,
-        topic,
-        message_with_payload_data,
-        producer,
-        envelope
-    ):
-        self._publish_and_assert_message(
-            topic,
-            message_with_payload_data,
-            producer,
-            envelope
         )
 
     def test_basic_publish(self, topic, message, producer, envelope):
@@ -441,8 +171,218 @@ class TestProducer(TestProducerBase):
             consumer.seek(kafka_offset, 0)  # kafka_offset from head
             assert len(consumer.get_messages(count=10)) == 1
 
+    def test_basic_publish_message_with_pii(
+        self,
+        topic,
+        payload,
+        producer,
+        registered_schema
+    ):
+        messages = self._publish_message(
+            topic,
+            self.create_message_with_pii(topic, payload, registered_schema),
+            producer
+        )
 
-@pytest.mark.usefixtures("patch_dry_run")
+        assert len(messages) == 0
+
+    def test_basic_publish_message_with_payload_data(
+        self,
+        topic,
+        message_with_payload_data,
+        producer,
+        envelope
+    ):
+        self._publish_and_assert_message(
+            topic,
+            message_with_payload_data,
+            producer,
+            envelope
+        )
+
+
+class TestPublishMonitorMessage(TestProducerBase):
+
+    def create_message(self, message, topic=None, timestamp=None):
+        new_message = copy.deepcopy(message)
+        if topic:
+            new_message.topic = topic
+        if timestamp:
+            new_message.timestamp = int(timestamp)
+        return new_message
+
+    @property
+    def monitor_window_in_sec(self):
+        return get_config().monitoring_window_in_sec
+
+    def publish_messages(self, messages, producer):
+        for message in messages:
+            producer.publish(message)
+        producer.flush()
+        producer.monitor.flush_buffered_info()
+
+    def get_messages(self, topic, expected_message_count):
+        with setup_capture_new_messages_consumer(topic) as consumer:
+            consumer.seek(-expected_message_count, 2)
+            return consumer.get_messages(count=100)
+
+    def assert_equal_monitor_messages(
+        self,
+        actual_raw_messages,
+        expected_topic,
+        expected_messages_counts,
+        envelope
+    ):
+        expected_start_timestamp = 0
+        expected_count_idx = 0
+        for msg in actual_raw_messages:
+            actual_message = self._get_actual_message(msg.message.value, envelope)
+            assert actual_message.message_type == _ProtectedMessageType.monitor.name
+
+            payload_data = actual_message.payload_data
+            if payload_data['topic'] != expected_topic:
+                continue
+
+            self.assert_equal_monitor_message(
+                actual_payload_data=payload_data,
+                expected_topic=expected_topic,
+                expected_message_count=expected_messages_counts[expected_count_idx],
+                expected_start_timestamp=expected_start_timestamp
+            )
+            expected_start_timestamp += self.monitor_window_in_sec
+            expected_count_idx += 1
+
+    def _get_actual_message(self, raw_message, envelope):
+        unpacked_message = envelope.unpack(raw_message)
+        actual_message = Message(
+            topic=str('__monitor_topic__'),
+            schema_id=unpacked_message['schema_id'],
+            payload=unpacked_message['payload'],
+            uuid=unpacked_message['uuid'],
+            timestamp=unpacked_message['timestamp']
+        )
+        actual_message._message_type = unpacked_message['message_type']
+        return actual_message
+
+    def assert_equal_monitor_message(
+        self,
+        actual_payload_data,
+        expected_topic,
+        expected_message_count,
+        expected_start_timestamp
+    ):
+        assert actual_payload_data['message_count'] == expected_message_count
+        assert actual_payload_data['client_type'] == 'producer'
+        assert actual_payload_data['start_timestamp'] == expected_start_timestamp
+        assert actual_payload_data['topic'] == expected_topic
+
+    def test_monitoring_message_basic(self, message, topic, producer, envelope):
+        messages_to_publish = [message] * 10
+        self.publish_messages(messages_to_publish, producer)
+
+        messages = self.get_messages(topic, len(messages_to_publish))
+        assert len(messages) == len(messages_to_publish)
+
+        expected_monitor_message_count = 3
+        monitor_messages = self.get_messages(
+            producer.monitor.monitor_topic,
+            expected_monitor_message_count
+        )
+        assert len(monitor_messages) == expected_monitor_message_count
+
+        expected_messages_counts = [0] * int(math.floor(
+            message.timestamp / self.monitor_window_in_sec
+        )) + [len(messages_to_publish)]
+        self.assert_equal_monitor_messages(
+            actual_raw_messages=monitor_messages,
+            expected_topic=topic,
+            expected_messages_counts=expected_messages_counts,
+            envelope=envelope
+        )
+
+    def test_publish_messages_with_diff_timestamps(self, topic, message,
+                                                   producer, envelope):
+        messages_to_publish = [
+            self.create_message(message, timestamp=self.monitor_window_in_sec * 0.5),
+            self.create_message(message, timestamp=self.monitor_window_in_sec * 1.5),
+            self.create_message(message, timestamp=self.monitor_window_in_sec * 3.5),
+        ]
+        self.publish_messages(messages_to_publish, producer)
+
+        messages = self.get_messages(topic, len(messages_to_publish))
+        assert len(messages) == len(messages_to_publish)
+
+        expected_monitor_message_count = 4
+        monitor_messages = self.get_messages(
+            producer.monitor.monitor_topic,
+            expected_monitor_message_count
+        )
+        assert len(monitor_messages) == expected_monitor_message_count
+
+        expected_messages_counts = [1, 1, 0, 1]
+        self.assert_equal_monitor_messages(
+            actual_raw_messages=monitor_messages,
+            expected_topic=topic,
+            expected_messages_counts=expected_messages_counts,
+            envelope=envelope
+        )
+
+    def test_publish_messages_with_diff_topic_and_timestamp(
+        self,
+        topic,
+        topic_two,
+        message,
+        producer,
+        envelope
+    ):
+        message_topic_and_timestamp = [
+            (topic, self.monitor_window_in_sec * 0.5),
+            (topic_two, self.monitor_window_in_sec * 0.8),
+            (topic, self.monitor_window_in_sec * 3.5),
+            (topic_two, self.monitor_window_in_sec * 4),
+            (topic_two, self.monitor_window_in_sec * 6),
+        ]
+        messages_to_publish = [
+            self.create_message(message, topic=msg_topic, timestamp=msg_timestamp)
+            for msg_topic, msg_timestamp in message_topic_and_timestamp
+        ]
+        self.publish_messages(messages_to_publish, producer)
+
+        assert len(self.get_messages(topic, 2)) == 2
+        assert len(self.get_messages(topic_two, 3)) == 3
+
+        expected_monitor_message_count = 14
+        monitor_messages = self.get_messages(
+            producer.monitor.monitor_topic,
+            expected_monitor_message_count
+        )
+        assert len(monitor_messages) == expected_monitor_message_count
+
+        expected_messages_counts = [1, 0, 0, 1, 0, 0, 0]
+        self.assert_equal_monitor_messages(
+            actual_raw_messages=monitor_messages,
+            expected_topic=topic,
+            expected_messages_counts=expected_messages_counts,
+            envelope=envelope
+        )
+        expected_messages_counts = [1, 0, 0, 0, 1, 0, 1]
+        self.assert_equal_monitor_messages(
+            actual_raw_messages=monitor_messages,
+            expected_topic=topic_two,
+            expected_messages_counts=expected_messages_counts,
+            envelope=envelope
+        )
+
+    def test_monitoring_system_dry_run(self, producer_name, team_name):
+        producer = Producer(
+            producer_name=producer_name,
+            team_name=team_name,
+            expected_frequency_seconds=ExpectedFrequency.constantly,
+            dry_run=True
+        )
+        assert producer.monitor.dry_run is True
+
+
 class TestEnsureMessagesPublished(TestProducerBase):
     number_of_messages = 5
 
@@ -527,150 +467,54 @@ class TestEnsureMessagesPublished(TestProducerBase):
         assert payloads == range(self.number_of_messages)
 
 
-@pytest.mark.usefixtures("registered_schema")
 class TestPublishMessagesWithRetry(TestProducerBase):
 
-    def no_op(self, position_data):
-        pass
-
-    @pytest.yield_fixture
-    def kafka_producer(self):
-        producer = KafkaProducer(
-            producer_position_callback=self.no_op,
-            dry_run=False
-        )
-        # Set time limit to 10 minutes so it flushes all messages together
-        producer.time_limit = 600
-        # Remove the delay between retries to speed up tests
-        producer.delay_between_retries_in_sec = 0
-        yield producer
-
     @pytest.fixture
-    def topic(self, kafka_docker):
-        uuid = binascii.hexlify(FastUUID().uuid4())
-        topic_name = str("publish.requests.with.retry.{0}".format(uuid))
-        create_kafka_docker_topic(kafka_docker, topic_name)
-        return topic_name
-
-    @pytest.fixture
-    def message(self, topic, registered_schema):
-        payload = str("message to retry")
-        msg = CreateMessage(
-            topic=topic,
-            schema_id=registered_schema.schema_id,
-            payload=payload
-        )
-        assert msg.payload == payload
-        return msg
+    def another_message(self, topic_two, message):
+        new_message = copy.deepcopy(message)
+        new_message.topic = topic_two
+        return new_message
 
     @property
-    def another_topic(self):
-        return str("another.topic.to.publish.requests.with.retry")
+    def max_retry_count(self):
+        return 3
 
-    @pytest.yield_fixture(scope='class', autouse=True)
-    def disable_monitor(self):
-        with mock.patch.object(
-            _Monitor,
-            'record_message',
-        ) as mock_message_monitor:
-            yield mock_message_monitor
+    @property
+    def retry_policy(self):
+        return RetryPolicy(
+            ExpBackoffPolicy(initial_delay_secs=0.1, max_delay_secs=0.5),
+            max_retry_count=self.max_retry_count
+        )
 
-    def test_publish_all_produce_requests_without_retry(self, topic,
-                                                        message, producer):
+    @pytest.fixture(autouse=True)
+    def patch_retry_policy(self, producer):
+        producer._kafka_producer._publish_retry_policy = self.retry_policy
+
+    def test_publish_all_messages_without_retry(self, topic, message, producer):
         with capture_new_messages(topic) as get_messages:
             producer.publish(message)
             producer.flush()
             messages = get_messages()
         self.assert_equal_msgs(expected_msgs=[message], actual_msgs=messages)
 
-    def test_kafka_producer_publish_all_requests_after_retry(self, message,
-                                                             kafka_producer):
-        orig_func = kafka_producer.kafka_client.send_produce_request
-
-        def fail_1st_time_and_succeed_2nd_time(*args, **kwargs):
-            def run_original_func(*args, **kwargs):
-                return orig_func(*args, **kwargs)
-            mock_send_request.side_effect = run_original_func
-            return FailedPayloadsError(payload=mock.Mock())
-
+    def test_publish_message_fails_after_retry(self, message, producer):
         with mock.patch.object(
-            kafka_producer.kafka_client,
-            'send_produce_request',
-            side_effect=fail_1st_time_and_succeed_2nd_time
-        ) as mock_send_request, setup_capture_new_messages_consumer(
-            message.topic
-        ) as consumer:
-            # Ensure the mock_send_request call count reflects the send
-            # requests call count during publishing messages only
-            mock_send_request.reset()
-            kafka_producer.publish(message)
-            kafka_producer.flush_buffered_messages()
-
-            messages = consumer.get_messages()
-            self.assert_equal_msgs(expected_msgs=[message], actual_msgs=messages)
-            assert mock_send_request.call_count == 2
-
-    def test_kafka_producer_publish_requests_fails_after_retry(self, message,
-                                                               kafka_producer):
-        with mock.patch.object(
-            kafka_producer.kafka_client,
+            producer._kafka_producer.kafka_client,
             'send_produce_request',
             side_effect=FailedPayloadsError
         ) as mock_send_request, setup_capture_new_messages_consumer(
             message.topic
         ) as consumer, pytest.raises(
-            PublishMessagesFailedError
+            MaxRetryError
         ):
-            kafka_producer.publish(message)
-            kafka_producer.flush_buffered_messages()
+            producer.publish(message)
+            producer.flush()
 
             messages = consumer.get_messages()
             assert len(messages) == 0
-            assert mock_send_request.call_count == kafka_producer.max_retry_count
+            assert mock_send_request.call_count == self.max_retry_count
 
-    def test_kafka_producer_publish_requests_one_succeeds_another_failed_after_retry(
-        self,
-        message,
-        kafka_producer
-    ):
-        orig_func = kafka_producer.kafka_client._get_leader_for_partition
-
-        def get_good_leader_then_bad_leader(*args, **kwargs):
-            topic = args[0] if args else kwargs['topic']
-            if topic == self.another_topic:
-                return mock.Mock("bad broker", host="-1.1.1.1", port=12345)
-            return orig_func(*args, **kwargs)
-
-        msg_failed_to_be_published = copy.copy(message)
-        msg_failed_to_be_published.topic = self.another_topic
-
-        with mock.patch.object(
-            kafka_producer.kafka_client,
-            '_get_leader_for_partition',
-            side_effect=get_good_leader_then_bad_leader
-        ), setup_capture_new_messages_consumer(
-            message.topic
-        ) as consumer, pytest.raises(
-            PublishMessagesFailedError
-        ):
-            kafka_producer.publish(message)
-            kafka_producer.publish(msg_failed_to_be_published)
-            kafka_producer.flush_buffered_messages()
-
-            messages = consumer.get_messages()
-            self.assert_equal_msgs(expected_msgs=[message], actual_msgs=messages)
-
-    def test_publish_all_produce_requests_after_retry(
-        self,
-        topic,
-        message,
-        producer
-    ):
-        # TODO: enable AsyncProducer to handle exceptions
-        if isinstance(producer, AsyncProducer):
-            return
-
-        # for async_producer, this has to be the func from another process
+    def test_publish_all_messages_after_retry(self, topic, message, producer):
         orig_func = producer._kafka_producer.kafka_client.send_produce_request
 
         def fail_1st_time_and_succeed_2nd_time(*args, **kwargs):
@@ -679,8 +523,9 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             mock_send_request.side_effect = run_original_func
             return FailedPayloadsError(payload=mock.Mock())
 
-        with mock.patch(
-            'kafka.client.KafkaClient.send_produce_request',
+        with mock.patch.object(
+            producer._kafka_producer.kafka_client,
+            'send_produce_request',
             side_effect=fail_1st_time_and_succeed_2nd_time
         ) as mock_send_request, setup_capture_new_messages_consumer(
             topic
@@ -688,33 +533,45 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             mock_send_request.reset()
             producer.publish(message)
             producer.flush()
+
             messages = consumer.get_messages()
-            assert len(messages) == 1
+            self.assert_equal_msgs(expected_msgs=[message], actual_msgs=messages)
             assert mock_send_request.call_count == 2
 
-    def test_producer_publish_message_fails_after_retry(
+    def test_publish_messages_one_succeeds_one_fails_after_retry(
         self,
         message,
-        producer_klass,
-        use_work_pool
+        another_message,
+        topic,
+        topic_two,
+        producer
     ):
-        # TODO: enable AsyncProducer to handle exceptions
-        if producer_klass is AsyncProducer:
-            return
+        # ensure all the messages are published together
+        producer._kafka_producer.time_limit = 10 * 60
 
-        with mock.patch(
-            'kafka.client.KafkaClient.send_produce_request',
-            side_effect=FailedPayloadsError(payload=mock.Mock())
-        ) as mock_send_request, pytest.raises(
-            PublishMessagesFailedError
-        ), producer_klass(
-            producer_name="producer with retry",
-            use_work_pool=use_work_pool
-        ) as producer:
+        mock_response = ProduceResponse(topic, partition=0, error=0, offset=1)
+        fail_response = FailedPayloadsError(payload=mock.Mock())
+        side_effect = ([[mock_response, fail_response]] +
+                       [[fail_response]] * self.max_retry_count)
+        with mock.patch.object(
+            producer._kafka_producer.kafka_client,
+            'send_produce_request',
+            side_effect=side_effect
+        ), pytest.raises(
+            MaxRetryError
+        ) as e:
             producer.publish(message)
+            producer.publish(another_message)
             producer.flush()
-            assert mock_send_request.call_count == KafkaProducer.max_retry_count
-        assert len(multiprocessing.active_children()) == 0
+
+        actual_failed_requests, actual_published_msgs_count = e.value.last_result
+        assert actual_published_msgs_count == 1
+        expected_requests = [ProduceRequest(
+            topic=topic_two,
+            partition=0,
+            messages=[_prepare(_EnvelopeAndMessage(Envelope(), another_message))]
+        )]
+        assert actual_failed_requests == expected_requests
 
     def assert_equal_msgs(self, expected_msgs, actual_msgs):
         envelope = Envelope()

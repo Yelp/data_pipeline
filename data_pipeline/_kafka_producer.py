@@ -11,6 +11,11 @@ from kafka import create_message
 from kafka.common import ProduceRequest
 
 from data_pipeline._position_data_tracker import PositionDataTracker
+from data_pipeline._retry_util import ExpBackoffPolicy
+from data_pipeline._retry_util import MaxRetryError
+from data_pipeline._retry_util import Predicate
+from data_pipeline._retry_util import retry_on_condition
+from data_pipeline._retry_util import RetryPolicy
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
 
@@ -31,25 +36,20 @@ def _prepare(envelope_and_message):
         raise
 
 
-class PublishMessagesFailedError(Exception):
-    pass
-
-
 class KafkaProducer(object):
     """The KafkaProducer deals with buffering messages that need to be published
     into Kafka, preparing them for publication, and ultimately publishing them.
 
     Args:
-      producer_position_callback (function): The producer position callback is
-        called when the KafkaProducer is instantiated, and every time messages
-        are published to notify the producer of current position information of
-        successfully published messages.
+        producer_position_callback (Optional[function]): The producer position
+            callback is called when the KafkaProducer is instantiated, and
+            every time messages are published to notify the producer of current
+            position information of successfully published messages.
+        dry_run (Optional[bool]): When dry_run mode is on, the producer won't
+            talk to real KafKa topic, nor to real Schematizer.  Default to False.
     """
     message_limit = 5000
     time_limit = 0.1
-
-    delay_between_retries_in_sec = get_config().delay_between_producer_retries_in_sec
-    max_retry_count = get_config().producer_max_retry_count
 
     @cached_property
     def envelope(self):
@@ -62,6 +62,10 @@ class KafkaProducer(object):
         self.position_data_tracker = PositionDataTracker()
         self._reset_message_buffer()
         self.skip_messages_with_pii = get_config().skip_messages_with_pii
+        self._publish_retry_policy = RetryPolicy(
+            ExpBackoffPolicy(with_jitter=True),
+            max_retry_count=get_config().producer_max_publish_retry_count
+        )
 
     def wake(self):
         """Should be called periodically if we're not otherwise waking up by
@@ -78,13 +82,21 @@ class KafkaProducer(object):
         self._flush_if_necessary()
 
     def flush_buffered_messages(self):
-        produce_method = self._publish_produce_requests_dry_run if self.dry_run else self._publish_produce_requests
+        produce_method = (self._publish_produce_requests_dry_run
+                          if self.dry_run else self._publish_produce_requests)
         produce_method(self._generate_produce_requests())
         self._reset_message_buffer()
 
     def close(self):
         self.flush_buffered_messages()
         self.kafka_client.close()
+
+    @property
+    def x_publish_retry_policy(self):
+        return RetryPolicy(
+            ExpBackoffPolicy(with_jitter=True),
+            max_retry_count=get_config().producer_max_publish_retry_count
+        )
 
     def _publish_produce_requests(self, requests):
         """It will try to publish all the produce requests for topics, and
@@ -95,65 +107,62 @@ class KafkaProducer(object):
         Each time the requests that are successfully published in the previous
         round will be removed from the requests and won't be published again.
         """
-        if not requests:
-            return
-
-        retried_count = 0
+        # TODO [DATAPIPE-325|clin] Have nicer handling
         unpublished_requests = list(requests)
-        responses = []
-        published_messages_count = 0
+        published_msgs_count = 0
 
-        while retried_count < self.max_retry_count:
-            try:
-                responses = self.kafka_client.send_produce_request(
-                    payloads=unpublished_requests,
-                    acks=1,  # Written to disk on master
-                    fail_on_error=False  # disable raising exception when retrying
-                )
-            except Exception:
-                # Exceptions like KafkaUnavailableError, LeaderNotAvailableError,
-                # UnknownTopicOrPartitionError, etc., are not controlled by
-                # `fail_on_error` flag and could be thrown from the kafka
-                # client, which fail all the requests. We will retry all the
-                # requests until either all of them are successfully published
-                # or it exceeds maximum number of retries.
-                # TODO [DATAPIPE-325|clin] Have nicer handling in such case
-                responses = []
+        def has_unpublished_requests():
+            return bool(unpublished_requests)
 
-            success_responses = [r for r in responses if self._is_success_response(r)]
-            published_messages_count = self._record_success_responses(
-                success_responses,
-                current_published_msgs_count=published_messages_count
+        unpublished_requests, published_msgs_count = retry_on_condition(
+            retry_policy=self._publish_retry_policy,
+            retry_conditions=[Predicate(has_unpublished_requests)],
+            func_to_retry=self._publish_requests,
+            use_previous_result_as_param=True,
+            unpublished_requests=unpublished_requests,
+            published_messages_count=published_msgs_count
+        )
+
+    def _publish_requests(self, unpublished_requests, published_messages_count):
+        if not unpublished_requests:
+            return unpublished_requests, published_messages_count
+
+        # Either it throws exceptions and none of them succeeds, or it returns
+        # responses of all the requests (success or fail response).
+        try:
+            responses = self.kafka_client.send_produce_request(
+                payloads=unpublished_requests,
+                acks=get_config().kafka_client_ack_count,
+                fail_on_error=False  # disable throwing exception for certain errors
             )
+        except Exception:
+            # Exceptions like KafkaUnavailableError, LeaderNotAvailableError,
+            # UnknownTopicOrPartitionError, etc., are not controlled by
+            # `fail_on_error` flag and could be thrown from the kafka
+            # client, which fail all the requests. We will retry all the
+            # requests until either all of them are successfully published
+            # or it exceeds maximum retry criteria.
+            responses = []
 
-            unpublished_requests = self._get_failed_requests(
-                unpublished_requests,
-                success_responses
-            )
-            if not unpublished_requests:
-                break  # All the requests are successfully published. Done.
-
-            retried_count += 1
-            time.sleep(self.delay_between_retries_in_sec)
-
-        # Return only when all the messages are published
-        # TODO [DATAPIPE-325|clin] Have nicer handling in such case
-        if (unpublished_requests or
-                published_messages_count != self.message_buffer_size):
-            self._assert_failed_requests(
-                unpublished_requests,
-                responses,
-                published_messages_count
-            )
+        success_responses = [r for r in responses if self._is_success_response(r)]
+        published_messages_count = self._record_success_responses(
+            success_responses,
+            current_published_msgs_count=published_messages_count
+        )
+        remain_unpublished_requests = self._get_failed_requests(
+            requests=unpublished_requests,
+            success_responses=success_responses
+        )
+        del unpublished_requests[:]
+        unpublished_requests.extend(remain_unpublished_requests)
+        return unpublished_requests, published_messages_count
 
     def _is_success_response(self, response):
-        """Three possible responses: success, failure, nothing (missing).
-        A successful response is the one that is not an exception, such
-        as FailedPayloadsError, and has error == 0. Otherwise, it is an
-        unsuccessful response.
+        """In our case, the response is either ProduceResponse (success) or
+        FailedPayloadsError (failed) if no other exception is thrown.  The
+        ProduceResponse should have error == 0.
         """
-        return (response and not isinstance(response, Exception) and
-                response.error == 0)
+        return not isinstance(response, Exception) and response.error == 0
 
     def _record_success_responses(self, success_responses, current_published_msgs_count):
         new_published_msgs_count = current_published_msgs_count
@@ -164,6 +173,7 @@ class KafkaProducer(object):
                 len(self.message_buffer[response.topic])
             )
             new_published_msgs_count += len(self.message_buffer[response.topic])
+            self.message_buffer.pop(response.topic)
         return new_published_msgs_count
 
     def _get_failed_requests(self, requests, success_responses):
@@ -173,32 +183,18 @@ class KafkaProducer(object):
         return [r for r in requests
                 if not (r.topic, r.partition) in success_topics_and_partitions]
 
-    def _assert_failed_requests(self, failed_requests, responses, published_msgs_count):
-        failed_responses = [r for r in responses
-                            if not self._is_success_response(r)]
-        raise PublishMessagesFailedError(
-            '{0} messages buffered. {1} messages published. '
-            'Failed requests: {2}. Failed responses: {3}.'.format(
-                self.message_buffer_size,
-                published_msgs_count,
-                repr(failed_requests),
-                repr(failed_responses)
-            )
-        )
-
     def _publish_produce_requests_dry_run(self, requests):
         for request in requests:
-            topic = request.topic
-            message_count = len(request.messages)
-            self.position_data_tracker.record_messages_published(
-                topic,
-                -1,
-                message_count
-            )
-            logger.debug("dry_run mode: Would have published {0} messages to {1}".format(
-                message_count,
-                topic
-            ))
+            self._publish_single_request_dry_run(request)
+
+    def _publish_single_request_dry_run(self, request):
+        topic = request.topic
+        message_count = len(request.messages)
+        self.position_data_tracker.record_messages_published(
+            topic,
+            -1,
+            message_count
+        )
 
     def _is_ready_to_flush(self):
         return (
@@ -246,12 +242,19 @@ class LoggingKafkaProducer(KafkaProducer):
         try:
             super(LoggingKafkaProducer, self)._publish_produce_requests(requests)
             logger.info("All messages published successfully")
-        except PublishMessagesFailedError as e:
+        except MaxRetryError as e:
             logger.exception(
                 "Failed to publish all produce requests. {0}".format(repr(e))
             )
             raise
 
     def _reset_message_buffer(self):
-        logger.info("Resetting message buffer")
+        logger.info("Resetting message buffer for success requests.")
         super(LoggingKafkaProducer, self)._reset_message_buffer()
+
+    def _publish_single_request_dry_run(self, request):
+        super(LoggingKafkaProducer, self)._publish_single_request_dry_run(request)
+        logger.debug("dry_run mode: Would have published {0} messages to {1}".format(
+            len(request.messages),
+            request.topic
+        ))

@@ -159,7 +159,7 @@ class Producer(Client):
             message (data_pipeline.message.Message): message to publish
         """
         self.publish_message(message)
-        self.monitoring_message.record_message(message)
+        self.monitor.record_message(message)
 
     def publish_message(self, message):
         self._kafka_producer.publish(message)
@@ -228,7 +228,7 @@ class Producer(Client):
                 ...
                 producer.publish(message)
         """
-        self.monitoring_message.close()
+        self.monitor.close()
         self._kafka_producer.close()
         assert len(multiprocessing.active_children()) == 0
 

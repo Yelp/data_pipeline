@@ -36,8 +36,9 @@ class PooledKafkaProducer(LoggingKafkaProducer):
             assert self.message_buffer_size == 0
             logger.debug("Closing the pool")
             self.pool.close()
+            logger.debug("Pool is closed.")
         except:
-            logger.debug("Exception occurs when closing pooled producer.")
+            logger.warning("Exception occurred when closing pooled producer.")
             raise
         finally:
             # The processes in the pool should be cleaned up in all cases. The

@@ -2,12 +2,18 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import math
 import socket
+from datetime import datetime
+
+import simplejson
+from cached_property import cached_property
 
 from data_pipeline._kafka_producer import LoggingKafkaProducer
 from data_pipeline.config import get_config
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import MonitorMessage
+from data_pipeline.schema_cache import get_schema_cache
 from data_pipeline.team import Team
 
 
@@ -80,9 +86,12 @@ class Client(object):
         dry_run=False
     ):
         if monitoring_enabled:
-            self.monitoring_message = _Monitor(
+            self.monitor = _Monitor(
                 client_name,
                 self.client_type,
+                start_time=_Monitor.get_monitor_window_start_timestamp(
+                    datetime.utcnow()
+                ),
                 dry_run=dry_run
             )
         self.client_name = client_name
@@ -147,12 +156,14 @@ class _Monitor(object):
     the client.
 
     Args:
-        client_name (str): name of the associated client
-        client_type (str): type of the client the _Monitor object is associated to.
-        Could be either producer or consumer
-        start_time (int): start_time when _Monitor object will start counting the
-            number of messages produced/consumed by the associated client
+        client_name (str): name of the associated client.
+        client_type (str): type of the client the _Monitor is associated to.
+            Could be either producer or consumer.
+        start_time (long): unix start_time when _Monitor will start tracking
+            the number of messages produced/consumed by the associated client.
     """
+
+    _monitor_window_in_sec = get_config().monitoring_window_in_sec
 
     def __init__(self, client_name, client_type, start_time=0, dry_run=False):
         self.topic_to_tracking_info_map = {}
@@ -164,8 +175,19 @@ class _Monitor(object):
             self._notify_messages_published,
             dry_run=dry_run
         )
-        self.monitoring_schema_id = self._get_monitoring_schema_id()
+        # self.monitoring_schema_id = self._get_monitoring_schema_id()
         self.dry_run = dry_run
+        self._last_msg_timestamp = None
+
+    @classmethod
+    def get_monitor_window_start_timestamp(cls, dt):
+        utc_now = cls._to_unix_timestamp(dt)
+        return (int(math.floor(utc_now / cls._monitor_window_in_sec)) *
+                cls._monitor_window_in_sec)
+
+    @classmethod
+    def _to_unix_timestamp(cls, dt):
+        return (dt - datetime(1970, 1, 1)).total_seconds()
 
     def _get_default_record(self, topic):
         """Returns the default version of the topic_to_tracking_info_map entry
@@ -195,19 +217,38 @@ class _Monitor(object):
         """
         self.producer.publish(
             MonitorMessage(
-                topic=str('message-monitoring-log'),
-                schema_id=self.monitoring_schema_id,
+                topic=self.monitor_topic,
+                schema_id=self.monitor_schema_id,
                 payload_data=tracking_info,
                 dry_run=self.dry_run
             )
         )
 
-    def _get_monitoring_schema_id(self):
-        """Returns the schema used to encode the payload.
-        TODO(DATAPIPE-274|pujun): return the schema_id associated with
-        the monitoring_message avro schema
-        """
-        return 0
+    @cached_property
+    def monitor_schema(self):
+        return get_schema_cache().schematizer_client.schemas.register_schema(
+            body={
+                'schema': simplejson.dumps(self._monitor_schema),
+                'namespace': self._monitor_schema['namespace'],
+                'source': self._monitor_schema['name'],
+                'source_owner_email': 'bam+data_pipeline+monitor@yelp.com',
+                'contains_pii': False
+            }
+        ).result()
+
+    @cached_property
+    def _monitor_schema(self):
+        with open('data_pipeline/schemas/monitoring_message_v1.avsc', 'r') as f:
+            schema_string = f.read()
+        return simplejson.loads(schema_string)
+
+    @cached_property
+    def monitor_schema_id(self):
+        return self.monitor_schema.schema_id
+
+    @cached_property
+    def monitor_topic(self):
+        return str(self.monitor_schema.topic.name)
 
     def _reset_monitoring_record(self, tracking_info):
         """resets the record for a particular topic by resetting
@@ -228,21 +269,32 @@ class _Monitor(object):
         logger.info("Client: " + self.client_name + " published monitoring message")
 
     def record_message(self, message):
-        """Used to handle the logic of recording monitoring_message in kafka and resetting
-        it if necessary
+        """Used to handle the logic of recording monitoring_message in kafka
+        and resetting it if necessary.
         """
-        tracking_info = self._get_record(message.topic)
-        while tracking_info['start_timestamp'] + self._monitoring_window_in_sec < message.timestamp:
-            self._publish(tracking_info)
-            self._reset_monitoring_record(tracking_info)
-        tracking_info['message_count'] += 1
+        self._last_msg_timestamp = message.timestamp
+
+        track_info = self._get_record(message.topic)
+        track_info = self._flush_previous_track_info(track_info)
+        track_info['message_count'] += 1
+
+    def _flush_previous_track_info(self, current_track_info):
+        next_start_time = (current_track_info['start_timestamp'] +
+                           self._monitoring_window_in_sec)
+        while next_start_time <= self._last_msg_timestamp:
+            self._publish(current_track_info)
+            self._reset_monitoring_record(current_track_info)
+            next_start_time = (current_track_info['start_timestamp'] +
+                               self._monitoring_window_in_sec)
+        return current_track_info
 
     def flush_buffered_info(self):
         """Publishes the buffered information, stored in topic_to_tracking_info_map,
         to kafka and resets topic_to_tracking_info_map to an empty dictionary
         """
-        for remaining_monitoring_topic, tracking_info in self.topic_to_tracking_info_map.items():
-            self._publish(tracking_info)
+        for track_info in self.topic_to_tracking_info_map.values():
+            last_track_info = self._flush_previous_track_info(track_info)
+            self._publish(last_track_info)
         self.producer.flush_buffered_messages()
         self.topic_to_tracking_info_map = {}
 

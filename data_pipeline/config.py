@@ -249,6 +249,23 @@ class Config(object):
             default='/nail/etc/services/data_pipeline/teams.yaml'
         )
 
+    @property
+    def kafka_client_ack_count(self):
+        """ack setting of the kafka client for publishing messages.  See
+        https://github.com/mumrah/kafka-python/blob/master/kafka/client.py#L445
+        for detail information.
+        """
+        return data_pipeline_conf.read_int('kafka_client_ack_count', default=-1)
+
+    @property
+    def producer_max_publish_retry_count(self):
+        """Number of times the producer will retry to publish messages.
+        """
+        return data_pipeline_conf.read_int(
+            'producer_max_publish_retry_count',
+            default=5
+        )
+
 
 def configure_from_dict(config_dict):
     """Configure the :mod:`data_pipeline` clientlib from a dictionary.
@@ -257,20 +274,6 @@ def configure_from_dict(config_dict):
         config_dict (dict): a dict of config data
     """
     staticconf.DictConfiguration(config_dict, namespace=namespace)
-
-    @property
-    def delay_between_producer_retries_in_sec(self):
-        """Number of seconds to wait before the producer retries publishing the
-        messages to the kafka topics.
-        """
-        return 0.1
-
-    @property
-    def producer_max_retry_count(self):
-        """Maximum number of times the producer will retry to publish the
-        messages before giving up.
-        """
-        return 5
 
 
 _config = Config()
