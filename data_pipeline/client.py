@@ -180,7 +180,7 @@ class _Monitor(object):
 
     @classmethod
     def get_monitor_window_start_timestamp(cls, timestamp):
-        return (int(math.floor(long(timestamp) / cls._monitor_window_in_sec)) *
+        return (long(math.floor(long(timestamp) / cls._monitor_window_in_sec)) *
                 cls._monitor_window_in_sec)
 
     def _get_default_record(self, topic):
