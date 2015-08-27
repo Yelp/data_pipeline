@@ -298,6 +298,36 @@ class Message(object):
         self.dry_run = dry_run
         self._set_payload_or_payload_data(payload, payload_data)
 
+    @classmethod
+    def construct(cls, *args, **kwargs):
+        """Helper function to allow dynamic class construction to be mocked in
+        tests, since __class__ has defined behavior in mock. See
+        https://docs.python.org/dev/library/unittest.mock.html#mocking-magic-methods for more info
+        """
+        return cls(*args, **kwargs)
+
+    def __eq__(self, other):
+        """
+        Note:
+            We don't check `payload_data` as we should be confident that
+            if `payload` matches then `payload_data` will as well, and there
+            is an extra overhead from extra encoding/decoding.
+        """
+        return isinstance(other, self.__class__) \
+            and self.message_type == other.message_type \
+            and self.topic == other.topic \
+            and self.schema_id == other.schema_id \
+            and self.payload == other.payload \
+            and self.uuid == other.uuid \
+            and self.contains_pii == other.contains_pii \
+            and self.timestamp == other.timestamp \
+            and self.upstream_position_info == other.upstream_position_info \
+            and self.kafka_position_info == other.kafka_position_info \
+            and self.dry_run == other.dry_run
+
+    def __ne__(self, other):
+        return not self == other
+
     def _set_payload_or_payload_data(self, payload, payload_data):
         # payload or payload_data are lazily constructed only on request
         is_not_none_payload = payload is not None
@@ -439,6 +469,17 @@ class UpdateMessage(Message):
             raise ValueError(
                 "Either previous_payload or previous_payload_data must be provided."
             )
+
+    def __eq__(self, other):
+        """
+        Note:
+            We don't check `previous_payload_data` as we should be confident
+            that if `previous_payload` matches then `previous_payload_data`
+            will as well, and there is an extra overhead from extra
+            encoding/decoding.
+        """
+        return super(UpdateMessage, self).__eq__(other) \
+            and self.previous_payload == other.previous_payload
 
     @property
     def previous_payload(self):
