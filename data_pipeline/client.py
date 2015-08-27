@@ -4,7 +4,7 @@ from __future__ import unicode_literals
 
 import math
 import socket
-from datetime import datetime
+import time
 
 import simplejson
 from cached_property import cached_property
@@ -90,7 +90,7 @@ class Client(object):
                 client_name,
                 self.client_type,
                 start_time=_Monitor.get_monitor_window_start_timestamp(
-                    datetime.utcnow()
+                    time.time()
                 ),
                 dry_run=dry_run
             )
@@ -179,14 +179,9 @@ class _Monitor(object):
         self._last_msg_timestamp = None
 
     @classmethod
-    def get_monitor_window_start_timestamp(cls, dt):
-        utc_now = cls._to_unix_timestamp(dt)
-        return (int(math.floor(utc_now / cls._monitor_window_in_sec)) *
+    def get_monitor_window_start_timestamp(cls, timestamp):
+        return (int(math.floor(long(timestamp) / cls._monitor_window_in_sec)) *
                 cls._monitor_window_in_sec)
-
-    @classmethod
-    def _to_unix_timestamp(cls, dt):
-        return (dt - datetime(1970, 1, 1)).total_seconds()
 
     def _get_default_record(self, topic):
         """Returns the default version of the topic_to_tracking_info_map entry

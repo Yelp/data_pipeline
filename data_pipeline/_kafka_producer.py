@@ -41,10 +41,10 @@ class KafkaProducer(object):
     into Kafka, preparing them for publication, and ultimately publishing them.
 
     Args:
-        producer_position_callback (Optional[function]): The producer position
-            callback is called when the KafkaProducer is instantiated, and
-            every time messages are published to notify the producer of current
-            position information of successfully published messages.
+        producer_position_callback (function): The producer position callback
+            is called when the KafkaProducer is instantiated, and every time
+            messages are published to notify the producer of current position
+            information of successfully published messages.
         dry_run (Optional[bool]): When dry_run mode is on, the producer won't
             talk to real KafKa topic, nor to real Schematizer.  Default to False.
     """

@@ -38,7 +38,7 @@ class PooledKafkaProducer(LoggingKafkaProducer):
             self.pool.close()
             logger.debug("Pool is closed.")
         except:
-            logger.warning("Exception occurred when closing pooled producer.")
+            logger.error("Exception occurred when closing pooled producer.")
             raise
         finally:
             # The processes in the pool should be cleaned up in all cases. The
