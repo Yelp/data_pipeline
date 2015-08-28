@@ -6,7 +6,6 @@ import multiprocessing
 from collections import defaultdict
 
 from cached_property import cached_property
-from yelp_kafka.offsets import get_topics_watermarks
 
 from data_pipeline._kafka_producer import LoggingKafkaProducer
 from data_pipeline._pooled_kafka_producer import PooledKafkaProducer
@@ -206,12 +205,15 @@ class Producer(Client):
                 published.
         """
         topic_messages_map = self._generate_topic_messages_map(messages)
-        topic_watermarks_map = self._get_high_water_mark_for_messages(
-            topic_messages_map.keys()
+        topic_actual_published_count_map = (
+            self._kafka_producer.get_actual_published_messages_count(
+                topics=topic_messages_map.keys(),
+                topic_to_tracked_offset_map=topic_offsets
+            )
         )
 
         for topic, messages in topic_messages_map.iteritems():
-            already_published_count = topic_watermarks_map[topic] - topic_offsets.get(topic, 0)
+            already_published_count = topic_actual_published_count_map[topic]
             if already_published_count < 0 or already_published_count > len(messages):
                 raise PublicationUnensurableError()
             for message in messages[already_published_count:]:
@@ -295,9 +297,3 @@ class Producer(Client):
         for message in messages:
             topic_messages_map[message.topic].append(message)
         return topic_messages_map
-
-    def _get_high_water_mark_for_messages(self, topic_list):
-        kafka_client = get_config().kafka_client
-        topic_watermarks = get_topics_watermarks(kafka_client, topic_list)
-
-        return {topic: partition_offsets[0].highmark for topic, partition_offsets in topic_watermarks.iteritems()}

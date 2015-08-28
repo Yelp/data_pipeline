@@ -9,6 +9,7 @@ from collections import namedtuple
 from cached_property import cached_property
 from kafka import create_message
 from kafka.common import ProduceRequest
+from yelp_kafka.offsets import get_topics_watermarks
 
 from data_pipeline._position_data_tracker import PositionDataTracker
 from data_pipeline._retry_util import ExpBackoffPolicy
@@ -104,7 +105,7 @@ class KafkaProducer(object):
         def has_unpublished_requests():
             return bool(unpublished_requests)
 
-        unpublished_requests, published_msgs_count = retry_on_condition(
+        retry_on_condition(
             retry_policy=self._publish_retry_policy,
             retry_conditions=[Predicate(has_unpublished_requests)],
             func_to_retry=self._publish_requests,
@@ -123,7 +124,7 @@ class KafkaProducer(object):
             responses = self.kafka_client.send_produce_request(
                 payloads=unpublished_requests,
                 acks=get_config().kafka_client_ack_count,
-                fail_on_error=False  # disable throwing exception for certain errors
+                fail_on_error=False
             )
         except Exception:
             # Exceptions like KafkaUnavailableError, LeaderNotAvailableError,
@@ -134,18 +135,32 @@ class KafkaProducer(object):
             # or it exceeds maximum retry criteria.
             responses = []
 
-        success_responses = [r for r in responses if self._is_success_response(r)]
-        published_messages_count = self._record_success_responses(
-            success_responses,
+        published_messages_count = self._process_success_responses(
+            unpublished_requests,
+            responses,
             current_published_msgs_count=published_messages_count
         )
-        remain_unpublished_requests = self._get_failed_requests(
-            requests=unpublished_requests,
-            success_responses=success_responses
+        published_messages_count = self._verify_failed_requests(
+            unpublished_requests,
+            current_published_msgs_count=published_messages_count
         )
-        del unpublished_requests[:]
-        unpublished_requests.extend(remain_unpublished_requests)
         return unpublished_requests, published_messages_count
+
+    def _process_success_responses(
+        self,
+        requests,
+        responses,
+        current_published_msgs_count
+    ):
+        success_resps = [r for r in responses if self._is_success_response(r)]
+        self._extract_success_requests(
+            requests,
+            self._is_request_with_success_response(success_resps)
+        )
+        return self._record_success_requests(
+            [(r.topic, r.offset) for r in success_resps],
+            current_published_msgs_count=current_published_msgs_count
+        )
 
     def _is_success_response(self, response):
         """In our case, the response is either ProduceResponse (success) or
@@ -154,24 +169,111 @@ class KafkaProducer(object):
         """
         return not isinstance(response, Exception) and response.error == 0
 
-    def _record_success_responses(self, success_responses, current_published_msgs_count):
-        new_published_msgs_count = current_published_msgs_count
-        for response in success_responses:
-            self.position_data_tracker.record_messages_published(
-                response.topic,
-                response.offset,
-                len(self.message_buffer[response.topic])
-            )
-            new_published_msgs_count += len(self.message_buffer[response.topic])
-            self.message_buffer.pop(response.topic)
-        return new_published_msgs_count
-
-    def _get_failed_requests(self, requests, success_responses):
+    def _is_request_with_success_response(self, success_responses):
         success_topics_and_partitions = set(
             (r.topic, r.partition) for r in success_responses
         )
-        return [r for r in requests
-                if not (r.topic, r.partition) in success_topics_and_partitions]
+
+        def predicate(req):
+            return (req.topic, req.partition) in success_topics_and_partitions
+        return predicate
+
+    def _extract_success_requests(self, requests, predicate_for_success):
+        success_requests = []
+        for r in requests:
+            if predicate_for_success(r):
+                success_requests.append(r)
+                requests.remove(r)
+        return success_requests
+
+    def _record_success_requests(
+        self,
+        success_topics_and_offsets,
+        current_published_msgs_count
+    ):
+        new_published_msgs_count = current_published_msgs_count
+        for topic, offset in success_topics_and_offsets:
+            self.position_data_tracker.record_messages_published(
+                topic=topic,
+                offset=offset,
+                message_count=len(self.message_buffer[topic])
+            )
+            new_published_msgs_count += len(self.message_buffer[topic])
+            self.message_buffer.pop(topic)
+        return new_published_msgs_count
+
+    def _verify_failed_requests(self, requests, current_published_msgs_count):
+        topic_actual_published_count_map = self.get_actual_published_messages_count(
+            topics=[r.topic for r in requests],
+            topic_to_tracked_offset_map=self.position_data_tracker.topic_to_kafka_offset_map,
+            raise_on_error=False
+        )
+        success_reqs = self._extract_success_requests(
+            requests,
+            self._is_false_fail_request(topic_actual_published_count_map)
+        )
+        return self._record_success_requests(
+            [(r.topic, topic_actual_published_count_map[r.topic] + len(r.messages))
+             for r in success_reqs],
+            current_published_msgs_count=current_published_msgs_count
+        )
+
+    def _is_false_fail_request(self, topic_actual_published_msgs_count_map):
+        def predicate(request):
+            return (len(request.messages) ==
+                    topic_actual_published_msgs_count_map.get(request.topic))
+        return predicate
+
+    def get_actual_published_messages_count(
+        self,
+        topics,
+        topic_to_tracked_offset_map,
+        raise_on_error=True
+    ):
+        """Get the actual number of published messages of specified topics.
+
+        Args:
+            topics ([str]): List of topic names to get message count
+            topic_to_tracked_offset_map (dict(str, int)): dictionary which
+                contains each topic and its current stored offset value.
+            raise_on_error (Optional[bool]): if False,  the function ignores
+                missing topics and missing partitions. It still may fail on
+                the request send.  Default to True.
+
+        Returns:
+            dict(str, int): Each topic and its actual published messages count
+                since last offset.  When `raise_on_error` is False, it is
+                possible that not all the specified topics are in the returned
+                dictionary due to non-existent topic or non network errors.
+
+        Raises:
+            :class:`~yelp_kafka.error.UnknownTopic`: upon missing topics and
+                raise_on_error=True
+            :class:`~yelp_kafka.error.UnknownPartition`: upon missing partitions
+            and raise_on_error=True
+            FailedPayloadsError: upon send request error.
+        """
+        topic_to_high_watermark_map = self._get_topics_high_watermarks(
+            topics,
+            raise_on_error=raise_on_error
+        )
+        topic_to_published_msgs_count = {}
+        for topic, high_watermark in topic_to_high_watermark_map.iteritems():
+            offset = topic_to_tracked_offset_map.get(topic, 0)
+            topic_to_published_msgs_count[topic] = high_watermark - offset
+
+        return topic_to_published_msgs_count
+
+    def _get_topics_high_watermarks(self, topics, raise_on_error=True):
+        topics_watermarks = get_topics_watermarks(
+            self.kafka_client,
+            topics,
+            raise_on_error=raise_on_error
+        )
+        return {
+            topic: partition_offsets[0].highmark
+            for topic, partition_offsets in topics_watermarks.iteritems()
+        }
 
     def _publish_produce_requests_dry_run(self, requests):
         for request in requests:
