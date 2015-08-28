@@ -6,7 +6,6 @@ It doesn't have decorators for retry functions yet but they can be added later.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import datetime
 import random
 import time
 from collections import namedtuple
@@ -285,7 +284,7 @@ class _RetryTracker(object):
         self._start_runtime = None
 
     def start(self):
-        self._start_runtime = datetime.datetime.utcnow()
+        self._start_runtime = time.time()
         self._retried_count = 0
 
     def increment_retry_count(self, count=1):
@@ -312,4 +311,4 @@ class _RetryTracker(object):
     def elapsed_runtime_secs(self):
         """Total seconds elapsed since tracker starts.
         """
-        return (datetime.datetime.utcnow() - self._start_runtime).total_seconds()
+        return (time.time() - self._start_runtime).total_seconds()
