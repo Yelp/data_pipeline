@@ -43,7 +43,7 @@ test:.venv.touch
 	# This will timeout after 15 minutes, in case there is a hang on jenkins
 	timeout -9 900 tox $(REBUILD_FLAG)
 
-docs:
+docs: clean-docs
 	tox -e docs
 
 coverage: test
