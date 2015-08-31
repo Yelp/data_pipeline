@@ -359,8 +359,10 @@ class TestProducer(TestProducerBase):
             expected_frequency_seconds=ExpectedFrequency.constantly,
             monitoring_enabled=False
         )
-        with mock.patch.object(producer.monitoring_message, skipped_method) \
-                as uncalled_method:
+        with mock.patch.object(
+            producer.monitoring_message,
+            skipped_method
+        ) as uncalled_method:
             getattr(producer.monitoring_message, method)(**kwargs)
             assert uncalled_method.called == 0
 
