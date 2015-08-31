@@ -30,6 +30,7 @@ clean-pyc:
 
 clean-docs:
 	rm -rf docs/build/*
+	rm -rf docs/code/*
 
 clean-vim:
 	find . -name '*.swp' -exec rm -f {} +
