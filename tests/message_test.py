@@ -2,9 +2,11 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import mock
 import pytest
 
 from data_pipeline import message as dp_message
+from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.message import PayloadFieldDiff
 from data_pipeline.message_type import MessageType
 
@@ -120,6 +122,46 @@ class SharedMessageTest(object):
         dry_run_message = self.message_class(**message_data)
         assert dry_run_message.payload == repr(payload_data)
 
+    def test_equality(self, valid_message_data):
+        message1 = self._mock_message_without_encode_or_decode(
+            self.message_class(**valid_message_data)
+        )
+        message2 = self._mock_message_without_encode_or_decode(
+            self.message_class(**valid_message_data)
+        )
+        assert message1 == message1
+        assert message1 == message2
+        assert message2 == message2
+
+    def test_inequality(self, valid_message_data):
+        message1 = self._mock_message_without_encode_or_decode(
+            self.message_class(**valid_message_data)
+        )
+        valid_message_data['topic'] = str('a different topic')
+        message2 = self._mock_message_without_encode_or_decode(
+            self.message_class(**valid_message_data)
+        )
+        assert message1 != message2
+
+    def test_hash(self, valid_message_data):
+        message1 = self._mock_message_without_encode_or_decode(
+            self.message_class(**valid_message_data)
+        )
+        message2 = self._mock_message_without_encode_or_decode(
+            self.message_class(**valid_message_data)
+        )
+        test_dict = {message1: 'message1'}
+        assert message2 in test_dict
+        assert test_dict[message2] == 'message1'
+
+    def _mock_message_without_encode_or_decode(self, message):
+        # Short-circuit the communication with schematizer for
+        # decoding/encoding the payload with a schema that isn't actually
+        # registered
+        message._encode_payload_data_if_necessary = mock.Mock()
+        message._decode_payload_if_necessary = mock.Mock()
+        return message
+
 
 class PayloadOnlyMessageTest(SharedMessageTest):
 
@@ -130,7 +172,8 @@ class PayloadOnlyMessageTest(SharedMessageTest):
             'topic': str('my-topic'),
             'schema_id': 123,
             'payload': payload,
-            'payload_data': payload_data
+            'payload_data': payload_data,
+            'uuid': FastUUID().uuid4()
         }
 
     def test_rejects_previous_payload(self, message):
@@ -177,6 +220,17 @@ class TestDeleteMessage(PayloadOnlyMessageTest):
 
 class TestUpdateMessage(SharedMessageTest):
 
+    def _mock_message_without_encode_or_decode(self, message):
+        message = super(
+            TestUpdateMessage,
+            self
+        )._mock_message_without_encode_or_decode(
+            message=message
+        )
+        message._encode_previous_payload_data_if_necessary = mock.Mock()
+        message._decode_previous_payload_if_necessary = mock.Mock()
+        return message
+
     @property
     def message_class(self):
         return dp_message.UpdateMessage
@@ -191,14 +245,15 @@ class TestUpdateMessage(SharedMessageTest):
     ])
     def valid_message_data(self, request):
         payload, payload_data, previous_payload, previous_payload_data = request.param
-        return dict(
-            topic=str('my-topic'),
-            schema_id=123,
-            payload=payload,
-            payload_data=payload_data,
-            previous_payload=previous_payload,
-            previous_payload_data=previous_payload_data
-        )
+        return {
+            'topic': str('my-topic'),
+            'schema_id': 123,
+            'payload': payload,
+            'payload_data': payload_data,
+            'previous_payload': previous_payload,
+            'previous_payload_data': previous_payload_data,
+            'uuid': FastUUID().uuid4()
+        }
 
     def test_rejects_invalid_previous_payload(
         self,
