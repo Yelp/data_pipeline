@@ -15,7 +15,7 @@ from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import CreateMessage
 from data_pipeline.schema_cache import get_schema_cache
-from data_pipeline.test_helpers.kafka_docker import KafkaDocker
+from data_pipeline.testing_helpers.kafka_docker import KafkaDocker
 from tests.helpers.config import reconfigure
 from tests.helpers.containers import Containers
 

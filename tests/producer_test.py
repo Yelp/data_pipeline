@@ -17,10 +17,10 @@ from data_pipeline.message import CreateMessage
 from data_pipeline.message import Message
 from data_pipeline.producer import Producer
 from data_pipeline.producer import PublicationUnensurableError
-from data_pipeline.test_helpers.kafka_docker import capture_new_data_pipeline_messages
-from data_pipeline.test_helpers.kafka_docker import capture_new_messages
-from data_pipeline.test_helpers.kafka_docker import create_kafka_docker_topic
-from data_pipeline.test_helpers.kafka_docker import setup_capture_new_messages_consumer
+from data_pipeline.testing_helpers.kafka_docker import capture_new_data_pipeline_messages
+from data_pipeline.testing_helpers.kafka_docker import capture_new_messages
+from data_pipeline.testing_helpers.kafka_docker import create_kafka_docker_topic
+from data_pipeline.testing_helpers.kafka_docker import setup_capture_new_messages_consumer
 
 
 class RandomException(Exception):

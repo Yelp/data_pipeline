@@ -16,7 +16,7 @@ from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import Message
 from data_pipeline.message import UpdateMessage
 from data_pipeline.producer import Producer
-from data_pipeline.test_helpers.kafka_docker import create_kafka_docker_topic
+from data_pipeline.testing_helpers.kafka_docker import create_kafka_docker_topic
 
 
 TIMEOUT = 1.0
