@@ -312,6 +312,38 @@ class Message(object):
         else:
             raise ValueError("Either payload or payload_data must be provided.")
 
+    def __eq__(self, other):
+        return self.__key == other.__key
+
+    def __ne__(self, other):
+        return self.__key != other.__key
+
+    def __hash__(self):
+        return hash(self.__key)
+
+    @property
+    def __key(self):
+        """Returns a tuple representing a unique key for this Message.
+
+        Note:
+            We don't include `payload_data` in the key tuple as we should be
+            confident that if `payload` matches then `payload_data` will as
+            well, and there is an extra overhead from decoding.
+        """
+        return (
+            self.__class__,
+            self.message_type,
+            self.topic,
+            self.schema_id,
+            self.payload,
+            self.uuid,
+            self.contains_pii,
+            self.timestamp,
+            self.upstream_position_info,
+            self.kafka_position_info,
+            self.dry_run
+        )
+
     @property
     def avro_repr(self):
         return {
@@ -439,6 +471,18 @@ class UpdateMessage(Message):
             raise ValueError(
                 "Either previous_payload or previous_payload_data must be provided."
             )
+
+    @property
+    def __key(self):
+        """Returns a tuple representing a unique key for this Message.
+
+        Note:
+            We don't include `previous_payload_data` in the key as we should
+            be confident that if `previous_payload` matches then
+            `previous_payload_data` will as well, and there is an extra
+            overhead from decoding.
+        """
+        return super(UpdateMessage, self).__key + (self.previous_payload, )
 
     @property
     def previous_payload(self):
