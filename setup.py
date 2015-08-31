@@ -37,7 +37,7 @@ setup(
         'PyStaticConfiguration',
         'simplejson',
         'swaggerpy',
-        'yelp_kafka',
+        'yelp_kafka>=4.0.0',
         'yelp_servlib',
     ],
     zip_safe=False,

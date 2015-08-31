@@ -6,11 +6,11 @@ import time
 from contextlib import contextmanager
 
 from docker import Client
-from kafka import KafkaClient
 from kafka import SimpleConsumer
 from kafka.common import KafkaUnavailableError
 
 from data_pipeline.config import get_config
+from data_pipeline.message import create_from_offset_and_message
 
 
 _ONE_MEGABYTE = 1024 * 1024
@@ -28,16 +28,22 @@ class KafkaDocker(object):
         logger.info("Getting connection to Kafka container on yocalhost")
         while end_time > time.time():
             try:
-                return KafkaClient("169.254.255.254:49255")
+                return get_config().kafka_client
             except KafkaUnavailableError:
                 logger.info("Kafka not yet available, waiting...")
                 time.sleep(0.1)
         raise KafkaUnavailableError()
 
 
-def create_kafka_docker_topic(kafka_docker, topic):
+def create_kafka_docker_topic(kafka_docker, topic, project='datapipeline'):
     """This method execs in the docker container because it's the only way to
     control how the topic is created.
+
+    Args:
+        kafka_docker (KakfaClient): Connection to the kafka docker instance
+        topic (str): Topic name to create
+        project (str): The project name used by docker-compose to identify
+            the containers.
     """
     if kafka_docker.has_metadata_for_topic(topic):
         return
@@ -51,7 +57,7 @@ def create_kafka_docker_topic(kafka_docker, topic):
         "--replication-factor 1 --partition 1 --topic {topic}"
     ).format(topic=topic)
 
-    _exec_docker_command(kafka_create_topic_command, 'datapipeline', 'kafka')
+    _exec_docker_command(kafka_create_topic_command, project, 'kafka')
 
     logger.info("Waiting for topic")
     kafka_docker.ensure_topic_exists(
@@ -77,6 +83,19 @@ def _exec_docker_command(command, project, service):
 
     exec_id = docker_client.exec_create(container_id, command)['Id']
     docker_client.exec_start(exec_id)
+
+
+@contextmanager
+def capture_new_data_pipeline_messages(topic):
+    with capture_new_messages(topic) as get_kafka_messages:
+        def get_data_pipeline_messages(count=100):
+            kafka_messages = get_kafka_messages(count)
+            return [
+                create_from_offset_and_message(topic, kafka_message)
+                for kafka_message in kafka_messages
+            ]
+
+        yield get_data_pipeline_messages
 
 
 @contextmanager

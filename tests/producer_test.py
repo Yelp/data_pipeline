@@ -17,6 +17,7 @@ from data_pipeline.message import CreateMessage
 from data_pipeline.message import Message
 from data_pipeline.producer import Producer
 from data_pipeline.producer import PublicationUnensurableError
+from data_pipeline.test_helpers.kafka_docker import capture_new_data_pipeline_messages
 from data_pipeline.test_helpers.kafka_docker import capture_new_messages
 from data_pipeline.test_helpers.kafka_docker import create_kafka_docker_topic
 from data_pipeline.test_helpers.kafka_docker import setup_capture_new_messages_consumer
@@ -366,7 +367,7 @@ class TestProducer(TestProducerBase):
         self._publish_and_assert_message(topic, message, producer, envelope)
 
     def _publish_message(self, topic, message, producer):
-        with capture_new_messages(topic) as get_messages:
+        with capture_new_data_pipeline_messages(topic) as get_messages:
             producer.publish(message)
             producer.flush()
 
@@ -376,9 +377,8 @@ class TestProducer(TestProducerBase):
         messages = self._publish_message(topic, message, producer)
 
         assert len(messages) == 1
-        unpacked_message = envelope.unpack(messages[0].message.value)
-        assert unpacked_message['payload'] == message.payload
-        assert unpacked_message['schema_id'] == message.schema_id
+        assert messages[0].payload == message.payload
+        assert messages[0].schema_id == message.schema_id
 
     def test_messages_not_duplicated(self, topic, message, producer_instance):
         with capture_new_messages(topic) as get_messages, producer_instance as producer:
