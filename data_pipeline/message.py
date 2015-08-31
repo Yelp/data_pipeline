@@ -298,36 +298,6 @@ class Message(object):
         self.dry_run = dry_run
         self._set_payload_or_payload_data(payload, payload_data)
 
-    @classmethod
-    def construct(cls, *args, **kwargs):
-        """Helper function to allow dynamic class construction to be mocked in
-        tests, since __class__ has defined behavior in mock. See
-        https://docs.python.org/dev/library/unittest.mock.html#mocking-magic-methods for more info
-        """
-        return cls(*args, **kwargs)
-
-    def __eq__(self, other):
-        """
-        Note:
-            We don't check `payload_data` as we should be confident that
-            if `payload` matches then `payload_data` will as well, and there
-            is an extra overhead from extra encoding/decoding.
-        """
-        return isinstance(other, self.__class__) \
-            and self.message_type == other.message_type \
-            and self.topic == other.topic \
-            and self.schema_id == other.schema_id \
-            and self.payload == other.payload \
-            and self.uuid == other.uuid \
-            and self.contains_pii == other.contains_pii \
-            and self.timestamp == other.timestamp \
-            and self.upstream_position_info == other.upstream_position_info \
-            and self.kafka_position_info == other.kafka_position_info \
-            and self.dry_run == other.dry_run
-
-    def __ne__(self, other):
-        return not self == other
-
     def _set_payload_or_payload_data(self, payload, payload_data):
         # payload or payload_data are lazily constructed only on request
         is_not_none_payload = payload is not None
@@ -341,6 +311,38 @@ class Message(object):
             self.payload_data = payload_data
         else:
             raise ValueError("Either payload or payload_data must be provided.")
+
+    def __eq__(self, other):
+        return self.__key == other.__key
+
+    def __ne__(self, other):
+        return self.__key != other.__key
+
+    def __hash__(self):
+        return hash(self.__key)
+
+    @property
+    def __key(self):
+        """Returns a tuple representing a unique key for this Message.
+
+        Note:
+            We don't include `payload_data` in the key tuple as we should be
+            confident that if `payload` matches then `payload_data` will as
+            well, and there is an extra overhead from decoding.
+        """
+        return (
+            self.__class__,
+            self.message_type,
+            self.topic,
+            self.schema_id,
+            self.payload,
+            self.uuid,
+            self.contains_pii,
+            self.timestamp,
+            self.upstream_position_info,
+            self.kafka_position_info,
+            self.dry_run
+        )
 
     @property
     def avro_repr(self):
@@ -470,16 +472,17 @@ class UpdateMessage(Message):
                 "Either previous_payload or previous_payload_data must be provided."
             )
 
-    def __eq__(self, other):
-        """
+    @property
+    def __key(self):
+        """Returns a tuple representing a unique key for this Message.
+
         Note:
-            We don't check `previous_payload_data` as we should be confident
-            that if `previous_payload` matches then `previous_payload_data`
-            will as well, and there is an extra overhead from extra
-            encoding/decoding.
+            We don't include `previous_payload_data` in the key as we should
+            be confident that if `previous_payload` matches then
+            `previous_payload_data` will as well, and there is an extra
+            overhead from decoding.
         """
-        return super(UpdateMessage, self).__eq__(other) \
-            and self.previous_payload == other.previous_payload
+        return super(UpdateMessage, self).__key + (self.previous_payload, )
 
     @property
     def previous_payload(self):

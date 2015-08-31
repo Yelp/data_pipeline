@@ -122,17 +122,6 @@ class SharedMessageTest(object):
         dry_run_message = self.message_class(**message_data)
         assert dry_run_message.payload == repr(payload_data)
 
-    def test_construct_args_kwargs(self, valid_message_data):
-        topic = valid_message_data['topic']
-        del valid_message_data['topic']
-        actual_message = self._mock_message_without_encode_or_decode(
-            self.message_class.construct(topic, **valid_message_data)
-        )
-        expected_message = self._mock_message_without_encode_or_decode(
-            self.message_class(topic, **valid_message_data)
-        )
-        assert actual_message == expected_message
-
     def test_equality(self, valid_message_data):
         message1 = self._mock_message_without_encode_or_decode(
             self.message_class(**valid_message_data)
@@ -153,6 +142,17 @@ class SharedMessageTest(object):
             self.message_class(**valid_message_data)
         )
         assert message1 != message2
+
+    def test_hash(self, valid_message_data):
+        message1 = self._mock_message_without_encode_or_decode(
+            self.message_class(**valid_message_data)
+        )
+        message2 = self._mock_message_without_encode_or_decode(
+            self.message_class(**valid_message_data)
+        )
+        test_dict = {message1: 'message1'}
+        assert message2 in test_dict
+        assert test_dict[message2] == 'message1'
 
     def _mock_message_without_encode_or_decode(self, message):
         # Short-circuit the communication with schematizer for
