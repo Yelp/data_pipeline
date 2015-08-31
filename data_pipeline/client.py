@@ -167,12 +167,12 @@ class _Monitor(object):
         dry_run=False
     ):
         self.monitoring_enabled = monitoring_enabled
+        self.client_name = client_name
+        self.client_type = client_type
         if not monitoring_enabled:
             return
 
         self.topic_to_tracking_info_map = {}
-        self.client_name = client_name
-        self.client_type = client_type
         self._monitoring_window_in_sec = get_config().monitoring_window_in_sec
         self.start_time = start_time
         self.producer = LoggingKafkaProducer(
