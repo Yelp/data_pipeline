@@ -3,8 +3,12 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import pytest
+from kafka import create_message
+from kafka.common import OffsetAndMessage
 
 from data_pipeline import message as dp_message
+from data_pipeline.envelope import Envelope
+from data_pipeline.message import create_from_offset_and_message
 from data_pipeline.message import PayloadFieldDiff
 from data_pipeline.message_type import MessageType
 
@@ -271,3 +275,23 @@ class TestUpdateMessage(SharedMessageTest):
         )
         expected_diff = {}
         self._test_has_changed_and_payload_diff(message_data_params, expected_diff)
+
+
+class TestCreateFromMessageAndOffset(object):
+
+    @pytest.fixture
+    def offset_and_message(self, message):
+        return OffsetAndMessage(0, create_message(Envelope().pack(message)))
+
+    def test_create_from_offset_and_message(self, offset_and_message, message):
+        extracted_message = create_from_offset_and_message(
+            topic=message.topic,
+            offset_and_message=offset_and_message
+        )
+        assert extracted_message.message_type == message.message_type
+        assert extracted_message.payload == message.payload
+        assert extracted_message.payload_data == message.payload_data
+        assert extracted_message.schema_id == message.schema_id
+        assert extracted_message.timestamp == message.timestamp
+        assert extracted_message.topic == message.topic
+        assert extracted_message.uuid == message.uuid
