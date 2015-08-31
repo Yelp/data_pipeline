@@ -94,8 +94,7 @@ class Producer(Client):
         super(Producer, self).__init__(
             producer_name,
             team_name,
-            expected_frequency_seconds,
-            dry_run=dry_run
+            expected_frequency_seconds
         )
         self.use_work_pool = use_work_pool
         self.dry_run = dry_run

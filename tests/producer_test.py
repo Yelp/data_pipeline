@@ -324,15 +324,6 @@ class TestProducer(TestProducerBase):
                 message_timeslot=1
             )
 
-    def test_monitoring_system_dry_run(self, producer_name, team_name):
-        producer = Producer(
-            producer_name=producer_name,
-            team_name=team_name,
-            expected_frequency_seconds=ExpectedFrequency.constantly,
-            dry_run=True
-        )
-        assert producer.monitoring_message.dry_run is True
-
     def test_basic_publish_message_with_pii(
         self,
         topic,

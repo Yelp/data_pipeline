@@ -62,8 +62,9 @@ class Client(object):
             additional detail.
         monitoring_enabled (bool): Enables the clients emission of monitoring
             messages.
-        dry_run (bool optional): Enables dry_run mode which doesn't publish
-            messages in kafka.
+
+            TODO(justinc|DATAPIPE-341): khuang will flush out a dry-run mode for
+            monitoring messages in DATAPIPE-341.
 
     Raises:
         InvalidTeamError: If the team specified is either not defined or does
@@ -76,15 +77,10 @@ class Client(object):
         client_name,
         team_name,
         expected_frequency_seconds,
-        monitoring_enabled=True,
-        dry_run=False
+        monitoring_enabled=True
     ):
         if monitoring_enabled:
-            self.monitoring_message = _Monitor(
-                client_name,
-                self.client_type,
-                dry_run=dry_run
-            )
+            self.monitoring_message = _Monitor(client_name, self.client_type)
         self.client_name = client_name
         self.team_name = team_name
         self.expected_frequency_seconds = expected_frequency_seconds
@@ -154,18 +150,14 @@ class _Monitor(object):
             number of messages produced/consumed by the associated client
     """
 
-    def __init__(self, client_name, client_type, start_time=0, dry_run=False):
+    def __init__(self, client_name, client_type, start_time=0):
         self.topic_to_tracking_info_map = {}
         self.client_name = client_name
         self.client_type = client_type
         self._monitoring_window_in_sec = get_config().monitoring_window_in_sec
         self.start_time = start_time
-        self.producer = LoggingKafkaProducer(
-            self._notify_messages_published,
-            dry_run=dry_run
-        )
+        self.producer = LoggingKafkaProducer(self._notify_messages_published)
         self.monitoring_schema_id = self._get_monitoring_schema_id()
-        self.dry_run = dry_run
 
     def _get_default_record(self, topic):
         """Returns the default version of the topic_to_tracking_info_map entry
@@ -198,7 +190,6 @@ class _Monitor(object):
                 topic=str('message-monitoring-log'),
                 schema_id=self.monitoring_schema_id,
                 payload_data=tracking_info,
-                dry_run=self.dry_run
             )
         )
 
