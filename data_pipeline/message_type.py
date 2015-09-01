@@ -20,6 +20,7 @@ class MessageType(Enum):
       refresh: refresh messages are used to intially populate a topic, they
         do not correspond to any particular data change
     """
+    log = 0
     create = 1
     update = 2
     delete = 3
