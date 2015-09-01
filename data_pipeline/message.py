@@ -75,10 +75,9 @@ class Message(object):
             track these objects and provide them back from the producer to
             identify the last message that was successfully published, both
             overall and per topic.
-        keys (tuple of str, optional): This should either be a tuple of strings
+        keys (tuple, optional): This should either be a tuple of strings
             or None.  If it's a tuple of strings, the clientlib will combine
-            those strings and use them as a key when publishing into Kafka.
-            This is currently unimplemented - see DATAPIPE-268 for details.
+            those strings and use them as key when publishing into Kafka.
         dry_run (boolean): When set to True, Message will return a string
             representation of the payload and previous payload, instead of
             the avro encoded message.  This is to avoid loading the schema
@@ -269,6 +268,16 @@ class Message(object):
         self._payload_data = payload_data
         self._payload = None  # force payload to be re-encoded
 
+    @property
+    def keys(self):
+        return self._keys
+
+    @keys.setter
+    def keys(self, keys):
+        if keys is not None and not isinstance(keys, tuple):
+            raise ValueError("Keys must be the type of tuple")
+        self._keys = keys
+
     def __init__(
         self,
         topic,
@@ -295,6 +304,7 @@ class Message(object):
         self.timestamp = timestamp
         self.upstream_position_info = upstream_position_info
         self.kafka_position_info = kafka_position_info
+        self.keys = keys
         self.dry_run = dry_run
         self._set_payload_or_payload_data(payload, payload_data)
 

@@ -84,13 +84,13 @@ class TestProducerBase(object):
 
 class TestProducer(TestProducerBase):
 
-    def create_message_with_pii(self, topic_name, payload, registered_schema):
+    def create_message(self, topic_name, payload, registered_schema, **kwargs):
         return CreateMessage(
             topic=topic_name,
             schema_id=registered_schema.schema_id,
             payload=payload,
             timestamp=1500,
-            contains_pii=True
+            **kwargs
         )
 
     def create_message_with_specified_timestamp(self, topic_name, payload, timestamp):
@@ -368,7 +368,12 @@ class TestProducer(TestProducerBase):
     ):
         messages = self._publish_message(
             topic,
-            self.create_message_with_pii(topic, payload, registered_schema),
+            self.create_message(
+                topic,
+                payload,
+                registered_schema,
+                contains_pii=True
+            ),
             producer
         )
 
@@ -387,6 +392,27 @@ class TestProducer(TestProducerBase):
             producer,
             envelope
         )
+
+    def test_basic_publish_message_with_primary_keys(
+        self,
+        topic,
+        payload,
+        producer,
+        registered_schema,
+        envelope
+    ):
+        sample_keys = (u'key\'1', u'key\\2')
+        with capture_new_messages(topic) as get_messages:
+            producer.publish(
+                self.create_message(
+                    topic,
+                    payload,
+                    registered_schema,
+                    keys=sample_keys
+                )
+            )
+            producer.flush()
+        assert get_messages()[0].message.key == bytes('key\\\'1\x1fkey\\\\2')
 
     def test_basic_publish(self, topic, message, producer, envelope):
         self._publish_and_assert_message(topic, message, producer, envelope)

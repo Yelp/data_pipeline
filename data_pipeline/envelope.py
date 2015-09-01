@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import os
+import re
 
 import avro.io
 import avro.schema
@@ -84,3 +85,16 @@ class Envelope(object):
         """
         # The initial "magic byte" is ignored, see the comment in `pack`.
         return self._avro_string_reader.decode(packed_message[1:])
+
+    def pack_keys(self, keys):
+        """Encode primary keys in message.
+
+        Args:
+            keys (tuple of str): a tuple of primary keys
+
+        Returns:
+            bytes: return bytes with encoded keys. All non-alphanumerics are
+                escaped.
+        """
+        escaped_keys = (re.escape(key) for key in keys)
+        return bytes('\x1f'.join(escaped_keys))
