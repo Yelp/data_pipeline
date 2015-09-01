@@ -24,7 +24,7 @@ setup(
     author=data_pipeline.__author__,
     author_email=data_pipeline.__email__,
     url='http://servicedocs.yelpcorp.com/docs/data_pipeline/',
-    packages=find_packages('data_pipeline'),
+    packages=find_packages(exclude=['tests*', 'benchmarks*']),
     include_package_data=True,
     install_requires=[
         'avro>=1.7.7',
