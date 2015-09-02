@@ -2,6 +2,7 @@
 """
 Define retry policies, retry functions on specified conditions or exceptions.
 It doesn't have decorators for retry functions yet but they can be added later.
+TODO: [clin|DATAPIPE-399] add retry decorators.
 """
 from __future__ import absolute_import
 from __future__ import unicode_literals
@@ -152,7 +153,7 @@ class ExpBackoffPolicy(BackoffPolicy):
 
 """Policy that defines how to retry and retry cap.
     Args:
-        backoff_policy (:class:`_retry_util.BackoffPolicy): One of the defined
+        backoff_policy (:class:`_retry_util.BackoffPolicy`): One of the defined
             backoff policy, such as :class:`_retry_util.ExpBackoffPolicy`.
         max_retry_count (Optional[int]): Maximum number of retries.  Default
             to unlimited.  Retry stops if max_retry_count or max_runtime_secs
@@ -164,7 +165,7 @@ class ExpBackoffPolicy(BackoffPolicy):
 """
 RetryPolicy = namedtuple(
     'RetryPolicy',
-    'backoff_policy max_retry_count, max_runtime_secs'
+    'backoff_policy, max_retry_count, max_runtime_secs'
 )
 RetryPolicy.__new__.__defaults__ = (UNLIMITED, UNLIMITED)
 

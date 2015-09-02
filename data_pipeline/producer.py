@@ -79,6 +79,10 @@ class Producer(Client):
         committed to Kafka, with updated position data.  The callback should
         take a single argument, which will be an instance of
         :class:`PositionData`.
+      dry_run (Optional[bool]): If true, producer will skip publishing message
+        to kafka. Default is false.
+      monitoring_enabled (Optional[bool]): If true, monitoring will be enabled
+        to record client's activities. Default is true.
     """
 
     def __init__(
@@ -88,12 +92,14 @@ class Producer(Client):
         expected_frequency_seconds,
         use_work_pool=False,
         dry_run=False,
-        position_data_callback=None
+        position_data_callback=None,
+        monitoring_enabled=True
     ):
         super(Producer, self).__init__(
             producer_name,
             team_name,
             expected_frequency_seconds,
+            monitoring_enabled,
             dry_run=dry_run
         )
         self.use_work_pool = use_work_pool
