@@ -275,7 +275,7 @@ class Message(object):
     @keys.setter
     def keys(self, keys):
         if keys is not None and not isinstance(keys, tuple):
-            raise ValueError("Keys must be the type of tuple")
+            raise ValueError("Keys must be a tuple of strs")
         self._keys = keys
 
     def __init__(

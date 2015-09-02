@@ -3,7 +3,6 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import os
-import re
 
 import avro.io
 import avro.schema
@@ -96,5 +95,5 @@ class Envelope(object):
             bytes: return bytes with encoded keys. All non-alphanumerics are
                 escaped.
         """
-        escaped_keys = (re.escape(key) for key in keys)
-        return bytes('\x1f'.join(escaped_keys))
+        escaped_keys = (key.replace('\\', '\\\\').replace("'", "\\'") for key in keys)
+        return '\x1f'.join(escaped_keys).encode('utf-8')
