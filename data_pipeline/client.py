@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 import math
 import socket
+import time
 
 import simplejson
 from cached_property import cached_property
@@ -87,6 +88,9 @@ class Client(object):
         self.monitor = _Monitor(
             client_name,
             self.client_type,
+            start_time=_Monitor.get_monitor_window_start_timestamp(
+                time.time()
+            ),
             monitoring_enabled=monitoring_enabled,
             dry_run=dry_run
         )
@@ -191,7 +195,7 @@ class _Monitor(object):
     @classmethod
     def get_monitor_window_start_timestamp(cls, timestamp):
         _monitor_window_in_sec = get_config().monitoring_window_in_sec
-        return (long(math.floor(long(timestamp) / _monitor_window_in_sec)) *
+        return (int(math.floor(int(timestamp) / _monitor_window_in_sec)) *
                 _monitor_window_in_sec)
 
     def _get_default_record(self, topic):
