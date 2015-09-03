@@ -12,11 +12,13 @@ from cached_property import cached_property
 
 class AvroStringWriter(object):
     def __init__(self, schema):
-        self.schema = schema
+        self.schema = get_avro_schema_object(schema)
 
     @cached_property
     def avro_writer(self):
-        return avro.io.DatumWriter(self.schema)
+        return avro.io.DatumWriter(
+            writers_schema=self.schema
+        )
 
     def encode(self, message_avro_representation):
         # Benchmarking this revealed that recreating stringio and the encoder
