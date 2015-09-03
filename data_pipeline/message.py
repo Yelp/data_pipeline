@@ -588,7 +588,7 @@ def create_from_kafka_message(
             Otherwise the decoding will happen whenever the lazy *_data
             properties are accessed.
 
-    Returns (data_pipeline.message.Message):
+    Returns (class:`data_pipeline.message.Message`):
         The message object
     """
     kafka_position_info = KafkaPositionInfo(
