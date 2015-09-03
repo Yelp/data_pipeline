@@ -34,8 +34,8 @@ class AvroStringWriter(object):
 
 class AvroStringReader(object):
     def __init__(self, reader_schema, writer_schema):
-        self.reader_schema = reader_schema
-        self.writer_schema = writer_schema
+        self.reader_schema = get_avro_schema_object(reader_schema)
+        self.writer_schema = get_avro_schema_object(writer_schema)
 
     @cached_property
     def avro_reader(self):
