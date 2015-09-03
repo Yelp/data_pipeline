@@ -2,7 +2,7 @@
 """
 Define retry policies, retry functions on specified conditions or exceptions.
 It doesn't have decorators for retry functions yet but they can be added later.
-TODO: [clin|DATAPIPE-399] add retry decorators.
+TODO: [DATAPIPE-399|clin] add retry decorators.
 """
 from __future__ import absolute_import
 from __future__ import unicode_literals

@@ -92,7 +92,7 @@ class KafkaProducer(object):
     def _publish_produce_requests(self, requests):
         """It will try to publish all the produce requests for topics, and
         retry a number of times until either all the requests are successfully
-        published or it can no longer retry, in which case., the exception will
+        published or it can no longer retry, in which case, the exception will
         be thrown.
 
         Each time the requests that are successfully published in the previous

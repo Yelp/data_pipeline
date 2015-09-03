@@ -155,15 +155,13 @@ class _Monitor(object):
         client_name (str): name of the associated client.
         client_type (str): type of the client the _Monitor is associated to.
             Could be either producer or consumer.
-        start_time (long): unix start_time when _Monitor will start tracking
+        start_time (int): unix start_time when _Monitor will start tracking
             the number of messages produced/consumed by the associated client.
         monitoring_enabled (Optional[bool]): If true, monitoring will be enabled
             to record client's activities. Default is true.
         dry_run (Optional[bool]): If true, client will skip publishing message to
             kafka. Default is false.
     """
-
-    _monitor_window_in_sec = get_config().monitoring_window_in_sec
 
     def __init__(
         self,
@@ -192,8 +190,9 @@ class _Monitor(object):
 
     @classmethod
     def get_monitor_window_start_timestamp(cls, timestamp):
-        return (long(math.floor(long(timestamp) / cls._monitor_window_in_sec)) *
-                cls._monitor_window_in_sec)
+        _monitor_window_in_sec = get_config().monitoring_window_in_sec
+        return (long(math.floor(long(timestamp) / _monitor_window_in_sec)) *
+                _monitor_window_in_sec)
 
     def _get_default_record(self, topic):
         """Returns the default version of the topic_to_tracking_info_map entry
