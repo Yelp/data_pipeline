@@ -392,6 +392,10 @@ class RefreshMessage(Message):
     _message_type = MessageType.refresh
 
 
+class LogMessage(Message):
+    _message_type = MessageType.log
+
+
 class MonitorMessage(Message):
     _message_type = _ProtectedMessageType.monitor
 

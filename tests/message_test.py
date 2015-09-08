@@ -200,6 +200,16 @@ class TestCreateMessage(PayloadOnlyMessageTest):
         return MessageType.create
 
 
+class TestLogMessage(PayloadOnlyMessageTest):
+    @property
+    def message_class(self):
+        return dp_message.LogMessage
+
+    @property
+    def expected_message_type(self):
+        return MessageType.log
+
+
 class TestRefreshMessage(PayloadOnlyMessageTest):
 
     @property
