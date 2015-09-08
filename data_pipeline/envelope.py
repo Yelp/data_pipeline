@@ -95,5 +95,5 @@ class Envelope(object):
             bytes: return bytes with encoded keys. All non-alphanumerics are
                 escaped.
         """
-        escaped_keys = (key.replace('\\', '\\\\').replace("'", "\\'") for key in keys)
+        escaped_keys = ('\'' + key.replace('\\', '\\\\').replace("'", "\\'") + '\'' for key in keys)
         return '\x1f'.join(escaped_keys).encode('utf-8')

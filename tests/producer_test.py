@@ -401,7 +401,7 @@ class TestProducer(TestProducerBase):
         registered_schema,
         envelope
     ):
-        sample_keys = (u'key1=\'', u'key2=\\', u'key3=哎ù')
+        sample_keys = (u'key1=\'', u'key2=\\', u'key3=哎ù\x1f')
         with capture_new_messages(topic) as get_messages:
             producer.publish(
                 self.create_message(
@@ -412,7 +412,7 @@ class TestProducer(TestProducerBase):
                 )
             )
             producer.flush()
-        assert get_messages()[0].message.key == 'key1=\\\'\x1fkey2=\\\\\x1fkey3=哎ù'.encode('utf-8')
+        assert get_messages()[0].message.key == '\'key1=\\\'\'\x1f\'key2=\\\\\'\x1f\'key3=哎ù\x1f\''.encode('utf-8')
 
     def test_basic_publish(self, topic, message, producer, envelope):
         self._publish_and_assert_message(topic, message, producer, envelope)
