@@ -275,7 +275,9 @@ class Message(object):
     @keys.setter
     def keys(self, keys):
         if keys is not None and not isinstance(keys, tuple):
-            raise ValueError("Keys must be a tuple of strs")
+            raise ValueError("Keys must be a tuple.")
+        if keys and not all(isinstance(key, unicode) for key in keys):
+            raise ValueError("Element of keys must be unicode.")
         self._keys = keys
 
     def __init__(
