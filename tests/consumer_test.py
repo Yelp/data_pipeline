@@ -10,8 +10,9 @@ import pytest
 
 from data_pipeline._avro_util import AvroStringWriter
 from data_pipeline._avro_util import generate_payload_data
-from data_pipeline.consumer import Consumer
 from data_pipeline.consumer import ConsumerTopicState
+from data_pipeline.consumer import KafkaConsumer
+from data_pipeline.consumer import MultiprocessingConsumer
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import Message
 from data_pipeline.message import UpdateMessage
@@ -38,8 +39,7 @@ faster and flake-proof
 
 
 @pytest.mark.usefixtures("patch_dry_run", "configure_teams")
-class TestConsumer(object):
-
+class BaseConsumerTest(object):
     @pytest.yield_fixture
     def patch_dry_run(self):
         with mock.patch.object(
@@ -73,32 +73,6 @@ class TestConsumer(object):
             yield producer
         assert len(multiprocessing.active_children()) == 0
 
-    @pytest.fixture
-    def publish_messages(self, producer, message, consumer):
-        def _publish_messages(count):
-            assert count > 0
-            for _ in xrange(count):
-                producer.publish(message)
-            producer.flush()
-            # wait until the consumer has retrieved a message before returning
-            while consumer.message_buffer.empty():
-                time.sleep(TIMEOUT)
-        return _publish_messages
-
-    @pytest.fixture(params=[
-        {'decode_payload_in_workers': False},
-        {'decode_payload_in_workers': True},
-    ])
-    def consumer_instance(self, request, topic, kafka_docker, team_name):
-        return Consumer(
-            consumer_name='test_consumer',
-            team_name=team_name,
-            expected_frequency_seconds=ExpectedFrequency.constantly,
-            topic_to_consumer_topic_state_map={topic: None},
-            max_buffer_size=self.test_buffer_size,
-            decode_payload_in_workers=request.param['decode_payload_in_workers']
-        )
-
     @pytest.yield_fixture
     def consumer(self, consumer_instance):
         with consumer_instance as consumer:
@@ -122,12 +96,6 @@ class TestConsumer(object):
     def test_get_message_none(self, consumer, topic):
         message = consumer.get_message(blocking=True, timeout=TIMEOUT)
         assert message is None
-        assert consumer.topic_to_consumer_topic_state_map[topic] is None
-
-    def test_get_messages_empty(self, consumer, topic):
-        messages = consumer.get_messages(count=10, blocking=True, timeout=TIMEOUT)
-        assert len(messages) == 0
-        assert consumer.message_buffer.empty()
         assert consumer.topic_to_consumer_topic_state_map[topic] is None
 
     def test_basic_iteration(
@@ -255,6 +223,40 @@ class TestConsumer(object):
             expect_buffer_empty=True
         )
 
+
+class TestMultiprocessingConsumer(BaseConsumerTest):
+    @pytest.fixture
+    def publish_messages(self, producer, message, consumer):
+        def _publish_messages(count):
+            assert count > 0
+            for _ in xrange(count):
+                producer.publish(message)
+            producer.flush()
+            # wait until the consumer has retrieved a message before returning
+            while consumer.message_buffer.empty():
+                time.sleep(TIMEOUT)
+        return _publish_messages
+
+    @pytest.fixture(params=[
+        {'decode_payload_in_workers': False},
+        {'decode_payload_in_workers': True},
+    ])
+    def consumer_instance(self, request, topic, kafka_docker, team_name):
+        return MultiprocessingConsumer(
+            consumer_name='test_consumer',
+            team_name=team_name,
+            expected_frequency_seconds=ExpectedFrequency.constantly,
+            topic_to_consumer_topic_state_map={topic: None},
+            max_buffer_size=self.test_buffer_size,
+            decode_payload_in_workers=request.param['decode_payload_in_workers']
+        )
+
+    def test_get_messages_empty(self, consumer, topic,):
+        messages = consumer.get_messages(count=10, blocking=True, timeout=TIMEOUT)
+        assert len(messages) == 0
+        assert consumer.message_buffer.empty()
+        assert consumer.topic_to_consumer_topic_state_map[topic] is None
+
     def test_maximum_buffer_size(
             self,
             publish_messages,
@@ -281,6 +283,36 @@ class TestConsumer(object):
             expected_msg_count=published_count - len(msgs),
             expect_buffer_empty=True
         )
+
+
+class TestKafkaConsumer(BaseConsumerTest):
+
+    @pytest.fixture
+    def publish_messages(self, producer, message, consumer):
+        def _publish_messages(count):
+            assert count > 0
+            for _ in xrange(count):
+                producer.publish(message)
+            producer.flush()
+        return _publish_messages
+
+    @pytest.fixture(params=[
+        {'decode_payload_in_workers': False},
+        {'decode_payload_in_workers': True},
+    ])
+    def consumer_instance(self, request, topic, kafka_docker, team_name):
+        return KafkaConsumer(
+            consumer_name='test_consumer',
+            team_name=team_name,
+            expected_frequency_seconds=ExpectedFrequency.constantly,
+            topic_to_consumer_topic_state_map={topic: None},
+            decode_payload_in_workers=request.param['decode_payload_in_workers']
+        )
+
+    def test_get_messages_empty(self, consumer, topic,):
+        messages = consumer.get_messages(count=10, blocking=True, timeout=TIMEOUT)
+        assert len(messages) == 0
+        assert consumer.topic_to_consumer_topic_state_map[topic] is None
 
 
 class ConsumerAsserter(object):
@@ -315,7 +347,8 @@ class ConsumerAsserter(object):
         assert isinstance(actual_msgs, list)
         for actual_msg in actual_msgs:
             self.assert_single_message(actual_msg, self.expected_msg)
-        self.assert_consumer_state(expect_buffer_empty)
+        if isinstance(self.consumer, MultiprocessingConsumer):
+            self.assert_consumer_state(expect_buffer_empty)
 
     def assert_single_message(self, actual_msg, expected_msg):
         assert actual_msg.message_type == expected_msg.message_type
