@@ -11,6 +11,7 @@
     {"name": "payload", "type": "bytes", "doc": "Avro-encoded data encoded with the schema corresponding to schema_id"},
     {"name": "previous_payload", "type": ["null", "bytes"], "doc": "Avro-encoded state of the row prior to the update for update messages."},
     {"name": "meta", "type": ["null", {"type": "map", "values": "bytes"}], "doc": "Structure reserved to contain future metadata."},
+    {"name": "transaction_id", "type": ["null", "bytes"], "doc": "Contains transaction seq number which is a combination of cluster_name, log_file and log_pos."},
     {"name": "encryption_type", "type": ["null", "string"], "doc": "If encryption is used, identifies the type and key used to encrypt the payload."},
     {"name": "timestamp", "type": "int", "doc": "Time the message was produced."}
   ]

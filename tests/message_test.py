@@ -115,6 +115,36 @@ class SharedMessageTest(object):
     def test_message_contains_pii(self, message_with_pii):
         assert message_with_pii.contains_pii is True
 
+    @pytest.fixture(params=[
+        'section1',
+        'section1:section2',
+        ['not a string'],
+        bytes(10)
+    ])
+    def invalid_transaction_id(self, request):
+        return request.param
+
+    def test_rejects_invalid_transaction_id(self, valid_message_data, invalid_transaction_id):
+        self._assert_invalid_data(
+            valid_message_data,
+            transaction_id=invalid_transaction_id
+        )
+
+    @pytest.fixture(params=[
+        None,
+        'cluster_name:log_file_name:log_position',
+    ])
+    def valid_transaction_id(self, request):
+        return request.param
+
+    def test_accepts_valid_transaction_id(self, valid_message_data, valid_transaction_id):
+        message_data = self._make_message_data(
+            valid_message_data,
+            transaction_id=valid_transaction_id
+        )
+        dry_run_message = self.message_class(**message_data)
+        assert dry_run_message.transaction_id == valid_transaction_id
+
     def test_dry_run(self, valid_message_data):
         payload_data = {'data': 'test'}
         message_data = self._make_message_data(

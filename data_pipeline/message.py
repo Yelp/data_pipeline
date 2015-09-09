@@ -164,6 +164,21 @@ class Message(object):
         self._contains_pii = contains_pii
 
     @property
+    def transaction_id(self):
+        """The kafka topic the message should be published to."""
+        return self._transaction_id
+
+    @transaction_id.setter
+    def transaction_id(self, transaction_id):
+        if transaction_id:
+            if not isinstance(transaction_id, unicode) or len(transaction_id.split(':')) != 3:
+                raise ValueError(
+                    "Transaction_id must be None or a unicode string in the "
+                    "form <cluster_nam>:<log_file_name>:<log_position>"
+                )
+        self._transaction_id = transaction_id
+
+    @property
     def dry_run(self):
         return self._dry_run
 
@@ -288,6 +303,7 @@ class Message(object):
         payload_data=None,
         uuid=None,
         contains_pii=False,
+        transaction_id=None,
         timestamp=None,
         upstream_position_info=None,
         kafka_position_info=None,
@@ -303,6 +319,7 @@ class Message(object):
         self.schema_id = schema_id
         self.uuid = uuid
         self.contains_pii = contains_pii
+        self.transaction_id = transaction_id
         self.timestamp = timestamp
         self.upstream_position_info = upstream_position_info
         self.kafka_position_info = kafka_position_info
@@ -363,6 +380,7 @@ class Message(object):
             'message_type': self.message_type.name,
             'schema_id': self.schema_id,
             'payload': self.payload,
+            'transaction_id': self.transaction_id,
             'timestamp': self.timestamp
         }
 
@@ -441,6 +459,7 @@ class UpdateMessage(Message):
         previous_payload_data=None,
         uuid=None,
         contains_pii=False,
+        transaction_id=None,
         timestamp=None,
         upstream_position_info=None,
         kafka_position_info=None,
@@ -454,6 +473,7 @@ class UpdateMessage(Message):
             payload_data=payload_data,
             uuid=uuid,
             contains_pii=contains_pii,
+            transaction_id=transaction_id,
             timestamp=timestamp,
             upstream_position_info=upstream_position_info,
             kafka_position_info=kafka_position_info,
@@ -536,6 +556,7 @@ class UpdateMessage(Message):
             'schema_id': self.schema_id,
             'payload': self.payload,
             'previous_payload': self.previous_payload,
+            'transaction_id': self.transaction_id,
             'timestamp': self.timestamp
         }
 
