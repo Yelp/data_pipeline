@@ -42,10 +42,8 @@ class MultiprocessingConsumer(Consumer):
             team_name,
             expected_frequency_seconds,
             topic_to_consumer_topic_state_map,
-            max_buffer_size=get_config().consumer_max_buffer_size_default,
             force_payload_decode=True,
-            auto_offset_reset='smallest',
-            partitioner_cooldown=get_config().consumer_partitioner_cooldown_default,
+            max_buffer_size=get_config().consumer_max_buffer_size_default,
             worker_min_sleep_time=get_config().consumer_worker_min_sleep_time_default,
             worker_max_sleep_time=get_config().consumer_worker_max_sleep_time_default
     ):
@@ -99,17 +97,15 @@ class MultiprocessingConsumer(Consumer):
             team_name,
             expected_frequency_seconds,
             topic_to_consumer_topic_state_map,
-            partitioner_cooldown,
-            force_payload_decode,
-            auto_offset_reset
+            force_payload_decode
         )
         self.max_buffer_size = max_buffer_size
+        self.worker_min_sleep_time = worker_min_sleep_time
+        self.worker_max_sleep_time = worker_max_sleep_time
         self.running = False
         self.consumer_group = None
         self.consumer_group_thread = None
         self.message_buffer = None
-        self.worker_min_sleep_time = worker_min_sleep_time
-        self.worker_max_sleep_time = worker_max_sleep_time
 
     def start(self):
         """ Start the MultiprocessingConsumer. Normally this should NOT be called directly,

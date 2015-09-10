@@ -40,18 +40,14 @@ class KafkaConsumer(Consumer):
             team_name,
             expected_frequency_seconds,
             topic_to_consumer_topic_state_map,
-            partitioner_cooldown=get_config().consumer_partitioner_cooldown_default,
             force_payload_decode=True,
-            auto_offset_reset='smallest'
     ):
         super(KafkaConsumer, self).__init__(
             consumer_name,
             team_name,
             expected_frequency_seconds,
             topic_to_consumer_topic_state_map,
-            partitioner_cooldown,
-            force_payload_decode,
-            auto_offset_reset
+            force_payload_decode
         )
         self.running = False
         self.consumer_group = None

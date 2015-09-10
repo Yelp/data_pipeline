@@ -46,9 +46,9 @@ class Consumer(Client):
         team_name,
         expected_frequency_seconds,
         topic_to_consumer_topic_state_map,
-        partitioner_cooldown,
         force_payload_decode=True,
-        auto_offset_reset='smallest'
+        auto_offset_reset='smallest',
+        partitioner_cooldown=get_config().consumer_partitioner_cooldown_default,
     ):
         super(Consumer, self).__init__(
             consumer_name,
@@ -56,10 +56,10 @@ class Consumer(Client):
             expected_frequency_seconds,
             monitoring_enabled=False
         )
-        self.partitioner_cooldown = partitioner_cooldown
         self.topic_to_consumer_topic_state_map = topic_to_consumer_topic_state_map
         self.force_payload_decode = force_payload_decode
         self.auto_offset_reset = auto_offset_reset
+        self.partitioner_cooldown = partitioner_cooldown
 
     @property
     def client_type(self):
