@@ -93,7 +93,11 @@ class Consumer(Client):
         raise NotImplementedError
 
     def __iter__(self):
-        raise NotImplementedError
+        while True:
+            yield self.get_message(
+                blocking=True,
+                timeout=get_config().consumer_get_messages_timeout_default
+            )
 
     def get_message(
             self,

@@ -82,13 +82,6 @@ class KafkaConsumer(Consumer):
         self.running = False
         logger.info("KafkaConsumer '{0}' stopped".format(self.client_name))
 
-    def __iter__(self):
-        while True:
-            yield self.get_message(
-                blocking=True,
-                timeout=get_config().consumer_get_messages_timeout_default
-            )
-
     def get_messages(
             self,
             count,
