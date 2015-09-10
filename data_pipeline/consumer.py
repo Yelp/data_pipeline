@@ -87,9 +87,23 @@ class Consumer(Client):
         return False
 
     def start(self):
+        """ Start the Consumer. Normally this should NOT be called directly,
+        rather the Consumer should be used as a context manager, which will
+        start automatically when the context enters.
+
+        Note:
+            The dervied class must implement this method.
+        """
         raise NotImplementedError
 
     def stop(self):
+        """ Stop the Consumer. Normally this should NOT be called directly,
+        rather the Consumer should be used as a context manager, which will
+        stop automatically when the context exits.
+
+        Note:
+            The dervied class must implement this method.
+        """
         raise NotImplementedError
 
     def __iter__(self):
@@ -134,6 +148,32 @@ class Consumer(Client):
         )
 
     def get_messages(self):
+        """ Retrieve a list of messages from the message buffer, optionally
+        blocking until the requested number of messages has been retrieved.
+
+        Note:
+            The dervied class must implement this method.
+
+        Warning:
+            If `blocking` is True and `timeout` is None this will block until
+            the requested number of messages is retrieved, potentially blocking
+            forever. Please be absolutely sure this is what you are intending
+            if you use these options!
+
+        Args:
+            count (int): Number of messages to retrieve
+            blocking (boolean): Set to True to block while waiting for messages
+                if the buffer has been depleted. Otherwise returns immediately
+                if the buffer reaches depletion.
+            timeout (double): Maximum time (in seconds) to wait if blocking is
+                set to True. Set to None to wait indefinitely.
+
+        Returns:
+            ([data_pipeline.message.Message]): List of Message objects with a
+                of maximum size `count`, but may be smaller or empty depending
+                on how many messages were retrieved within the timeout.
+        """
+
         raise NotImplementedError
 
     def commit_message(self, message):
