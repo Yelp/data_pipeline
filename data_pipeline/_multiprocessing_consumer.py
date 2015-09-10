@@ -124,10 +124,6 @@ class MultiprocessingConsumer(Consumer):
         self.consumer_group_thread.start()
 
     def _stop(self):
-        """ Stop the MultiprocessingConsumer. Normally this should NOT be called directly,
-        rather the MultiprocessingConsumer should be used as a context manager, which will
-        stop automatically when the context exits.
-        """
         self.consumer_group.stop_group()
         self.consumer_group_thread.join()
 
@@ -137,28 +133,6 @@ class MultiprocessingConsumer(Consumer):
             blocking=False,
             timeout=get_config().consumer_get_messages_timeout_default
     ):
-        """ Retrieve a list of messages from the message buffer, optionally
-        blocking if the buffer is depleted.
-
-        Warning:
-            If `blocking` is True and `timeout` is None this will block until
-            the requested number of messages is retrieved, potentially blocking
-            forever. Please be absolutely sure this is what you are intending
-            if you use these options!
-
-        Args:
-            count (int): Number of messages to retrieve
-            blocking (boolean): Set to True to block while waiting for messages
-                if the buffer has been depleted. Otherwise returns immediately
-                if the buffer reaches depletion.
-            timeout (double): Maximum time (in seconds) to wait if blocking is
-                set to True. Set to None to wait indefinitely.
-
-        Returns:
-            ([data_pipeline.message.Message]): List of Message objects with a
-                of maximum size `count`, but may be smaller or empty depending
-                on how many messages were retrieved within the timeout.
-        """
         messages = []
         has_timeout = timeout is not None
         if has_timeout:

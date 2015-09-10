@@ -57,10 +57,6 @@ class KafkaConsumer(Consumer):
         self.consumer_group.start()
 
     def _stop(self):
-        """ Stop the KafkaConsumer. Normally this should NOT be called directly,
-        rather the KafkaConsumer should be used as a context manager, which will
-        stop automatically when the context exits.
-        """
         self.consumer_group.stop()
 
     def get_messages(
