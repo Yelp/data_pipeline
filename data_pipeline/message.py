@@ -287,7 +287,6 @@ class Message(object):
         payload=None,
         payload_data=None,
         uuid=None,
-        contains_pii=None,
         timestamp=None,
         upstream_position_info=None,
         kafka_position_info=None,
@@ -302,7 +301,7 @@ class Message(object):
         self.topic = topic
         self.schema_id = schema_id
         self.uuid = uuid
-        self.contains_pii = contains_pii
+        self.contains_pii = None
         self.timestamp = timestamp
         self.upstream_position_info = upstream_position_info
         self.kafka_position_info = kafka_position_info
@@ -444,7 +443,6 @@ class UpdateMessage(Message):
         previous_payload=None,
         previous_payload_data=None,
         uuid=None,
-        contains_pii=None,
         timestamp=None,
         upstream_position_info=None,
         kafka_position_info=None,
@@ -457,7 +455,6 @@ class UpdateMessage(Message):
             payload=payload,
             payload_data=payload_data,
             uuid=uuid,
-            contains_pii=contains_pii,
             timestamp=timestamp,
             upstream_position_info=upstream_position_info,
             kafka_position_info=kafka_position_info,

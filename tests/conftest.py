@@ -45,7 +45,7 @@ def registered_schema(schematizer_client, example_schema):
             'namespace': 'test_namespace',
             'source': 'good_source',
             'source_owner_email': 'test@yelp.com',
-            'contains_pii': False
+            'contains_pii': True
         }
     ).result()
 

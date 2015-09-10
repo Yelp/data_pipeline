@@ -366,14 +366,11 @@ class TestProducer(TestProducerBase):
         producer,
         registered_schema
     ):
+        test_message = self.create_message(topic, payload, registered_schema)
+        test_message.set_pii_flag_from_schematizer()
         messages = self._publish_message(
             topic,
-            self.create_message(
-                topic,
-                payload,
-                registered_schema,
-                contains_pii=True
-            ),
+            test_message,
             producer
         )
 
