@@ -161,11 +161,6 @@ class Message(object):
 
     @contains_pii.setter
     def contains_pii(self, contains_pii):
-        if contains_pii:
-            raise NotImplementedError(
-                "Encryption of topics that contain PII has not yet been "
-                "implemented. See DATAPIPE-62 for details."
-            )
         self._contains_pii = contains_pii
 
     @property
