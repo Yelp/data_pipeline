@@ -43,7 +43,7 @@ class MultiprocessingConsumer(Consumer):
             expected_frequency_seconds,
             topic_to_consumer_topic_state_map,
             max_buffer_size=get_config().consumer_max_buffer_size_default,
-            decode_payload_in_workers=True,
+            force_payload_decode=True,
             auto_offset_reset='smallest',
             partitioner_cooldown=get_config().consumer_partitioner_cooldown_default,
             worker_min_sleep_time=get_config().consumer_worker_min_sleep_time_default,
@@ -100,7 +100,7 @@ class MultiprocessingConsumer(Consumer):
             expected_frequency_seconds,
             topic_to_consumer_topic_state_map,
             partitioner_cooldown,
-            decode_payload_in_workers,
+            force_payload_decode,
             auto_offset_reset
         )
         self.max_buffer_size = max_buffer_size
@@ -130,7 +130,7 @@ class MultiprocessingConsumer(Consumer):
             config=self._kafka_consumer_config,
             consumer_factory=KafkaConsumerWorker.create_factory(
                 message_buffer=self.message_buffer,
-                decode_payload=self.decode_payload_in_workers,
+                decode_payload=self.force_payload_decode,
                 min_sleep_time=self.worker_min_sleep_time,
                 max_sleep_time=self.worker_max_sleep_time
             )

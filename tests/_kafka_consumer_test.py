@@ -22,8 +22,8 @@ class TestKafkaConsumer(BaseConsumerTest):
         return _publish_messages
 
     @pytest.fixture(params=[
-        {'decode_payload_in_workers': False},
-        {'decode_payload_in_workers': True},
+        {'force_payload_decode': False},
+        {'force_payload_decode': True},
     ])
     def consumer_instance(self, request, topic, kafka_docker, team_name):
         return KafkaConsumer(
@@ -31,7 +31,7 @@ class TestKafkaConsumer(BaseConsumerTest):
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
             topic_to_consumer_topic_state_map={topic: None},
-            decode_payload_in_workers=request.param['decode_payload_in_workers']
+            force_payload_decode=request.param['force_payload_decode']
         )
 
     def test_get_messages_empty(self, consumer, topic,):

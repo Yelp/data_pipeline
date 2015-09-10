@@ -47,7 +47,7 @@ class Consumer(Client):
         expected_frequency_seconds,
         topic_to_consumer_topic_state_map,
         partitioner_cooldown,
-        decode_payload_in_workers=True,
+        force_payload_decode=True,
         auto_offset_reset='smallest'
     ):
         super(Consumer, self).__init__(
@@ -58,7 +58,7 @@ class Consumer(Client):
         )
         self.partitioner_cooldown = partitioner_cooldown
         self.topic_to_consumer_topic_state_map = topic_to_consumer_topic_state_map
-        self.decode_payload_in_workers = decode_payload_in_workers
+        self.force_payload_decode = force_payload_decode
         self.auto_offset_reset = auto_offset_reset
 
     @property

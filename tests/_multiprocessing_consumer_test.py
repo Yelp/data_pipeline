@@ -26,8 +26,8 @@ class TestMultiprocessingConsumer(BaseConsumerTest):
         return _publish_messages
 
     @pytest.fixture(params=[
-        {'decode_payload_in_workers': False},
-        {'decode_payload_in_workers': True},
+        {'force_payload_decode': False},
+        {'force_payload_decode': True},
     ])
     def consumer_instance(self, request, topic, kafka_docker, team_name):
         return MultiprocessingConsumer(
@@ -36,7 +36,7 @@ class TestMultiprocessingConsumer(BaseConsumerTest):
             expected_frequency_seconds=ExpectedFrequency.constantly,
             topic_to_consumer_topic_state_map={topic: None},
             max_buffer_size=self.test_buffer_size,
-            decode_payload_in_workers=request.param['decode_payload_in_workers']
+            force_payload_decode=request.param['force_payload_decode']
         )
 
     def test_get_messages_empty(self, consumer, topic,):

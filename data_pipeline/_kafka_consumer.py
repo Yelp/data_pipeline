@@ -41,7 +41,7 @@ class KafkaConsumer(Consumer):
             expected_frequency_seconds,
             topic_to_consumer_topic_state_map,
             partitioner_cooldown=get_config().consumer_partitioner_cooldown_default,
-            decode_payload_in_workers=True,
+            force_payload_decode=True,
             auto_offset_reset='smallest'
     ):
         super(KafkaConsumer, self).__init__(
@@ -50,7 +50,7 @@ class KafkaConsumer(Consumer):
             expected_frequency_seconds,
             topic_to_consumer_topic_state_map,
             partitioner_cooldown,
-            decode_payload_in_workers,
+            force_payload_decode,
             auto_offset_reset
         )
         self.running = False
@@ -112,7 +112,7 @@ class KafkaConsumer(Consumer):
                 message = create_from_kafka_message(
                     message.topic,
                     message,
-                    self.decode_payload_in_workers
+                    self.force_payload_decode
                 )
                 self._update_topic_map(message)
                 messages.append(message)
