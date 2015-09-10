@@ -94,18 +94,16 @@ class KafkaConsumer(Consumer):
             max_time = time() + timeout
         while len(messages) < count:
             try:
-                try:
-                    message = self.consumer_group.next()
-                except ConsumerTimeout:
-                    break
-                message = create_from_kafka_message(
-                    message.topic,
-                    message,
-                    self.force_payload_decode
-                )
-                self._update_topic_map(message)
-                messages.append(message)
-            except Empty:
-                if not blocking or (has_timeout and time() > max_time):
-                    break
+                message = self.consumer_group.next()
+            except ConsumerTimeout:
+                break
+            message = create_from_kafka_message(
+                message.topic,
+                message,
+                self.force_payload_decode
+            )
+            self._update_topic_map(message)
+            messages.append(message)
+            if not blocking or (has_timeout and time() > max_time):
+                break
         return messages

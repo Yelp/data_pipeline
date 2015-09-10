@@ -173,7 +173,6 @@ class Consumer(Client):
                 of maximum size `count`, but may be smaller or empty depending
                 on how many messages were retrieved within the timeout.
         """
-
         raise NotImplementedError
 
     def commit_message(self, message):
