@@ -60,6 +60,8 @@ class Consumer(Client):
         self.force_payload_decode = force_payload_decode
         self.auto_offset_reset = auto_offset_reset
         self.partitioner_cooldown = partitioner_cooldown
+        self.running = False
+        self.consumer_group = None
 
     @property
     def client_type(self):
@@ -94,17 +96,26 @@ class Consumer(Client):
         Note:
             The dervied class must implement this method.
         """
-        raise NotImplementedError
+        logger.info("Starting Consumer '{0}'...".format(self.client_name))
+        if self.running:
+            raise RuntimeError("Consumer '{0}' is already running".format(
+                self.client_name
+            ))
+        self._commit_topic_map_offsets()
+        self._start()
+        self.running = True
+        logger.info("Consumer '{0}' started".format(self.client_name))
 
     def stop(self):
         """ Stop the Consumer. Normally this should NOT be called directly,
         rather the Consumer should be used as a context manager, which will
         stop automatically when the context exits.
-
-        Note:
-            The dervied class must implement this method.
         """
-        raise NotImplementedError
+        logger.info("Stopping Consumer '{0}'...".format(self.client_name))
+        if self.running:
+            self._stop()
+        self.running = False
+        logger.info("Consumer '{0}' stopped".format(self.client_name))
 
     def __iter__(self):
         while True:

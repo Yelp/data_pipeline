@@ -2,7 +2,6 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from Queue import Empty
 from time import time
 
 from kafka.common import ConsumerTimeout
@@ -49,38 +48,20 @@ class KafkaConsumer(Consumer):
             topic_to_consumer_topic_state_map,
             force_payload_decode
         )
-        self.running = False
-        self.consumer_group = None
 
-    def start(self):
-        """ Start the KafkaConsumer. Normally this should NOT be called directly,
-        rather the KafkaConsumer should be used as a context manager, which will
-        start automatically when the context enters.
-        """
-        logger.info("Starting KafkaConsumer '{0}'...".format(self.client_name))
-        if self.running:
-            raise RuntimeError("KafkaConsumer '{0}' is already running".format(
-                self.client_name
-            ))
-        self._commit_topic_map_offsets()
+    def _start(self):
         self.consumer_group = KafkaConsumerGroup(
             topics=self.topic_to_consumer_topic_state_map.keys(),
             config=self._kafka_consumer_config
         )
         self.consumer_group.start()
-        self.running = True
-        logger.info("KafkaConsumer '{0}' started".format(self.client_name))
 
-    def stop(self):
+    def _stop(self):
         """ Stop the KafkaConsumer. Normally this should NOT be called directly,
         rather the KafkaConsumer should be used as a context manager, which will
         stop automatically when the context exits.
         """
-        logger.info("Stopping KafkaConsumer '{0}'...".format(self.client_name))
-        if self.running:
-            self.consumer_group.stop()
-        self.running = False
-        logger.info("KafkaConsumer '{0}' stopped".format(self.client_name))
+        self.consumer_group.stop()
 
     def get_messages(
             self,

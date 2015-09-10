@@ -99,27 +99,13 @@ class MultiprocessingConsumer(Consumer):
             topic_to_consumer_topic_state_map,
             force_payload_decode
         )
+        self.message_buffer = None
+        self.consumer_group_thread = None
         self.max_buffer_size = max_buffer_size
         self.worker_min_sleep_time = worker_min_sleep_time
         self.worker_max_sleep_time = worker_max_sleep_time
-        self.running = False
-        self.consumer_group = None
-        self.consumer_group_thread = None
-        self.message_buffer = None
 
-    def start(self):
-        """ Start the MultiprocessingConsumer. Normally this should NOT be called directly,
-        rather the MultiprocessingConsumer should be used as a context manager, which will
-        start automatically when the context enters.
-        """
-        logger.info("Starting MultiprocessingConsumer '{0}'...".format(self.client_name))
-        if self.running:
-            raise RuntimeError("MultiprocessingConsumer '{0}' is already running".format(
-                self.client_name
-            ))
-
-        self._commit_topic_map_offsets()
-
+    def _start(self):
         self.message_buffer = Queue(self.max_buffer_size)
         self.consumer_group = MultiprocessingConsumerGroup(
             topics=self.topic_to_consumer_topic_state_map.keys(),
@@ -136,20 +122,14 @@ class MultiprocessingConsumer(Consumer):
         )
         self.consumer_group_thread.setDaemon(False)
         self.consumer_group_thread.start()
-        self.running = True
-        logger.info("MultiprocessingConsumer '{0}' started".format(self.client_name))
 
-    def stop(self):
+    def _stop(self):
         """ Stop the MultiprocessingConsumer. Normally this should NOT be called directly,
         rather the MultiprocessingConsumer should be used as a context manager, which will
         stop automatically when the context exits.
         """
-        logger.info("Stopping MultiprocessingConsumer '{0}'...".format(self.client_name))
-        if self.running:
-            self.consumer_group.stop_group()
-            self.consumer_group_thread.join()
-        self.running = False
-        logger.info("MultiprocessingConsumer '{0}' stopped".format(self.client_name))
+        self.consumer_group.stop_group()
+        self.consumer_group_thread.join()
 
     def get_messages(
             self,
