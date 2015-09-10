@@ -691,8 +691,8 @@ def _create_message_from_packed_message(
             {'previous_payload': unpacked_message['previous_payload']}
         )
     message = message_class(**message_params)
+    message.set_pii_flag_from_schematizer()
     if force_payload_decoding:
-        message.set_pii_flag_from_schematizer()
         # Access the cached, but lazily-calculated, properties
         message.reload_data()
     return message
