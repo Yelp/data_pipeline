@@ -161,6 +161,11 @@ class Message(object):
 
     @contains_pii.setter
     def contains_pii(self, contains_pii):
+        if contains_pii:
+            raise NotImplementedError(
+                "Encryption of topics that contain PII has not yet been "
+                "implemented. See DATAPIPE-62 for details."
+            )
         self._contains_pii = contains_pii
 
     @property
@@ -287,7 +292,7 @@ class Message(object):
         payload=None,
         payload_data=None,
         uuid=None,
-        contains_pii=False,
+        contains_pii=None,
         timestamp=None,
         upstream_position_info=None,
         kafka_position_info=None,
@@ -385,6 +390,8 @@ class Message(object):
     def reload_data(self):
         """Encode the payload data or decode the payload if it hasn't done so.
         """
+        pii_flag = get_schema_cache().get_contains_pii_for_schema_id(self.schema_id)
+        self.contains_pii = pii_flag
         self._decode_payload_if_necessary()
         self._encode_payload_data_if_necessary()
 

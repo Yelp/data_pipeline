@@ -25,6 +25,7 @@ class SchemaCache(object):
         self.schema_id_to_schema_map = {}
         self.schema_id_to_topic_map = {}
         self.base_to_transformed_schema_id_map = {}
+        self.schema_id_to_pii_map = {}
 
     @property
     def schematizer_client(self):
@@ -147,6 +148,14 @@ class SchemaCache(object):
         self.schema_id_to_topic_map[schema_id] = topic_name
         return topic_name
 
+    def get_contains_pii_for_schema_id(self, schema_id):
+        pii_flag = self.schema_id_to_pii_map.get(
+            schema_id,
+            self._retrieve_contains_pii_from_schematizer(schema_id)
+        )
+        self.schema_id_to_pii_map[schema_id] = pii_flag
+        return pii_flag
+
     def get_schema(self, schema_id):
         """ Get the schema corresponding to the given schema_id, handling cache
             misses if required
@@ -172,6 +181,9 @@ class SchemaCache(object):
 
     def _retrieve_topic_name_from_schematizer(self, schema_id):
         return self._retrieve_schema_from_schematizer(schema_id).topic.name
+
+    def _retrieve_contains_pii_from_schematizer(self, schema_id):
+        return self._retrieve_schema_from_schematizer(schema_id).topic.contains_pii
 
     def _retrieve_avro_schema_from_schematizer(self, schema_id):
         return get_avro_schema_object(
