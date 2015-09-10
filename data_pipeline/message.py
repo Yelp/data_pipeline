@@ -385,10 +385,12 @@ class Message(object):
     def reload_data(self):
         """Encode the payload data or decode the payload if it hasn't done so.
         """
-        pii_flag = get_schema_cache().get_contains_pii_for_schema_id(self.schema_id)
-        self.contains_pii = pii_flag
         self._decode_payload_if_necessary()
         self._encode_payload_data_if_necessary()
+
+    def set_pii_flag_from_schematizer(self):
+        pii_flag = get_schema_cache().get_contains_pii_for_schema_id(self.schema_id)
+        self.contains_pii = pii_flag
 
 
 class CreateMessage(Message):
@@ -442,7 +444,7 @@ class UpdateMessage(Message):
         previous_payload=None,
         previous_payload_data=None,
         uuid=None,
-        contains_pii=False,
+        contains_pii=None,
         timestamp=None,
         upstream_position_info=None,
         kafka_position_info=None,
@@ -690,6 +692,7 @@ def _create_message_from_packed_message(
         )
     message = message_class(**message_params)
     if force_payload_decoding:
+        message.set_pii_flag_from_schematizer()
         # Access the cached, but lazily-calculated, properties
         message.reload_data()
     return message
