@@ -50,6 +50,30 @@ class Consumer(Client):
         auto_offset_reset='smallest',
         partitioner_cooldown=get_config().consumer_partitioner_cooldown_default,
     ):
+        """ Creates the base Consumer object
+
+        Args:
+            consumer_name (str): See parameter `client_name` in
+                :class:`data_pipeline.client.Client`.  The `consumer_name` will
+                be registered with Kafka to commit offsets.
+            team_name (str): See parameter `team_name` in
+                :class:`data_pipeline.client.Client`.
+            expected_frequency_seconds (int, ExpectedFrequency): See parameter
+                `expected_frequency_seconds` in :class:`data_pipeline.client.Client`.
+            topic_to_consumer_topic_state_map ({str:Optional(ConsumerTopicState)}):
+                A map of topic names to ``ConsumerTopicState`` objects which
+                define the offsets to start from. These objects may be `None`,
+                in which case the committed kafka offset for the consumer_name is
+                used. If there is no committed kafka offset for the consumer_name
+                the MultiprocessingConsumer will begin from the `auto_offset_reset` offset in
+                the topic.
+            auto_offset_reset (str): Used for offset validation. If 'largest'
+                reset the offset to the latest available message (tail). If
+                'smallest' reset from the earliest (head).
+            partitioner_cooldown (float): Waiting time (in seconds) for the
+                consumer to acquire the partitions. See
+                yelp_kafka/yelp_kafka/partitioner.py for more details
+        """
         super(Consumer, self).__init__(
             consumer_name,
             team_name,
@@ -94,7 +118,7 @@ class Consumer(Client):
         start automatically when the context enters.
 
         Note:
-            The dervied class must implement this method.
+            The derived class must implement _start().
         """
         logger.info("Starting Consumer '{0}'...".format(self.client_name))
         if self.running:
@@ -110,6 +134,9 @@ class Consumer(Client):
         """ Stop the Consumer. Normally this should NOT be called directly,
         rather the Consumer should be used as a context manager, which will
         stop automatically when the context exits.
+
+        Note:
+            The derived class must implement _stop().
         """
         logger.info("Stopping Consumer '{0}'...".format(self.client_name))
         if self.running:
@@ -125,9 +152,9 @@ class Consumer(Client):
             )
 
     def get_message(
-            self,
-            blocking=False,
-            timeout=get_config().consumer_get_messages_timeout_default
+        self,
+        blocking=False,
+        timeout=get_config().consumer_get_messages_timeout_default
     ):
         """ Retrieve a single message. Returns None if no message could
         be retrieved within the timeout.
@@ -158,12 +185,17 @@ class Consumer(Client):
             None
         )
 
-    def get_messages(self):
+    def get_messages(
+        self,
+        count,
+        blocking=False,
+        timeout=get_config().consumer_get_messages_timeout_default
+    ):
         """ Retrieve a list of messages from the message buffer, optionally
         blocking until the requested number of messages has been retrieved.
 
         Note:
-            The dervied class must implement this method.
+            The derived class must implement this method.
 
         Warning:
             If `blocking` is True and `timeout` is None this will block until
@@ -222,7 +254,7 @@ class Consumer(Client):
             pos_info = message.kafka_position_info
             partition_offset_map = topic_to_partition_offset_map.get(message.topic, {})
             max_offset = partition_offset_map.get(pos_info.partition, 0)
-
+            # Increment the offset value by 1 so the consumer can retrieve the next message.
             partition_offset_map[pos_info.partition] = max(pos_info.offset, max_offset) + 1
             topic_to_partition_offset_map[message.topic] = partition_offset_map
         self.commit_offsets(topic_to_partition_offset_map)

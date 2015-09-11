@@ -74,9 +74,10 @@ class KafkaConsumer(Consumer):
                 default_iter_timeout = self.consumer_group.iter_timeout
                 self.consumer_group.iter_timeout = timeout
                 message = self.consumer_group.next()
-                self.consumer_group.iter_timeout = default_iter_timeout
             except ConsumerTimeout:
                 break
+            finally:
+                self.consumer_group.iter_timeout = default_iter_timeout
             message = create_from_kafka_message(
                 message.topic,
                 message,

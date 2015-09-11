@@ -55,20 +55,6 @@ class MultiprocessingConsumer(Consumer):
             at the same time (aka configurable 'jitter').
 
         Args:
-            consumer_name (str): See parameter `client_name` in
-                :class:`data_pipeline.client.Client`.  The `consumer_name` will
-                be registered with Kafka to commit offsets.
-            team_name (str): See parameter `team_name` in
-                :class:`data_pipeline.client.Client`.
-            expected_frequency_seconds (int, ExpectedFrequency): See parameter
-                `expected_frequency_seconds` in :class:`data_pipeline.client.Client`.
-            topic_to_consumer_topic_state_map ({str:Optional(ConsumerTopicState)}):
-                A map of topic names to ``ConsumerTopicState`` objects which
-                define the offsets to start from. These objects may be `None`,
-                in which case the committed kafka offset for the consumer_name is
-                used. If there is no committed kafka offset for the consumer_name
-                the MultiprocessingConsumer will begin from the `auto_offset_reset` offset in
-                the topic.
             max_buffer_size (int): Maximum size for the internal
                 ``multiprocessing.Queue`` used as a shared buffer among all
                 ``KafkaConsumerWorker`` objects created internally. The size
@@ -78,12 +64,6 @@ class MultiprocessingConsumer(Consumer):
                 more memory will be consumed, but the more likely that you will
                 be able to continually retrieve from `get_messages(..)` without
                 encountering blocking.
-            auto_offset_reset (str): Used for offset validation. If 'largest'
-                reset the offset to the latest available message (tail). If
-                'smallest' reset from the earliest (head).
-            partitioner_cooldown (float): Waiting time (in seconds) for the
-                consumer to acquire the partitions. See
-                yelp_kafka/yelp_kafka/partitioner.py for more details
             worker_min_sleep_time (float): Minimum time (in seconds) for
                 background workers in the consumer to sleep while waiting to
                 retry adding messages to the shared `multiprocess.Queue`
