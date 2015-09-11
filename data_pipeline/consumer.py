@@ -254,7 +254,7 @@ class Consumer(Client):
             pos_info = message.kafka_position_info
             partition_offset_map = topic_to_partition_offset_map.get(message.topic, {})
             max_offset = partition_offset_map.get(pos_info.partition, 0)
-            # Increment the offset value by 1 so the consumer can retrieve the next message.
+            # Increment the offset value by 1 so the consumer knows where to retrieve the next message.
             partition_offset_map[pos_info.partition] = max(pos_info.offset, max_offset) + 1
             topic_to_partition_offset_map[message.topic] = partition_offset_map
         self.commit_offsets(topic_to_partition_offset_map)
