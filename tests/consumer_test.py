@@ -2,7 +2,9 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import datetime
 import multiprocessing
+import random
 import time
 
 import mock
@@ -12,10 +14,13 @@ from data_pipeline._avro_util import AvroStringWriter
 from data_pipeline._avro_util import generate_payload_data
 from data_pipeline.consumer import Consumer
 from data_pipeline.consumer import ConsumerTopicState
+from data_pipeline.consumer import TopicFilter
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import Message
 from data_pipeline.message import UpdateMessage
 from data_pipeline.producer import Producer
+from data_pipeline.schema_cache import get_schematizer_client
+from data_pipeline.schema_cache import Topic
 from data_pipeline.testing_helpers.kafka_docker import create_kafka_docker_topic
 
 
@@ -338,3 +343,234 @@ class ConsumerAsserter(object):
         # if 'None' we can't have any expectations
         if expect_buffer_empty is not None:
             assert self.consumer.message_buffer.empty() == expect_buffer_empty
+
+
+@pytest.mark.usefixtures("configure_teams")
+class TestRefreshTopics(object):
+
+    @pytest.yield_fixture(scope='class')
+    def schematizer(self):
+        yield get_schematizer_client()
+
+    @pytest.fixture
+    def yelp_namespace(self):
+        return 'yelp_{0}'.format(random.random())
+
+    @pytest.fixture
+    def biz_src(self):
+        return 'biz_{0}'.format(random.random())
+
+    @pytest.fixture
+    def biz_schema(self, schematizer, yelp_namespace, biz_src):
+        return self._register_schema(schematizer, yelp_namespace, biz_src)
+
+    @pytest.fixture
+    def biz_topic(self, biz_schema):
+        return Topic(
+            id=biz_schema.topic.id,
+            name=biz_schema.topic.name,
+            source=biz_schema.topic.source,
+            created_at=biz_schema.topic.created_at
+        )
+
+    @pytest.fixture
+    def usr_src(self):
+        return 'user_{0}'.format(random.random())
+
+    @pytest.fixture
+    def usr_schema(self, schematizer, yelp_namespace, usr_src):
+        return self._register_schema(schematizer, yelp_namespace, usr_src)
+
+    @pytest.fixture
+    def usr_topic(self, usr_schema):
+        return Topic(
+            id=usr_schema.topic.id,
+            name=usr_schema.topic.name,
+            source=usr_schema.topic.source,
+            created_at=usr_schema.topic.created_at
+        )
+
+    @pytest.fixture(autouse=True)
+    def aux_namespace(self):
+        return 'aux_{0}'.format(random.random())
+
+    @pytest.fixture(autouse=True)
+    def cta_src(self):
+        return 'cta_{0}'.format(random.random())
+
+    @pytest.fixture(autouse=True)
+    def cta_schema(self, schematizer, aux_namespace, cta_src):
+        return self._register_schema(schematizer, aux_namespace, cta_src)
+
+    def _register_schema(self, schematizer_client, namespace, source):
+        avro_schema = {
+            'type': 'record',
+            'name': source,
+            'namespace': namespace,
+            'fields': [{'type': 'int', 'name': 'id'}]
+        }
+        return schematizer_client.register_schema_by_schema_json(
+            namespace=namespace,
+            source=source,
+            schema_json=avro_schema,
+            owner_email='test@yelp.com',
+            contains_pii=False
+        )
+
+    @pytest.fixture(scope='class')
+    def test_schema(self, schematizer):
+        return self._register_schema(schematizer, 'test_namespace', 'test_src')
+
+    @pytest.fixture(scope='class')
+    def topic(self, test_schema, kafka_docker):
+        topic_name = str(test_schema.topic.name)
+        create_kafka_docker_topic(kafka_docker, topic_name)
+        return topic_name
+
+    @pytest.yield_fixture
+    def consumer_instance(self, topic, team_name):
+        yield Consumer(
+            consumer_name='test_consumer',
+            team_name=team_name,
+            expected_frequency_seconds=ExpectedFrequency.constantly,
+            topic_to_consumer_topic_state_map={topic: None},
+        )
+
+    @pytest.yield_fixture
+    def consumer(self, consumer_instance):
+        with consumer_instance as consumer:
+            yield consumer
+        assert len(multiprocessing.active_children()) == 0
+
+    def test_no_newer_topics(self, consumer, yelp_namespace, biz_schema):
+        expected = dict(consumer.topic_to_consumer_topic_state_map)
+        new_topics = consumer.refresh_new_topics(TopicFilter(
+            namespace_name=yelp_namespace,
+            created_after=self._increment_seconds(biz_schema.created_at, seconds=1)
+        ))
+        assert new_topics == []
+        assert consumer.topic_to_consumer_topic_state_map == expected
+
+    def test_refresh_newer_topics_created_after_now(
+        self,
+        consumer,
+        yelp_namespace,
+        biz_schema,
+        biz_topic,
+        usr_schema,
+        usr_topic
+    ):
+        expected = dict(consumer.topic_to_consumer_topic_state_map)
+        expected.update({biz_topic.name: None, usr_topic.name: None})
+
+        new_topics = consumer.refresh_new_topics(TopicFilter(
+            namespace_name=yelp_namespace,
+            created_after=self._increment_seconds(
+                min(biz_schema.created_at, usr_schema.created_at),
+                seconds=-1
+            )
+        ))
+
+        assert new_topics == [biz_topic, usr_topic]  # !!!
+        assert consumer.topic_to_consumer_topic_state_map == expected
+
+    def test_already_tailed_topic_state_remains_after_refresh(
+        self,
+        consumer,
+        test_schema,
+    ):
+        self._publish_then_consume_message(consumer, test_schema)
+
+        topic = test_schema.topic
+        expected_state = consumer.topic_to_consumer_topic_state_map[topic.name]
+
+        new_topics = consumer.refresh_new_topics(TopicFilter(
+            source_name=topic.source.name,
+            created_after=self._increment_seconds(topic.created_at, seconds=-1)
+        ))
+
+        assert topic.id not in [new_topic.id for new_topic in new_topics]
+        assert consumer.topic_to_consumer_topic_state_map[topic.name] == expected_state
+
+    def _publish_then_consume_message(self, consumer, avro_schema):
+        with Producer(
+            'test_producer',
+            team_name='bam',
+            expected_frequency_seconds=ExpectedFrequency.constantly,
+            monitoring_enabled=False
+        ) as producer:
+            message = UpdateMessage(
+                topic=str(avro_schema.topic.name),
+                schema_id=avro_schema.id,
+                payload_data={'id': 2},
+                previous_payload_data={'id': 1}
+            )
+            producer.publish(message)
+            producer.flush()
+
+        consumer.get_messages(1, blocking=True, timeout=1)
+
+    def test_refresh_with_custom_filter(
+        self,
+        consumer,
+        yelp_namespace,
+        biz_schema,
+        biz_topic,
+        usr_schema
+    ):
+        expected = dict(consumer.topic_to_consumer_topic_state_map)
+        expected.update({biz_topic.name: None})
+
+        new_topics = consumer.refresh_new_topics(TopicFilter(
+            namespace_name=yelp_namespace,
+            created_after=self._increment_seconds(
+                min(biz_schema.created_at, usr_schema.created_at),
+                seconds=-1
+            ),
+            filter_func=lambda topics: [biz_topic]
+        ))
+
+        assert new_topics == [biz_topic]
+        assert consumer.topic_to_consumer_topic_state_map == expected
+
+    def test_with_bad_namespace(self, consumer):
+        actual = consumer.refresh_new_topics(TopicFilter(
+            namespace_name='bad.namespace',
+            created_after=self._get_utc_timestamp(datetime.datetime.utcnow())
+        ))
+        assert actual == []
+
+    def test_with_bad_source(self, consumer, yelp_namespace):
+        actual = consumer.refresh_new_topics(TopicFilter(
+            namespace_name=yelp_namespace,
+            source_name='bad.source',
+            created_after=self._get_utc_timestamp(datetime.datetime.utcnow())
+        ))
+        assert actual == []
+
+    def test_with_before_refresh_handler(
+        self,
+        consumer,
+        yelp_namespace,
+        biz_schema,
+        biz_topic
+    ):
+        mock_handler = mock.Mock()
+        new_topics = consumer.refresh_new_topics(
+            TopicFilter(
+                namespace_name=yelp_namespace,
+                created_after=self._increment_seconds(
+                    biz_schema.created_at,
+                    seconds=-1
+                )
+            ),
+            before_refresh_handler=mock_handler
+        )
+        assert new_topics == [biz_topic]
+        mock_handler.assert_called_once_with([biz_topic])
+
+    def _get_utc_timestamp(self, dt):
+        return int((dt - datetime.datetime(1970, 1, 1)).total_seconds())
+
+    def _increment_seconds(self, dt, seconds):
+        return self._get_utc_timestamp(dt + datetime.timedelta(seconds=seconds))
