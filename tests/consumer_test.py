@@ -20,7 +20,6 @@ from data_pipeline.message import Message
 from data_pipeline.message import UpdateMessage
 from data_pipeline.producer import Producer
 from data_pipeline.schema_cache import get_schematizer_client
-from data_pipeline.schema_cache import Topic
 from data_pipeline.testing_helpers.kafka_docker import create_kafka_docker_topic
 
 
@@ -365,30 +364,12 @@ class TestRefreshTopics(object):
         return self._register_schema(schematizer, yelp_namespace, biz_src)
 
     @pytest.fixture
-    def biz_topic(self, biz_schema):
-        return Topic(
-            id=biz_schema.topic.id,
-            name=biz_schema.topic.name,
-            source=biz_schema.topic.source,
-            created_at=biz_schema.topic.created_at
-        )
-
-    @pytest.fixture
     def usr_src(self):
         return 'user_{0}'.format(random.random())
 
     @pytest.fixture
     def usr_schema(self, schematizer, yelp_namespace, usr_src):
         return self._register_schema(schematizer, yelp_namespace, usr_src)
-
-    @pytest.fixture
-    def usr_topic(self, usr_schema):
-        return Topic(
-            id=usr_schema.topic.id,
-            name=usr_schema.topic.name,
-            source=usr_schema.topic.source,
-            created_at=usr_schema.topic.created_at
-        )
 
     @pytest.fixture(autouse=True)
     def aux_namespace(self):
@@ -451,15 +432,15 @@ class TestRefreshTopics(object):
         assert new_topics == []
         assert consumer.topic_to_consumer_topic_state_map == expected
 
-    def test_refresh_newer_topics_created_after_now(
+    def test_refresh_newer_topics_in_yelp_namesapce(
         self,
         consumer,
         yelp_namespace,
         biz_schema,
-        biz_topic,
         usr_schema,
-        usr_topic
     ):
+        biz_topic = biz_schema.topic
+        usr_topic = usr_schema.topic
         expected = dict(consumer.topic_to_consumer_topic_state_map)
         expected.update({biz_topic.name: None, usr_topic.name: None})
 
@@ -471,7 +452,7 @@ class TestRefreshTopics(object):
             )
         ))
 
-        assert new_topics == [biz_topic, usr_topic]  # !!!
+        assert new_topics == [biz_topic, usr_topic]
         assert consumer.topic_to_consumer_topic_state_map == expected
 
     def test_already_tailed_topic_state_remains_after_refresh(
@@ -515,9 +496,9 @@ class TestRefreshTopics(object):
         consumer,
         yelp_namespace,
         biz_schema,
-        biz_topic,
         usr_schema
     ):
+        biz_topic = biz_schema.topic
         expected = dict(consumer.topic_to_consumer_topic_state_map)
         expected.update({biz_topic.name: None})
 
@@ -552,8 +533,7 @@ class TestRefreshTopics(object):
         self,
         consumer,
         yelp_namespace,
-        biz_schema,
-        biz_topic
+        biz_schema
     ):
         mock_handler = mock.Mock()
         new_topics = consumer.refresh_new_topics(
@@ -566,6 +546,7 @@ class TestRefreshTopics(object):
             ),
             before_refresh_handler=mock_handler
         )
+        biz_topic = biz_schema.topic
         assert new_topics == [biz_topic]
         mock_handler.assert_called_once_with([biz_topic])
 
