@@ -5,12 +5,12 @@ from __future__ import unicode_literals
 import time
 from contextlib import contextmanager
 
-from docker import Client
 from kafka import SimpleConsumer
 from kafka.common import KafkaUnavailableError
 
 from data_pipeline.config import get_config
 from data_pipeline.message import create_from_offset_and_message
+from tests.helpers.containers import Containers
 
 
 _ONE_MEGABYTE = 1024 * 1024
@@ -57,7 +57,7 @@ def create_kafka_docker_topic(kafka_docker, topic, project='datapipeline'):
         "--replication-factor 1 --partition 1 --topic {topic}"
     ).format(topic=topic)
 
-    _exec_docker_command(kafka_create_topic_command, project, 'kafka')
+    Containers.exec_command(kafka_create_topic_command, project, 'kafka')
 
     logger.info("Waiting for topic")
     kafka_docker.ensure_topic_exists(
@@ -66,23 +66,6 @@ def create_kafka_docker_topic(kafka_docker, topic, project='datapipeline'):
     )
     logger.info("Topic Exists")
     assert kafka_docker.has_metadata_for_topic(topic)
-
-
-def _exec_docker_command(command, project, service):
-    """Execs the command in the project and service container running under
-    docker-compose.
-    """
-    docker_client = Client(version='auto')
-    # intentionally letting this blow up if it can't find the container
-    # - we can't do anything if the container doesn't exist
-    container_id = next(
-        c['Id'] for c in docker_client.containers() if
-        c['Labels'].get('com.docker.compose.project') == project and
-        c['Labels'].get('com.docker.compose.service') == service
-    )
-
-    exec_id = docker_client.exec_create(container_id, command)['Id']
-    docker_client.exec_start(exec_id)
 
 
 @contextmanager
