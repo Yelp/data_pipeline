@@ -100,7 +100,8 @@ class TestProducer(TestProducerBase):
             topic=topic_name,
             schema_id=10,
             payload=payload,
-            timestamp=timestamp
+            timestamp=timestamp,
+            contains_pii=False
         )
 
     def assert_monitoring_system_checks(self, unpacked_message, topic, message_count, message_timeslot):
@@ -366,11 +367,14 @@ class TestProducer(TestProducerBase):
         producer,
         registered_schema
     ):
-        test_message = self.create_message(topic, payload, registered_schema)
-        test_message.set_pii_flag_from_schematizer()
         messages = self._publish_message(
             topic,
-            test_message,
+            self.create_message(
+                topic,
+                payload,
+                registered_schema,
+                contains_pii=True
+            ),
             producer
         )
 
@@ -405,7 +409,8 @@ class TestProducer(TestProducerBase):
                     topic,
                     payload,
                     registered_schema,
-                    keys=sample_keys
+                    keys=sample_keys,
+                    contains_pii=False
                 )
             )
             producer.flush()

@@ -213,7 +213,8 @@ class _Monitor(object):
                 topic=str('message-monitoring-log'),
                 schema_id=self.monitoring_schema_id,
                 payload_data=tracking_info,
-                dry_run=self.dry_run
+                dry_run=self.dry_run,
+                contains_pii=False
             )
         )
 

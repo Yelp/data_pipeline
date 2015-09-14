@@ -45,7 +45,7 @@ def registered_schema(schematizer_client, example_schema):
             'namespace': 'test_namespace',
             'source': 'good_source',
             'source_owner_email': 'test@yelp.com',
-            'contains_pii': True
+            'contains_pii': False
         }
     ).result()
 
@@ -100,7 +100,8 @@ def message(topic_name, payload, registered_schema, example_payload_data):
         topic=topic_name,
         schema_id=registered_schema.schema_id,
         payload=payload,
-        timestamp=1500
+        timestamp=1500,
+        contains_pii=False
     )
     # TODO [DATAPIPE-249|clin] as part of refactoring and cleanup consumer
     # tests, let's re-visit and see if these assertions are needed.
@@ -117,7 +118,8 @@ def message_with_payload_data(topic_name, registered_schema):
         topic=topic_name,
         schema_id=registered_schema.schema_id,
         payload_data={'test': 100},
-        timestamp=1500
+        timestamp=1500,
+        contains_pii=False
     )
 
 

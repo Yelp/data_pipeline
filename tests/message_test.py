@@ -108,7 +108,7 @@ class SharedMessageTest(object):
         assert message.message_type == self.expected_message_type
 
     def test_message_contains_pii(self, message):
-        assert message.contains_pii is None
+        assert message.contains_pii is False
 
     def test_dry_run(self, valid_message_data):
         payload_data = {'data': 'test'}
@@ -172,7 +172,8 @@ class PayloadOnlyMessageTest(SharedMessageTest):
             'schema_id': 123,
             'payload': payload,
             'payload_data': payload_data,
-            'uuid': FastUUID().uuid4()
+            'uuid': FastUUID().uuid4(),
+            'contains_pii': False
         }
 
     def test_rejects_previous_payload(self, message):
@@ -261,7 +262,8 @@ class TestUpdateMessage(SharedMessageTest):
             'payload_data': payload_data,
             'previous_payload': previous_payload,
             'previous_payload_data': previous_payload_data,
-            'uuid': FastUUID().uuid4()
+            'uuid': FastUUID().uuid4(),
+            'contains_pii': False
         }
 
     def test_rejects_invalid_previous_payload(

@@ -157,6 +157,8 @@ class Message(object):
         encrypted, because PII information will be used to indicate to various
         systems how to handle the data, in addition to automatic decryption.
         """
+        if self._contains_pii is None:
+            self._contains_pii = get_schema_cache().get_contains_pii_for_schema_id(self.schema_id)
         return self._contains_pii
 
     @contains_pii.setter
@@ -287,6 +289,7 @@ class Message(object):
         payload=None,
         payload_data=None,
         uuid=None,
+        contains_pii=None,
         timestamp=None,
         upstream_position_info=None,
         kafka_position_info=None,
@@ -301,13 +304,16 @@ class Message(object):
         self.topic = topic
         self.schema_id = schema_id
         self.uuid = uuid
-        self.contains_pii = None
         self.timestamp = timestamp
         self.upstream_position_info = upstream_position_info
         self.kafka_position_info = kafka_position_info
         self.keys = keys
         self.dry_run = dry_run
         self._set_payload_or_payload_data(payload, payload_data)
+        # TODO(DATAPIPE-274|psuben):
+        # While we wait for DATAPIPE-274 to be implemented we must
+        # override contains_pii as True or False otherwise an error occurs.
+        self.contains_pii = contains_pii
 
     def _set_payload_or_payload_data(self, payload, payload_data):
         # payload or payload_data are lazily constructed only on request
@@ -348,7 +354,6 @@ class Message(object):
             self.schema_id,
             self.payload,
             self.uuid,
-            self.contains_pii,
             self.timestamp,
             self.upstream_position_info,
             self.kafka_position_info,
@@ -386,10 +391,6 @@ class Message(object):
         """
         self._decode_payload_if_necessary()
         self._encode_payload_data_if_necessary()
-
-    def set_pii_flag_from_schematizer(self):
-        pii_flag = get_schema_cache().get_contains_pii_for_schema_id(self.schema_id)
-        self.contains_pii = pii_flag
 
 
 class CreateMessage(Message):
@@ -443,6 +444,7 @@ class UpdateMessage(Message):
         previous_payload=None,
         previous_payload_data=None,
         uuid=None,
+        contains_pii=None,
         timestamp=None,
         upstream_position_info=None,
         kafka_position_info=None,
@@ -455,6 +457,7 @@ class UpdateMessage(Message):
             payload=payload,
             payload_data=payload_data,
             uuid=uuid,
+            contains_pii=contains_pii,
             timestamp=timestamp,
             upstream_position_info=upstream_position_info,
             kafka_position_info=kafka_position_info,
@@ -688,7 +691,6 @@ def _create_message_from_packed_message(
             {'previous_payload': unpacked_message['previous_payload']}
         )
     message = message_class(**message_params)
-    message.set_pii_flag_from_schematizer()
     if force_payload_decoding:
         # Access the cached, but lazily-calculated, properties
         message.reload_data()
