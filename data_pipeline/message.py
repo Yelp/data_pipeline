@@ -310,9 +310,8 @@ class Message(object):
         self.keys = keys
         self.dry_run = dry_run
         self._set_payload_or_payload_data(payload, payload_data)
-        # TODO(DATAPIPE-274|psuben):
-        # While we wait for DATAPIPE-274 to be implemented we must
-        # override contains_pii as True or False otherwise an error occurs.
+        # TODO(DATAPIPE-416|psuben):
+        # Make it so contains_pii is no longer overrideable.
         self.contains_pii = contains_pii
 
     def _set_payload_or_payload_data(self, payload, payload_data):
