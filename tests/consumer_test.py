@@ -165,7 +165,8 @@ class TestConsumer(object):
             schema_id=registered_schema.schema_id,
             payload=payload,
             previous_payload=previous_payload,
-            timestamp=1500
+            timestamp=1500,
+            contains_pii=False
         )
         # TODO [DATAPIPE-249|clin] as part of refactoring and cleanup consumer
         # tests, let's re-visit and see if these assertions are needed.
