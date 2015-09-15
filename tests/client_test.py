@@ -81,6 +81,6 @@ class TestClient(object):
         client = self._build_client(
             expected_frequency_seconds=ExpectedFrequency.constantly
         )
-        with mock.patch.object(client.monitoring_message, skipped_method) as uncalled_method:
-            getattr(client.monitoring_message, method)(**kwargs)
+        with mock.patch.object(client.monitor, skipped_method) as uncalled_method:
+            getattr(client.monitor, method)(**kwargs)
             assert uncalled_method.called == 0

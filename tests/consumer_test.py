@@ -5,7 +5,6 @@ from __future__ import unicode_literals
 import multiprocessing
 import time
 
-import mock
 import pytest
 
 from data_pipeline._avro_util import AvroStringWriter
@@ -13,7 +12,6 @@ from data_pipeline._avro_util import generate_payload_data
 from data_pipeline.consumer import Consumer
 from data_pipeline.consumer import ConsumerTopicState
 from data_pipeline.expected_frequency import ExpectedFrequency
-from data_pipeline.message import Message
 from data_pipeline.message import UpdateMessage
 from data_pipeline.producer import Producer
 from data_pipeline.testing_helpers.kafka_docker import create_kafka_docker_topic
@@ -37,18 +35,8 @@ faster and flake-proof
 """
 
 
-@pytest.mark.usefixtures("patch_dry_run", "configure_teams")
+@pytest.mark.usefixtures("configure_teams")
 class TestConsumer(object):
-
-    @pytest.yield_fixture
-    def patch_dry_run(self):
-        with mock.patch.object(
-            Message,
-            'dry_run',
-            new_callable=mock.PropertyMock
-        ) as mock_dry_run:
-            mock_dry_run.return_value = True
-            yield mock_dry_run
 
     @property
     def test_buffer_size(self):
@@ -58,14 +46,16 @@ class TestConsumer(object):
     def producer_name(self):
         return 'producer_1'
 
-    @pytest.fixture()
+    @pytest.fixture
     def producer_instance(self, kafka_docker, producer_name, team_name):
-        return Producer(
+        instance = Producer(
             producer_name=producer_name,
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
             use_work_pool=False
         )
+        create_kafka_docker_topic(kafka_docker, instance.monitor.monitor_topic)
+        return instance
 
     @pytest.yield_fixture
     def producer(self, producer_instance):
@@ -89,7 +79,7 @@ class TestConsumer(object):
         {'decode_payload_in_workers': False},
         {'decode_payload_in_workers': True},
     ])
-    def consumer_instance(self, request, topic, kafka_docker, team_name):
+    def consumer_instance(self, request, topic, team_name):
         return Consumer(
             consumer_name='test_consumer',
             team_name=team_name,
@@ -114,11 +104,6 @@ class TestConsumer(object):
         create_kafka_docker_topic(kafka_docker, topic_name)
         return topic_name
 
-    @pytest.fixture(scope='module')
-    def monitor(self, kafka_docker):
-        create_kafka_docker_topic(kafka_docker, str('message-monitoring-log'))
-        return str('message-monitoring-log')
-
     def test_get_message_none(self, consumer, topic):
         message = consumer.get_message(blocking=True, timeout=TIMEOUT)
         assert message is None
@@ -133,8 +118,7 @@ class TestConsumer(object):
     def test_basic_iteration(
             self,
             publish_messages,
-            consumer_asserter,
-            monitor
+            consumer_asserter
     ):
         publish_messages(1)
         for msg in consumer_asserter.consumer:
@@ -259,8 +243,7 @@ class TestConsumer(object):
     def test_maximum_buffer_size(
             self,
             publish_messages,
-            consumer_asserter,
-            monitor
+            consumer_asserter
     ):
         published_count = self.test_buffer_size + 1
         publish_messages(published_count)
