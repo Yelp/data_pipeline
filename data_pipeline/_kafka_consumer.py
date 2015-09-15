@@ -8,8 +8,8 @@ from kafka.common import ConsumerTimeout
 from yelp_kafka.consumer_group import KafkaConsumerGroup
 
 from data_pipeline.config import get_config
-from data_pipeline.message import create_from_kafka_message
 from data_pipeline.consumer import Consumer
+from data_pipeline.message import create_from_kafka_message
 
 
 logger = get_config().logger
@@ -33,6 +33,7 @@ class KafkaConsumer(Consumer):
                     ... do stuff with message ...
                     consumer.commit_message(message)
     """
+
     def __init__(
             self,
             consumer_name,
@@ -40,13 +41,17 @@ class KafkaConsumer(Consumer):
             expected_frequency_seconds,
             topic_to_consumer_topic_state_map,
             force_payload_decode=True,
+            auto_offset_reset='smallest',
+            partitioner_cooldown=get_config().consumer_partitioner_cooldown_default,
     ):
         super(KafkaConsumer, self).__init__(
             consumer_name,
             team_name,
             expected_frequency_seconds,
             topic_to_consumer_topic_state_map,
-            force_payload_decode
+            force_payload_decode,
+            auto_offset_reset,
+            partitioner_cooldown
         )
 
     def _start(self):

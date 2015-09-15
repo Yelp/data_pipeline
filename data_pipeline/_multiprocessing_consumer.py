@@ -43,6 +43,8 @@ class MultiprocessingConsumer(Consumer):
             expected_frequency_seconds,
             topic_to_consumer_topic_state_map,
             force_payload_decode=True,
+            auto_offset_reset='smallest',
+            partitioner_cooldown=get_config().consumer_partitioner_cooldown_default,
             max_buffer_size=get_config().consumer_max_buffer_size_default,
             worker_min_sleep_time=get_config().consumer_worker_min_sleep_time_default,
             worker_max_sleep_time=get_config().consumer_worker_max_sleep_time_default
@@ -77,7 +79,9 @@ class MultiprocessingConsumer(Consumer):
             team_name,
             expected_frequency_seconds,
             topic_to_consumer_topic_state_map,
-            force_payload_decode
+            force_payload_decode,
+            auto_offset_reset,
+            partitioner_cooldown
         )
         self.message_buffer = None
         self.consumer_group_thread = None
