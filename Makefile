@@ -6,6 +6,7 @@ help:
 	@echo "clean-build - remove build artifacts"
 	@echo "clean-pyc - remove Python file artifacts"
 	@echo "clean-docs - remove doc creation artifacts"
+	@echo "clean-vim - remove vim swap file artifacts"
 	@echo "lint - check style with flake8"
 	@echo "test - run tests quickly with the default Python"
 	@echo "coverage - check code coverage"
@@ -30,6 +31,7 @@ clean-pyc:
 
 clean-docs:
 	rm -rf docs/build/*
+	rm -rf docs/code/*
 
 clean-vim:
 	find . -name '*.swp' -exec rm -f {} +
@@ -42,7 +44,7 @@ test:.venv.touch
 	# This will timeout after 15 minutes, in case there is a hang on jenkins
 	timeout -9 900 tox $(REBUILD_FLAG)
 
-docs:
+docs: clean-docs
 	tox -e docs
 
 coverage: test

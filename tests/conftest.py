@@ -15,9 +15,9 @@ from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import CreateMessage
 from data_pipeline.schema_cache import get_schema_cache
+from data_pipeline.testing_helpers.kafka_docker import KafkaDocker
 from tests.helpers.config import reconfigure
 from tests.helpers.containers import Containers
-from tests.helpers.kafka_docker import KafkaDocker
 
 
 logging.basicConfig(
@@ -100,7 +100,8 @@ def message(topic_name, payload, registered_schema, example_payload_data):
         topic=topic_name,
         schema_id=registered_schema.schema_id,
         payload=payload,
-        timestamp=1500
+        timestamp=1500,
+        contains_pii=False
     )
     # TODO [DATAPIPE-249|clin] as part of refactoring and cleanup consumer
     # tests, let's re-visit and see if these assertions are needed.

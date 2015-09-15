@@ -27,10 +27,11 @@ from data_pipeline.message import Message
 from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.producer import Producer
 from data_pipeline.producer import PublicationUnensurableError
+from data_pipeline.testing_helpers.kafka_docker import capture_new_data_pipeline_messages
+from data_pipeline.testing_helpers.kafka_docker import capture_new_messages
+from data_pipeline.testing_helpers.kafka_docker import create_kafka_docker_topic
+from data_pipeline.testing_helpers.kafka_docker import setup_capture_new_messages_consumer
 from tests.helpers.config import reconfigure
-from tests.helpers.kafka_docker import capture_new_messages
-from tests.helpers.kafka_docker import create_kafka_docker_topic
-from tests.helpers.kafka_docker import setup_capture_new_messages_consumer
 
 
 class RandomException(Exception):
@@ -91,20 +92,45 @@ class TestProducerBase(object):
 
 class TestProducer(TestProducerBase):
 
-    def create_message_with_pii(self, topic_name, payload, registered_schema):
+    def create_message(self, topic_name, payload, registered_schema, **kwargs):
         return CreateMessage(
             topic=topic_name,
             schema_id=registered_schema.schema_id,
             payload=payload,
             timestamp=1500,
-            contains_pii=True
+            **kwargs
         )
+
+    @pytest.mark.parametrize("method, skipped_method, kwargs", [
+        ('record_message', '_get_record', {'message': None}),
+        ('close', 'flush_buffered_info', {}),
+    ])
+    def test_monitoring_system_disabled(
+        self,
+        producer_name,
+        team_name,
+        method,
+        skipped_method,
+        kwargs
+    ):
+        producer = Producer(
+            producer_name=producer_name,
+            team_name=team_name,
+            expected_frequency_seconds=ExpectedFrequency.constantly,
+            monitoring_enabled=False
+        )
+        with mock.patch.object(
+            producer.monitor,
+            skipped_method
+        ) as uncalled_method:
+            getattr(producer.monitor, method)(**kwargs)
+            assert uncalled_method.called == 0
 
     def test_basic_publish(self, topic, message, producer, envelope):
         self._publish_and_assert_message(topic, message, producer, envelope)
 
     def _publish_message(self, topic, message, producer):
-        with capture_new_messages(topic) as get_messages:
+        with capture_new_data_pipeline_messages(topic) as get_messages:
             producer.publish(message)
             producer.flush()
 
@@ -114,9 +140,8 @@ class TestProducer(TestProducerBase):
         messages = self._publish_message(topic, message, producer)
 
         assert len(messages) == 1
-        unpacked_message = envelope.unpack(messages[0].message.value)
-        assert unpacked_message['payload'] == message.payload
-        assert unpacked_message['schema_id'] == message.schema_id
+        assert messages[0].payload == message.payload
+        assert messages[0].schema_id == message.schema_id
 
     def test_messages_not_duplicated(self, topic, message, producer_instance):
         with capture_new_messages(topic) as get_messages, producer_instance as producer:
@@ -201,7 +226,12 @@ class TestProducer(TestProducerBase):
     ):
         messages = self._publish_message(
             topic,
-            self.create_message_with_pii(topic, payload, registered_schema),
+            self.create_message(
+                topic,
+                payload,
+                registered_schema,
+                contains_pii=True
+            ),
             producer
         )
 
@@ -220,6 +250,28 @@ class TestProducer(TestProducerBase):
             producer,
             envelope
         )
+
+    def test_basic_publish_message_with_primary_keys(
+        self,
+        topic,
+        payload,
+        producer,
+        registered_schema,
+        envelope
+    ):
+        sample_keys = (u'key1=\'', u'key2=\\', u'key3=哎ù\x1f')
+        with capture_new_messages(topic) as get_messages:
+            producer.publish(
+                self.create_message(
+                    topic,
+                    payload,
+                    registered_schema,
+                    keys=sample_keys,
+                    contains_pii=False
+                )
+            )
+            producer.flush()
+        assert get_messages()[0].message.key == '\'key1=\\\'\'\x1f\'key2=\\\\\'\x1f\'key3=哎ù\x1f\''.encode('utf-8')
 
 
 class TestPublishMonitorMessage(TestProducerBase):

@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+from setuptools import find_packages
 from setuptools import setup
 
 import data_pipeline
@@ -23,10 +24,7 @@ setup(
     author=data_pipeline.__author__,
     author_email=data_pipeline.__email__,
     url='http://servicedocs.yelpcorp.com/docs/data_pipeline/',
-    packages=[
-        str('data_pipeline'),
-    ],
-    package_dir={'data_pipeline': 'data_pipeline'},
+    packages=find_packages(exclude=['tests*', 'benchmarks*']),
     include_package_data=True,
     install_requires=[
         'avro>=1.7.7',
@@ -37,7 +35,7 @@ setup(
         'PyStaticConfiguration',
         'simplejson',
         'swaggerpy',
-        'yelp_kafka',
+        'yelp_kafka>=4.0.0',
         'yelp_servlib',
     ],
     zip_safe=False,

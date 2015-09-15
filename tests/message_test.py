@@ -2,9 +2,15 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import mock
 import pytest
+from kafka import create_message
+from kafka.common import OffsetAndMessage
 
 from data_pipeline import message as dp_message
+from data_pipeline._fast_uuid import FastUUID
+from data_pipeline.envelope import Envelope
+from data_pipeline.message import create_from_offset_and_message
 from data_pipeline.message import PayloadFieldDiff
 from data_pipeline.message_type import MessageType
 
@@ -14,11 +20,6 @@ class SharedMessageTest(object):
     @pytest.fixture
     def message(self, valid_message_data):
         return self.message_class(**valid_message_data)
-
-    @pytest.fixture
-    def message_with_pii(self, valid_message_data):
-        valid_data = self._make_message_data(valid_message_data, contains_pii=True)
-        return self.message_class(**valid_data)
 
     @pytest.fixture(params=[
         None,
@@ -106,8 +107,8 @@ class SharedMessageTest(object):
     def test_message_type(self, message):
         assert message.message_type == self.expected_message_type
 
-    def test_message_contains_pii(self, message_with_pii):
-        assert message_with_pii.contains_pii is True
+    def test_message_contains_pii(self, message):
+        assert message.contains_pii is False
 
     def test_dry_run(self, valid_message_data):
         payload_data = {'data': 'test'}
@@ -120,6 +121,46 @@ class SharedMessageTest(object):
         dry_run_message = self.message_class(**message_data)
         assert dry_run_message.payload == repr(payload_data)
 
+    def test_equality(self, valid_message_data):
+        message1 = self._mock_message_without_encode_or_decode(
+            self.message_class(**valid_message_data)
+        )
+        message2 = self._mock_message_without_encode_or_decode(
+            self.message_class(**valid_message_data)
+        )
+        assert message1 == message1
+        assert message1 == message2
+        assert message2 == message2
+
+    def test_inequality(self, valid_message_data):
+        message1 = self._mock_message_without_encode_or_decode(
+            self.message_class(**valid_message_data)
+        )
+        valid_message_data['topic'] = str('a different topic')
+        message2 = self._mock_message_without_encode_or_decode(
+            self.message_class(**valid_message_data)
+        )
+        assert message1 != message2
+
+    def test_hash(self, valid_message_data):
+        message1 = self._mock_message_without_encode_or_decode(
+            self.message_class(**valid_message_data)
+        )
+        message2 = self._mock_message_without_encode_or_decode(
+            self.message_class(**valid_message_data)
+        )
+        test_dict = {message1: 'message1'}
+        assert message2 in test_dict
+        assert test_dict[message2] == 'message1'
+
+    def _mock_message_without_encode_or_decode(self, message):
+        # Short-circuit the communication with schematizer for
+        # decoding/encoding the payload with a schema that isn't actually
+        # registered
+        message._encode_payload_data_if_necessary = mock.Mock()
+        message._decode_payload_if_necessary = mock.Mock()
+        return message
+
 
 class PayloadOnlyMessageTest(SharedMessageTest):
 
@@ -130,7 +171,9 @@ class PayloadOnlyMessageTest(SharedMessageTest):
             'topic': str('my-topic'),
             'schema_id': 123,
             'payload': payload,
-            'payload_data': payload_data
+            'payload_data': payload_data,
+            'uuid': FastUUID().uuid4(),
+            'contains_pii': False
         }
 
     def test_rejects_previous_payload(self, message):
@@ -151,6 +194,16 @@ class TestCreateMessage(PayloadOnlyMessageTest):
     @property
     def expected_message_type(self):
         return MessageType.create
+
+
+class TestLogMessage(PayloadOnlyMessageTest):
+    @property
+    def message_class(self):
+        return dp_message.LogMessage
+
+    @property
+    def expected_message_type(self):
+        return MessageType.log
 
 
 class TestRefreshMessage(PayloadOnlyMessageTest):
@@ -177,6 +230,17 @@ class TestDeleteMessage(PayloadOnlyMessageTest):
 
 class TestUpdateMessage(SharedMessageTest):
 
+    def _mock_message_without_encode_or_decode(self, message):
+        message = super(
+            TestUpdateMessage,
+            self
+        )._mock_message_without_encode_or_decode(
+            message=message
+        )
+        message._encode_previous_payload_data_if_necessary = mock.Mock()
+        message._decode_previous_payload_if_necessary = mock.Mock()
+        return message
+
     @property
     def message_class(self):
         return dp_message.UpdateMessage
@@ -191,14 +255,16 @@ class TestUpdateMessage(SharedMessageTest):
     ])
     def valid_message_data(self, request):
         payload, payload_data, previous_payload, previous_payload_data = request.param
-        return dict(
-            topic=str('my-topic'),
-            schema_id=123,
-            payload=payload,
-            payload_data=payload_data,
-            previous_payload=previous_payload,
-            previous_payload_data=previous_payload_data
-        )
+        return {
+            'topic': str('my-topic'),
+            'schema_id': 123,
+            'payload': payload,
+            'payload_data': payload_data,
+            'previous_payload': previous_payload,
+            'previous_payload_data': previous_payload_data,
+            'uuid': FastUUID().uuid4(),
+            'contains_pii': False
+        }
 
     def test_rejects_invalid_previous_payload(
         self,
@@ -271,3 +337,23 @@ class TestUpdateMessage(SharedMessageTest):
         )
         expected_diff = {}
         self._test_has_changed_and_payload_diff(message_data_params, expected_diff)
+
+
+class TestCreateFromMessageAndOffset(object):
+
+    @pytest.fixture
+    def offset_and_message(self, message):
+        return OffsetAndMessage(0, create_message(Envelope().pack(message)))
+
+    def test_create_from_offset_and_message(self, offset_and_message, message):
+        extracted_message = create_from_offset_and_message(
+            topic=message.topic,
+            offset_and_message=offset_and_message
+        )
+        assert extracted_message.message_type == message.message_type
+        assert extracted_message.payload == message.payload
+        assert extracted_message.payload_data == message.payload_data
+        assert extracted_message.schema_id == message.schema_id
+        assert extracted_message.timestamp == message.timestamp
+        assert extracted_message.topic == message.topic
+        assert extracted_message.uuid == message.uuid

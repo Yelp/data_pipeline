@@ -29,8 +29,15 @@ logger = get_config().logger
 # multiprocessing
 def _prepare(envelope_and_message):
     try:
+        kwargs = {}
+        if envelope_and_message.message.keys:
+            kwargs['key'] = envelope_and_message.envelope.pack_keys(
+                envelope_and_message.message.keys
+            )
+
         return create_message(
-            envelope_and_message.envelope.pack(envelope_and_message.message)
+            envelope_and_message.envelope.pack(envelope_and_message.message),
+            **kwargs
         )
     except:
         logger.exception('Prepare failed')

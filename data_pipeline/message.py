@@ -75,10 +75,9 @@ class Message(object):
             track these objects and provide them back from the producer to
             identify the last message that was successfully published, both
             overall and per topic.
-        keys (tuple of str, optional): This should either be a tuple of strings
+        keys (tuple, optional): This should either be a tuple of strings
             or None.  If it's a tuple of strings, the clientlib will combine
-            those strings and use them as a key when publishing into Kafka.
-            This is currently unimplemented - see DATAPIPE-268 for details.
+            those strings and use them as key when publishing into Kafka.
         dry_run (boolean): When set to True, Message will return a string
             representation of the payload and previous payload, instead of
             the avro encoded message.  This is to avoid loading the schema
@@ -158,6 +157,8 @@ class Message(object):
         encrypted, because PII information will be used to indicate to various
         systems how to handle the data, in addition to automatic decryption.
         """
+        if self._contains_pii is None:
+            self._contains_pii = get_schema_cache().get_contains_pii_for_schema_id(self.schema_id)
         return self._contains_pii
 
     @contains_pii.setter
@@ -269,6 +270,18 @@ class Message(object):
         self._payload_data = payload_data
         self._payload = None  # force payload to be re-encoded
 
+    @property
+    def keys(self):
+        return self._keys
+
+    @keys.setter
+    def keys(self, keys):
+        if keys is not None and not isinstance(keys, tuple):
+            raise ValueError("Keys must be a tuple.")
+        if keys and not all(isinstance(key, unicode) for key in keys):
+            raise ValueError("Element of keys must be unicode.")
+        self._keys = keys
+
     def __init__(
         self,
         topic,
@@ -276,7 +289,7 @@ class Message(object):
         payload=None,
         payload_data=None,
         uuid=None,
-        contains_pii=False,
+        contains_pii=None,
         timestamp=None,
         upstream_position_info=None,
         kafka_position_info=None,
@@ -291,12 +304,15 @@ class Message(object):
         self.topic = topic
         self.schema_id = schema_id
         self.uuid = uuid
-        self.contains_pii = contains_pii
         self.timestamp = timestamp
         self.upstream_position_info = upstream_position_info
         self.kafka_position_info = kafka_position_info
+        self.keys = keys
         self.dry_run = dry_run
         self._set_payload_or_payload_data(payload, payload_data)
+        # TODO(DATAPIPE-416|psuben):
+        # Make it so contains_pii is no longer overrideable.
+        self.contains_pii = contains_pii
 
     def _set_payload_or_payload_data(self, payload, payload_data):
         # payload or payload_data are lazily constructed only on request
@@ -311,6 +327,37 @@ class Message(object):
             self.payload_data = payload_data
         else:
             raise ValueError("Either payload or payload_data must be provided.")
+
+    def __eq__(self, other):
+        return self.__key == other.__key
+
+    def __ne__(self, other):
+        return self.__key != other.__key
+
+    def __hash__(self):
+        return hash(self.__key)
+
+    @property
+    def __key(self):
+        """Returns a tuple representing a unique key for this Message.
+
+        Note:
+            We don't include `payload_data` in the key tuple as we should be
+            confident that if `payload` matches then `payload_data` will as
+            well, and there is an extra overhead from decoding.
+        """
+        return (
+            self.__class__,
+            self.message_type,
+            self.topic,
+            self.schema_id,
+            self.payload,
+            self.uuid,
+            self.timestamp,
+            self.upstream_position_info,
+            self.kafka_position_info,
+            self.dry_run
+        )
 
     @property
     def avro_repr(self):
@@ -360,6 +407,10 @@ class RefreshMessage(Message):
     _message_type = MessageType.refresh
 
 
+class LogMessage(Message):
+    _message_type = MessageType.log
+
+
 class MonitorMessage(Message):
     _message_type = _ProtectedMessageType.monitor
 
@@ -392,7 +443,7 @@ class UpdateMessage(Message):
         previous_payload=None,
         previous_payload_data=None,
         uuid=None,
-        contains_pii=False,
+        contains_pii=None,
         timestamp=None,
         upstream_position_info=None,
         kafka_position_info=None,
@@ -439,6 +490,18 @@ class UpdateMessage(Message):
             raise ValueError(
                 "Either previous_payload or previous_payload_data must be provided."
             )
+
+    @property
+    def __key(self):
+        """Returns a tuple representing a unique key for this Message.
+
+        Note:
+            We don't include `previous_payload_data` in the key as we should
+            be confident that if `previous_payload` matches then
+            `previous_payload_data` will as well, and there is an extra
+            overhead from decoding.
+        """
+        return super(UpdateMessage, self).__key + (self.previous_payload, )
 
     @property
     def previous_payload(self):
@@ -544,22 +607,83 @@ def create_from_kafka_message(
             Otherwise the decoding will happen whenever the lazy *_data
             properties are accessed.
 
+    Returns (class:`data_pipeline.message.Message`):
+        The message object
+    """
+    kafka_position_info = KafkaPositionInfo(
+        offset=kafka_message.offset,
+        partition=kafka_message.partition,
+        key=kafka_message.key,
+    )
+    return _create_message_from_packed_message(
+        topic=topic,
+        packed_message=kafka_message,
+        force_payload_decoding=force_payload_decoding,
+        kafka_position_info=kafka_position_info
+    )
+
+
+def create_from_offset_and_message(
+        topic,
+        offset_and_message,
+        force_payload_decoding=True
+):
+    """ Build a data_pipeline.message.Message from a kafka.common.OffsetAndMessage
+
+    Args:
+        topic (str): The topic name from which the message was received.
+        offset_and_message (kafka.common.OffsetAndMessage): a namedtuple
+            containing the offset and message. Message contains magic,
+            attributes, keys and values.
+        force_payload_decoding (boolean): If this is set to `True` then
+            we will decode the payload/previous_payload immediately.
+            Otherwise the decoding will happen whenever the lazy *_data
+            properties are accessed.
+
     Returns (data_pipeline.message.Message):
         The message object
     """
-    unpacked_message = Envelope().unpack(kafka_message.value)
+    return _create_message_from_packed_message(
+        topic=topic,
+        packed_message=offset_and_message.message,
+        force_payload_decoding=force_payload_decoding
+    )
+
+
+def _create_message_from_packed_message(
+    topic,
+    packed_message,
+    force_payload_decoding,
+    kafka_position_info=None
+):
+    """ Builds a data_pipeline.message.Message from packed_message
+    Args:
+        topic (str): The topic name from which the message was received.
+        packed_message (yelp_kafka.consumer.Message or kafka.common.Message):
+            The message info which has the payload, offset, partition,
+            and key of the received message if of type yelp_kafka.consumer.message
+            or just payload, uuid, schema_id in case of kafka.common.Message.
+        force_payload_decoding (boolean): If this is set to `True` then
+            we will decode the payload/previous_payload immediately.
+            Otherwise the decoding will happen whenever the lazy *_data
+            properties are accessed.
+        append_kafka_position_info (boolean): If this is set to `True` then
+            we will construct kafka_position_info for resulting message
+            from the unpacked_message. Otherwise kafka_position_info will
+            be set to None.
+
+    Returns (data_pipeline.message.Message):
+        The message object
+    """
+    unpacked_message = Envelope().unpack(packed_message.value)
     message_class = _message_type_to_class_map[unpacked_message['message_type']]
     message_params = {
         'topic': topic,
-        'kafka_position_info': KafkaPositionInfo(
-            offset=kafka_message.offset,
-            partition=kafka_message.partition,
-            key=kafka_message.key,
-        ),
         'uuid': unpacked_message['uuid'],
         'schema_id': unpacked_message['schema_id'],
         'payload': unpacked_message['payload'],
-        'timestamp': unpacked_message['timestamp']
+        'timestamp': unpacked_message['timestamp'],
+        'kafka_position_info': kafka_position_info
     }
     if message_class is UpdateMessage:
         message_params.update(

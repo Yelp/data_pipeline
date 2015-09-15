@@ -16,7 +16,7 @@ from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import Message
 from data_pipeline.message import UpdateMessage
 from data_pipeline.producer import Producer
-from tests.helpers.kafka_docker import create_kafka_docker_topic
+from data_pipeline.testing_helpers.kafka_docker import create_kafka_docker_topic
 
 
 TIMEOUT = 1.0
@@ -165,7 +165,8 @@ class TestConsumer(object):
             schema_id=registered_schema.schema_id,
             payload=payload,
             previous_payload=previous_payload,
-            timestamp=1500
+            timestamp=1500,
+            contains_pii=False
         )
         # TODO [DATAPIPE-249|clin] as part of refactoring and cleanup consumer
         # tests, let's re-visit and see if these assertions are needed.
