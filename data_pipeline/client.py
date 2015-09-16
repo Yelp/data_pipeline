@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import math
+import os
 import socket
 import time
 
@@ -248,7 +249,11 @@ class _Monitor(object):
 
     @cached_property
     def _monitor_schema(self):
-        with open('data_pipeline/schemas/monitoring_message_v1.avsc', 'r') as f:
+        schema_file = os.path.join(
+            os.path.dirname(__file__),
+            'schemas/monitoring_message_v1.avsc'
+        )
+        with open(schema_file, 'r') as f:
             schema_string = f.read()
         return simplejson.loads(schema_string)
 
