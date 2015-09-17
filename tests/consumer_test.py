@@ -6,8 +6,8 @@ import pytest
 
 from data_pipeline.consumer import Consumer
 from data_pipeline.expected_frequency import ExpectedFrequency
-from tests.consumer_test import BaseConsumerTest
-from tests.consumer_test import TIMEOUT
+from tests.base_consumer_test import BaseConsumerTest
+from tests.base_consumer_test import TIMEOUT
 
 
 class TestConsumer(BaseConsumerTest):
@@ -26,7 +26,7 @@ class TestConsumer(BaseConsumerTest):
         {'force_payload_decode': True},
     ])
     def consumer_instance(self, request, topic, team_name):
-        return KafkaConsumer(
+        return Consumer(
             consumer_name='test_consumer',
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
