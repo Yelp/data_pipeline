@@ -10,14 +10,14 @@ from time import time
 from yelp_kafka.consumer_group import MultiprocessingConsumerGroup
 
 from data_pipeline._kafka_consumer_worker import KafkaConsumerWorker
+from data_pipeline.base_consumer import BaseConsumer
 from data_pipeline.config import get_config
-from data_pipeline.consumer import Consumer
 
 
 logger = get_config().logger
 
 
-class MultiprocessingConsumer(Consumer):
+class MultiprocessingConsumer(BaseConsumer):
     """The MultiprocessingConsumer deals with buffering messages that need to be consumed
     from Kafka.
 
@@ -37,17 +37,17 @@ class MultiprocessingConsumer(Consumer):
     """
 
     def __init__(
-            self,
-            consumer_name,
-            team_name,
-            expected_frequency_seconds,
-            topic_to_consumer_topic_state_map,
-            force_payload_decode=True,
-            auto_offset_reset='smallest',
-            partitioner_cooldown=get_config().consumer_partitioner_cooldown_default,
-            max_buffer_size=get_config().consumer_max_buffer_size_default,
-            worker_min_sleep_time=get_config().consumer_worker_min_sleep_time_default,
-            worker_max_sleep_time=get_config().consumer_worker_max_sleep_time_default
+        self,
+        consumer_name,
+        team_name,
+        expected_frequency_seconds,
+        topic_to_consumer_topic_state_map,
+        force_payload_decode=True,
+        auto_offset_reset='smallest',
+        partitioner_cooldown=get_config().consumer_partitioner_cooldown_default,
+        max_buffer_size=get_config().consumer_max_buffer_size_default,
+        worker_min_sleep_time=get_config().consumer_worker_min_sleep_time_default,
+        worker_max_sleep_time=get_config().consumer_worker_max_sleep_time_default
     ):
         """ Creates the MultiprocessingConsumer object
 

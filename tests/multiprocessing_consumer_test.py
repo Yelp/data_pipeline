@@ -6,10 +6,10 @@ import time
 
 import pytest
 
-from data_pipeline._multiprocessing_consumer import MultiprocessingConsumer
 from data_pipeline.expected_frequency import ExpectedFrequency
-from tests.consumer_test import BaseConsumerTest
-from tests.consumer_test import TIMEOUT
+from data_pipeline.multiprocessing_consumer import MultiprocessingConsumer
+from tests.base_consumer_test import BaseConsumerTest
+from tests.base_consumer_test import TIMEOUT
 
 
 class TestMultiprocessingConsumer(BaseConsumerTest):
