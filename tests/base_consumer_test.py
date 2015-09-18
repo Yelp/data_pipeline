@@ -6,6 +6,7 @@ import copy
 import datetime
 import multiprocessing
 import random
+import time
 
 import mock
 import pytest
@@ -350,7 +351,10 @@ class RefreshTopicsTest(object):
             created_after=self._increment_seconds(biz_schema.created_at, seconds=1)
         ))
         assert new_topics == []
-        assert consumer.topic_to_consumer_topic_state_map == expected
+        self._assert_equal_state_map(
+            actual_map=consumer.topic_to_consumer_topic_state_map,
+            expected_map=expected
+        )
 
     def test_refresh_newer_topics_in_yelp_namesapce(
         self,
@@ -375,7 +379,10 @@ class RefreshTopicsTest(object):
         ))
 
         assert new_topics == [biz_topic, usr_topic]
-        assert consumer.topic_to_consumer_topic_state_map == expected
+        self._assert_equal_state_map(
+            actual_map=consumer.topic_to_consumer_topic_state_map,
+            expected_map=expected
+        )
 
     def test_already_tailed_topic_state_remains_after_refresh(
         self,
@@ -385,7 +392,9 @@ class RefreshTopicsTest(object):
         self._publish_then_consume_message(consumer, test_schema)
 
         topic = test_schema.topic
-        expected_state = consumer.topic_to_consumer_topic_state_map[topic.name]
+        expected = self._get_expected_value(
+            original_states=consumer.topic_to_consumer_topic_state_map
+        )
 
         new_topics = consumer.refresh_new_topics(TopicFilter(
             source_name=topic.source.name,
@@ -393,7 +402,10 @@ class RefreshTopicsTest(object):
         ))
 
         assert topic.topic_id not in [new_topic.topic_id for new_topic in new_topics]
-        assert consumer.topic_to_consumer_topic_state_map[topic.name] == expected_state
+        self._assert_equal_state_map(
+            actual_map=consumer.topic_to_consumer_topic_state_map,
+            expected_map=expected
+        )
 
     def _publish_then_consume_message(self, consumer, avro_schema):
         with Producer(
@@ -412,6 +424,10 @@ class RefreshTopicsTest(object):
             producer.flush()
 
         consumer.get_messages(1, blocking=True, timeout=1)
+        # MutliprocessingConsumer seems to cause strange failure and pause for
+        # a little while seems to avoid the problem. May be related to flakiness
+        # of the Multiprocessing kakfa consumer.
+        time.sleep(1)
 
     def test_refresh_with_custom_filter(
         self,
@@ -436,7 +452,10 @@ class RefreshTopicsTest(object):
         ))
 
         assert new_topics == [biz_topic]
-        assert consumer.topic_to_consumer_topic_state_map == expected
+        self._assert_equal_state_map(
+            actual_map=consumer.topic_to_consumer_topic_state_map,
+            expected_map=expected
+        )
 
     def test_with_bad_namespace(self, consumer):
         actual = consumer.refresh_new_topics(TopicFilter(
@@ -484,3 +503,13 @@ class RefreshTopicsTest(object):
 
     def _increment_seconds(self, dt, seconds):
         return self._get_utc_timestamp(dt + datetime.timedelta(seconds=seconds))
+
+    def _assert_equal_state_map(self, actual_map, expected_map):
+        assert set(actual_map.keys()) == set(expected_map.keys())
+        for topic, actual in actual_map.iteritems():
+            expected = expected_map[topic]
+            if expected is None:
+                assert actual is None
+                continue
+            assert actual.last_seen_schema_id == expected.last_seen_schema_id
+            assert actual.partition_offset_map == expected.partition_offset_map
