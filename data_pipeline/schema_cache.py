@@ -75,6 +75,8 @@ class SchematizerClient(object):
         schema. So keep the name neutral and not AST specific. For new code, please
         use this function. The existing function `register_transformed_schema` will
         continue to work until we're safe to rename it.
+
+        Right now the function is private and will stay private until it's ready.
         """
         request_body = {
             'schema': schema_str,
@@ -105,14 +107,14 @@ class SchematizerClient(object):
         Args:
             namespace (str): The namespace the new schema belongs to
             source (str): The source the new schema belongs to.
-            schema_json (dict/list): The Python object representation of the
+            schema_json (dict or list): The Python object representation of the
                 new avro schema json.
             owner_email (str): The email of the source owner.
             contains_pii (bool): Indicates whether the new schema contains
                 field(s) that store pii information.  See http://y/pii for
                 help identifying what is or is not PII.
             base_schema_id (Optional[int]): The schema_id of the original schema
-                which the new schema was changed based on.
+                which the new schema is changed based on.
 
         Returns:
             `data_pipeline.schema_cache.AvroSchema`: The object containing the
