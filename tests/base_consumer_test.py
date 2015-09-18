@@ -426,7 +426,7 @@ class RefreshTopicsTest(object):
         consumer.get_messages(1, blocking=True, timeout=1)
         # MutliprocessingConsumer seems to cause strange failure and pause for
         # a little while seems to avoid the problem. May be related to flakiness
-        # of the Multiprocessing kakfa consumer.
+        # of the Multiprocessing kakfa consumer (DATAPIPE-249).
         time.sleep(1)
 
     def test_refresh_with_custom_filter(
