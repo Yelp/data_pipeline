@@ -506,11 +506,11 @@ class Consumer(Client):
         Args:
             topic_filter (Optional[TopicFilter]): criteria to filter newly
                 created topics.
-            before_refresh_handler (Optional[function]): function that performs
-                custom logic before the consumer resets topics.  The function
-                will take a list of new topics (`schema_cache.Topic`) filtered
+            before_refresh_handler (Optional[Callable[[List[schema_cache.Topic]], Any]]):
+                function that performs custom logic before the consumer resets
+                topics.  The function will take a list of new topics filtered
                 by the given filter and currently not in the topic state map.
-                It does not have return value.
+                The return value of the function is ignored.
 
         Returns:
             [schema_cache.Topic]: A list of new topics.

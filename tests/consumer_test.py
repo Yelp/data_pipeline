@@ -2,11 +2,13 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import copy
 import datetime
 import multiprocessing
 import random
 import time
 
+import mock
 import pytest
 
 from data_pipeline._avro_util import AvroStringWriter
@@ -355,11 +357,11 @@ class TestRefreshTopics(object):
     def usr_schema(self, schematizer, yelp_namespace, usr_src):
         return self._register_schema(schematizer, yelp_namespace, usr_src)
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture
     def aux_namespace(self):
         return 'aux_{0}'.format(random.random())
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture
     def cta_src(self):
         return 'cta_{0}'.format(random.random())
 
@@ -378,7 +380,7 @@ class TestRefreshTopics(object):
             namespace=namespace,
             source=source,
             schema_json=avro_schema,
-            owner_email='test@yelp.com',
+            owner_email='bam+test@yelp.com',
             contains_pii=False
         )
 
@@ -392,9 +394,9 @@ class TestRefreshTopics(object):
         create_kafka_docker_topic(kafka_docker, topic_name)
         return topic_name
 
-    @pytest.yield_fixture
+    @pytest.fixture
     def consumer_instance(self, topic, team_name):
-        yield Consumer(
+        return Consumer(
             consumer_name='test_consumer',
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
@@ -408,7 +410,9 @@ class TestRefreshTopics(object):
         assert len(multiprocessing.active_children()) == 0
 
     def test_no_newer_topics(self, consumer, yelp_namespace, biz_schema):
-        expected = dict(consumer.topic_to_consumer_topic_state_map)
+        expected = self._get_expected_value(
+            original_states=consumer.topic_to_consumer_topic_state_map
+        )
         new_topics = consumer.refresh_new_topics(TopicFilter(
             namespace_name=yelp_namespace,
             created_after=self._increment_seconds(biz_schema.created_at, seconds=1)
@@ -425,8 +429,10 @@ class TestRefreshTopics(object):
     ):
         biz_topic = biz_schema.topic
         usr_topic = usr_schema.topic
-        expected = dict(consumer.topic_to_consumer_topic_state_map)
-        expected.update({biz_topic.name: None, usr_topic.name: None})
+        expected = self._get_expected_value(
+            original_states=consumer.topic_to_consumer_topic_state_map,
+            new_states={biz_topic.name: None, usr_topic.name: None}
+        )
 
         new_topics = consumer.refresh_new_topics(TopicFilter(
             namespace_name=yelp_namespace,
@@ -454,7 +460,7 @@ class TestRefreshTopics(object):
             created_after=self._increment_seconds(topic.created_at, seconds=-1)
         ))
 
-        assert topic.id not in [new_topic.id for new_topic in new_topics]
+        assert topic.topic_id not in [new_topic.topic_id for new_topic in new_topics]
         assert consumer.topic_to_consumer_topic_state_map[topic.name] == expected_state
 
     def _publish_then_consume_message(self, consumer, avro_schema):
@@ -466,7 +472,7 @@ class TestRefreshTopics(object):
         ) as producer:
             message = UpdateMessage(
                 topic=str(avro_schema.topic.name),
-                schema_id=avro_schema.id,
+                schema_id=avro_schema.schema_id,
                 payload_data={'id': 2},
                 previous_payload_data={'id': 1}
             )
@@ -483,8 +489,10 @@ class TestRefreshTopics(object):
         usr_schema
     ):
         biz_topic = biz_schema.topic
-        expected = dict(consumer.topic_to_consumer_topic_state_map)
-        expected.update({biz_topic.name: None})
+        expected = self._get_expected_value(
+            original_states=consumer.topic_to_consumer_topic_state_map,
+            new_states={biz_topic.name: None}
+        )
 
         new_topics = consumer.refresh_new_topics(TopicFilter(
             namespace_name=yelp_namespace,
@@ -501,7 +509,7 @@ class TestRefreshTopics(object):
     def test_with_bad_namespace(self, consumer):
         actual = consumer.refresh_new_topics(TopicFilter(
             namespace_name='bad.namespace',
-            created_after=self._get_utc_timestamp(datetime.datetime.utcnow())
+            created_after=0
         ))
         assert actual == []
 
@@ -509,7 +517,7 @@ class TestRefreshTopics(object):
         actual = consumer.refresh_new_topics(TopicFilter(
             namespace_name=yelp_namespace,
             source_name='bad.source',
-            created_after=self._get_utc_timestamp(datetime.datetime.utcnow())
+            created_after=0
         ))
         assert actual == []
 
@@ -533,6 +541,11 @@ class TestRefreshTopics(object):
         biz_topic = biz_schema.topic
         assert new_topics == [biz_topic]
         mock_handler.assert_called_once_with([biz_topic])
+
+    def _get_expected_value(self, original_states, new_states=None):
+        expected = copy.deepcopy(original_states)
+        expected.update(new_states or {})
+        return expected
 
     def _get_utc_timestamp(self, dt):
         return int((dt - datetime.datetime(1970, 1, 1)).total_seconds())

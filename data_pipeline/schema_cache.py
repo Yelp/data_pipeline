@@ -10,6 +10,9 @@ from data_pipeline._avro_util import get_avro_schema_object
 from data_pipeline.config import get_config
 
 
+# TODO([DATAPIPE-396|clin]): Revise these namedtuples to their own classes
+# as soon as we can! They should be separate classes in their own files in
+# separate folder along with this schematizer clientlib module.
 SchemaInfo = namedtuple('SchemaInfo', [
     'schema_id',
     'topic_name'
@@ -17,11 +20,11 @@ SchemaInfo = namedtuple('SchemaInfo', [
 
 AvroSchema = namedtuple(
     'AvroSchema',
-    ['id', 'schema', 'topic', 'base_schema_id', 'created_at']
+    ['schema_id', 'schema', 'topic', 'base_schema_id', 'created_at']
 )
-Topic = namedtuple('Topic', ['id', 'name', 'source', 'created_at'])
-Source = namedtuple('Source', ['id', 'name', 'namespace', 'created_at'])
-Namespace = namedtuple('Namespace', ['id', 'name', 'created_at'])
+Topic = namedtuple('Topic', ['topic_id', 'name', 'source', 'created_at'])
+Source = namedtuple('Source', ['source_id', 'name', 'namespace', 'created_at'])
+Namespace = namedtuple('Namespace', ['namespace_id', 'name', 'created_at'])
 
 
 class SchematizerClient(object):
@@ -58,7 +61,7 @@ class SchematizerClient(object):
         """
         return self.base_to_transformed_schema_id_map.get(schema_id, None)
 
-    def register_schema(
+    def _register_schema(
         self,
         namespace,
         source,
@@ -97,7 +100,25 @@ class SchematizerClient(object):
         contains_pii,
         base_schema_id=None
     ):
-        return self.register_schema(
+        """Register a new avro schema.
+
+        Args:
+            namespace (str): The namespace the new schema belongs to
+            source (str): The source the new schema belongs to.
+            schema_json (dict/list): The Python object representation of the
+                new avro schema json.
+            owner_email (str): The email of the source owner.
+            contains_pii (bool): Indicates whether the new schema contains
+                field(s) that store pii information.  See http://y/pii for
+                help identifying what is or is not PII.
+            base_schema_id (Optional[int]): The schema_id of the original schema
+                which the new schema was changed based on.
+
+        Returns:
+            `data_pipeline.schema_cache.AvroSchema`: The object containing the
+                information of newly created avro schema.
+        """
+        return self._register_schema(
             namespace=namespace,
             source=source,
             schema_str=simplejson.dumps(schema_json),
@@ -115,7 +136,9 @@ class SchematizerClient(object):
         owner_email,
         contains_pii
     ):
-        """ Register a new schema and return it's schema_id and topic
+        """ Register a new schema and return it's schema_id and topic.
+        Note that this function is going to be deprecated soon.  Please use
+        `register_schema` function instead for moving forward.
 
         Args:
             base_schema_id (int): The schema_id of the original schema from
@@ -229,6 +252,7 @@ class SchematizerClient(object):
         Returns:
             (avro.schema.Schema): The avro Schema object
         """
+        # TODO(DATAPIPE-437|clin): Revisit the logic to ensure it works
         schema = self.schema_id_to_schema_map.get(
             schema_id,
             self._retrieve_avro_schema_from_schematizer(schema_id)
@@ -246,7 +270,7 @@ class SchematizerClient(object):
         return self._get_schema_from_schematizer(schema_id).topic.name
 
     def _retrieve_contains_pii_from_schematizer(self, schema_id):
-        return self._retrieve_schema_from_schematizer(schema_id).topic.contains_pii
+        return self._get_schema_from_schematizer(schema_id).topic.contains_pii
 
     def _retrieve_avro_schema_from_schematizer(self, schema_id):
         return get_avro_schema_object(
@@ -280,8 +304,10 @@ class SchematizerClient(object):
         return [self._construct_topic(t) for t in topics_resp]
 
     def _construct_schema(self, response):
+        # TODO([DATAPIPE-396|clin]): This should be replaced with class constructor
+        # once the AvroSchema namedtuple is replaced with the class.
         return AvroSchema(
-            id=response.schema_id,
+            schema_id=response.schema_id,
             schema=response.schema,
             topic=self._construct_topic(response.topic),
             base_schema_id=response.base_schema_id,
@@ -289,24 +315,30 @@ class SchematizerClient(object):
         )
 
     def _construct_topic(self, response):
+        # TODO([DATAPIPE-396|clin]): This should be replaced with class constructor
+        # once the Topic namedtuple is replaced with the class.
         return Topic(
-            id=response.topic_id,
+            topic_id=response.topic_id,
             name=response.name,
             source=self._construct_source(response.source),
             created_at=response.created_at
         )
 
     def _construct_source(self, response):
+        # TODO([DATAPIPE-396|clin]): This should be replaced with class constructor
+        # once the Source namedtuple is replaced with the class.
         return Source(
-            id=response.source_id,
+            source_id=response.source_id,
             name=response.source,
             namespace=self._construct_namespace(response.namespace),
             created_at=response.created_at
         )
 
     def _construct_namespace(self, response):
+        # TODO([DATAPIPE-396|clin]): This should be replaced with class constructor
+        # once the Namespace namedtuple is replaced with the class.
         return Namespace(
-            id=response.namespace_id,
+            namespace_id=response.namespace_id,
             name=response.name,
             created_at=response.created_at
         )
