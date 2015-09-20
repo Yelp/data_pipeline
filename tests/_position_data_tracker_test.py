@@ -11,7 +11,7 @@ from data_pipeline.message import CreateMessage
 from tests.helpers.config import reconfigure
 
 
-class TestPositionDataTracker(object):
+class BasePositionDataTrackerTest(object):
     @property
     def valid_message_data(self):
         return {
@@ -24,17 +24,25 @@ class TestPositionDataTracker(object):
     def topic(self):
         return str('my-topic')
 
+    def _publish_messages(self, tracker, messages):
+        messages_published = defaultdict(int)
+        for message in messages:
+            tracker.record_message_buffered(message)
+            messages_published[message.topic] += 1
+
+        for topic, count in messages_published.iteritems():
+            tracker.record_messages_published(topic, 0, count)
+
+    def _create_message(self, **kwargs):
+        message_data = self.valid_message_data
+        message_data.update(kwargs)
+        return CreateMessage(**message_data)
+
+
+class TestPositionDataTracker(BasePositionDataTrackerTest):
     @pytest.fixture
     def tracker(self):
         return PositionDataTracker()
-
-    @pytest.yield_fixture
-    def merging_tracker(self):
-        with reconfigure(
-            skip_position_info_update_when_not_set=True,
-            merge_position_info_update=True
-        ):
-            yield PositionDataTracker()
 
     @pytest.fixture
     def position_info(self):
@@ -76,28 +84,24 @@ class TestPositionDataTracker(object):
         assert position_data.last_published_message_position_info == {1: 12}
         assert position_data.topic_to_last_position_info_map == {self.topic: {1: 12}}
 
-    def test_publishing_with_merged_position_info(self, merging_tracker):
-        self._publish_messages(merging_tracker, [
+
+class TestMergingPositionDataTracker(BasePositionDataTrackerTest):
+    @pytest.yield_fixture
+    def tracker(self):
+        with reconfigure(
+            skip_position_info_update_when_not_set=True,
+            merge_position_info_update=True
+        ):
+            yield PositionDataTracker()
+
+    def test_publishing_with_merged_position_info(self, tracker):
+        self._publish_messages(tracker, [
             self._create_message(upstream_position_info={0: 10}),
             self._create_message(upstream_position_info=None),
             self._create_message(upstream_position_info={0: 12, 1: 14}),
             self._create_message(upstream_position_info={1: 18, 2: 20}),
         ])
-        position_data = merging_tracker.get_position_data()
+        position_data = tracker.get_position_data()
         expected_position_info = {0: 12, 1: 18, 2: 20}
         assert position_data.last_published_message_position_info == expected_position_info
         assert position_data.topic_to_last_position_info_map == {self.topic: expected_position_info}
-
-    def _publish_messages(self, tracker, messages):
-        messages_published = defaultdict(int)
-        for message in messages:
-            tracker.record_message_buffered(message)
-            messages_published[message.topic] += 1
-
-        for topic, count in messages_published.iteritems():
-            tracker.record_messages_published(topic, 0, count)
-
-    def _create_message(self, **kwargs):
-        message_data = self.valid_message_data
-        message_data.update(kwargs)
-        return CreateMessage(**message_data)
