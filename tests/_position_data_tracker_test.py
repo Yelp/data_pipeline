@@ -24,6 +24,23 @@ class BasePositionDataTrackerTest(object):
     def topic(self):
         return str('my-topic')
 
+    def test_merged_upstream_position_info_map(self, tracker):
+        other_topic = str('other-topic')
+        self._publish_messages(tracker, [
+            self._create_message_with_offsets({0: 10}),
+            self._create_message(upstream_position_info=None),
+            self._create_message_with_offsets({1: 14}),
+            self._create_message_with_offsets({0: 18}),
+            self._create_message_with_offsets({2: 20}),
+            self._create_message_with_offsets({0: 42}, topic=other_topic)
+        ])
+        position_data = tracker.get_position_data().merged_upstream_position_info_map
+        expected_position_data = {
+            self.topic: {0: 18, 1: 14, 2: 20},
+            other_topic: {0: 42}
+        }
+        assert position_data == expected_position_data
+
     def _publish_messages(self, tracker, messages):
         messages_published = defaultdict(int)
         for message in messages:
@@ -37,6 +54,11 @@ class BasePositionDataTrackerTest(object):
         message_data = self.valid_message_data
         message_data.update(kwargs)
         return CreateMessage(**message_data)
+
+    def _create_message_with_offsets(self, offsets, topic=None):
+        if topic is None:
+            topic = self.topic
+        return self._create_message(upstream_position_info={topic: offsets})
 
 
 class TestPositionDataTracker(BasePositionDataTrackerTest):
