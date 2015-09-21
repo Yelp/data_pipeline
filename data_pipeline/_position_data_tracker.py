@@ -4,6 +4,8 @@ from __future__ import unicode_literals
 
 from collections import defaultdict
 
+from yelp_lib.containers.dicts import update_nested_dict
+
 from data_pipeline.config import get_config
 from data_pipeline.position_data import PositionData
 
@@ -31,12 +33,14 @@ class _PositionDataTracker(object):
     def __init__(self):
         self.unpublished_messages = 0
         self.topic_to_kafka_offset_map = {}
+        self.merged_upstream_position_info_map = {}
         self._setup_position_info()
 
     def record_message_buffered(self, message):
         logger.debug("Message buffered: %s" % message)
         if self._should_update_position_info(message):
             self._update_position_info(message)
+        self._update_merged_upstream_position_info(message)
         self.unpublished_messages += 1
 
     def record_messages_published(self, topic, offset, message_count):
@@ -50,7 +54,8 @@ class _PositionDataTracker(object):
         return PositionData(
             last_published_message_position_info=self.last_published_message_position_info,
             topic_to_last_position_info_map=dict(self.topic_to_last_position_info_map),
-            topic_to_kafka_offset_map=dict(self.topic_to_kafka_offset_map)
+            topic_to_kafka_offset_map=dict(self.topic_to_kafka_offset_map),
+            merged_upstream_position_info_map=dict(self.merged_upstream_position_info_map)
         )
 
     def _setup_position_info(self):
@@ -66,6 +71,13 @@ class _PositionDataTracker(object):
     def _update_position_info(self, message):
         self.last_published_message_position_info = message.upstream_position_info
         self.topic_to_last_position_info_map[message.topic] = message.upstream_position_info
+
+    def _update_merged_upstream_position_info(self, message):
+        if message.upstream_position_info is not None:
+            update_nested_dict(
+                self.merged_upstream_position_info_map,
+                message.upstream_position_info
+            )
 
 
 class _MergingPositionDataTracker(_PositionDataTracker):
