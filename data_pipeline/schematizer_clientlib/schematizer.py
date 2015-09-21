@@ -2,196 +2,263 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from collections import namedtuple
+import simplejson
 
-from data_pipeline._avro_util import get_avro_schema_object
 from data_pipeline.config import get_config
-
-SchemaInfo = namedtuple('SchemaInfo', [
-    'schema_id',
-    'topic_name'
-])
+from data_pipeline.schematizer_clientlib.models.avro_schema import _AvroSchema
+from data_pipeline.schematizer_clientlib.models.source import _Source
+from data_pipeline.schematizer_clientlib.models.topic import _Topic
 
 
-class SchemaCache(object):
-    """ A cache for mapping schema_id's to their schemas and to their
-        transformed schema_ids.
+class SchematizerClient(object):
+    """A client that interacts with Schematizer APIs.  It has built-in caching
+    feature which caches avro schemas, topics, and etc.  Right now the cache is
+    only in memory (TODO(DATAPIPE-162|joshszep): Implement persistent caching).
 
-        Currently this only holds an in-memory cache.
-        TODO(DATAPIPE-162|joshszep): Implement persistent caching
+    It caches schemas, topics, and sources separately instead of caching nested
+    objects to avoid storing duplicate data repeatedly.
     """
 
     def __init__(self):
-        self.schema_id_to_schema_map = {}
-        self.schema_id_to_topic_map = {}
-        self.base_to_transformed_schema_id_map = {}
-        self.schema_id_to_pii_map = {}
+        self._client = get_config().schematizer_client  # swaggerpy client
+        self._schema_cache = {}
+        self._topic_cache = {}
+        self._source_cache = {}
 
-    @property
-    def schematizer_client(self):
-        return get_config().schematizer_client
-
-    def get_transformed_schema_id(self, schema_id):
-        """ Get the cached transformed schema_id corresponding to the given
-            base_schema_id if it is known, otherwise None is returned
+    def get_schema_by_id(self, schema_id):
+        """Get the avro schema of given schema id.
 
         Args:
-            schema_id (int): The base schema_id
+            schema_id (int): The id of requested avro schema.
 
         Returns:
-            int: cached transformed schema_id if known, None otherwise
+            (data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
+                The requested avro Schema.
         """
-        return self.base_to_transformed_schema_id_map.get(schema_id, None)
+        return self._get_schema_by_id(schema_id).to_result()
 
-    def register_transformed_schema(
+    def _get_schema_by_id(self, schema_id):
+        cached_schema = self._schema_cache.get(schema_id)
+        if cached_schema:
+            _schema = _AvroSchema.from_cache_value(cached_schema)
+            _schema.topic = self._get_topic_by_name(cached_schema['topic_name'])
+        else:
+            response = self._call_api(
+                api_func_name='schemas.get_schema_by_id',
+                params={'schema_id': schema_id}
+            )
+            _schema = _AvroSchema.from_response(response)
+            self._update_cache_by_schema(_schema)
+        return _schema
+
+    def get_topic_by_name(self, topic_name):
+        """Get the topic of given topic name.
+
+        Args:
+            topic_name (str): The name of requested topic.
+
+        Returns:
+            (data_pipeline.schematizer_clientlib.models.topic.Topic):
+                The requested topic.
+        """
+        return self._get_topic_by_name(topic_name).to_result()
+
+    def _get_topic_by_name(self, topic_name):
+        cached_topic = self._topic_cache.get(topic_name)
+        if cached_topic:
+            _topic = _Topic.from_cache_value(cached_topic)
+            _topic.source = self._get_source_by_id(cached_topic['source_id'])
+        else:
+            response = self._call_api(
+                api_func_name='topics.get_topic_by_topic_name',
+                params={'topic_name': topic_name}
+            )
+            _topic = _Topic.from_response(response)
+            self._update_cache_by_topic(_topic)
+        return _topic
+
+    def get_source_by_id(self, source_id):
+        """Get the schema source of given source id.
+
+        Args:
+            source_id (int): The id of the source.
+
+        Returns:
+            (data_pipeline.schematizer_clientlib.models.topic.Source):
+                The requested schema source.
+        """
+        return self._get_source_by_id(source_id).to_result()
+
+    def _get_source_by_id(self, source_id):
+        cached_source = self._source_cache.get(source_id)
+        if cached_source:
+            _source = _Source.from_cache_value(cached_source)
+        else:
+            response = self._call_api(
+                api_func_name='sources.get_source_by_id',
+                params={'source_id': source_id}
+            )
+            _source = _Source.from_response(response)
+            self._update_cache_by_source(_source)
+        return _source
+
+    def register_schema(
         self,
-        base_schema_id,
         namespace,
         source,
-        schema,
-        owner_email,
-        contains_pii
+        schema_str,
+        source_owner_email,
+        contains_pii,
+        base_schema_id=None
     ):
-        """ Register a new schema and return it's schema_id and topic
+        """ Register a new schema and return newly created schema object.
 
         Args:
-            base_schema_id (int): The schema_id of the original schema from
-                which the the new schema was transformed
-            namespace (str): The namespace the new schema should be registered
-                to.
-            source (str): The source the new schema should be registered to.
-            schema (str): The new schema in json string representation.
-            owner_email (str): The owner email for the new schema.
-            contains_pii (bool): Indicates that the schema being registered has
+            namespace (str): The namespace the new schema is registered to.
+            source (str): The source the new schema is registered to.
+            schema_str (str): String representation of the avro schema.
+            source_owner_email (str): The owner email of the given source.
+            contains_pii (bool): Indicates if the schema being registered has
                 at least one field that can potentially contain PII.
                 See http://y/pii for help identifying what is or is not PII.
+            base_schema_id (Optional[int]): The id of the original schema which
+                the new schema was changed based on
 
         Returns:
-            (int, string): The new schema_id and the new topic name
+            (data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
+                The newly created avro Schema.
         """
-        request_body = {
-            'base_schema_id': base_schema_id,
-            'schema': schema,
+        post_body = {
+            'schema': schema_str,
             'namespace': namespace,
             'source': source,
-            'source_owner_email': owner_email,
+            'source_owner_email': source_owner_email,
             'contains_pii': contains_pii,
         }
-        register_response = self.schematizer_client.schemas.register_schema(
-            body=request_body
-        ).result()
-        transformed_id = register_response.schema_id
-        self.schema_id_to_schema_map[transformed_id] = register_response.schema
-        self.base_to_transformed_schema_id_map[base_schema_id] = transformed_id
-        new_topic_name = register_response.topic.name
-        self.schema_id_to_topic_map[transformed_id] = new_topic_name
-        return SchemaInfo(schema_id=register_response.schema_id, topic_name=new_topic_name)
+        if base_schema_id:
+            post_body['base_schema_id'] = base_schema_id
+        response = self._call_api(
+            api_func_name='schemas.register_schema',
+            post_body=post_body
+        )
 
-    def register_schema_from_mysql_stmts(
-            self,
-            new_create_table_stmt,
-            namespace,
-            source,
-            owner_email,
-            contains_pii,
-            old_create_table_stmt=None,
-            alter_table_stmt=None,
+        _schema = _AvroSchema.from_response(response)
+        self._update_cache_by_schema(_schema)
+        return _schema.to_result()
+
+    def register_schema_from_schema_json(
+        self,
+        namespace,
+        source,
+        schema_json,
+        source_owner_email,
+        contains_pii,
+        base_schema_id=None
     ):
-        """ Register schema based on mysql statements and return it's schema_id
-            and topic.
+        """ Register a new schema and return newly created schema object.
 
         Args:
-            new_create_table_stmt (str): the mysql statement of creating new table.
-            namespace (str): The namespace the new schema should be registered to.
-            source (str): The source the new schema should be registered to.
-            owner_email (str): The owner email for the new schema.
-            contains_pii (bool): The flag indicating if schema contains pii.
-            old_create_table_stmt (str optional): the mysql statement of creating old table.
-            alter_table_stmt (str optional): the mysql statement of altering table schema.
+            namespace (str): The namespace the new schema is registered to.
+            source (str): The source the new schema is registered to.
+            schema_json (dict or list): Python object representation of the
+                avro schema json.
+            source_owner_email (str): The owner email of the given source.
+            contains_pii (bool): Indicates if the schema being registered has
+                at least one field that can potentially contain PII.
+                See http://y/pii for help identifying what is or is not PII.
+            base_schema_id (Optional[int]): The id of the original schema which
+                the new schema was changed based on
 
         Returns:
-            (int, string): The new schema_id and the new topic name
+            (data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
+                The newly created avro Schema.
         """
-        request_body = {
-            'new_create_table_stmt': new_create_table_stmt,
+        return self.register_schema(
+            namespace=namespace,
+            source=source,
+            schema_str=simplejson.dumps(schema_json),
+            source_owner_email=source_owner_email,
+            contains_pii=contains_pii,
+            base_schema_id=base_schema_id
+        )
+
+    def register_schema_from_mysql_stmts(
+        self,
+        namespace,
+        source,
+        source_owner_email,
+        contains_pii,
+        new_create_table_stmt,
+        old_create_table_stmt=None,
+        alter_table_stmt=None,
+    ):
+        """ Register schema based on mysql statements and return newly created
+        schema.
+
+        Args:
+            namespace (str): The namespace the new schema is registered to.
+            source (str): The source the new schema is registered to.
+            source_owner_email (str): The owner email of the given source.
+            contains_pii (bool): The flag indicating if schema contains pii.
+            new_create_table_stmt (str): the mysql statement of creating new table.
+            old_create_table_stmt (Optional[str]): the mysql statement of
+                creating old table.
+            alter_table_stmt (Optional[str]): the mysql statement of altering
+                table schema.
+
+        Returns:
+            (data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
+                The newly created avro Schema.
+        """
+        post_body = {
             'namespace': namespace,
             'source': source,
-            'source_owner_email': owner_email,
+            'new_create_table_stmt': new_create_table_stmt,
+            'source_owner_email': source_owner_email,
             'contains_pii': contains_pii
         }
         if old_create_table_stmt:
-            request_body['old_create_table_stmt'] = old_create_table_stmt
+            post_body['old_create_table_stmt'] = old_create_table_stmt
         if alter_table_stmt:
-            request_body['alter_table_stmt'] = alter_table_stmt
-        register_response = self.schematizer_client.schemas.register_schema_from_mysql_stmts(
-            body=request_body
-        ).result()
-        schema_id = register_response.schema_id
-        self.schema_id_to_schema_map[schema_id] = register_response.schema
-        new_topic_name = register_response.topic.name
-        self.schema_id_to_topic_map[schema_id] = new_topic_name
-        return SchemaInfo(schema_id=register_response.schema_id, topic_name=new_topic_name)
-
-    def get_topic_for_schema_id(self, schema_id):
-        """ Get the topic name for a given schema_id
-
-        Args:
-            schema_id (int): The schema_id you are curious about.
-
-        Returns:
-            (str): The topic name for the given schema_id
-        """
-        topic_name = self.schema_id_to_topic_map.get(
-            schema_id,
-            self._retrieve_topic_name_from_schematizer(schema_id)
+            post_body['alter_table_stmt'] = alter_table_stmt
+        response = self._call_api(
+            api_func_name='schemas.register_schema_from_mysql_stmts',
+            post_body=post_body
         )
-        self.schema_id_to_topic_map[schema_id] = topic_name
-        return topic_name
 
-    def get_contains_pii_for_schema_id(self, schema_id):
-        pii_flag = self.schema_id_to_pii_map.get(
-            schema_id,
-            self._retrieve_contains_pii_from_schematizer(schema_id)
-        )
-        self.schema_id_to_pii_map[schema_id] = pii_flag
-        return pii_flag
+        _schema = _AvroSchema.from_response(response)
+        self._update_cache_by_schema(_schema)
+        return _schema.to_result()
 
-    def get_schema(self, schema_id):
-        """ Get the schema corresponding to the given schema_id, handling cache
-            misses if required
+    def refresh_new_topics(self):
+        # placeholder
+        pass
 
-        Args:
-            schema_id (int): The schema_id to use for lookup.
-
-        Returns:
-            (avro.schema.Schema): The avro Schema object
-        """
-        schema = self.schema_id_to_schema_map.get(
-            schema_id,
-            self._retrieve_avro_schema_from_schematizer(schema_id)
-        )
-        self.schema_id_to_schema_map[schema_id] = schema
-        return schema
-
-    def _retrieve_schema_from_schematizer(self, schema_id):
+    def _call_api(self, api_func_name, params=None, post_body=None):
         # TODO(DATAPIPE-207|joshszep): Include retry strategy support
-        return self.schematizer_client.schemas.get_schema_by_id(
-            schema_id=schema_id
-        ).result()
+        api_func = self._client
+        for func in api_func_name.split('.'):
+            api_func = getattr(api_func, func)
 
-    def _retrieve_topic_name_from_schematizer(self, schema_id):
-        return self._retrieve_schema_from_schematizer(schema_id).topic.name
+        request_params = {'body': post_body} if post_body else params or {}
+        request = api_func(**request_params)
+        response = request.result()
+        return response
 
-    def _retrieve_contains_pii_from_schematizer(self, schema_id):
-        return self._retrieve_schema_from_schematizer(schema_id).topic.contains_pii
+    def _update_cache_by_schema(self, new_schema):
+        self._schema_cache[new_schema.schema_id] = new_schema.to_cache_value()
+        self._update_cache_by_topic(new_schema.topic)
 
-    def _retrieve_avro_schema_from_schematizer(self, schema_id):
-        return get_avro_schema_object(
-            self._retrieve_schema_from_schematizer(schema_id).schema
-        )
+    def _update_cache_by_topic(self, new_topic):
+        self._topic_cache[new_topic.name] = new_topic.to_cache_value()
+        self._update_cache_by_source(new_topic.source)
 
-_schema_cache = SchemaCache()
+    def _update_cache_by_source(self, new_source):
+        self._source_cache[new_source.source_id] = new_source.to_cache_value()
 
 
-def get_schema_cache():
-    return _schema_cache
+_schematizer_client = SchematizerClient()
+
+
+def get_schematizer():
+    return _schematizer_client
