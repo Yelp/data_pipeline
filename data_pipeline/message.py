@@ -164,27 +164,54 @@ class Message(object):
         self._contains_pii = contains_pii
 
     @property
-    def transaction_id(self):
-        """The kafka topic the message should be published to."""
-        return self._transaction_id
-
-    @transaction_id.setter
-    def transaction_id(self, transaction_id):
-        if transaction_id:
-            if not isinstance(transaction_id, unicode) or len(transaction_id.split(':')) != 3:
-                raise ValueError(
-                    "Transaction_id must be None or a unicode string in the "
-                    "form <cluster_nam>:<log_file_name>:<log_position>"
-                )
-        self._transaction_id = transaction_id
-
-    @property
     def dry_run(self):
         return self._dry_run
 
     @dry_run.setter
     def dry_run(self, dry_run):
         self._dry_run = dry_run
+
+    @property
+    def meta(self):
+        """List of optional meta attributes of the message."""
+        return self._meta
+
+    @meta.setter
+    def meta(self, meta):
+        if meta:
+            if not isinstance(meta, list):
+                raise ValueError(
+                    "Meta must be None or list of (schema_id, payload) "
+                    "meta_attribute tuples."
+                )
+            for meta_attr in meta:
+                if any([
+                    not isinstance(meta_attr, tuple),
+                    len(meta_attr) != 2,
+                    not isinstance(meta_attr[0], int)
+                ]):
+                    raise ValueError(
+                        "Each Meta attribute must be a (schema_id, payload) "
+                        "tuple, schema_id being an integer."
+                    )
+        self._meta = meta
+
+    @property
+    def decoded_meta_attributes(self):
+        if self.meta:
+            return {
+                self._get_meta_attribute_name(schema_id): (schema_id, payload)
+                for schema_id, payload in self.meta
+            }
+
+    def _get_meta_attribute_name(self, schema_id):
+        schema_response = get_schema_cache().schematizer_client.schemas.get_schema_by_id(
+            schema_id=schema_id
+        ).result()
+        return '.'.join([
+            schema_response.topic.source.namespace.name,
+            schema_response.topic.source.source
+        ])
 
     @property
     def timestamp(self):
@@ -303,12 +330,12 @@ class Message(object):
         payload_data=None,
         uuid=None,
         contains_pii=False,
-        transaction_id=None,
         timestamp=None,
         upstream_position_info=None,
         kafka_position_info=None,
         keys=None,
-        dry_run=False
+        dry_run=False,
+        meta=None
     ):
         # The decision not to just pack the message to validate it is
         # intentional here.  We want to perform more sanity checks than avro
@@ -319,12 +346,12 @@ class Message(object):
         self.schema_id = schema_id
         self.uuid = uuid
         self.contains_pii = contains_pii
-        self.transaction_id = transaction_id
         self.timestamp = timestamp
         self.upstream_position_info = upstream_position_info
         self.kafka_position_info = kafka_position_info
         self.keys = keys
         self.dry_run = dry_run
+        self.meta = meta
         self._set_payload_or_payload_data(payload, payload_data)
 
     def _set_payload_or_payload_data(self, payload, payload_data):
@@ -380,8 +407,8 @@ class Message(object):
             'message_type': self.message_type.name,
             'schema_id': self.schema_id,
             'payload': self.payload,
-            'transaction_id': self.transaction_id,
-            'timestamp': self.timestamp
+            'timestamp': self.timestamp,
+            'meta': self.meta,
         }
 
     def _encode_payload_data_if_necessary(self):
@@ -459,12 +486,12 @@ class UpdateMessage(Message):
         previous_payload_data=None,
         uuid=None,
         contains_pii=False,
-        transaction_id=None,
         timestamp=None,
         upstream_position_info=None,
         kafka_position_info=None,
         keys=None,
-        dry_run=False
+        dry_run=False,
+        meta=None
     ):
         super(UpdateMessage, self).__init__(
             topic,
@@ -473,12 +500,12 @@ class UpdateMessage(Message):
             payload_data=payload_data,
             uuid=uuid,
             contains_pii=contains_pii,
-            transaction_id=transaction_id,
             timestamp=timestamp,
             upstream_position_info=upstream_position_info,
             kafka_position_info=kafka_position_info,
             keys=keys,
-            dry_run=dry_run
+            dry_run=dry_run,
+            meta=meta
         )
         self._set_previous_payload_or_payload_data(
             previous_payload,
@@ -556,8 +583,8 @@ class UpdateMessage(Message):
             'schema_id': self.schema_id,
             'payload': self.payload,
             'previous_payload': self.previous_payload,
-            'transaction_id': self.transaction_id,
-            'timestamp': self.timestamp
+            'timestamp': self.timestamp,
+            'meta': self.meta,
         }
 
     def _encode_previous_payload_data_if_necessary(self):
@@ -701,6 +728,7 @@ def _create_message_from_packed_message(
         'schema_id': unpacked_message['schema_id'],
         'payload': unpacked_message['payload'],
         'timestamp': unpacked_message['timestamp'],
+        'meta': unpacked_message['meta'],
         'kafka_position_info': kafka_position_info
     }
     if message_class is UpdateMessage:

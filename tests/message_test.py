@@ -11,6 +11,7 @@ from data_pipeline import message as dp_message
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import create_from_offset_and_message
+from data_pipeline.message import Message
 from data_pipeline.message import PayloadFieldDiff
 from data_pipeline.message_type import MessageType
 
@@ -116,34 +117,58 @@ class SharedMessageTest(object):
         assert message_with_pii.contains_pii is True
 
     @pytest.fixture(params=[
-        'section1',
-        'section1:section2',
-        ['not a string'],
-        bytes(10)
+        'not a list',
+        ['not_a_tuple'],
+        [('tuple does not', 'have 2', 'elements')],
+        [('schema_id', 'is not int')],
     ])
-    def invalid_transaction_id(self, request):
+    def invalid_meta(self, request):
         return request.param
 
-    def test_rejects_invalid_transaction_id(self, valid_message_data, invalid_transaction_id):
+    def test_rejects_invalid_meta(self, valid_message_data, invalid_meta):
         self._assert_invalid_data(
             valid_message_data,
-            transaction_id=invalid_transaction_id
+            meta=invalid_meta
         )
 
     @pytest.fixture(params=[
         None,
-        'cluster_name:log_file_name:log_position',
+        [(10, 'meta attr payload')],
     ])
-    def valid_transaction_id(self, request):
+    def valid_meta(self, request):
         return request.param
 
-    def test_accepts_valid_transaction_id(self, valid_message_data, valid_transaction_id):
+    def _get_dry_run_message_with_meta(self, valid_message_data, valid_meta):
         message_data = self._make_message_data(
             valid_message_data,
-            transaction_id=valid_transaction_id
+            meta=valid_meta
         )
-        dry_run_message = self.message_class(**message_data)
-        assert dry_run_message.transaction_id == valid_transaction_id
+        return self.message_class(**message_data)
+
+    def test_accepts_valid_meta(self, valid_message_data, valid_meta):
+        dry_run_message = self._get_dry_run_message_with_meta(
+            valid_message_data,
+            valid_meta
+        )
+        assert dry_run_message.meta == valid_meta
+
+    def test_decoded_meta_attributes(self, valid_message_data, valid_meta):
+        dry_run_message = self._get_dry_run_message_with_meta(
+            valid_message_data,
+            valid_meta
+        )
+        with mock.patch.object(
+            Message,
+            '_get_meta_attribute_name',
+            return_value='DummyAttributeName'
+        ):
+            if not valid_meta:
+                assert dry_run_message.decoded_meta_attributes is None
+            else:
+                for meta in valid_meta:
+                    assert dry_run_message.decoded_meta_attributes == {
+                        'DummyAttributeName': meta
+                    }
 
     def test_dry_run(self, valid_message_data):
         payload_data = {'data': 'test'}

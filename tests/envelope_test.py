@@ -2,19 +2,42 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import mock
 import pytest
 
 from data_pipeline import message as dp_message
+from data_pipeline.envelope import MetaEnvelope
 
 
-class TestEnvelope(object):
+class BaseEnvelopeTest(object):
+
+    def test_schema_implemented(self, envelope):
+        envelope._schema
+
+
+class TestEnvelope(BaseEnvelopeTest):
 
     @pytest.fixture(params=[
-        {'transaction_id': None},
-        {'transaction_id': 'cluster_name:log_file_name:log_position'}
+        {'meta': None},
+        {'meta': [(10, 'meta attr payload')]}
     ])
-    def transaction_id_params(self, request):
+    def meta_param(self, request):
         return request.param
+
+    @pytest.yield_fixture(autouse=True)
+    def mock_meta_envelope(self, meta_param):
+        unpacked_meta = meta_param['meta'][0][1] if meta_param['meta'] else None
+        with mock.patch.object(
+            MetaEnvelope,
+            '_pack_payload_using_schema_id',
+            return_value=bytes(10)
+        ), \
+            mock.patch.object(
+                MetaEnvelope,
+                '_unpack_payload_using_schema_id',
+                return_value=unpacked_meta
+        ):
+            yield
 
     @pytest.fixture(params=[
         (dp_message.CreateMessage, {}),
@@ -22,10 +45,10 @@ class TestEnvelope(object):
         (dp_message.DeleteMessage, {}),
         (dp_message.UpdateMessage, {'previous_payload': bytes(20)})
     ])
-    def message(self, request, topic_name, payload, transaction_id_params):
+    def message(self, request, topic_name, payload, meta_param):
         message_class, additional_params = request.param
-        if transaction_id_params:
-            additional_params.update(transaction_id_params)
+        if meta_param:
+            additional_params.update(meta_param)
         return message_class(
             topic_name,
             10,
@@ -34,15 +57,14 @@ class TestEnvelope(object):
         )
 
     @pytest.fixture
-    def expected_message(self, message, transaction_id_params):
+    def expected_message(self, message, meta_param):
         previous_payload = None
         if isinstance(message, dp_message.UpdateMessage):
             previous_payload = message.previous_payload
         return dict(
             encryption_type=None,
             message_type=message.message_type.name,
-            meta=None,
-            transaction_id=transaction_id_params['transaction_id'],
+            meta=meta_param['meta'],
             payload=message.payload,
             previous_payload=previous_payload,
             schema_id=message.schema_id,
