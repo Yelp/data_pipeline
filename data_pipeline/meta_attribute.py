@@ -22,6 +22,10 @@ class MetaAttribute(object):
         raise NotImplementedError
 
     @property
+    def contains_pii(self):
+        raise NotImplementedError
+
+    @property
     def payload(self):
         raise NotImplementedError
 
@@ -35,13 +39,14 @@ class MetaAttribute(object):
 
     @cached_property
     def schema_id(self):
+        # TODO: Use new schematizer_client methods before pushing this
         schema_info = self.schematizer_client.register_transformed_schema(
             base_schema_id=0,
             namespace=self.namespace,
             source=self.source,
             schema=self.schema,
             owner_email=self.owner_email,
-            contains_pii=False
+            contains_pii=self.contains_pii
 
         )
         return schema_info.schema_id

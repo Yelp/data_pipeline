@@ -15,4 +15,3 @@
     {"name": "timestamp", "type": "int", "doc": "Time the message was produced."}
   ]
 }
-
