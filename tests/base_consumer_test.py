@@ -356,7 +356,7 @@ class RefreshTopicsTest(object):
             expected_map=expected
         )
 
-    def test_refresh_newer_topics_in_yelp_namesapce(
+    def test_refresh_newer_topics_in_yelp_namespace(
         self,
         consumer,
         yelp_namespace,
