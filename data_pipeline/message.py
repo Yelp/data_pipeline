@@ -42,9 +42,8 @@ class Message(object):
     Args:
         schema_id (int): Identifies the schema used to encode the payload
         topic (Optional[str]): Kafka topic to publish into.  It is highly
-            recommended to leave it not assigned and let the Schematizer to
-            decide the topic of the schema.  Use caution when overriding the
-            topic.
+            recommended to leave it not assigned and let the Schematizer decide
+            the topic of the schema.  Use caution when overriding the topic.
         payload (bytes): Avro-encoded message - encoded with schema identified
             by `schema_id`.  Either `payload` or `payload_data` must be provided
             but not both.
