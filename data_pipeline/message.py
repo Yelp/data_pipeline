@@ -40,8 +40,11 @@ class Message(object):
     :class:`data_pipeline.message.RefreshMessage`.
 
     Args:
-        topic (str): Kafka topic to publish into
         schema_id (int): Identifies the schema used to encode the payload
+        topic (Optional[str]): Kafka topic to publish into.  It is highly
+            recommended to leave it not assigned and let the Schematizer to
+            decide the topic of the schema.  Use caution when overriding the
+            topic.
         payload (bytes): Avro-encoded message - encoded with schema identified
             by `schema_id`.  Either `payload` or `payload_data` must be provided
             but not both.
@@ -97,6 +100,10 @@ class Message(object):
 
     _fast_uuid = FastUUID()
     """UUID generator - this isn't a @cached_property so it can be serialized"""
+
+    @property
+    def _schematizer(self):
+        return get_schema_cache()
 
     @property
     def topic(self):
@@ -158,7 +165,7 @@ class Message(object):
         systems how to handle the data, in addition to automatic decryption.
         """
         if self._contains_pii is None:
-            self._contains_pii = get_schema_cache().get_contains_pii_for_schema_id(self.schema_id)
+            self._contains_pii = self._schematizer.get_contains_pii_for_schema_id(self.schema_id)
         return self._contains_pii
 
     @contains_pii.setter
@@ -209,7 +216,8 @@ class Message(object):
 
     @upstream_position_info.setter
     def upstream_position_info(self, upstream_position_info):
-        if upstream_position_info is not None and not isinstance(upstream_position_info, dict):
+        if (upstream_position_info is not None and
+                not isinstance(upstream_position_info, dict)):
             raise ValueError("upstream_position_info should be None or a dict")
         self._upstream_position_info = upstream_position_info
 
@@ -223,13 +231,16 @@ class Message(object):
 
     @kafka_position_info.setter
     def kafka_position_info(self, kafka_position_info):
-        if kafka_position_info is not None and not isinstance(kafka_position_info, KafkaPositionInfo):
-            raise ValueError("kafka_position_info should be None or a KafkaPositionInfo")
+        if (kafka_position_info is not None and
+                not isinstance(kafka_position_info, KafkaPositionInfo)):
+            raise ValueError(
+                "kafka_position_info should be None or a KafkaPositionInfo"
+            )
         self._kafka_position_info = kafka_position_info
 
     @property
     def _avro_schema(self):
-        return get_schema_cache().get_schema(self.schema_id)
+        return self._schematizer.get_schema(self.schema_id)
 
     @property
     def _avro_string_writer(self):
@@ -284,8 +295,8 @@ class Message(object):
 
     def __init__(
         self,
-        topic,
         schema_id,
+        topic=None,
         payload=None,
         payload_data=None,
         uuid=None,
@@ -301,8 +312,9 @@ class Message(object):
         # does, and in addition, this check is quite a bit faster than
         # serialization.  Finally, if we do it this way, we can lazily
         # serialize the payload in a subclass if necessary.
-        self.topic = topic
         self.schema_id = schema_id
+        self.topic = (topic or
+                      str(self._schematizer.get_topic_for_schema_id(schema_id)))
         self.uuid = uuid
         self.timestamp = timestamp
         self.upstream_position_info = upstream_position_info
@@ -313,6 +325,10 @@ class Message(object):
         # TODO(DATAPIPE-416|psuben):
         # Make it so contains_pii is no longer overrideable.
         self.contains_pii = contains_pii
+
+        if topic:
+            logger.debug("Overriding message topic: {0} for schema {1}."
+                         .format(topic, schema_id))
 
     def _set_payload_or_payload_data(self, payload, payload_data):
         # payload or payload_data are lazily constructed only on request
@@ -329,16 +345,16 @@ class Message(object):
             raise ValueError("Either payload or payload_data must be provided.")
 
     def __eq__(self, other):
-        return self.__key == other.__key
+        return type(self) is type(other) and self._eq_key == other._eq_key
 
     def __ne__(self, other):
-        return self.__key != other.__key
+        return not self.__eq__(other)
 
     def __hash__(self):
-        return hash(self.__key)
+        return hash(self._eq_key)
 
     @property
-    def __key(self):
+    def _eq_key(self):
         """Returns a tuple representing a unique key for this Message.
 
         Note:
@@ -347,7 +363,6 @@ class Message(object):
             well, and there is an extra overhead from decoding.
         """
         return (
-            self.__class__,
             self.message_type,
             self.topic,
             self.schema_id,
@@ -436,8 +451,8 @@ class UpdateMessage(Message):
 
     def __init__(
         self,
-        topic,
         schema_id,
+        topic=None,
         payload=None,
         payload_data=None,
         previous_payload=None,
@@ -451,8 +466,8 @@ class UpdateMessage(Message):
         dry_run=False
     ):
         super(UpdateMessage, self).__init__(
-            topic,
             schema_id,
+            topic=topic,
             payload=payload,
             payload_data=payload_data,
             uuid=uuid,
@@ -492,7 +507,7 @@ class UpdateMessage(Message):
             )
 
     @property
-    def __key(self):
+    def _eq_key(self):
         """Returns a tuple representing a unique key for this Message.
 
         Note:
@@ -501,7 +516,7 @@ class UpdateMessage(Message):
             `previous_payload_data` will as well, and there is an extra
             overhead from decoding.
         """
-        return super(UpdateMessage, self).__key + (self.previous_payload, )
+        return super(UpdateMessage, self)._eq_key + (self.previous_payload,)
 
     @property
     def previous_payload(self):
