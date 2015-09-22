@@ -7,6 +7,15 @@ from collections import namedtuple
 from data_pipeline.schematizer_clientlib.models.model_base import BaseModel
 
 
+"""
+Represent the data of a namespace.  Namespace is a group which the avro schemas
+belong to.  It is the highest grouping level of schemas.  For example,
+`yelp_main` could be a namespace.
+
+Args:
+    namespace_id (int): The id of the namespace.
+    name (str): The name of the namespace.
+"""
 Namespace = namedtuple('Namespace', ['namespace_id', 'name'])
 
 

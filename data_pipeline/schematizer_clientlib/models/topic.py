@@ -8,6 +8,21 @@ from data_pipeline.schematizer_clientlib.models.model_base import BaseModel
 from data_pipeline.schematizer_clientlib.models.source import _Source
 
 
+"""
+Represent the data of a topic.  A topic represents a kafka topic which a
+producer publishes messages to (or a consumer consumes messages from).
+
+Args:
+    topic_id (int): The id of the topic.
+    name (str): The name of the topic.
+    source (data_pipeline.schematizer_clientlib.models.source.Source):
+        The source of the topic.
+    contains_pii (bool): Whether the messages in this topic contain PII data.
+    created_at (str): The timestamp when the topic is created in ISO-8601
+        format.
+    updated_at (str): The timestamp when the topic is last updated in ISO-8601
+        format.
+"""
 Topic = namedtuple(
     'Topic',
     ['topic_id', 'name', 'source', 'contains_pii', 'created_at', 'updated_at']

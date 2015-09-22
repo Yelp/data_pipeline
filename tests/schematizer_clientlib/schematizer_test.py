@@ -2,9 +2,12 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import random
+
 import mock
 import pytest
 import simplejson
+from swaggerpy import exception as swaggerpy_exc
 
 from data_pipeline.schematizer_clientlib.schematizer import SchematizerClient
 
@@ -23,20 +26,97 @@ class SchematizerClientTestBase(object):
 
         return mock.patch.object(resource, api_name, side_effect=attach_spy)
 
+    @pytest.fixture(scope='class')
+    def yelp_namespace(self):
+        return 'yelp_{0}'.format(random.random())
 
-class TestSchematizerClient(SchematizerClientTestBase):
+    @pytest.fixture(scope='class')
+    def aux_namespace(self):
+        return 'aux_{0}'.format(random.random())
 
-    def test_get_non_cached_schema_by_id(self, schematizer, registered_schema):
+    @pytest.fixture(scope='class')
+    def biz_src_name(self):
+        return 'biz_{0}'.format(random.random())
+
+    @pytest.fixture(scope='class')
+    def usr_src_name(self):
+        return 'user_{0}'.format(random.random())
+
+    @pytest.fixture(scope='class')
+    def cta_src_name(self):
+        return 'cta_{0}'.format(random.random())
+
+    @property
+    def source_owner_email(self):
+        return 'bam+test@yelp.com'
+
+    def _register_avro_schema(self, schematizer, namespace, source, **overrides):
+        schema_json = {
+            'type': 'record',
+            'name': source,
+            'namespace': namespace,
+            'fields': [{'type': 'int', 'name': 'foo'}]
+        }
+        params = {
+            'namespace': namespace,
+            'source': source,
+            'source_owner_email': self.source_owner_email,
+            'schema': simplejson.dumps(schema_json),
+            'contains_pii': False
+        }
+        if overrides:
+            params.update(**overrides)
+        return schematizer._client.schemas.register_schema(body=params).result()
+
+    def _get_schema_by_id(self, schematizer, schema_id):
+        return schematizer._client.schemas.get_schema_by_id(
+            schema_id=schema_id
+        ).result()
+
+    def _assert_schema_values(self, actual, expected_resp):
+        assert actual.schema_id == expected_resp.schema_id
+        assert actual.schema_json == simplejson.loads(expected_resp.schema)
+        self._assert_topic_values(actual.topic, expected_resp.topic)
+        assert actual.base_schema_id == expected_resp.base_schema_id
+        assert actual.created_at == expected_resp.created_at
+        assert actual.updated_at == expected_resp.updated_at
+
+    def _assert_topic_values(self, actual, expected_resp):
+        assert actual.topic_id == expected_resp.topic_id
+        assert actual.name == expected_resp.name
+        self._assert_source_values(actual.source, expected_resp.source)
+        assert actual.contains_pii == expected_resp.contains_pii
+        assert actual.created_at == expected_resp.created_at
+        assert actual.updated_at == expected_resp.updated_at
+
+    def _assert_source_values(self, actual, expected_resp):
+        assert actual.source_id == expected_resp.source_id
+        assert actual.name == expected_resp.name
+        assert actual.owner_email == expected_resp.owner_email
+        assert actual.namespace.namespace_id == expected_resp.namespace.namespace_id
+
+
+class TestGetSchemaById(SchematizerClientTestBase):
+
+    @pytest.fixture(autouse=True)
+    def biz_schema(self, schematizer, yelp_namespace, biz_src_name):
+        return self._register_avro_schema(
+            schematizer,
+            yelp_namespace,
+            biz_src_name
+        )
+
+    def test_get_non_cached_schema_by_id(self, schematizer, biz_schema):
         with self.attach_spy_on_api(
             schematizer._client.schemas,
             'get_schema_by_id'
         ) as api_spy:
-            actual = schematizer.get_schema_by_id(registered_schema.schema_id)
-            self._assert_schema_values(actual, registered_schema)
+            actual = schematizer.get_schema_by_id(biz_schema.schema_id)
+            self._assert_schema_values(actual, biz_schema)
             assert api_spy.call_count == 1
 
-    def test_get_cached_schema_by_id(self, schematizer, registered_schema):
-        schematizer.get_schema_by_id(registered_schema.schema_id)
+    def test_get_cached_schema_by_id(self, schematizer, biz_schema):
+        schematizer.get_schema_by_id(biz_schema.schema_id)
 
         with self.attach_spy_on_api(
             schematizer._client.schemas,
@@ -48,14 +128,25 @@ class TestSchematizerClient(SchematizerClientTestBase):
             schematizer._client.sources,
             'get_source_by_id'
         ) as source_api_spy:
-            actual = schematizer.get_schema_by_id(registered_schema.schema_id)
-            self._assert_schema_values(actual, registered_schema)
+            actual = schematizer.get_schema_by_id(biz_schema.schema_id)
+            self._assert_schema_values(actual, biz_schema)
             assert schema_api_spy.call_count == 0
             assert topic_api_spy.call_count == 0
             assert source_api_spy.call_count == 0
 
-    def test_get_non_cached_topic_by_name(self, schematizer, registered_schema):
-        expected_topic = registered_schema.topic
+
+class TestGetTopicByName(SchematizerClientTestBase):
+
+    @pytest.fixture(autouse=True)
+    def biz_schema(self, schematizer, yelp_namespace, biz_src_name):
+        return self._register_avro_schema(
+            schematizer,
+            yelp_namespace,
+            biz_src_name
+        )
+
+    def test_get_non_cached_topic_by_name(self, schematizer, biz_schema):
+        expected_topic = biz_schema.topic
 
         with self.attach_spy_on_api(
             schematizer._client.topics,
@@ -65,8 +156,8 @@ class TestSchematizerClient(SchematizerClientTestBase):
             self._assert_topic_values(actual, expected_topic)
             assert api_spy.call_count == 1
 
-    def test_get_cached_topic_by_name(self, schematizer, registered_schema):
-        expected_topic = registered_schema.topic
+    def test_get_cached_topic_by_name(self, schematizer, biz_schema):
+        expected_topic = biz_schema.topic
         schematizer.get_topic_by_name(expected_topic.name)
 
         with self.attach_spy_on_api(
@@ -81,8 +172,19 @@ class TestSchematizerClient(SchematizerClientTestBase):
             assert topic_api_spy.call_count == 0
             assert source_api_spy.call_count == 0
 
-    def test_get_non_cached_source_by_id(self, schematizer, registered_schema):
-        expected_source = registered_schema.topic.source
+
+class TestGetSourceById(SchematizerClientTestBase):
+
+    @pytest.fixture(autouse=True)
+    def biz_schema(self, schematizer, yelp_namespace, biz_src_name):
+        return self._register_avro_schema(
+            schematizer,
+            yelp_namespace,
+            biz_src_name
+        )
+
+    def test_get_non_cached_source_by_id(self, schematizer, biz_schema):
+        expected_source = biz_schema.topic.source
 
         with self.attach_spy_on_api(
             schematizer._client.sources,
@@ -92,8 +194,8 @@ class TestSchematizerClient(SchematizerClientTestBase):
             self._assert_source_values(actual, expected_source)
             assert api_spy.call_count == 1
 
-    def test_get_cached_source_by_id(self, schematizer, registered_schema):
-        expected_source = registered_schema.topic.source
+    def test_get_cached_source_by_id(self, schematizer, biz_schema):
+        expected_source = biz_schema.topic.source
         schematizer.get_source_by_id(expected_source.source_id)
 
         with self.attach_spy_on_api(
@@ -104,121 +206,296 @@ class TestSchematizerClient(SchematizerClientTestBase):
             self._assert_source_values(actual, expected_source)
             assert source_api_spy.call_count == 0
 
-    def _assert_schema_values(self, actual, expected):
-        assert actual.schema_id == expected.schema_id
-        assert actual.schema_json == simplejson.loads(expected.schema)
-        self._assert_topic_values(actual.topic, expected.topic)
-        assert actual.base_schema_id == expected.base_schema_id
-        assert actual.created_at == expected.created_at
-        assert actual.updated_at == expected.updated_at
 
-    def _assert_topic_values(self, actual, expected):
-        assert actual.topic_id == expected.topic_id
-        assert actual.name == expected.name
-        self._assert_source_values(actual.source, expected.source)
-        assert actual.contains_pii == expected.contains_pii
-        assert actual.created_at == expected.created_at
-        assert actual.updated_at == expected.updated_at
+class TestGetSourcesByNamespace(SchematizerClientTestBase):
 
-    def _assert_source_values(self, actual, expected):
-        assert actual.source_id == expected.source_id
-        assert actual.name == expected.source
-        assert actual.namespace.namespace_id == expected.namespace.namespace_id
-        assert actual.owner_email == expected.source_owner_email
+    @pytest.fixture(autouse=True)
+    def biz_schema(self, schematizer, yelp_namespace, biz_src_name):
+        return self._register_avro_schema(
+            schematizer,
+            yelp_namespace,
+            biz_src_name
+        )
+
+    @pytest.fixture
+    def biz_src(self, biz_schema):
+        return biz_schema.topic.source
+
+    @pytest.fixture(autouse=True)
+    def usr_schema(self, schematizer, yelp_namespace, usr_src_name):
+        return self._register_avro_schema(
+            schematizer,
+            yelp_namespace,
+            usr_src_name
+        )
+
+    @pytest.fixture
+    def usr_src(self, usr_schema):
+        return usr_schema.topic.source
+
+    @pytest.fixture(autouse=True)
+    def cta_schema(self, schematizer, aux_namespace, cta_src_name):
+        return self._register_avro_schema(
+            schematizer,
+            aux_namespace,
+            cta_src_name
+        )
+
+    def test_get_sources_in_yelp_namespace(
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src,
+        usr_src
+    ):
+        actual = schematizer.get_sources_by_namespace(yelp_namespace)
+
+        expected_resp = sorted([biz_src, usr_src], key=lambda o: o.source_id)
+        sorted_actual = sorted(actual, key=lambda o: o.source_id)
+        for i, actual_src in enumerate(sorted_actual):
+            self._assert_source_values(actual_src, expected_resp[i])
+
+    def test_get_sources_of_bad_namespace(self, schematizer):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.get_sources_by_namespace('bad_namespace')
+        assert e.value.response.status_code == 404
+
+    def test_sources_should_be_cached(self, schematizer, yelp_namespace):
+        sources = schematizer.get_sources_by_namespace(yelp_namespace)
+        with self.attach_spy_on_api(
+            schematizer._client.sources,
+            'get_source_by_id'
+        ) as source_api_spy:
+            actual = schematizer.get_source_by_id(sources[0].source_id)
+            assert actual == sources[0]
+            assert source_api_spy.call_count == 0
+
+
+class TestGetTopicsBySourceId(SchematizerClientTestBase):
+
+    @pytest.fixture(autouse=True)
+    def biz_schema(self, schematizer, yelp_namespace, biz_src_name):
+        return self._register_avro_schema(
+            schematizer,
+            yelp_namespace,
+            biz_src_name
+        )
+
+    @pytest.fixture
+    def biz_topic(self, biz_schema):
+        return biz_schema.topic
+
+    @pytest.fixture(autouse=True)
+    def pii_biz_schema(self, schematizer, yelp_namespace, biz_src_name):
+        return self._register_avro_schema(
+            schematizer,
+            yelp_namespace,
+            biz_src_name,
+            contains_pii=True
+        )
+
+    @pytest.fixture
+    def pii_biz_topic(self, pii_biz_schema):
+        return pii_biz_schema.topic
+
+    def test_get_topics_of_biz_source(self, schematizer, biz_topic, pii_biz_topic):
+        actual = schematizer.get_topics_by_source_id(biz_topic.source.source_id)
+
+        expected_resp = sorted(
+            [biz_topic, pii_biz_topic],
+            key=lambda o: o.topic_id
+        )
+        sorted_actual = sorted(actual, key=lambda o: o.topic_id)
+        for i, actual_topic in enumerate(sorted_actual):
+            self._assert_topic_values(actual_topic, expected_resp[i])
+
+    def test_get_topics_of_bad_source_id(self, schematizer):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.get_topics_by_source_id(0)
+        assert e.value.response.status_code == 404
+
+    def test_topics_should_be_cached(self, schematizer, biz_topic):
+        topics = schematizer.get_topics_by_source_id(biz_topic.source.source_id)
+        with self.attach_spy_on_api(
+            schematizer._client.topics,
+            'get_topic_by_topic_name'
+        ) as topic_api_spy, self.attach_spy_on_api(
+            schematizer._client.sources,
+            'get_source_by_id'
+        ) as source_api_spy:
+            actual = schematizer.get_topic_by_name(topics[0].name)
+            assert actual == topics[0]
+            assert topic_api_spy.call_count == 0
+            assert source_api_spy.call_count == 0
+
+
+class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
+
+    @pytest.fixture(autouse=True)
+    def biz_schema(self, schematizer, yelp_namespace, biz_src_name):
+        return self._register_avro_schema(
+            schematizer,
+            yelp_namespace,
+            biz_src_name
+        )
+
+    @pytest.fixture
+    def biz_topic(self, biz_schema):
+        return biz_schema.topic
+
+    @pytest.fixture(autouse=True)
+    def biz_schema_two(self, schematizer, biz_schema):
+        new_schema = simplejson.loads(biz_schema.schema)
+        new_schema['fields'].append({'type': 'int', 'name': 'bar', 'default': 0})
+        return self._register_avro_schema(
+            schematizer,
+            namespace=biz_schema.topic.source.namespace.name,
+            source=biz_schema.topic.source.name,
+            schema=simplejson.dumps(new_schema)
+        )
+
+    def test_get_latest_schema_of_biz_topic(
+        self,
+        schematizer,
+        biz_topic,
+        biz_schema_two
+    ):
+        actual = schematizer.get_latest_schema_by_topic_name(biz_topic.name)
+        self._assert_schema_values(actual, biz_schema_two)
+
+    def test_latest_schema_of_bad_topic(self, schematizer):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.get_latest_schema_by_topic_name('bad_topic')
+        assert e.value.response.status_code == 500  # TODO: investigate
+
+    def test_latest_schema_should_be_cached(self, schematizer, biz_topic):
+        latest_schema = schematizer.get_latest_schema_by_topic_name(biz_topic.name)
+        with self.attach_spy_on_api(
+            schematizer._client.schemas,
+            'get_schema_by_id'
+        ) as schema_api_spy, self.attach_spy_on_api(
+            schematizer._client.topics,
+            'get_topic_by_topic_name'
+        ) as topic_api_spy, self.attach_spy_on_api(
+            schematizer._client.sources,
+            'get_source_by_id'
+        ) as source_api_spy:
+            actual = schematizer.get_schema_by_id(latest_schema.schema_id)
+            assert actual == latest_schema
+            assert schema_api_spy.call_count == 0
+            assert topic_api_spy.call_count == 0
+            assert source_api_spy.call_count == 0
 
 
 class TestRegisterSchema(SchematizerClientTestBase):
 
-    @property
-    def yelp_namespace(self):
-        return 'yelp_main'
-
-    @property
-    def biz_src(self):
-        return 'biz'
-
-    @property
-    def avro_schema(self):
+    @pytest.fixture
+    def schema_json(self, yelp_namespace, biz_src_name):
         return {
             'type': 'record',
-            'name': self.biz_src,
-            'namespace': self.yelp_namespace,
+            'name': biz_src_name,
+            'namespace': yelp_namespace,
             'fields': [{'type': 'int', 'name': 'biz_id'}]
         }
 
-    @property
-    def avro_schema_str(self):
-        return simplejson.dumps(self.avro_schema)
+    @pytest.fixture
+    def schema_str(self, schema_json):
+        return simplejson.dumps(schema_json)
 
-    @property
-    def source_owner_email(self):
-        return 'dummy@test.com'
-
-    def test_register_schema(self, schematizer):
+    def test_register_schema(
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name,
+        schema_str
+    ):
         actual = schematizer.register_schema(
-            namespace=self.yelp_namespace,
-            source=self.biz_src,
-            schema_str=self.avro_schema_str,
+            namespace=yelp_namespace,
+            source=biz_src_name,
+            schema_str=schema_str,
             source_owner_email=self.source_owner_email,
             contains_pii=False
         )
-        self._assert_schema_values(actual)
+        expected = self._get_schema_by_id(schematizer, actual.schema_id)
+        self._assert_schema_values(actual, expected)
 
-    def test_register_schema_with_base_schema(self, schematizer):
+    def test_register_schema_with_schema_json(
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name,
+        schema_json
+    ):
+        actual = schematizer.register_schema_from_schema_json(
+            namespace=yelp_namespace,
+            source=biz_src_name,
+            schema_json=schema_json,
+            source_owner_email=self.source_owner_email,
+            contains_pii=False
+        )
+        expected = self._get_schema_by_id(schematizer, actual.schema_id)
+        self._assert_schema_values(actual, expected)
+
+    def test_register_schema_with_base_schema(
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name,
+        schema_str
+    ):
         actual = schematizer.register_schema(
-            namespace=self.yelp_namespace,
-            source=self.biz_src,
-            schema_str=self.avro_schema_str,
+            namespace=yelp_namespace,
+            source=biz_src_name,
+            schema_str=schema_str,
             source_owner_email=self.source_owner_email,
             contains_pii=False,
             base_schema_id=10
         )
-        self._assert_schema_values(actual, base_schema_id=10)
+        expected = self._get_schema_by_id(schematizer, actual.schema_id)
+        self._assert_schema_values(actual, expected)
 
-    def _assert_schema_values(self, actual, base_schema_id=None):
-        assert actual.schema_json == self.avro_schema
-        if base_schema_id is None:
-            assert actual.base_schema_id is None
-        else:
-            assert actual.base_schema_id == base_schema_id
-
-        assert not actual.topic.contains_pii
-
-        actual_source = actual.topic.source
-        assert actual_source.name == self.biz_src
-        assert actual_source.owner_email == self.source_owner_email
-        assert actual_source.namespace.name == self.yelp_namespace
-
-    def test_register_same_schema_twice(self, schematizer):
+    def test_register_same_schema_twice(
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name,
+        schema_str
+    ):
         schema_one = schematizer.register_schema(
-            namespace=self.yelp_namespace,
-            source=self.biz_src,
-            schema_str=self.avro_schema_str,
+            namespace=yelp_namespace,
+            source=biz_src_name,
+            schema_str=schema_str,
             source_owner_email=self.source_owner_email,
             contains_pii=False
         )
         schema_two = schematizer.register_schema(
-            namespace=self.yelp_namespace,
-            source=self.biz_src,
-            schema_str=self.avro_schema_str,
+            namespace=yelp_namespace,
+            source=biz_src_name,
+            schema_str=schema_str,
             source_owner_email=self.source_owner_email,
             contains_pii=False
         )
         assert schema_one == schema_two
 
-    def test_register_same_schema_with_diff_base_schema(self, schematizer):
+    def test_register_same_schema_with_diff_base_schema(
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name,
+        schema_str
+    ):
         schema_one = schematizer.register_schema(
-            namespace=self.yelp_namespace,
-            source=self.biz_src,
-            schema_str=self.avro_schema_str,
+            namespace=yelp_namespace,
+            source=biz_src_name,
+            schema_str=schema_str,
             source_owner_email=self.source_owner_email,
             contains_pii=False,
             base_schema_id=10
         )
         schema_two = schematizer.register_schema(
-            namespace=self.yelp_namespace,
-            source=self.biz_src,
-            schema_str=self.avro_schema_str,
+            namespace=yelp_namespace,
+            source=biz_src_name,
+            schema_str=schema_str,
             source_owner_email=self.source_owner_email,
             contains_pii=False,
             base_schema_id=20
@@ -226,18 +503,24 @@ class TestRegisterSchema(SchematizerClientTestBase):
         self._assert_two_schemas_have_diff_topics(schema_one, schema_two)
         assert schema_one.topic.source == schema_two.topic.source
 
-    def test_register_same_schema_with_diff_pii(self, schematizer):
+    def test_register_same_schema_with_diff_pii(
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name,
+        schema_str
+    ):
         schema_one = schematizer.register_schema(
-            namespace=self.yelp_namespace,
-            source=self.biz_src,
-            schema_str=self.avro_schema_str,
+            namespace=yelp_namespace,
+            source=biz_src_name,
+            schema_str=schema_str,
             source_owner_email=self.source_owner_email,
             contains_pii=False
         )
         schema_two = schematizer.register_schema(
-            namespace=self.yelp_namespace,
-            source=self.biz_src,
-            schema_str=self.avro_schema_str,
+            namespace=yelp_namespace,
+            source=biz_src_name,
+            schema_str=schema_str,
             source_owner_email=self.source_owner_email,
             contains_pii=True
         )
@@ -246,19 +529,25 @@ class TestRegisterSchema(SchematizerClientTestBase):
         assert schema_two.topic.contains_pii
         assert schema_one.topic.source == schema_two.topic.source
 
-    def test_register_same_schema_with_diff_source(self, schematizer):
+    def test_register_same_schema_with_diff_source(
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name,
+        schema_str
+    ):
         another_src = 'biz_user'
         schema_one = schematizer.register_schema(
-            namespace=self.yelp_namespace,
-            source=self.biz_src,
-            schema_str=self.avro_schema_str,
+            namespace=yelp_namespace,
+            source=biz_src_name,
+            schema_str=schema_str,
             source_owner_email=self.source_owner_email,
             contains_pii=False
         )
         schema_two = schematizer.register_schema(
-            namespace=self.yelp_namespace,
+            namespace=yelp_namespace,
             source=another_src,
-            schema_str=self.avro_schema_str,
+            schema_str=schema_str,
             source_owner_email=self.source_owner_email,
             contains_pii=False
         )
@@ -266,10 +555,10 @@ class TestRegisterSchema(SchematizerClientTestBase):
 
         src_one = schema_one.topic.source
         src_two = schema_two.topic.source
-        assert src_one.name == self.biz_src
+        assert src_one.name == biz_src_name
         assert src_two.name == another_src
         assert src_one.source_id != src_two.source_id
-        assert src_one.namespace.namespace_id == src_two.namespace.namespace_id
+        assert src_one.namespace == src_two.namespace
 
     def _assert_two_schemas_have_diff_topics(self, schema_one, schema_two):
         assert schema_one.schema_id != schema_two.schema_id
@@ -280,18 +569,6 @@ class TestRegisterSchema(SchematizerClientTestBase):
 
 
 class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
-
-    @property
-    def yelp_namespace(self):
-        return 'yelp_main'
-
-    @property
-    def biz_src(self):
-        return 'biz'
-
-    @property
-    def source_owner_email(self):
-        return 'dummy@test.com'
 
     @property
     def old_create_biz_table_stmt(self):
@@ -305,11 +582,11 @@ class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
     def new_create_biz_table_stmt(self):
         return 'create table biz(id int(11) not null, name varchar(8));'
 
-    @property
-    def avro_schema_of_new_biz_table(self):
+    @pytest.fixture
+    def avro_schema_of_new_biz_table(self, biz_src_name):
         return {
             'type': 'record',
-            'name': self.biz_src,
+            'name': biz_src_name,
             'namespace': '',
             'fields': [
                 {'name': 'id', 'type': 'int'},
@@ -318,54 +595,62 @@ class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
             ]
         }
 
-    def test_register_for_new_table(self, schematizer):
+    def test_register_for_new_table(self, schematizer, yelp_namespace, biz_src_name):
         actual = schematizer.register_schema_from_mysql_stmts(
-            namespace=self.yelp_namespace,
-            source=self.biz_src,
+            namespace=yelp_namespace,
+            source=biz_src_name,
             source_owner_email=self.source_owner_email,
             contains_pii=False,
             new_create_table_stmt=self.new_create_biz_table_stmt
         )
-        self._assert_schema_values(actual)
+        expected = self._get_schema_by_id(schematizer, actual.schema_id)
+        self._assert_schema_values(actual, expected)
 
-    def test_register_for_updated_existing_table(self, schematizer):
+    def test_register_for_updated_existing_table(
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name
+    ):
         actual = schematizer.register_schema_from_mysql_stmts(
-            namespace=self.yelp_namespace,
-            source=self.biz_src,
+            namespace=yelp_namespace,
+            source=biz_src_name,
             source_owner_email=self.source_owner_email,
             contains_pii=False,
             new_create_table_stmt=self.new_create_biz_table_stmt,
             old_create_table_stmt=self.old_create_biz_table_stmt,
             alter_table_stmt=self.alter_biz_table_stmt
         )
-        self._assert_schema_values(actual)
+        expected = self._get_schema_by_id(schematizer, actual.schema_id)
+        self._assert_schema_values(actual, expected)
 
-    def _assert_schema_values(self, actual):
-        assert actual.schema_json == self.avro_schema_of_new_biz_table
-        assert actual.base_schema_id is None
-        assert not actual.topic.contains_pii
-        assert actual.topic.source.name == self.biz_src
-        assert actual.topic.source.owner_email == self.source_owner_email
-        assert actual.topic.source.namespace.name == self.yelp_namespace
-
-    def test_register_same_schema_with_diff_pii(self, schematizer):
+    def test_register_same_schema_with_diff_pii(
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name
+    ):
         non_pii_schema = schematizer.register_schema_from_mysql_stmts(
-            namespace=self.yelp_namespace,
-            source=self.biz_src,
+            namespace=yelp_namespace,
+            source=biz_src_name,
             source_owner_email=self.source_owner_email,
             contains_pii=False,
             new_create_table_stmt=self.new_create_biz_table_stmt
         )
-
         pii_schema = schematizer.register_schema_from_mysql_stmts(
-            namespace=self.yelp_namespace,
-            source=self.biz_src,
+            namespace=yelp_namespace,
+            source=biz_src_name,
             source_owner_email=self.source_owner_email,
             contains_pii=True,
             new_create_table_stmt=self.new_create_biz_table_stmt
         )
+
         assert non_pii_schema.schema_id != pii_schema.schema_id
         assert non_pii_schema.schema_json == pii_schema.schema_json
         assert non_pii_schema.base_schema_id == pii_schema.base_schema_id
+
         assert non_pii_schema.topic.topic_id != pii_schema.topic.topic_id
+        assert not non_pii_schema.topic.contains_pii
+        assert pii_schema.topic.contains_pii
+
         assert non_pii_schema.topic.source == non_pii_schema.topic.source

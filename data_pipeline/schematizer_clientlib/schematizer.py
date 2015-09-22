@@ -102,6 +102,67 @@ class SchematizerClient(object):
             self._update_cache_by_source(_source)
         return _source
 
+    def get_sources_by_namespace(self, namespace):
+        """Get the list of sources in the specified namespace.
+
+        Args:
+            namespace (str): namespace name to look up
+
+        Returns:
+            (List[data_pipeline.schematizer_clientlib.models.source.Source]):
+                The list of schemas sources in the given namespace.
+        """
+        response = self._call_api(
+            api_func_name='namespaces.list_sources_by_namespace',
+            params={'namespace': namespace}
+        )
+        result = []
+        for resp_item in response:
+            _source = _Source.from_response(resp_item)
+            result.append(_source.to_result())
+            self._update_cache_by_source(_source)
+        return result
+
+    def get_topics_by_source_id(self, source_id):
+        """Get the list of topics of specified source id.
+
+        Args:
+            source_id (int): The id of the source to look up
+
+        Returns:
+            (List[data_pipeline.schematizer_clientlib.models.topic.Topic]):
+                The list of topics of given source.
+        """
+        response = self._call_api(
+            api_func_name='sources.list_topics_by_source_id',
+            params={'source_id': source_id}
+        )
+        result = []
+        for resp_item in response:
+            _topic = _Topic.from_response(resp_item)
+            result.append(_topic.to_result())
+            self._update_cache_by_topic(_topic)
+        return result
+
+    def get_latest_schema_by_topic_name(self, topic_name):
+        """Get the latest enabled schema of given topic.
+
+        Args:
+            topic_name (str): The topic name of which
+
+        Returns:
+            (data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
+                The latest enabled avro schema of given topic.  It returns None
+                if no such avro schema can be found.
+        """
+        response = self._call_api(
+            'topics.get_latest_schema_by_topic_name',
+            {'topic_name': topic_name}
+        )
+        _schema = _AvroSchema.from_response(response)
+        self._update_cache_by_schema(_schema)
+        return _schema.to_result()
+
     def register_schema(
         self,
         namespace,

@@ -10,6 +10,21 @@ from data_pipeline.schematizer_clientlib.models.model_base import BaseModel
 from data_pipeline.schematizer_clientlib.models.topic import _Topic
 
 
+"""
+Represent the data of an Avro schema.
+
+Args:
+    schema_id (int): The id of the avro schema.
+    schema_json (dict or list): The Python representation of the avro schema.
+    topic (data_pipeline.schematizer_clientlib.models.topic.Topic): The topic
+        of the avro schema.
+    base_schema_id (Optional[int]): The id of the base schema which this avro
+        schema is changed based on.  `None` if there is no such base schema.
+    created_at (str): The timestamp when the schema is created in ISO-8601
+        format.
+    updated_at (str): The timestamp when the schema is last updated in ISO-8601
+        format.
+"""
 AvroSchema = namedtuple(
     'AvroSchema',
     ['schema_id', 'schema_json', 'topic', 'base_schema_id', 'created_at', 'updated_at']
