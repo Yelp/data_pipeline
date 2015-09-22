@@ -9,6 +9,7 @@ import pytest
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.multiprocessing_consumer import MultiprocessingConsumer
 from tests.base_consumer_test import BaseConsumerTest
+from tests.base_consumer_test import RefreshTopicsTest
 from tests.base_consumer_test import TIMEOUT
 
 
@@ -69,4 +70,16 @@ class TestMultiprocessingConsumer(BaseConsumerTest):
             count=published_count,
             expected_msg_count=published_count - len(msgs),
             expect_buffer_empty=True
+        )
+
+
+class TestRefreshTopics(RefreshTopicsTest):
+
+    @pytest.fixture
+    def consumer_instance(self, topic, team_name):
+        return MultiprocessingConsumer(
+            consumer_name='test_consumer',
+            team_name=team_name,
+            expected_frequency_seconds=ExpectedFrequency.constantly,
+            topic_to_consumer_topic_state_map={topic: None}
         )

@@ -7,6 +7,7 @@ import pytest
 from data_pipeline.consumer import Consumer
 from data_pipeline.expected_frequency import ExpectedFrequency
 from tests.base_consumer_test import BaseConsumerTest
+from tests.base_consumer_test import RefreshTopicsTest
 from tests.base_consumer_test import TIMEOUT
 
 
@@ -38,3 +39,15 @@ class TestConsumer(BaseConsumerTest):
         messages = consumer.get_messages(count=10, blocking=True, timeout=TIMEOUT)
         assert len(messages) == 0
         assert consumer.topic_to_consumer_topic_state_map[topic] is None
+
+
+class TestRefreshTopics(RefreshTopicsTest):
+
+    @pytest.fixture
+    def consumer_instance(self, topic, team_name):
+        return Consumer(
+            consumer_name='test_consumer',
+            team_name=team_name,
+            expected_frequency_seconds=ExpectedFrequency.constantly,
+            topic_to_consumer_topic_state_map={topic: None}
+        )

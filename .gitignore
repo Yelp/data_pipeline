@@ -3,6 +3,7 @@
 .#*
 ._*
 \#*\#
+.cache
 
 # C extensions
 *.so

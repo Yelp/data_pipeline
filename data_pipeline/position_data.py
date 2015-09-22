@@ -8,7 +8,8 @@ from collections import namedtuple
 class PositionData(namedtuple("PositionData", [
     "last_published_message_position_info",
     "topic_to_last_position_info_map",
-    "topic_to_kafka_offset_map"
+    "topic_to_kafka_offset_map",
+    "merged_upstream_position_info_map"
 ])):
     """Contains information about the last messages successfully published into
     Kafka.
@@ -45,6 +46,8 @@ class PositionData(namedtuple("PositionData", [
         {'my-topic': {'upstream_offset': 'offset-info'}}
         >>> position_data.topic_to_kafka_offset_map   # doctest: +ELLIPSIS
         {'my-topic': ...}
+        >>> position_data.merged_upstream_position_info_map
+        {'upstream_offset': 'offset-info'}
 
     Warning:
 
@@ -101,6 +104,28 @@ class PositionData(namedtuple("PositionData", [
                 publised to in this session::
 
                     {'topic1': offset1, 'topic2': offset2}
+
+        merged_upstream_position_info_map (dict): This dictionary starts empty,
+            and contains a deep merge of
+            :attr:`data_pipeline.message.Message.upstream_position_info`
+            for all messages that have been successfully published.  This
+            structure is particularly useful to track the combined upstream
+            position info for multiple topics.
+
+            **Example**:
+
+                This dictionary starts empty, and each messages
+                `upstream_position_info` will be deep-merged into it::
+
+                    {'topic1': {0: offset1}, 'topic2': {0, offset2}}
+
+                When implementing a kafka-to-kafka transformer pipeline, this
+                makes it easy to build up a structure to pass into
+                :meth:`data_pipeline.base_consumer.BaseConsumer.commit_offsets`.
+                Each transformed message would include `upstream_position_info`
+                like::
+
+                    {topic: {partition: offset}}
     """
     # This is a class instead of a namedtuple so the docstring can be
     # set.

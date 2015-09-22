@@ -11,6 +11,7 @@ from yelp_kafka.config import KafkaConsumerConfig
 from data_pipeline.client import Client
 from data_pipeline.config import get_config
 from data_pipeline.message import Message
+from data_pipeline.schema_cache import get_schematizer_client
 
 
 logger = get_config().logger
@@ -422,3 +423,83 @@ class BaseConsumer(Client):
             auto_commit=False,
             partitioner_cooldown=self.partitioner_cooldown
         )
+
+    def refresh_new_topics(
+        self,
+        topic_filter=None,
+        before_refresh_handler=None
+    ):
+        """
+        Get newly created topics that match given criteria and refresh internal
+        topic state maps for these new topics.
+
+        Args:
+            topic_filter (Optional[TopicFilter]): criteria to filter newly
+                created topics.
+            before_refresh_handler (Optional[Callable[[List[schema_cache.Topic]], Any]]):
+                function that performs custom logic before the consumer resets
+                topics.  The function will take a list of new topics filtered
+                by the given filter and currently not in the topic state map.
+                The return value of the function is ignored.
+
+        Returns:
+            [schema_cache.Topic]: A list of new topics.
+        """
+        new_topics = self._get_new_topics(topic_filter)
+
+        new_topics = [topic for topic in new_topics
+                      if topic.name not in self.topic_to_consumer_topic_state_map]
+
+        if before_refresh_handler:
+            before_refresh_handler(new_topics)
+
+        if new_topics:
+            self.stop()
+            self._update_new_topic_state_map(new_topics)
+            self.start()
+
+        return new_topics
+
+    def _get_new_topics(self, topic_filter):
+        schematizer_client = get_schematizer_client()
+        new_topics = schematizer_client.get_topics_by_criteria(
+            namespace_name=topic_filter.namespace_name,
+            source_name=topic_filter.source_name,
+            created_after=topic_filter.created_after
+        )
+        if topic_filter.filter_func:
+            new_topics = topic_filter.filter_func(new_topics)
+        return new_topics
+
+    def _update_new_topic_state_map(self, new_topics):
+        for new_topic in new_topics:
+            self.topic_to_consumer_topic_state_map[new_topic.name] = None
+
+
+class TopicFilter(object):
+    """Criteria to filter topics.
+
+    Args:
+        namespace_name (Optional[str]): filter topics by their namespace name.
+        source_name (Optional[str]): filter topics by their source name. Note
+            that same source name may appear in multiple namespaces.
+        created_after (Optional[int]): get topics created after this timestamp.
+            The topics created at the same timestamp are included as well.
+        filter_func (Optional[function]): function that performs custom logic
+            to filter topics.  The input of this function will be a list of
+            `schema_cache.Topic` already filtered by specified namespace,
+            source, and/or created_after timestamp.  This function should
+            return a list of filtered `schema_cache.Topic`.
+    """
+
+    def __init__(
+        self,
+        namespace_name=None,
+        source_name=None,
+        created_after=None,
+        filter_func=None
+    ):
+        self.namespace_name = namespace_name
+        self.source_name = source_name
+        self.created_after = created_after
+        self.filter_func = filter_func
