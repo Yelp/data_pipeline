@@ -152,7 +152,7 @@ class SharedMessageTest(object):
         )
         assert dry_run_message.meta == valid_meta
 
-    def test_decoded_meta_attributes(self, valid_message_data, valid_meta):
+    def test_meta_attributes_map(self, valid_message_data, valid_meta):
         dry_run_message = self._get_dry_run_message_with_meta(
             valid_message_data,
             valid_meta
@@ -163,10 +163,10 @@ class SharedMessageTest(object):
             return_value='DummyAttributeName'
         ):
             if not valid_meta:
-                assert dry_run_message.decoded_meta_attributes is None
+                assert dry_run_message.meta_attributes_map is None
             else:
                 for meta in valid_meta:
-                    assert dry_run_message.decoded_meta_attributes == {
+                    assert dry_run_message.meta_attributes_map == {
                         'DummyAttributeName': meta
                     }
 

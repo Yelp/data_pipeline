@@ -197,7 +197,7 @@ class Message(object):
         self._meta = meta
 
     @property
-    def decoded_meta_attributes(self):
+    def meta_attributes_map(self):
         if self.meta:
             return {
                 self._get_meta_attribute_name(schema_id): (schema_id, payload)

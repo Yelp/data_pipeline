@@ -6,16 +6,10 @@ import mock
 import pytest
 
 from data_pipeline import message as dp_message
-from data_pipeline.envelope import MetaEnvelope
+from data_pipeline.envelope import Envelope
 
 
-class BaseEnvelopeTest(object):
-
-    def test_schema_implemented(self, envelope):
-        envelope._schema
-
-
-class TestEnvelope(BaseEnvelopeTest):
+class TestEnvelope(object):
 
     @pytest.fixture(params=[
         {'meta': None},
@@ -26,15 +20,15 @@ class TestEnvelope(BaseEnvelopeTest):
 
     @pytest.yield_fixture(autouse=True)
     def mock_meta_envelope(self, meta_param):
-        unpacked_meta = meta_param['meta'][0][1] if meta_param['meta'] else None
+        unpacked_meta = meta_param['meta'][0] if meta_param['meta'] else None
         with mock.patch.object(
-            MetaEnvelope,
-            '_pack_payload_using_schema_id',
-            return_value=bytes(10)
+            Envelope,
+            '_pack_meta_attribute',
+            return_value={'schema_id': 10, 'payload': bytes(20)}
         ), \
             mock.patch.object(
-                MetaEnvelope,
-                '_unpack_payload_using_schema_id',
+                Envelope,
+                '_unpack_meta_attribute',
                 return_value=unpacked_meta
         ):
             yield
@@ -57,14 +51,14 @@ class TestEnvelope(BaseEnvelopeTest):
         )
 
     @pytest.fixture
-    def expected_message(self, message, meta_param):
+    def expected_message(self, message):
         previous_payload = None
         if isinstance(message, dp_message.UpdateMessage):
             previous_payload = message.previous_payload
         return dict(
             encryption_type=None,
             message_type=message.message_type.name,
-            meta=meta_param['meta'],
+            meta=message.meta,
             payload=message.payload,
             previous_payload=previous_payload,
             schema_id=message.schema_id,
