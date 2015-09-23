@@ -227,13 +227,13 @@ class AvroSchemaBuilder(object):
         return self
 
     def remove_field(self, field_name):
-        fields = self._get_fields()
-        field = self._get_field(field_name, fields)
-        fields.remove(field)
+        self._get_fields().remove(self._get_field(field_name))
 
-    def _get_field(self, field_name, fields=None):
-        _fields = fields or self._get_fields()
-        field = next((f for f in _fields if f['name'] == field_name), None)
+    def _get_field(self, field_name):
+        field = next(
+            (f for f in self._get_fields() if f['name'] == field_name),
+            None
+        )
         if not field:
             raise AvroBuildInvalidOperation(
                 'Cannot find field named {0}'.format(field_name)
