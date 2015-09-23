@@ -28,6 +28,11 @@ PayloadFieldDiff = namedtuple('PayloadFieldDiff', [
     'current_value'         # Value of the field after update
 ])
 
+MetaAttribute = namedtuple('MetaAttribute', [
+    'schema_id',            # Schema id of meta attribute, must be an int
+    'payload'               # Payload of meta attribute
+])
+
 
 class Message(object):
     """Encapsulates a data pipeline message with metadata about the message.
@@ -179,29 +184,24 @@ class Message(object):
     @meta.setter
     def meta(self, meta):
         if meta:
-            if not isinstance(meta, list):
+            if any([
+                not isinstance(meta, list),
+                any((
+                    not isinstance(meta_attr, MetaAttribute) or
+                    not isinstance(meta_attr.schema_id, int)
+                )for meta_attr in meta)
+            ]):
                 raise ValueError(
-                    "Meta must be None or list of (schema_id, payload) "
-                    "meta_attribute tuples."
+                    "Meta must be None or list of MetaAttribute tuples."
                 )
-            for meta_attr in meta:
-                if any([
-                    not isinstance(meta_attr, tuple),
-                    len(meta_attr) != 2,
-                    not isinstance(meta_attr[0], int)
-                ]):
-                    raise ValueError(
-                        "Each Meta attribute must be a (schema_id, payload) "
-                        "tuple, schema_id being an integer."
-                    )
         self._meta = meta
 
     @property
     def meta_attributes_map(self):
         if self.meta:
             return {
-                self._get_meta_attribute_name(schema_id): (schema_id, payload)
-                for schema_id, payload in self.meta
+                self._get_meta_attribute_name(meta_attribute.schema_id): meta_attribute
+                for meta_attribute in self.meta
             }
 
     def _get_meta_attribute_name(self, schema_id):
@@ -213,6 +213,14 @@ class Message(object):
             schema_response.topic.source.namespace.name,
             schema_response.topic.source.source
         ])
+
+    @meta_attributes_map.setter
+    def meta_attributes_map(self, meta_attributes_map):
+        for meta_attr in meta_attributes_map.values():
+            for old_meta_attr in self.meta:
+                if old_meta_attr.schema_id == meta_attr.schema_id:
+                    self.meta.remove(old_meta_attr)
+                self.meta.append(meta_attr)
 
     @property
     def timestamp(self):

@@ -63,17 +63,18 @@ class Envelope(object):
         Returns:
             bytes: Avro byte string prepended by magic envelope version byte
         """
-        # The initial "magic byte" is currently unused, but is meant to specify
-        # the envelope schema version.  see y/cep342 for details.  In other
-        # words, the version number of the current schema is the null byte.  In
-        # the event we need to add additional envelope versions, we'll use this
-        # byte to identify it.
-        message_avro_repr = message.avro_repr.copy()
+        message_avro_repr = message.avro_repr
         if message_avro_repr.get('meta'):
             message_avro_repr['meta'] = [
                 self._pack_meta_attribute(schema_id, payload)
                 for schema_id, payload in message_avro_repr['meta']
             ]
+
+        # The initial "magic byte" is currently unused, but is meant to specify
+        # the envelope schema version.  see y/cep342 for details.  In other
+        # words, the version number of the current schema is the null byte.  In
+        # the event we need to add additional envelope versions, we'll use this
+        # byte to identify it.
         return bytes(0) + self._avro_string_writer.encode(message_avro_repr)
 
     def _pack_meta_attribute(self, schema_id, payload):

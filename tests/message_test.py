@@ -12,6 +12,7 @@ from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import create_from_offset_and_message
 from data_pipeline.message import Message
+from data_pipeline.message import MetaAttribute
 from data_pipeline.message import PayloadFieldDiff
 from data_pipeline.message_type import MessageType
 
@@ -133,7 +134,7 @@ class SharedMessageTest(object):
 
     @pytest.fixture(params=[
         None,
-        [(10, 'meta attr payload')],
+        [MetaAttribute(schema_id=10, payload='meta attr payload')],
     ])
     def valid_meta(self, request):
         return request.param

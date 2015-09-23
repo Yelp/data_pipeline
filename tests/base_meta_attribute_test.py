@@ -4,10 +4,10 @@ from __future__ import unicode_literals
 
 import pytest
 
-from data_pipeline.meta_attribute import MetaAttribute
+from data_pipeline.base_meta_attribute import BaseMetaAttribute
 
 
-class TestMetaAttribute(object):
+class TestBaseMetaAttribute(object):
 
     @pytest.fixture(params=[
         'source',
@@ -20,4 +20,4 @@ class TestMetaAttribute(object):
 
     def test_property_not_implemented(self, property_to_implement):
         with pytest.raises(NotImplementedError):
-            MetaAttribute().__getattribute__(property_to_implement)
+            BaseMetaAttribute().__getattribute__(property_to_implement)

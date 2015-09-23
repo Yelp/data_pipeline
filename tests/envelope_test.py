@@ -13,7 +13,7 @@ class TestEnvelope(object):
 
     @pytest.fixture(params=[
         {'meta': None},
-        {'meta': [(10, 'meta attr payload')]}
+        {'meta': [dp_message.MetaAttribute(10, 'meta attr payload')]}
     ])
     def meta_param(self, request):
         return request.param
