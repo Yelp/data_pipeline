@@ -227,13 +227,48 @@ class AvroSchemaBuilder(object):
         return self
 
     def remove_field(self, field_name):
-        fields = self._schema_json.get('fields', [])
-        field = next((f for f in fields if f['name'] == field_name), None)
+        fields = self._get_fields()
+        field = self._get_field(field_name, fields)
+        fields.remove(field)
+
+    def _get_field(self, field_name, fields=None):
+        _fields = fields or self._get_fields()
+        field = next((f for f in _fields if f['name'] == field_name), None)
         if not field:
             raise AvroBuildInvalidOperation(
                 'Cannot find field named {0}'.format(field_name)
             )
-        fields.remove(field)
+        return field
+
+    def _get_fields(self):
+        return self._schema_json.get('fields', [])
+
+    def replace_field(self, old_field_name, new_fields, preserve_null=True):
+        """ Replace an existing field with 0 or more new fields, preserving
+        the 'nullability' on the type if required.
+
+        Args:
+            old_field_name (str): The name of the field to replace.
+            new_fields (list(dict)): A list of dictionaries containing kwargs
+                for `add_field`. At the minimum it is expected that the keys
+                "name" and "typ" will be provided. If this list is empty the
+                effect will be the same as calling `remove_field`
+            preserve_null (boolean): If true then if `old_field_name` had
+                a "null" in it's type list, the new fields will as well.
+        """
+        field = self._get_field(old_field_name)
+        null_type = self.create_null()
+        add_null = preserve_null and null_type in field['type']
+        self.remove_field(old_field_name)
+        for field_kwargs in new_fields:
+            new_field_type = field_kwargs['typ']
+            _kwargs = copy.deepcopy(field_kwargs)
+            if add_null and null_type not in new_field_type:
+                if isinstance(field_kwargs['typ'], list):
+                    _kwargs['typ'].insert(0, null_type)
+                else:
+                    _kwargs['typ'] = [null_type, new_field_type]
+            self.add_field(**_kwargs)
 
     def clear(self):
         """Clear the schemas that are built so far."""
