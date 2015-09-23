@@ -44,7 +44,7 @@ class SchematizerClient(object):
             _schema.topic = self._get_topic_by_name(cached_schema['topic_name'])
         else:
             response = self._call_api(
-                api_func_name='schemas.get_schema_by_id',
+                api=self._client.schemas.get_schema_by_id,
                 params={'schema_id': schema_id}
             )
             _schema = _AvroSchema.from_response(response)
@@ -70,7 +70,7 @@ class SchematizerClient(object):
             _topic.source = self._get_source_by_id(cached_topic['source_id'])
         else:
             response = self._call_api(
-                api_func_name='topics.get_topic_by_topic_name',
+                api=self._client.topics.get_topic_by_topic_name,
                 params={'topic_name': topic_name}
             )
             _topic = _Topic.from_response(response)
@@ -95,7 +95,7 @@ class SchematizerClient(object):
             _source = _Source.from_cache_value(cached_source)
         else:
             response = self._call_api(
-                api_func_name='sources.get_source_by_id',
+                api=self._client.sources.get_source_by_id,
                 params={'source_id': source_id}
             )
             _source = _Source.from_response(response)
@@ -113,7 +113,7 @@ class SchematizerClient(object):
                 The list of schemas sources in the given namespace.
         """
         response = self._call_api(
-            api_func_name='namespaces.list_sources_by_namespace',
+            api=self._client.namespaces.list_sources_by_namespace,
             params={'namespace': namespace}
         )
         result = []
@@ -134,7 +134,7 @@ class SchematizerClient(object):
                 The list of topics of given source.
         """
         response = self._call_api(
-            api_func_name='sources.list_topics_by_source_id',
+            api=self._client.sources.list_topics_by_source_id,
             params={'source_id': source_id}
         )
         result = []
@@ -156,8 +156,8 @@ class SchematizerClient(object):
                 if no such avro schema can be found.
         """
         response = self._call_api(
-            'topics.get_latest_schema_by_topic_name',
-            {'topic_name': topic_name}
+            api=self._client.topics.get_latest_schema_by_topic_name,
+            params={'topic_name': topic_name}
         )
         _schema = _AvroSchema.from_response(response)
         self._update_cache_by_schema(_schema)
@@ -199,7 +199,7 @@ class SchematizerClient(object):
         if base_schema_id:
             post_body['base_schema_id'] = base_schema_id
         response = self._call_api(
-            api_func_name='schemas.register_schema',
+            api=self._client.schemas.register_schema,
             post_body=post_body
         )
 
@@ -283,7 +283,7 @@ class SchematizerClient(object):
         if alter_table_stmt:
             post_body['alter_table_stmt'] = alter_table_stmt
         response = self._call_api(
-            api_func_name='schemas.register_schema_from_mysql_stmts',
+            api=self._client.schemas.register_schema_from_mysql_stmts,
             post_body=post_body
         )
 
@@ -291,18 +291,45 @@ class SchematizerClient(object):
         self._update_cache_by_schema(_schema)
         return _schema.to_result()
 
-    def refresh_new_topics(self):
-        # placeholder
-        pass
+    def get_topics_by_criteria(
+        self,
+        namespace_name=None,
+        source_name=None,
+        created_after=None
+    ):
+        """Get all the topics that match specified criteria.  If no criterion
+        is specified, it returns all the topics.
 
-    def _call_api(self, api_func_name, params=None, post_body=None):
+        Args:
+            namespace_name (Optional[str]): namespace the topics belong to
+            source_name (Optional[str]): name of the source topics belong to
+            created_after (Optional[int]): Epoch timestamp the topics should be
+                created after.  The topics created at the same timestamp are
+                also included.
+
+        Returns:
+            (List[data_pipeline.schematizer_clientlib.models.topic.Topic]):
+                list of topics that match given criteria.
+        """
+        response = self._call_api(
+            api=self._client.topics.get_topics_by_criteria,
+            params={
+                'namespace': namespace_name,
+                'source': source_name,
+                'created_after': created_after
+            }
+        )
+        result = []
+        for resp_item in response:
+            _topic = _Topic.from_response(resp_item)
+            result.append(_topic.to_result())
+            self._update_cache_by_topic(_topic)
+        return result
+
+    def _call_api(self, api, params=None, post_body=None):
         # TODO(DATAPIPE-207|joshszep): Include retry strategy support
-        api_func = self._client
-        for func in api_func_name.split('.'):
-            api_func = getattr(api_func, func)
-
         request_params = {'body': post_body} if post_body else params or {}
-        request = api_func(**request_params)
+        request = api(**request_params)
         response = request.result()
         return response
 
