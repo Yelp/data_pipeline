@@ -23,11 +23,6 @@ class SharedMessageTest(object):
     def message(self, valid_message_data):
         return self.message_class(**valid_message_data)
 
-    @pytest.fixture
-    def message_with_pii(self, valid_message_data):
-        valid_data = self._make_message_data(valid_message_data, contains_pii=True)
-        return self.message_class(**valid_data)
-
     @pytest.fixture(params=[
         None,
         100,
@@ -114,8 +109,8 @@ class SharedMessageTest(object):
     def test_message_type(self, message):
         assert message.message_type == self.expected_message_type
 
-    def test_message_contains_pii(self, message_with_pii):
-        assert message_with_pii.contains_pii is True
+    def test_message_contains_pii(self, message):
+        assert message.contains_pii is False
 
     @pytest.fixture(params=[
         'not a list',
@@ -233,7 +228,8 @@ class PayloadOnlyMessageTest(SharedMessageTest):
             'schema_id': 123,
             'payload': payload,
             'payload_data': payload_data,
-            'uuid': FastUUID().uuid4()
+            'uuid': FastUUID().uuid4(),
+            'contains_pii': False
         }
 
     def test_rejects_previous_payload(self, message):
@@ -322,7 +318,8 @@ class TestUpdateMessage(SharedMessageTest):
             'payload_data': payload_data,
             'previous_payload': previous_payload,
             'previous_payload_data': previous_payload_data,
-            'uuid': FastUUID().uuid4()
+            'uuid': FastUUID().uuid4(),
+            'contains_pii': False
         }
 
     def test_rejects_invalid_previous_payload(

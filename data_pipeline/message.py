@@ -162,6 +162,8 @@ class Message(object):
         encrypted, because PII information will be used to indicate to various
         systems how to handle the data, in addition to automatic decryption.
         """
+        if self._contains_pii is None:
+            self._contains_pii = get_schema_cache().get_contains_pii_for_schema_id(self.schema_id)
         return self._contains_pii
 
     @contains_pii.setter
@@ -338,7 +340,7 @@ class Message(object):
         payload=None,
         payload_data=None,
         uuid=None,
-        contains_pii=False,
+        contains_pii=None,
         timestamp=None,
         upstream_position_info=None,
         kafka_position_info=None,
@@ -354,7 +356,6 @@ class Message(object):
         self.topic = topic
         self.schema_id = schema_id
         self.uuid = uuid
-        self.contains_pii = contains_pii
         self.timestamp = timestamp
         self.upstream_position_info = upstream_position_info
         self.kafka_position_info = kafka_position_info
@@ -362,6 +363,9 @@ class Message(object):
         self.dry_run = dry_run
         self.meta = meta
         self._set_payload_or_payload_data(payload, payload_data)
+        # TODO(DATAPIPE-416|psuben):
+        # Make it so contains_pii is no longer overrideable.
+        self.contains_pii = contains_pii
 
     def _set_payload_or_payload_data(self, payload, payload_data):
         # payload or payload_data are lazily constructed only on request
@@ -402,7 +406,6 @@ class Message(object):
             self.schema_id,
             self.payload,
             self.uuid,
-            self.contains_pii,
             self.timestamp,
             self.upstream_position_info,
             self.kafka_position_info,
@@ -494,7 +497,7 @@ class UpdateMessage(Message):
         previous_payload=None,
         previous_payload_data=None,
         uuid=None,
-        contains_pii=False,
+        contains_pii=None,
         timestamp=None,
         upstream_position_info=None,
         kafka_position_info=None,

@@ -94,7 +94,7 @@ class FileBootstrapperBase(object):
         schema_ref (docs, notes, etc) and return the final schema_result.
         """
         source_ref = self.schema_ref.get_source_ref(
-            schema_result.topic.source.source
+            schema_result.topic.source.name
         )
         if not source_ref:
             return schema_result
@@ -141,7 +141,7 @@ class FileBootstrapperBase(object):
         """ Update the "doc" attributes of the schema and all it's fields,
         returning back the result of the register_schema call.
         """
-        source = schema_result.topic.source.source
+        source = schema_result.topic.source.name
         schema_json = json.loads(schema_result.schema)
         if self.override_metadata or not schema_json.get('doc'):
             schema_json['doc'] = self.schema_ref.get_ref_val(source_ref, 'doc')
@@ -517,7 +517,7 @@ class BootstrapperBatch(yelp_batch.batch.Batch):
                         get_config().schematizer_port
                     ),
                     namespace=schema_result.topic.source.namespace.name,
-                    source=schema_result.topic.source.source
+                    source=schema_result.topic.source.name
                 )
             )
 
