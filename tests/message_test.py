@@ -84,7 +84,7 @@ class SharedMessageTest(object):
             payload_data={'data': 'foo'}
         )
 
-    def _assert_invalid_data(self, valid_data, error=ValueError, **data_overrides):
+    def _assert_invalid_data(self, valid_data, error=TypeError, **data_overrides):
         invalid_data = self._make_message_data(valid_data, **data_overrides)
         with pytest.raises(error):
             self.message_class(**invalid_data)

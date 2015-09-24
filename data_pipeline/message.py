@@ -42,7 +42,7 @@ class Message(object):
     Args:
         schema_id (int): Identifies the schema used to encode the payload
         topic (Optional[str]): Kafka topic to publish into.  It is highly
-            recommended to leave it not assigned and let the Schematizer decide
+            recommended to leave it unassigned and let the Schematizer decide
             the topic of the schema.  Use caution when overriding the topic.
         payload (bytes): Avro-encoded message - encoded with schema identified
             by `schema_id`.  Either `payload` or `payload_data` must be provided
@@ -111,7 +111,9 @@ class Message(object):
 
     @topic.setter
     def topic(self, topic):
-        if not isinstance(topic, str) or len(topic) == 0:
+        if not isinstance(topic, str):
+            raise TypeError("Topic must be a non-empty string")
+        if len(topic) == 0:
             raise ValueError("Topic must be a non-empty string")
         self._topic = topic
 
@@ -123,7 +125,7 @@ class Message(object):
     @schema_id.setter
     def schema_id(self, schema_id):
         if not isinstance(schema_id, int):
-            raise ValueError("Schema id should be an int")
+            raise TypeError("Schema id should be an int")
         self._schema_id = schema_id
 
     @property
@@ -148,7 +150,7 @@ class Message(object):
             # second.
             uuid = self._fast_uuid.uuid4()
         elif len(uuid) != 16:
-            raise ValueError(
+            raise TypeError(
                 "UUIDs should be exactly 16 bytes.  Conforming UUID's can be "
                 "generated with `import uuid; uuid.uuid4().bytes`."
             )
@@ -217,7 +219,7 @@ class Message(object):
     def upstream_position_info(self, upstream_position_info):
         if (upstream_position_info is not None and
                 not isinstance(upstream_position_info, dict)):
-            raise ValueError("upstream_position_info should be None or a dict")
+            raise TypeError("upstream_position_info should be None or a dict")
         self._upstream_position_info = upstream_position_info
 
     @property
@@ -232,7 +234,7 @@ class Message(object):
     def kafka_position_info(self, kafka_position_info):
         if (kafka_position_info is not None and
                 not isinstance(kafka_position_info, KafkaPositionInfo)):
-            raise ValueError(
+            raise TypeError(
                 "kafka_position_info should be None or a KafkaPositionInfo"
             )
         self._kafka_position_info = kafka_position_info
@@ -264,7 +266,7 @@ class Message(object):
     @payload.setter
     def payload(self, payload):
         if not isinstance(payload, bytes):
-            raise ValueError("Payload must be bytes")
+            raise TypeError("Payload must be bytes")
         self._payload = payload
         self._payload_data = None  # force payload_data to be re-decoded
 
@@ -276,7 +278,7 @@ class Message(object):
     @payload_data.setter
     def payload_data(self, payload_data):
         if not isinstance(payload_data, dict):
-            raise ValueError("Payload data must be a dict")
+            raise TypeError("Payload data must be a dict")
         self._payload_data = payload_data
         self._payload = None  # force payload to be re-encoded
 
@@ -287,9 +289,9 @@ class Message(object):
     @keys.setter
     def keys(self, keys):
         if keys is not None and not isinstance(keys, tuple):
-            raise ValueError("Keys must be a tuple.")
+            raise TypeError("Keys must be a tuple.")
         if keys and not all(isinstance(key, unicode) for key in keys):
-            raise ValueError("Element of keys must be unicode.")
+            raise TypeError("Element of keys must be unicode.")
         self._keys = keys
 
     def __init__(
@@ -335,13 +337,13 @@ class Message(object):
         is_not_none_payload_data = payload_data is not None
 
         if is_not_none_payload and is_not_none_payload_data:
-            raise ValueError("Cannot pass both payload and payload_data.")
+            raise TypeError("Cannot pass both payload and payload_data.")
         if is_not_none_payload:
             self.payload = payload
         elif is_not_none_payload_data:
             self.payload_data = payload_data
         else:
-            raise ValueError("Either payload or payload_data must be provided.")
+            raise TypeError("Either payload or payload_data must be provided.")
 
     def __eq__(self, other):
         return type(self) is type(other) and self._eq_key == other._eq_key
@@ -493,7 +495,7 @@ class UpdateMessage(Message):
         is_not_none_previous_payload_data = previous_payload_data is not None
 
         if is_not_none_previous_payload and is_not_none_previous_payload_data:
-            raise ValueError(
+            raise TypeError(
                 "Cannot pass both previous_payload and previous_payload_data."
             )
         if is_not_none_previous_payload:
@@ -501,7 +503,7 @@ class UpdateMessage(Message):
         elif is_not_none_previous_payload_data:
             self.previous_payload_data = previous_payload_data
         else:
-            raise ValueError(
+            raise TypeError(
                 "Either previous_payload or previous_payload_data must be provided."
             )
 
@@ -528,7 +530,7 @@ class UpdateMessage(Message):
     @previous_payload.setter
     def previous_payload(self, previous_payload):
         if not isinstance(previous_payload, bytes):
-            raise ValueError("Previous payload must be bytes")
+            raise TypeError("Previous payload must be bytes")
         self._previous_payload = previous_payload
         self._previous_payload_data = None  # force previous_payload_data to be re-decoded
 
@@ -540,7 +542,7 @@ class UpdateMessage(Message):
     @previous_payload_data.setter
     def previous_payload_data(self, previous_payload_data):
         if not isinstance(previous_payload_data, dict):
-            raise ValueError("Previous payload data must be a dict")
+            raise TypeError("Previous payload data must be a dict")
 
         self._previous_payload_data = previous_payload_data
         self._previous_payload = None  # force previous_payload to be re-encoded
