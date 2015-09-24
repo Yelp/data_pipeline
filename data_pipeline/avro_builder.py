@@ -227,9 +227,9 @@ class AvroSchemaBuilder(object):
         return self
 
     def remove_field(self, field_name):
-        self._get_fields().remove(self._get_field(field_name))
+        self._get_fields().remove(self.get_field(field_name))
 
-    def _get_field(self, field_name):
+    def get_field(self, field_name):
         field = next(
             (f for f in self._get_fields() if f['name'] == field_name),
             None
@@ -256,7 +256,7 @@ class AvroSchemaBuilder(object):
             preserve_null (boolean): If true then if `old_field_name` had
                 a "null" in it's type list, the new fields will as well.
         """
-        field = self._get_field(old_field_name)
+        field = self.get_field(old_field_name)
         null_type = self.create_null()
         add_null = preserve_null and null_type in field['type']
         self.remove_field(old_field_name)
