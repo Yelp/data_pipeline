@@ -232,6 +232,7 @@ class Message(object):
 
     @kafka_position_info.setter
     def kafka_position_info(self, kafka_position_info):
+        # TODO [clin|DATAPIPE-469] re-visit the style when we get a chance
         if (kafka_position_info is not None and
                 not isinstance(kafka_position_info, KafkaPositionInfo)):
             raise TypeError(
@@ -352,6 +353,7 @@ class Message(object):
         return not self.__eq__(other)
 
     def __hash__(self):
+        # TODO [clin|DATAPIPE-468] Revisit this when we get a chance
         return hash(self._eq_key)
 
     @property
