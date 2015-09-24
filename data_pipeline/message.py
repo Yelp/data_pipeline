@@ -217,8 +217,11 @@ class Message(object):
 
     @upstream_position_info.setter
     def upstream_position_info(self, upstream_position_info):
-        if (upstream_position_info is not None and
-                not isinstance(upstream_position_info, dict)):
+        # TODO [clin|DATAPIPE-469] re-visit the style when we get a chance
+        if (
+            upstream_position_info is not None and
+            not isinstance(upstream_position_info, dict)
+        ):
             raise TypeError("upstream_position_info should be None or a dict")
         self._upstream_position_info = upstream_position_info
 
@@ -233,8 +236,10 @@ class Message(object):
     @kafka_position_info.setter
     def kafka_position_info(self, kafka_position_info):
         # TODO [clin|DATAPIPE-469] re-visit the style when we get a chance
-        if (kafka_position_info is not None and
-                not isinstance(kafka_position_info, KafkaPositionInfo)):
+        if (
+            kafka_position_info is not None and
+            not isinstance(kafka_position_info, KafkaPositionInfo)
+        ):
             raise TypeError(
                 "kafka_position_info should be None or a KafkaPositionInfo"
             )
