@@ -62,7 +62,7 @@ class TestSchemaCache(object):
         assert schema_response.schema == schema
         assert schema_response.topic.name == topic
         assert schema_response.topic.source.namespace.name == 'test_namespace'
-        assert schema_response.topic.source.source == 'test_source'
+        assert schema_response.topic.source.name == 'test_source'
 
     def test_register_transformed_schema_repeated_alternate_source(
             self,
@@ -143,9 +143,9 @@ class TestSchemaCache(object):
             self.sample_schema_create_from_mysql_stmts_data['contains_pii']
         assert schema_response.topic.source.namespace.name == \
             self.sample_schema_create_from_mysql_stmts_data['namespace']
-        assert schema_response.topic.source.source == \
+        assert schema_response.topic.source.name == \
             self.sample_schema_create_from_mysql_stmts_data['source']
-        assert schema_response.topic.source.source_owner_email == \
+        assert schema_response.topic.source.owner_email == \
             self.sample_schema_create_from_mysql_stmts_data['owner_email']
 
     def test_register_schema_from_mysql_stmts_alter(

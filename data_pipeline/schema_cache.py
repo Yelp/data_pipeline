@@ -331,7 +331,7 @@ class SchematizerClient(object):
         # once the Source namedtuple is replaced with the class.
         return Source(
             source_id=response.source_id,
-            name=response.source,
+            name=response.name,
             namespace=self._construct_namespace(response.namespace),
             created_at=response.created_at
         )
