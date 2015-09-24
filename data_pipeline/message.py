@@ -207,7 +207,7 @@ class Message(object):
             }
 
     def _get_meta_attribute_name(self, schema_id):
-        # TODO: Use new schematizer_client methods before pushing this
+        # TODO(askatti|DATAPIPE-467): Use new schematizer_client here.
         schema_response = get_schema_cache().schematizer_client.schemas.get_schema_by_id(
             schema_id=schema_id
         ).result()

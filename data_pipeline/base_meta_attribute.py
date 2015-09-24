@@ -49,7 +49,7 @@ class BaseMetaAttribute(object):
 
     @cached_property
     def schema_id(self):
-        # TODO: Use new schematizer_client methods before pushing this
+        # TODO(askatti|DATAPIPE-467): Use new schematizer_client here.
         schema_info = self.schematizer_client.register_transformed_schema(
             base_schema_id=0,
             namespace=self.namespace,
