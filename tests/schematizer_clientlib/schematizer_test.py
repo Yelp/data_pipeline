@@ -538,7 +538,7 @@ class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
 
     @property
     def alter_biz_table_stmt(self):
-        return 'alter table biz;'
+        return 'alter table biz add column name varchar(8);'
 
     @property
     def new_create_biz_table_stmt(self):
