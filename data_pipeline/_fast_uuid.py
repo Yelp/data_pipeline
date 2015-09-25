@@ -93,11 +93,11 @@ class FastUUID(object):
                     "uuid implementation.  On ubuntu, apt-get install uuid-dev."
                 )
 
-            if not FastUUID._libuuid_unavailable:
-                # Keeping only one copy of this around does result in
-                # pretty substantial performance improvements - in the 10,000s of
-                # messages per second range
-                self.output = FastUUID._ffi.new("uuid_t")
+        if not FastUUID._libuuid_unavailable:
+            # Keeping only one copy of this around does result in
+            # pretty substantial performance improvements - in the 10,000s of
+            # messages per second range
+            self.output = FastUUID._ffi.new("uuid_t")
 
     def uuid1(self):
         """Generates a uuid1 - a device specific uuid

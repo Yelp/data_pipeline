@@ -16,17 +16,29 @@ class TestFastUUID(object):
 
     @pytest.yield_fixture
     def fast_uuid(self, libuuid_available):
-        # reset the ffi cache
-        FastUUID._ffi = None
-        FastUUID._libuuid = None
-        FastUUID._libuuid_unavailable = False
+        # Save the existing state
+        initial_ffi = FastUUID._ffi
+        initial_libuuid = FastUUID._libuuid
+        initial_libuuid_unavailable = FastUUID._libuuid_unavailable
 
-        if libuuid_available:
-            yield FastUUID()
-        else:
-            with mock.patch.object(data_pipeline._fast_uuid, 'FFI') as ffi_mock:
-                ffi_mock.side_effect = Exception
+        try:
+            # reset the ffi cache
+            FastUUID._ffi = None
+            FastUUID._libuuid = None
+            FastUUID._libuuid_unavailable = False
+
+            if libuuid_available:
                 yield FastUUID()
+            else:
+                with mock.patch.object(data_pipeline._fast_uuid, 'FFI') as ffi_mock:
+                    ffi_mock.side_effect = Exception
+                    yield FastUUID()
+        finally:
+            # Restore the existing state - this will allow already instantiated
+            # FastUUID instances to keep working.
+            FastUUID._ffi = initial_ffi
+            FastUUID._libuuid = initial_libuuid
+            FastUUID._libuuid_unavailable = initial_libuuid_unavailable
 
     def test_uuid1(self, fast_uuid):
         assert self._is_valid_uuid(fast_uuid.uuid1())
