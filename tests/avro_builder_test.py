@@ -562,3 +562,49 @@ class TestAvroSchemaBuilder(object):
             builder.begin_with_schema_json(schema_json)
             builder.remove_field('bar1')
             builder.end()
+
+    def test_replace_field_preserve_null_true(self, builder):
+        schema_json = {
+            'type': 'record',
+            'name': self.name,
+            'fields': [{'name': 'old', 'type': ['null', 'int']}]
+        }
+        builder.begin_with_schema_json(schema_json)
+        builder.replace_field(
+            old_field_name='old',
+            new_fields=[
+                {'name': 'new_string', 'typ': 'string'},
+                {'name': 'new_double_bytes', 'typ': ['double', 'bytes']},
+                {'name': 'new_boolean_null', 'typ': ['null', 'boolean']},
+            ],
+            preserve_null=True
+        )
+        record = builder.end()
+        assert record['fields'] == [
+            {'name': 'new_string', 'type': ['null', 'string']},
+            {'name': 'new_double_bytes', 'type': ['null', 'double', 'bytes']},
+            {'name': 'new_boolean_null', 'type': ['null', 'boolean']},
+        ]
+
+    def test_replace_field_preserve_null_false(self, builder):
+        schema_json = {
+            'type': 'record',
+            'name': self.name,
+            'fields': [{'name': 'old', 'type': ['null', 'int']}]
+        }
+        builder.begin_with_schema_json(schema_json)
+        builder.replace_field(
+            old_field_name='old',
+            new_fields=[
+                {'name': 'new_string', 'typ': 'string'},
+                {'name': 'new_double_bytes', 'typ': ['double', 'bytes']},
+                {'name': 'new_boolean_null', 'typ': ['null', 'boolean']},
+            ],
+            preserve_null=False
+        )
+        record = builder.end()
+        assert record['fields'] == [
+            {'name': 'new_string', 'type': 'string'},
+            {'name': 'new_double_bytes', 'type': ['double', 'bytes']},
+            {'name': 'new_boolean_null', 'type': ['null', 'boolean']},
+        ]
