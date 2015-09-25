@@ -9,7 +9,9 @@ import multiprocessing
 
 import mock
 import pytest
+import simplejson as json
 
+import data_pipeline.producer
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
 from data_pipeline.expected_frequency import ExpectedFrequency
@@ -489,8 +491,10 @@ class TestEnsureMessagesPublished(TestProducerBase):
         self, topic, messages, producer, envelope, topic_offsets
     ):
         with setup_capture_new_messages_consumer(topic) as consumer:
-            producer.ensure_messages_published(messages, topic_offsets)
+            with mock.patch.object(data_pipeline.producer, 'logger') as mock_logger:
+                producer.ensure_messages_published(messages, topic_offsets)
             self._assert_all_messages_published(consumer, envelope)
+            self._assert_logged_info_correct(mock_logger, 0, topic, topic_offsets)
 
     def test_ensure_messages_published_when_partially_published(
         self, topic, messages, producer, envelope, topic_offsets
@@ -498,9 +502,16 @@ class TestEnsureMessagesPublished(TestProducerBase):
         with setup_capture_new_messages_consumer(topic) as consumer:
             for message in messages[:2]:
                 producer.publish(message)
-                producer.flush()
-            producer.ensure_messages_published(messages, topic_offsets)
+            producer.flush()
+            with mock.patch.object(data_pipeline.producer, 'logger') as mock_logger:
+                producer.ensure_messages_published(messages, topic_offsets)
             self._assert_all_messages_published(consumer, envelope)
+            self._assert_logged_info_correct(
+                mock_logger,
+                len(messages[:2]),
+                topic,
+                topic_offsets
+            )
 
     def test_ensure_messages_published_when_all_published(
         self, topic, messages, producer, envelope, topic_offsets
@@ -508,19 +519,52 @@ class TestEnsureMessagesPublished(TestProducerBase):
         with setup_capture_new_messages_consumer(topic) as consumer:
             for message in messages:
                 producer.publish(message)
-                producer.flush()
-            producer.ensure_messages_published(messages, topic_offsets)
+            producer.flush()
+            with mock.patch.object(data_pipeline.producer, 'logger') as mock_logger:
+                producer.ensure_messages_published(messages, topic_offsets)
             self._assert_all_messages_published(consumer, envelope)
+            self._assert_logged_info_correct(mock_logger, len(messages), topic, topic_offsets)
 
     def test_ensure_messages_published_fails_when_overpublished(
         self, topic, messages, producer, topic_offsets
     ):
         for message in messages:
             producer.publish(message)
-            producer.flush()
+        producer.flush()
 
         with pytest.raises(PublicationUnensurableError):
-            producer.ensure_messages_published(messages[:2], topic_offsets)
+            with mock.patch.object(data_pipeline.producer, 'logger') as mock_logger:
+                producer.ensure_messages_published(messages[:2], topic_offsets)
+
+        self._assert_logged_info_correct(
+            mock_logger,
+            len(messages),
+            topic,
+            topic_offsets,
+            message_count=len(messages[:2])
+        )
+
+    def _assert_logged_info_correct(
+        self,
+        mock_logger,
+        messages_already_published,
+        topic,
+        topic_offsets,
+        message_count=None
+    ):
+        if message_count is None:
+            message_count = self.number_of_messages
+        assert mock_logger.info.call_count == 1
+        (log_line,), _ = mock_logger.info.call_args
+        logged_info = json.loads(log_line)
+
+        assert logged_info['topic'] == topic
+        assert logged_info['message_count'] == message_count
+        assert logged_info['saved_offset'] == topic_offsets.get(topic, 0)
+        assert logged_info['already_published_count'] == messages_already_published
+        assert logged_info['high_watermark'] == (
+            topic_offsets.get(topic, 0) + messages_already_published
+        )
 
     def _assert_all_messages_published(self, consumer, envelope):
         messages = consumer.get_messages(count=self.number_of_messages * 2)
