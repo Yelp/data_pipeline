@@ -7,10 +7,11 @@ import os
 from uuid import UUID
 
 import pytest
+from yelp_avro.avro_string_writer import AvroStringWriter
+from yelp_avro.testing_helpers.generate_payload_data import \
+    generate_payload_data
+from yelp_avro.util import get_avro_schema_object
 
-from data_pipeline._avro_util import AvroStringWriter
-from data_pipeline._avro_util import generate_payload_data
-from data_pipeline._avro_util import get_avro_schema_object
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import CreateMessage
