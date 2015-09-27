@@ -102,11 +102,11 @@ class SchematizerClient(object):
             self._update_cache_by_source(_source)
         return _source
 
-    def get_sources_by_namespace(self, namespace):
+    def get_sources_by_namespace(self, namespace_name):
         """Get the list of sources in the specified namespace.
 
         Args:
-            namespace (str): namespace name to look up
+            namespace_name (str): namespace name to look up
 
         Returns:
             (List[data_pipeline.schematizer_clientlib.models.source.Source]):
@@ -114,7 +114,7 @@ class SchematizerClient(object):
         """
         response = self._call_api(
             api=self._client.namespaces.list_sources_by_namespace,
-            params={'namespace': namespace}
+            params={'namespace': namespace_name}
         )
         result = []
         for resp_item in response:

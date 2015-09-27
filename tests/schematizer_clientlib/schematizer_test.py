@@ -230,10 +230,10 @@ class TestGetSourcesByNamespace(SchematizerClientTestBase):
     ):
         actual = schematizer.get_sources_by_namespace(yelp_namespace)
 
-        expected_resp = sorted([biz_src, usr_src], key=lambda o: o.source_id)
+        sorted_expected = sorted([biz_src, usr_src], key=lambda o: o.source_id)
         sorted_actual = sorted(actual, key=lambda o: o.source_id)
-        for i, actual_src in enumerate(sorted_actual):
-            self._assert_source_values(actual_src, expected_resp[i])
+        for actual_src, expected_resp in zip(sorted_actual, sorted_expected):
+            self._assert_source_values(actual_src, expected_resp)
 
     def test_get_sources_of_bad_namespace(self, schematizer):
         with pytest.raises(swaggerpy_exc.HTTPError) as e:
@@ -268,13 +268,13 @@ class TestGetTopicsBySourceId(SchematizerClientTestBase):
     def test_get_topics_of_biz_source(self, schematizer, biz_topic, pii_biz_topic):
         actual = schematizer.get_topics_by_source_id(biz_topic.source.source_id)
 
-        expected_resp = sorted(
+        sorted_expected = sorted(
             [biz_topic, pii_biz_topic],
             key=lambda o: o.topic_id
         )
         sorted_actual = sorted(actual, key=lambda o: o.topic_id)
-        for i, actual_topic in enumerate(sorted_actual):
-            self._assert_topic_values(actual_topic, expected_resp[i])
+        for actual_topic, expected_resp in zip(sorted_actual, sorted_expected):
+            self._assert_topic_values(actual_topic, expected_resp)
 
     def test_get_topics_of_bad_source_id(self, schematizer):
         with pytest.raises(swaggerpy_exc.HTTPError) as e:
@@ -634,11 +634,11 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
 
     @pytest.fixture
     def yelp_topics(self, yelp_biz_topic, yelp_usr_topic):
-        return sorted([yelp_biz_topic, yelp_usr_topic], key=lambda o: o.topic_id)
+        return [yelp_biz_topic, yelp_usr_topic]
 
     @pytest.fixture
     def biz_src_topics(self, yelp_biz_topic, aux_biz_topic):
-        return sorted([yelp_biz_topic, aux_biz_topic], key=lambda o: o.topic_id)
+        return [yelp_biz_topic, aux_biz_topic]
 
     def test_get_topics_of_yelp_namespace(
         self,
@@ -649,7 +649,7 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
         actual = schematizer.get_topics_by_criteria(
             namespace_name=yelp_namespace
         )
-        self._assert_topics_values(actual, expected_resp=yelp_topics)
+        self._assert_topics_values(actual, expected_topics=yelp_topics)
 
     def test_get_topics_of_biz_source(
         self,
@@ -660,12 +660,13 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
         actual = schematizer.get_topics_by_criteria(
             source_name=biz_src_name
         )
-        self._assert_topics_values(actual, expected_resp=biz_src_topics)
+        self._assert_topics_values(actual, expected_topics=biz_src_topics)
 
-    def _assert_topics_values(self, actual, expected_resp):
+    def _assert_topics_values(self, actual, expected_topics):
+        sorted_expected = sorted(expected_topics, key=lambda o: o.topic_id)
         sorted_actual = sorted(actual, key=lambda o: o.topic_id)
-        for i, actual_topic in enumerate(sorted_actual):
-            self._assert_topic_values(actual_topic, expected_resp[i])
+        for actual_topic, expected_resp in zip(sorted_actual, sorted_expected):
+            self._assert_topic_values(actual_topic, expected_resp)
 
     def test_get_topics_of_bad_namesapce_name(self, schematizer):
         actual = schematizer.get_topics_by_criteria(namespace_name='foo')
