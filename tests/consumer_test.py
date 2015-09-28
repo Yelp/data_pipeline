@@ -35,7 +35,7 @@ class TestConsumer(BaseConsumerTest):
             force_payload_decode=request.param['force_payload_decode']
         )
 
-    def test_get_messages_empty(self, consumer, topic,):
+    def test_get_messages_empty(self, consumer, topic):
         messages = consumer.get_messages(count=10, blocking=True, timeout=TIMEOUT)
         assert len(messages) == 0
         assert consumer.topic_to_consumer_topic_state_map[topic] is None
