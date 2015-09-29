@@ -20,12 +20,12 @@ from yelp_lib.classutil import cached_property
 
 
 class FullRefreshRunner(Batch, BatchDBMixin):
-    # These should eventually be configurable
+    # TODO(psuben|2015-09-29): Make these configurable
     db_name = 'primary'
     # Just using this table for testing
     table_name = 'user_scout'
     temp_table = ''
-    notify_emails = ['psuben@yelp.com']
+    notify_emails = ['psuben@yelp.com'] # Make this bam+batch before committing
     default_batch_size = 100
     is_readonly_batch = False
     processed_row_count = 0
@@ -34,7 +34,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
     @cached_property
     def total_row_count(self):
-        query = 'SELECT COUNT(*) FROM ' + self.table_name
+        query = 'SELECT COUNT(*) FROM {0}'.format(self.table_name)
         value = self.execute_sql(query, is_write_session=False).fetchone()
         return value[0] if value is not None else 1
 
@@ -65,14 +65,19 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         opt_group = OptionGroup(option_parser, 'Full Refresh Runner Options')
 
         opt_group.add_option(
-            '--table-name', dest='table_name', default=self.table_name,
-            help='Name of table to be refreshed (default: %default).')
+            '--table-name',
+            dest='table_name',
+            default=self.table_name,
+            help='Name of table to be refreshed (default: %default).'
+        )
 
         opt_group.add_option(
-            '--batch-size', dest='batch_size',
-            type='int', default=self.default_batch_size,
-            help='Number of rows to process between commits '
-                 '(default: %default).')
+            '--batch-size',
+            dest='batch_size',
+            type='int',
+            default=self.default_batch_size,
+            help='Number of rows to process between commits (default: %default).'
+        )
 
         opt_group.add_option('--dry-run', action="store_true", dest='dry_run', default=False)
 
@@ -80,23 +85,26 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             '--yelp-conn-config',
             dest='yelp_conn_config',
             default='/nail/srv/configs/yelp_conn_generic.yaml',
-            help=('The yelp_conn config file, defaults to '
-                  '%default.'))
+            help='The yelp_conn config file, defaults to %default.'
+        )
         opt_group.add_option('--topology',
                              dest='topology',
                              default='/nail/srv/configs/topology.yaml',
-                             help='The topology.yaml file')
+                             help='The topology.yaml file'
+                             )
         opt_group.add_option(
             '--connection-sets',
             dest='connection_sets',
             default='/nail/home/psuben/pg/yelp-main/config/connection_sets.yaml',
-            help='The connection_sets.yaml file')
+            help='The connection_sets.yaml file'
+        )
         opt_group.add_option(
             '--no-start-up-replication-wait',
             dest='wait_for_replication_on_startup',
             action='store_false', default=True,
             help='On startup, do not wait for replication to catch up to the '
-                 'time batch was started (default: %default).')
+                 'time batch was started (default: %default).'
+        )
         return opt_group
 
     @batch_configure
@@ -104,9 +112,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         if self.options.batch_size <= 0:
             raise ValueError("batch size should be greater than 0")
 
-        self._start_time = time.time()
         self.table_name = self.options.table_name
-        self.temp_table = 'temp_' + self.table_name
+        self.temp_table = 'temp_{0}'.format(self.table_name)
 
     def _wait_for_replication(self):
         """Lets first wait for ro_conn replication to catch up with the
@@ -121,7 +128,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
     def generate_new_query(self):
         # Generates query for an identical table structure with a Blackhole engine
-        show_original_query = 'SHOW CREATE TABLE ' + self.table_name
+        show_original_query = 'SHOW CREATE TABLE {0}'.format(self.table_name)
         original_query = self.execute_sql(show_original_query, is_write_session=False).fetchone()[1]
         max_replacements = 1
         new_query = original_query.replace(self.table_name, self.temp_table, max_replacements)
@@ -137,7 +144,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self._after_processing_rows()
 
     def final_action(self):
-        query = 'DROP TABLE ' + self.temp_table
+        query = 'DROP TABLE {0}'.format(self.temp_table)
         self.execute_sql(query, is_write_session=True)
         self.log.info("Dropped table: {table}".format(table=self.temp_table))
 
@@ -173,12 +180,13 @@ class FullRefreshRunner(Batch, BatchDBMixin):
     def insert_rows_into_temp(self, row_generator):
         # String manipulation to make sure strings are not mistaken for Columns
         row_values = ','.join('\'' + str(e) + '\'' for e in next(row_generator).values())
-        query = 'INSERT INTO ' + self.temp_table + ' VALUES (' + row_values + ')'
+        query = 'INSERT INTO {0} VALUES ({1})'.format(self.temp_table, row_values)
+        # query = 'INSERT INTO ' + self.temp_table + ' VALUES (' + row_values + ')'
         self.execute_sql(query, is_write_session=True)
         self.log.info("Row inserted: {query}".format(query=query))
 
     def get_row(self):
-        query = 'SELECT * FROM ' + self.table_name
+        query = 'SELECT * FROM {0}'.format(self.table_name)
         result = self.execute_sql(query, is_write_session=False)
         for row in result:
             yield row
@@ -187,6 +195,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         if is_write_session:
             if not self.options.dry_run:
                 return self._write_session.execute(query)
+            else:
+                self.log.info("Dry run: Query: {0}".format(query))
         else:
             return self._read_session.execute(query)
 
@@ -201,9 +211,12 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self._read_session.rollback()
         if not self.options.dry_run:
             self._write_session.commit()
+        else:
+            self.log.info("Dry run: Writes would be committed here.")
+
 
     def log_run_info(self):
-        elapsed_time = timedelta(seconds=(time.time() - self._start_time))
+        elapsed_time = timedelta(seconds=(time.time() - self.starttime))
         self.log.info(
             "Processed {row_count} row(s) in {elapsed_time}".format(
                 row_count=self.processed_row_count,
