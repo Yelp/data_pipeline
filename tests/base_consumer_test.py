@@ -4,9 +4,7 @@ from __future__ import unicode_literals
 
 import copy
 import datetime
-import multiprocessing
 import random
-import time
 
 import mock
 import pytest
@@ -17,7 +15,6 @@ from data_pipeline.base_consumer import ConsumerTopicState
 from data_pipeline.base_consumer import TopicFilter
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import UpdateMessage
-from data_pipeline.multiprocessing_consumer import MultiprocessingConsumer
 from data_pipeline.producer import Producer
 from data_pipeline.schema_cache import get_schematizer_client
 from data_pipeline.testing_helpers.kafka_docker import create_kafka_docker_topic
@@ -43,10 +40,6 @@ faster and flake-proof
 
 @pytest.mark.usefixtures("configure_teams")
 class BaseConsumerTest(object):
-    @property
-    def test_buffer_size(self):
-        return 5
-
     @pytest.fixture
     def producer_name(self):
         return 'producer_1'
@@ -66,13 +59,11 @@ class BaseConsumerTest(object):
     def producer(self, producer_instance):
         with producer_instance as producer:
             yield producer
-        assert len(multiprocessing.active_children()) == 0
 
     @pytest.yield_fixture
     def consumer(self, consumer_instance):
         with consumer_instance as consumer:
             yield consumer
-        assert len(multiprocessing.active_children()) == 0
 
     @pytest.fixture
     def consumer_asserter(self, consumer, message):
@@ -96,10 +87,7 @@ class BaseConsumerTest(object):
         publish_messages(1)
         for msg in consumer_asserter.consumer:
             with consumer_asserter.consumer.ensure_committed(msg):
-                consumer_asserter.assert_messages(
-                    [msg],
-                    expect_buffer_empty=True
-                )
+                consumer_asserter.assert_messages([msg])
             break
 
     @pytest.fixture
@@ -145,8 +133,7 @@ class BaseConsumerTest(object):
         )
         consumer_asserter.get_and_assert_messages(
             count=1,
-            expected_msg_count=1,
-            expect_buffer_empty=True
+            expected_msg_count=1
         )
 
     def test_consume_using_get_message(
@@ -159,10 +146,7 @@ class BaseConsumerTest(object):
         with consumer.ensure_committed(
                 consumer.get_message(blocking=True, timeout=TIMEOUT)
         ) as msg:
-            consumer_asserter.assert_messages(
-                [msg],
-                expect_buffer_empty=True
-            )
+            consumer_asserter.assert_messages([msg])
 
     def test_consume_using_get_messages(
             self,
@@ -172,8 +156,7 @@ class BaseConsumerTest(object):
         publish_messages(2)
         consumer_asserter.get_and_assert_messages(
             count=2,
-            expected_msg_count=2,
-            expect_buffer_empty=True
+            expected_msg_count=2
         )
 
     def test_basic_publish_retrieve_then_reset(
@@ -188,15 +171,13 @@ class BaseConsumerTest(object):
         # have a ConsumerTopicState for our topic
         consumer_asserter.get_and_assert_messages(
             count=2,
-            expected_msg_count=2,
-            expect_buffer_empty=True
+            expected_msg_count=2
         )
 
         # Verify that we are not going to get any new messages
         consumer_asserter.get_and_assert_messages(
             count=10,
-            expected_msg_count=0,
-            expect_buffer_empty=True
+            expected_msg_count=0
         )
 
         # Set the offset to one previous so we can use reset_topics to
@@ -209,8 +190,7 @@ class BaseConsumerTest(object):
         # Verify that we do get the same two messages again
         consumer_asserter.get_and_assert_messages(
             count=10,
-            expected_msg_count=2,
-            expect_buffer_empty=True
+            expected_msg_count=2
         )
 
 
@@ -228,7 +208,6 @@ class ConsumerAsserter(object):
             self,
             count,
             expected_msg_count,
-            expect_buffer_empty=None,
             blocking=True
     ):
         with self.consumer.ensure_committed(
@@ -239,15 +218,14 @@ class ConsumerAsserter(object):
             )
         ) as messages:
             assert len(messages) == expected_msg_count
-            self.assert_messages(messages, expect_buffer_empty)
+            self.assert_messages(messages)
         return messages
 
-    def assert_messages(self, actual_msgs, expect_buffer_empty=None):
+    def assert_messages(self, actual_msgs):
         assert isinstance(actual_msgs, list)
         for actual_msg in actual_msgs:
             self.assert_single_message(actual_msg, self.expected_msg)
-        if isinstance(self.consumer, MultiprocessingConsumer):
-            self.assert_consumer_state(expect_buffer_empty)
+            self.assert_consumer_state()
 
     def assert_single_message(self, actual_msg, expected_msg):
         assert actual_msg.message_type == expected_msg.message_type
@@ -259,17 +237,12 @@ class ConsumerAsserter(object):
             assert actual_msg.previous_payload == expected_msg.previous_payload
             assert actual_msg.previous_payload_data == expected_msg.previous_payload_data
 
-    def assert_consumer_state(self, expect_buffer_empty=None):
+    def assert_consumer_state(self):
         consumer_topic_state = self.consumer.topic_to_consumer_topic_state_map[
             self.expected_topic
         ]
         assert isinstance(consumer_topic_state, ConsumerTopicState)
         assert consumer_topic_state.last_seen_schema_id == self.expected_schema_id
-
-        # We can either expect it to be empty, expect it not to be empty, or
-        # if 'None' we can't have any expectations
-        if expect_buffer_empty is not None:
-            assert self.consumer.message_buffer.empty() == expect_buffer_empty
 
 
 @pytest.mark.usefixtures("configure_teams")
@@ -340,7 +313,6 @@ class RefreshTopicsTest(object):
     def consumer(self, consumer_instance):
         with consumer_instance as consumer:
             yield consumer
-        assert len(multiprocessing.active_children()) == 0
 
     def test_no_newer_topics(self, consumer, yelp_namespace, biz_schema):
         expected = self._get_expected_value(
@@ -423,11 +395,7 @@ class RefreshTopicsTest(object):
             producer.publish(message)
             producer.flush()
 
-        consumer.get_messages(1, blocking=True, timeout=1)
-        # MutliprocessingConsumer seems to cause strange failure and pause for
-        # a little while seems to avoid the problem. May be related to flakiness
-        # of the Multiprocessing kakfa consumer (DATAPIPE-249).
-        time.sleep(1)
+        consumer.get_messages(1, blocking=True, timeout=TIMEOUT)
 
     def test_refresh_with_custom_filter(
         self,
