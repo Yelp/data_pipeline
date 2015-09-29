@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import re
 import time
 import staticconf
 import yelp_conn
@@ -20,9 +21,9 @@ from yelp_lib.classutil import cached_property
 
 class FullRefreshRunner(Batch, BatchDBMixin):
     # These should eventually be configurable
-    db_name = 'aux'
+    db_name = 'primary'
     # Just using this table for testing
-    table_name = 'replication_heartbeat'
+    table_name = 'user_scout'
     temp_table = ''
     notify_emails = ['psuben@yelp.com']
     default_batch_size = 100
@@ -118,10 +119,20 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             with self.ro_conn() as ro_conn:
                 self.wait_for_replication_until(self.starttime, ro_conn)
 
+    def generate_new_query(self):
+        # Generates query for an identical table structure with a Blackhole engine
+        show_original_query = 'SHOW CREATE TABLE ' + self.table_name
+        original_query = self.execute_sql(show_original_query, is_write_session=False).fetchone()[1]
+        max_replacements = 1
+        new_query = original_query.replace(self.table_name, self.temp_table, max_replacements)
+        # Substitute original engine with Blackhole engine
+        new_query = re.sub('ENGINE=[^\s]*', 'ENGINE=BLACKHOLE', new_query)
+        self.log.info("New blackhole table query: {query}".format(query=new_query))
+        return new_query
+
     def initial_action(self):
         self.total_row_count
-        # Make this a Blackhole table using SHOW CREATE TABLE and string manipulation
-        query = 'CREATE TABLE IF NOT EXISTS ' + self.temp_table + ' LIKE ' + self.table_name
+        query = self.generate_new_query()
         self.execute_sql(query, is_write_session=True)
         self._after_processing_rows()
 

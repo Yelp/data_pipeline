@@ -22,6 +22,26 @@ class TestFullRefreshRunner(object):
     def fake_query(self):
         return 'SELECT * FROM faketable'
 
+    @pytest.fixture
+    def fake_original_table(self):
+        return 'CREATE TABLE test_db(' \
+               'PersonID int,' \
+               'LastName varchar(255),' \
+               'FirstName varchar(255),' \
+               'Address varchar(255),' \
+               'City varchar(255))' \
+               'ENGINE=InnoDB'
+
+    @pytest.fixture
+    def fake_new_table(self):
+        return 'CREATE TABLE temp_test_db(' \
+               'PersonID int,' \
+               'LastName varchar(255),' \
+               'FirstName varchar(255),' \
+               'Address varchar(255),' \
+               'City varchar(255))' \
+               'ENGINE=BLACKHOLE'
+
     @pytest.yield_fixture
     def refresh_batch(self, table_name):
         batch = FullRefreshRunner()
@@ -40,21 +60,23 @@ class TestFullRefreshRunner(object):
                 refresh_batch.write_session() as refresh_batch._write_session:
             yield
 
-    def test_initial_action(self, refresh_batch, table_name, temp_name):
+    def test_initial_action(self, refresh_batch, fake_new_table):
         with mock.patch.object(FullRefreshRunner, '_after_processing_rows') as mock_process_rows, \
                 mock.patch.object(
                     FullRefreshRunner,
                     'total_row_count',
                     new_callable=mock.PropertyMock
                 ) as mock_row_count, \
-                mock.patch.object(refresh_batch, 'execute_sql') as mock_write:
+                mock.patch.object(refresh_batch, 'execute_sql') as mock_write, \
+                mock.patch.object(
+                    refresh_batch,
+                    'generate_new_query',
+                    return_value = fake_new_table
+                ) as mock_generate:
             refresh_batch.initial_action()
             mock_row_count.assert_called_once_with()
             mock_process_rows.assert_called_once_with()
-            mock_write.assert_called_once_with(
-                'CREATE TABLE IF NOT EXISTS ' + temp_name + ' LIKE ' + table_name,
-                is_write_session=True
-            )
+            mock_write.assert_called_once_with(fake_new_table, is_write_session=True)
 
     def test_final_action(self, refresh_batch, temp_name):
         with mock.patch.object(refresh_batch, 'execute_sql') as mock_write:
@@ -65,6 +87,12 @@ class TestFullRefreshRunner(object):
         refresh_batch._commit_changes()
         refresh_batch._read_session.rollback.assert_called_once_with()
         refresh_batch._write_session.commit.assert_not_called()
+
+    def test_generate_new_query(self, refresh_batch, fake_original_table, fake_new_table):
+        with mock.patch.object(refresh_batch, 'execute_sql', autospec=True) as mock_execute:
+            mock_execute.return_value.fetchone.return_value = ['test_db', fake_original_table]
+            test_result = refresh_batch.generate_new_query()
+            assert test_result == fake_new_table
 
     def test_execute_sql_read(self, refresh_batch, sessions, fake_query):
         refresh_batch.execute_sql(fake_query, is_write_session=False)
