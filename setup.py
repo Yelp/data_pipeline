@@ -37,6 +37,7 @@ setup(
         'swaggerpy',
         'yelp_kafka>=4.0.0',
         'yelp_servlib',
+        'yelp_conn'
     ],
     zip_safe=False,
     keywords='data_pipeline',
