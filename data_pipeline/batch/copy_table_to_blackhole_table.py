@@ -120,8 +120,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
     def initial_action(self):
         self.total_row_count
-        # Make this a Blackhole table using SHOW CREATE TABLE
-        query = 'CREATE TABLE IF NOT EXISTS '+ self.temp_table + ' LIKE ' + self.table_name
+        # Make this a Blackhole table using SHOW CREATE TABLE and string manipulation
+        query = 'CREATE TABLE IF NOT EXISTS ' + self.temp_table + ' LIKE ' + self.table_name
         self.execute_sql(query, is_write_session=True)
         self._after_processing_rows()
 

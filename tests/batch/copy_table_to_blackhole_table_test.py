@@ -51,7 +51,10 @@ class TestFullRefreshRunner(object):
             refresh_batch.initial_action()
             mock_row_count.assert_called_once_with()
             mock_process_rows.assert_called_once_with()
-            mock_write.assert_called_once_with('CREATE TABLE IF NOT EXISTS ' + temp_name + ' LIKE ' + table_name, is_write_session=True)
+            mock_write.assert_called_once_with(
+                'CREATE TABLE IF NOT EXISTS ' + temp_name + ' LIKE ' + table_name,
+                is_write_session=True
+            )
 
     def test_final_action(self, refresh_batch, temp_name):
         with mock.patch.object(refresh_batch, 'execute_sql') as mock_write:
@@ -77,4 +80,3 @@ class TestFullRefreshRunner(object):
         with mock.patch.object(refresh_batch, 'execute_sql', return_value=[]) as mock_write:
             assert tuple(refresh_batch.get_row()) == ()
             mock_write.assert_called_once_with('SELECT * FROM ' + table_name, is_write_session=False)
-
