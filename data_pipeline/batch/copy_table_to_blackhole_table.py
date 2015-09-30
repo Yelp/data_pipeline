@@ -25,7 +25,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
     # Just using this table for testing
     table_name = 'user_scout'
     temp_table = ''
-    notify_emails = ['psuben@yelp.com'] # Make this bam+batch before committing
+    notify_emails = ['bam+batch@yelp.com'] # Make this bam+batch before committing
     default_batch_size = 100
     is_readonly_batch = False
     processed_row_count = 0
@@ -148,17 +148,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self.execute_sql(query, is_write_session=True)
         self.log.info("Dropped table: {table}".format(table=self.temp_table))
 
-    def run(self):
-        self.initial_action()
-        self.processed_row_count = 0
-        self.log.info(
-            "Total rows to be processed: {row_count}".format(
-                row_count=self.total_row_count
-            )
-        )
+    def process_table(self, row_generator):
         remaining_row_count = self.total_row_count
-        row_generator = self.get_row()
-
         while remaining_row_count > 0:
             chunk_size = min(self.options.batch_size, remaining_row_count)
             for i in range(chunk_size):
@@ -174,6 +165,16 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             remaining_row_count -= chunk_size
             self.processed_row_count += chunk_size
 
+    def run(self):
+        self.initial_action()
+        self.processed_row_count = 0
+        self.log.info(
+            "Total rows to be processed: {row_count}".format(
+                row_count=self.total_row_count
+            )
+        )
+        row_generator = self.get_row()
+        self.process_table(row_generator)
         self.log_run_info()
         self.final_action()
 
