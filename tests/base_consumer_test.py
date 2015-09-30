@@ -8,9 +8,10 @@ import random
 
 import mock
 import pytest
+from yelp_avro.avro_string_writer import AvroStringWriter
+from yelp_avro.testing_helpers.generate_payload_data import \
+    generate_payload_data
 
-from data_pipeline._avro_util import AvroStringWriter
-from data_pipeline._avro_util import generate_payload_data
 from data_pipeline.base_consumer import ConsumerTopicState
 from data_pipeline.base_consumer import TopicFilter
 from data_pipeline.expected_frequency import ExpectedFrequency

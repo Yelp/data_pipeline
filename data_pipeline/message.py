@@ -5,8 +5,9 @@ from __future__ import unicode_literals
 import time
 from collections import namedtuple
 
-from data_pipeline._avro_util import AvroStringReader
-from data_pipeline._avro_util import AvroStringWriter
+from yelp_avro.avro_string_reader import AvroStringReader
+from yelp_avro.avro_string_writer import AvroStringWriter
+
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope

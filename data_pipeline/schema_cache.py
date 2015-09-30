@@ -5,8 +5,8 @@ from __future__ import unicode_literals
 from collections import namedtuple
 
 import simplejson
+from yelp_avro.util import get_avro_schema_object
 
-from data_pipeline._avro_util import get_avro_schema_object
 from data_pipeline.config import get_config
 
 
