@@ -25,7 +25,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
     # Just using this table for testing
     table_name = 'user_scout'
     temp_table = ''
-    notify_emails = ['bam+batch@yelp.com'] # Make this bam+batch before committing
+    notify_emails = ['bam+batch@yelp.com']
     default_batch_size = 100
     is_readonly_batch = False
     processed_row_count = 0
@@ -127,7 +127,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
                 self.wait_for_replication_until(self.starttime, ro_conn)
 
     def generate_new_query(self):
-        # Generates query for an identical table structure with a Blackhole engine
+        """Generates query for an identical table structure with a Blackhole engine.
+        """
         show_original_query = 'SHOW CREATE TABLE {0}'.format(self.table_name)
         original_query = self.execute_sql(show_original_query, is_write_session=False).fetchone()[1]
         max_replacements = 1
@@ -180,9 +181,11 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
     def insert_rows_into_temp(self, row_generator):
         # String manipulation to make sure strings are not mistaken for Columns
-        row_values = ','.join('\'' + str(e) + '\'' for e in next(row_generator).values())
+        row_values = ','.join(
+            '\'{0}\''.format(str(column_values))
+            for column_values in next(row_generator).values()
+        )
         query = 'INSERT INTO {0} VALUES ({1})'.format(self.temp_table, row_values)
-        # query = 'INSERT INTO ' + self.temp_table + ' VALUES (' + row_values + ')'
         self.execute_sql(query, is_write_session=True)
         self.log.info("Row inserted: {query}".format(query=query))
 
@@ -214,7 +217,6 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self._write_session.commit()
         else:
             self.log.info("Dry run: Writes would be committed here.")
-
 
     def log_run_info(self):
         elapsed_time = timedelta(seconds=(time.time() - self.starttime))
