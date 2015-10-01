@@ -19,6 +19,10 @@ class TestFullRefreshRunner(object):
         return "temp_{0}".format(table_name)
 
     @pytest.fixture
+    def show_table_query(self, table_name):
+        return 'SHOW CREATE TABLE {0}'.format(table_name)
+
+    @pytest.fixture
     def fake_query(self):
         return 'SELECT * FROM faketable'
 
@@ -93,27 +97,21 @@ class TestFullRefreshRunner(object):
             yield mock_write
 
     @pytest.yield_fixture
-    def mock_generate(self, fake_new_table):
+    def mock_create_table_src(self):
         with mock.patch.object(
                 FullRefreshRunner,
-                'generate_new_query',
-                return_value=fake_new_table
-        ) as mock_generate:
-            yield mock_generate
+                'create_table_from_src_table'
+        ) as mock_create:
+            yield mock_create
 
     def test_initial_action(self,
                             refresh_batch,
-                            fake_new_table,
                             mock_process_rows,
-                            mock_row_count,
-                            mock_write,
-                            mock_generate
+                            mock_create_table_src
                             ):
-            refresh_batch.initial_action()
-            mock_row_count.assert_called_once_with()
-            mock_generate.assert_called_once_with()
-            mock_process_rows.assert_called_once_with()
-            mock_write.assert_called_once_with(fake_new_table, is_write_session=True)
+        refresh_batch.initial_action()
+        mock_create_table_src.assert_called_once_with()
+        mock_process_rows.assert_called_once_with()
 
     def test_final_action(self, refresh_batch, temp_name):
         with mock.patch.object(refresh_batch, 'execute_sql') as mock_write:
@@ -125,11 +123,13 @@ class TestFullRefreshRunner(object):
         refresh_batch._read_session.rollback.assert_called_once_with()
         refresh_batch._write_session.commit.assert_not_called()
 
-    def test_generate_new_query(self, refresh_batch, fake_original_table, fake_new_table):
+    def test_create_table_from_src_table(self, refresh_batch, fake_original_table, fake_new_table, show_table_query):
         with mock.patch.object(refresh_batch, 'execute_sql', autospec=True) as mock_execute:
             mock_execute.return_value.fetchone.return_value = ['test_db', fake_original_table]
-            test_result = refresh_batch.generate_new_query()
-            assert test_result == fake_new_table
+            refresh_batch.create_table_from_src_table()
+            calls = [mock.call(show_table_query, is_write_session=False),
+                     mock.call(fake_new_table, is_write_session=True)]
+            mock_execute.assert_has_calls(calls, any_order=True)
 
     def test_execute_sql_read(self, refresh_batch, sessions, fake_query):
         refresh_batch.execute_sql(fake_query, is_write_session=False)
@@ -141,7 +141,7 @@ class TestFullRefreshRunner(object):
         refresh_batch._read_session.execute.assert_not_called()
         refresh_batch._write_session.execute.assert_not_called()
 
-    def test_get_row(self, refresh_batch, table_name):
+    def test_get_rows(self, refresh_batch, table_name):
         with mock.patch.object(refresh_batch, 'execute_sql', return_value=[]) as mock_write:
-            assert tuple(refresh_batch.get_row()) == ()
+            assert tuple(refresh_batch.get_rows()) == ()
             mock_write.assert_called_once_with('SELECT * FROM {0}'.format(table_name), is_write_session=False)

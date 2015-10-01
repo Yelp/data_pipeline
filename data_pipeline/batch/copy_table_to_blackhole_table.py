@@ -5,7 +5,6 @@ import re
 import time
 import yelp_conn
 
-from datetime import timedelta
 from datetime import datetime
 from optparse import OptionGroup
 
@@ -28,8 +27,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
     @cached_property
     def total_row_count(self):
         query = 'SELECT COUNT(*) FROM {0}'.format(self.table_name)
-        value = self.execute_sql(query, is_write_session=False).fetchone()
-        return value[0] if value is not None else 1
+        value = self.execute_sql(query, is_write_session=False).scalar()
+        return value if value is not None else 1
 
     @batch_configure
     def configure(self):
@@ -65,8 +64,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         opt_group.add_option(
             '--config-path',
             dest='config_path',
-            default='/nail/home/psuben/pg/yelp-main/config/test_config.yaml',
-            help='Config file path for FullRefreshRunner'
+            help='Required Config file path for FullRefreshRunner'
         )
 
         opt_group.add_option(
@@ -99,9 +97,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             with self.ro_conn() as ro_conn:
                 self.wait_for_replication_until(self.starttime, ro_conn)
 
-    def generate_new_query(self):
-        """Generates query for an identical table structure with a Blackhole engine.
-        """
+    def create_table_from_src_table(self):
         show_original_query = 'SHOW CREATE TABLE {0}'.format(self.table_name)
         original_query = self.execute_sql(show_original_query, is_write_session=False).fetchone()[1]
         max_replacements = 1
@@ -109,12 +105,10 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         # Substitute original engine with Blackhole engine
         new_query = re.sub('ENGINE=[^\s]*', 'ENGINE=BLACKHOLE', new_query)
         self.log.info("New blackhole table query: {query}".format(query=new_query))
-        return new_query
+        self.execute_sql(new_query, is_write_session=True)
 
     def initial_action(self):
-        self.total_row_count
-        query = self.generate_new_query()
-        self.execute_sql(query, is_write_session=True)
+        self.create_table_from_src_table()
         self._after_processing_rows()
 
     def final_action(self):
@@ -123,12 +117,19 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self.log.info("Dropped table: {table}".format(table=self.temp_table))
 
     def process_table(self, row_generator):
+        self.log.info(
+            "Total rows to be processed: {row_count}".format(
+                row_count=self.total_row_count
+            )
+        )
         remaining_row_count = self.total_row_count
         while remaining_row_count > 0:
             chunk_size = min(self.options.batch_size, remaining_row_count)
+            batch_rows = []  # Accumulates chunk_size # of rows to execute all at once.
             for i in range(chunk_size):
-                self.insert_rows_into_temp(row_generator)
+                batch_rows.append(self.get_row_values(row_generator))
 
+            self.insert_batch_rows(batch_rows)
             self.log.info(
                 "Inserted {chunk_size} rows into {table}".format(
                     chunk_size=chunk_size,
@@ -141,27 +142,25 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
     def run(self):
         self.initial_action()
-        self.log.info(
-            "Total rows to be processed: {row_count}".format(
-                row_count=self.total_row_count
-            )
-        )
-        row_generator = self.get_row()
+        row_generator = self.get_rows()
         self.process_table(row_generator)
         self.log_run_info()
         self.final_action()
 
-    def insert_rows_into_temp(self, row_generator):
+    def insert_batch_rows(self, batch_rows):
+        insert_values = ','.join(batch_rows)
+        query = 'INSERT INTO {0} VALUES{1}'.format(self.temp_table, insert_values)
+        self.execute_sql(query, is_write_session=True)
+
+    def get_row_values(self, row_generator):
         # String manipulation to make sure strings are not mistaken for Columns
         row_values = ','.join(
             '\'{0}\''.format(str(column_values))
             for column_values in next(row_generator).values()
         )
-        query = 'INSERT INTO {0} VALUES ({1})'.format(self.temp_table, row_values)
-        self.execute_sql(query, is_write_session=True)
-        self.log.info("Row inserted: {query}".format(query=query))
+        return '({0})'.format(row_values)
 
-    def get_row(self):
+    def get_rows(self):
         query = 'SELECT * FROM {0}'.format(self.table_name)
         result = self.execute_sql(query, is_write_session=False)
         for row in result:
@@ -191,7 +190,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.log.info("Dry run: Writes would be committed here.")
 
     def log_run_info(self):
-        elapsed_time = timedelta(seconds=(time.time() - self.starttime))
+        elapsed_time = time.time() - self.starttime
         self.log.info(
             "Processed {row_count} row(s) in {elapsed_time}".format(
                 row_count=self.processed_row_count,
