@@ -19,9 +19,7 @@ from yelp_servlib import config_util
 
 
 class FullRefreshRunner(Batch, BatchDBMixin):
-    # TODO(psuben|2015-09-29): Make these configurable
     db_name = 'primary'
-    table_name = 'replication_heartbeat'
     notify_emails = ['bam+batch@yelp.com']
     is_readonly_batch = False
     ro_replica_name = 'batch_ro'
@@ -51,7 +49,6 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         opt_group.add_option(
             '--table-name',
             dest='table_name',
-            default=self.table_name,
             help='Name of table to be refreshed (default: %default).'
         )
 
