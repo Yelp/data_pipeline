@@ -3,10 +3,8 @@ from __future__ import absolute_import
 
 import re
 import time
-import staticconf
 import yelp_conn
 
-from contextlib import nested
 from datetime import timedelta
 from datetime import datetime
 from optparse import OptionGroup
@@ -17,18 +15,15 @@ from yelp_batch import batch_context
 from yelp_batch.for_each import Batch
 from yelp_batch._db import BatchDBMixin
 from yelp_lib.classutil import cached_property
+from yelp_servlib import config_util
 
 
 class FullRefreshRunner(Batch, BatchDBMixin):
     # TODO(psuben|2015-09-29): Make these configurable
     db_name = 'primary'
-    # Just using this table for testing
-    table_name = 'user_scout'
-    temp_table = ''
+    table_name = 'replication_heartbeat'
     notify_emails = ['bam+batch@yelp.com']
-    default_batch_size = 100
     is_readonly_batch = False
-    processed_row_count = 0
     ro_replica_name = 'batch_ro'
     rw_replica_name = 'batch_rw'
 
@@ -39,25 +34,14 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         return value[0] if value is not None else 1
 
     @batch_configure
-    def setup_yelp_conn(self):
-        """Take this opportunity to initialize yelp_conn to a state that's
-        acceptable for use.
-        """
-        staticconf.YamlConfiguration(self.options.yelp_conn_config, namespace='yelp_conn')
-        config = {
-            'topology': self.options.topology,
-            'connection_set_file': self.options.connection_sets,
-        }
-
-        staticconf.DictConfiguration(config, namespace='yelp_conn')
-
+    def configure(self):
+        config_util.load_package_config(self.options.config_path, field='module_config')
         yelp_conn.initialize()
 
     @batch_context
     def _session_manager(self):
         self._wait_for_replication()
-        with nested(self.read_session(), self.write_session()
-                    ) as (self._read_session, self._write_session):
+        with self.read_session() as self._read_session, self.write_session() as self._write_session:
             yield
 
     @batch_command_line_options
@@ -75,29 +59,19 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             '--batch-size',
             dest='batch_size',
             type='int',
-            default=self.default_batch_size,
+            default=100,
             help='Number of rows to process between commits (default: %default).'
         )
 
         opt_group.add_option('--dry-run', action="store_true", dest='dry_run', default=False)
 
         opt_group.add_option(
-            '--yelp-conn-config',
-            dest='yelp_conn_config',
-            default='/nail/srv/configs/yelp_conn_generic.yaml',
-            help='The yelp_conn config file, defaults to %default.'
+            '--config-path',
+            dest='config_path',
+            default='/nail/home/psuben/pg/yelp-main/config/test_config.yaml',
+            help='Config file path for FullRefreshRunner'
         )
-        opt_group.add_option('--topology',
-                             dest='topology',
-                             default='/nail/srv/configs/topology.yaml',
-                             help='The topology.yaml file'
-                             )
-        opt_group.add_option(
-            '--connection-sets',
-            dest='connection_sets',
-            default='/nail/home/psuben/pg/yelp-main/config/connection_sets.yaml',
-            help='The connection_sets.yaml file'
-        )
+
         opt_group.add_option(
             '--no-start-up-replication-wait',
             dest='wait_for_replication_on_startup',
@@ -113,7 +87,9 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             raise ValueError("batch size should be greater than 0")
 
         self.table_name = self.options.table_name
+        # TODO(psuben|2015-09-30): Decide the actual naming convention for blackhole table
         self.temp_table = 'temp_{0}'.format(self.table_name)
+        self.processed_row_count = 0
 
     def _wait_for_replication(self):
         """Lets first wait for ro_conn replication to catch up with the
@@ -168,7 +144,6 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
     def run(self):
         self.initial_action()
-        self.processed_row_count = 0
         self.log.info(
             "Total rows to be processed: {row_count}".format(
                 row_count=self.total_row_count
