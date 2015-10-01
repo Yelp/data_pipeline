@@ -44,8 +44,9 @@ class SharedMessageTest(object):
     def test_rejects_unicode_topic(self, valid_message_data):
         self._assert_invalid_data(valid_message_data, topic=unicode('topic'))
 
-    def test_rejects_empty_topic(self, valid_message_data):
-        self._assert_invalid_data(valid_message_data, topic=str(''))
+    def test_rejects_empty_topic(self, message):
+        with pytest.raises(ValueError):
+            message.topic = str('')
 
     def test_rejects_non_numeric_schema_id(self, valid_message_data):
         self._assert_invalid_data(valid_message_data, schema_id='123')
@@ -85,7 +86,7 @@ class SharedMessageTest(object):
             payload_data={'data': 'foo'}
         )
 
-    def _assert_invalid_data(self, valid_data, error=ValueError, **data_overrides):
+    def _assert_invalid_data(self, valid_data, error=TypeError, **data_overrides):
         invalid_data = self._make_message_data(valid_data, **data_overrides)
         with pytest.raises(error):
             self.message_class(**invalid_data)
@@ -217,6 +218,19 @@ class SharedMessageTest(object):
         message._decode_payload_if_necessary = mock.Mock()
         return message
 
+    def test_get_topic_from_schematizer_by_default(
+        self,
+        registered_schema,
+        valid_message_data
+    ):
+        message_data = self._make_message_data(
+            valid_message_data,
+            schema_id=registered_schema.schema_id
+        )
+        message_data.pop('topic')
+        message = self.message_class(**message_data)
+        assert message.topic == str(registered_schema.topic.name)
+
 
 class PayloadOnlyMessageTest(SharedMessageTest):
 
@@ -224,8 +238,8 @@ class PayloadOnlyMessageTest(SharedMessageTest):
     def valid_message_data(self, request):
         payload, payload_data = request.param
         return {
-            'topic': str('my-topic'),
             'schema_id': 123,
+            'topic': str('my-topic'),
             'payload': payload,
             'payload_data': payload_data,
             'uuid': FastUUID().uuid4(),
@@ -312,8 +326,8 @@ class TestUpdateMessage(SharedMessageTest):
     def valid_message_data(self, request):
         payload, payload_data, previous_payload, previous_payload_data = request.param
         return {
-            'topic': str('my-topic'),
             'schema_id': 123,
+            'topic': str('my-topic'),
             'payload': payload,
             'payload_data': payload_data,
             'previous_payload': previous_payload,
@@ -354,8 +368,8 @@ class TestUpdateMessage(SharedMessageTest):
     def _test_has_changed_and_payload_diff(self, message_data_params, expected_diff):
         payload_data, previous_payload_data = message_data_params
         message_data = dict(
-            topic=str('my-topic'),
             schema_id=123,
+            topic=str('my-topic'),
             payload=None,
             payload_data=payload_data,
             previous_payload=None,

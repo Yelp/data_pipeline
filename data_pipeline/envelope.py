@@ -7,9 +7,9 @@ import os
 import avro.io
 import avro.schema
 from cached_property import cached_property
+from yelp_avro.avro_string_reader import AvroStringReader
+from yelp_avro.avro_string_writer import AvroStringWriter
 
-from data_pipeline._avro_util import AvroStringReader
-from data_pipeline._avro_util import AvroStringWriter
 from data_pipeline.schema_cache import get_schema_cache
 
 

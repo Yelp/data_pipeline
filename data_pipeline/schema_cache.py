@@ -5,8 +5,8 @@ from __future__ import unicode_literals
 from collections import namedtuple
 
 import simplejson
+from yelp_avro.util import get_avro_schema_object
 
-from data_pipeline._avro_util import get_avro_schema_object
 from data_pipeline.config import get_config
 
 
@@ -229,20 +229,14 @@ class SchematizerClient(object):
         Returns:
             (str): The topic name for the given schema_id
         """
-        topic_name = self.schema_id_to_topic_map.get(
-            schema_id,
-            self._retrieve_topic_name_from_schematizer(schema_id)
-        )
-        self.schema_id_to_topic_map[schema_id] = topic_name
-        return topic_name
+        if schema_id not in self.schema_id_to_topic_map:
+            self.schema_id_to_topic_map[schema_id] = self._retrieve_topic_name_from_schematizer(schema_id)
+        return self.schema_id_to_topic_map[schema_id]
 
     def get_contains_pii_for_schema_id(self, schema_id):
-        pii_flag = self.schema_id_to_pii_map.get(
-            schema_id,
-            self._retrieve_contains_pii_from_schematizer(schema_id)
-        )
-        self.schema_id_to_pii_map[schema_id] = pii_flag
-        return pii_flag
+        if schema_id not in self.schema_id_to_pii_map:
+            self.schema_id_to_pii_map[schema_id] = self._retrieve_contains_pii_from_schematizer(schema_id)
+        return self.schema_id_to_pii_map[schema_id]
 
     def get_schema(self, schema_id):
         """ Get the schema corresponding to the given schema_id, handling cache
@@ -254,13 +248,9 @@ class SchematizerClient(object):
         Returns:
             (avro.schema.Schema): The avro Schema object
         """
-        # TODO(DATAPIPE-437|clin): Revisit the logic to ensure it works
-        schema = self.schema_id_to_schema_map.get(
-            schema_id,
-            self._retrieve_avro_schema_from_schematizer(schema_id)
-        )
-        self.schema_id_to_schema_map[schema_id] = schema
-        return schema
+        if schema_id not in self.schema_id_to_schema_map:
+            self.schema_id_to_schema_map[schema_id] = self._retrieve_avro_schema_from_schematizer(schema_id)
+        return self.schema_id_to_schema_map[schema_id]
 
     def _get_schema_from_schematizer(self, schema_id):
         # TODO(DATAPIPE-207|joshszep): Include retry strategy support

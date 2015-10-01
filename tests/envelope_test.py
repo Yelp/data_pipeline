@@ -44,9 +44,9 @@ class TestEnvelope(object):
         if meta_param:
             additional_params.update(meta_param)
         return message_class(
-            topic_name,
-            10,
-            payload,
+            schema_id=10,
+            topic=topic_name,
+            payload=payload,
             **additional_params
         )
 
