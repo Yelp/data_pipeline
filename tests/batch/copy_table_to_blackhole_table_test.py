@@ -47,9 +47,6 @@ class TestFullRefreshRunner(object):
         batch = FullRefreshRunner()
         batch.process_commandline_options(['--dry-run', '--table-name={0}'.format(table_name)])
         batch._init_global_state()
-        batch.setup_yelp_conn = mock.Mock()
-        batch.wait_for_replication_until = mock.Mock()
-        batch.throttle_to_replication = mock.Mock()
         yield batch
 
     @pytest.yield_fixture
