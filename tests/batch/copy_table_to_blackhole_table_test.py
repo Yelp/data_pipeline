@@ -49,7 +49,7 @@ class TestFullRefreshRunner(object):
     @pytest.yield_fixture
     def refresh_batch(self, table_name):
         batch = FullRefreshRunner()
-        batch.process_commandline_options(['--dry-run', '--table-name={0}'.format(table_name)])
+        batch.process_commandline_options(['--dry-run', '--table-name={0}'.format(table_name), '--primary=id'])
         batch._init_global_state()
         yield batch
 
@@ -142,21 +142,22 @@ class TestFullRefreshRunner(object):
 
     def test_insert_batch(self, refresh_batch, mock_execute, table_name, temp_name):
         offset = 0
-        limit = 10
-        refresh_batch.insert_batch(offset, limit)
+        refresh_batch.insert_batch(offset)
         query = 'INSERT INTO {0} SELECT * FROM {1} ORDER BY id LIMIT {2}, {3}'.format(
             temp_name,
             table_name,
             offset,
-            limit
+            refresh_batch.options.batch_size
         )
         mock_execute.assert_called_once_with(query, is_write_session=True)
 
     def test_process_table(self, refresh_batch, mock_row_count, mock_process_rows):
         with mock.patch.object(refresh_batch, 'insert_batch') as mock_insert, \
+                mock.patch.object(refresh_batch, 'count_inserted') as mock_rows, \
                 mock.patch.object(refresh_batch, 'options', autospec=True) as mock_options:
+            mock_rows.side_effect = [10, 10, 5]
             mock_options.batch_size = 10
             mock_row_count.return_value = 25
             refresh_batch.process_table()
-            calls = [mock.call(0, 10), mock.call(10, 10), mock.call(20, 5)]
-            mock_insert.assert_has_calls(calls, any_order=False)
+            calls = [mock.call(0), mock.call(10), mock.call(20)]
+            mock_insert.assert_has_calls(calls)

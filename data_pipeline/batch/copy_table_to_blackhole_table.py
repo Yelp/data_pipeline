@@ -59,6 +59,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             help='Number of rows to process between commits (default: %default).'
         )
 
+        opt_group.add_option('--primary', dest='primary', help='Primary key column name')
+
         opt_group.add_option('--dry-run', action="store_true", dest='dry_run', default=False)
 
         opt_group.add_option(
@@ -84,6 +86,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self.table_name = self.options.table_name
         # TODO(psuben|2015-09-30): Decide the actual naming convention for blackhole table
         self.temp_table = 'temp_{0}'.format(self.table_name)
+        self.primary_key = self.options.primary
         self.processed_row_count = 0
 
     def _wait_for_replication(self):
@@ -116,15 +119,32 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self.execute_sql(query, is_write_session=True)
         self.log.info("Dropped table: {table}".format(table=self.temp_table))
 
-    def insert_batch(self, offset, chunk_size):
-        query = 'INSERT INTO {0} SELECT * FROM {1} ORDER BY id LIMIT {2}, {3}'.format(
+    def setup_transaction(self):
+        self.execute_sql('BEGIN', is_write_session=True)
+        self.execute_sql(
+            'LOCK TABLES {0} WRITE, {1} WRITE'.format(self.table_name, self.temp_table),
+            is_write_session=True
+        )
+
+    def count_inserted(self, offset):
+        query = 'SELECT COUNT(*) FROM (SELECT * FROM {0} ORDER BY {1} LIMIT {2}, {3}) AS T'.format(
+            self.table_name,
+            self.primary_key,
+            offset,
+            self.options.batch_size
+        )
+        inserted_rows = self.execute_sql(query, is_write_session=True)
+        return inserted_rows.scalar()
+
+    def insert_batch(self, offset):
+        query = 'INSERT INTO {0} SELECT * FROM {1} ORDER BY {2} LIMIT {3}, {4}'.format(
             self.temp_table,
             self.table_name,
+            self.primary_key,
             offset,
-            chunk_size
+            self.options.batch_size
         )
         self.execute_sql(query, is_write_session=True)
-        self.log.info("Inserted {0} rows starting at row: {1}".format(chunk_size, offset))
 
     def process_table(self):
         self.log.info(
@@ -133,14 +153,14 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             )
         )
         offset = 0
-        rows_remaining = self.total_row_count
-        while rows_remaining > 0:
-            chunk_size = min(self.options.batch_size, rows_remaining)
-            self.insert_batch(offset, chunk_size)
+        count = self.options.batch_size
+        while count >= self.options.batch_size:
+            self.setup_transaction()
+            count = self.count_inserted(offset)
+            self.insert_batch(offset)
             self._after_processing_rows()
-            self.processed_row_count += chunk_size
-            offset += chunk_size
-            rows_remaining -= chunk_size
+            offset += count
+            self.processed_row_count += count
 
     def run(self):
         self.initial_action()
