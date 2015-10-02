@@ -116,55 +116,37 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self.execute_sql(query, is_write_session=True)
         self.log.info("Dropped table: {table}".format(table=self.temp_table))
 
-    def process_table(self, row_generator):
+    def insert_batch(self, offset, chunk_size):
+        query = 'INSERT INTO {0} SELECT * FROM {1} ORDER BY id LIMIT {2}, {3}'.format(
+            self.temp_table,
+            self.table_name,
+            offset,
+            chunk_size
+        )
+        self.execute_sql(query, is_write_session=True)
+        self.log.info("Inserted {0} rows starting at row: {1}".format(chunk_size, offset))
+
+    def process_table(self):
         self.log.info(
             "Total rows to be processed: {row_count}".format(
                 row_count=self.total_row_count
             )
         )
-        remaining_row_count = self.total_row_count
-        while remaining_row_count > 0:
-            chunk_size = min(self.options.batch_size, remaining_row_count)
-            batch_rows = []  # Accumulates chunk_size # of rows to execute all at once.
-            for i in range(chunk_size):
-                batch_rows.append(self.get_row_values(row_generator))
-
-            self.insert_batch_rows(batch_rows)
-            self.log.info(
-                "Inserted {chunk_size} rows into {table}".format(
-                    chunk_size=chunk_size,
-                    table=self.temp_table
-                )
-            )
+        offset = 0
+        rows_remaining = self.total_row_count
+        while rows_remaining > 0:
+            chunk_size = min(self.options.batch_size, rows_remaining)
+            self.insert_batch(offset, chunk_size)
             self._after_processing_rows()
-            remaining_row_count -= chunk_size
             self.processed_row_count += chunk_size
+            offset += chunk_size
+            rows_remaining -= chunk_size
 
     def run(self):
         self.initial_action()
-        row_generator = self.get_rows()
-        self.process_table(row_generator)
+        self.process_table()
         self.log_run_info()
         self.final_action()
-
-    def insert_batch_rows(self, batch_rows):
-        insert_values = ','.join(batch_rows)
-        query = 'INSERT INTO {0} VALUES{1}'.format(self.temp_table, insert_values)
-        self.execute_sql(query, is_write_session=True)
-
-    def get_row_values(self, row_generator):
-        # String manipulation to make sure strings are not mistaken for Columns
-        row_values = ','.join(
-            '\'{0}\''.format(str(column_values))
-            for column_values in next(row_generator).values()
-        )
-        return '({0})'.format(row_values)
-
-    def get_rows(self):
-        query = 'SELECT * FROM {0}'.format(self.table_name)
-        result = self.execute_sql(query, is_write_session=False)
-        for row in result:
-            yield row
 
     def execute_sql(self, query, is_write_session):
         if is_write_session:

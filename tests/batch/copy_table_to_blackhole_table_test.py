@@ -55,13 +55,13 @@ class TestFullRefreshRunner(object):
 
     @pytest.yield_fixture
     def _read(self, refresh_batch):
-        with mock.patch.object(refresh_batch, 'read_session', autospec=True) as mock_read:
-            yield mock_read
+        with mock.patch.object(refresh_batch, 'read_session', autospec=True) as mock_read_session:
+            yield mock_read_session
 
     @pytest.yield_fixture
     def _write(self, refresh_batch):
-        with mock.patch.object(refresh_batch, 'write_session', autospec=True) as mock_write:
-            yield mock_write
+        with mock.patch.object(refresh_batch, 'write_session', autospec=True) as mock_write_session:
+            yield mock_write_session
 
     @pytest.yield_fixture
     def _read_session(self, refresh_batch):
@@ -92,9 +92,9 @@ class TestFullRefreshRunner(object):
             yield mock_row_count
 
     @pytest.yield_fixture
-    def mock_write(self):
-        with mock.patch.object(FullRefreshRunner, 'execute_sql') as mock_write:
-            yield mock_write
+    def mock_execute(self):
+        with mock.patch.object(FullRefreshRunner, 'execute_sql') as mock_execute:
+            yield mock_execute
 
     @pytest.yield_fixture
     def mock_create_table_src(self):
@@ -113,10 +113,9 @@ class TestFullRefreshRunner(object):
         mock_create_table_src.assert_called_once_with()
         mock_process_rows.assert_called_once_with()
 
-    def test_final_action(self, refresh_batch, temp_name):
-        with mock.patch.object(refresh_batch, 'execute_sql') as mock_write:
-            refresh_batch.final_action()
-            mock_write.assert_called_once_with('DROP TABLE {0}'.format(temp_name), is_write_session=True)
+    def test_final_action(self, refresh_batch, temp_name, mock_execute):
+        refresh_batch.final_action()
+        mock_execute.assert_called_once_with('DROP TABLE {0}'.format(temp_name), is_write_session=True)
 
     def test_after_row_processing(self, refresh_batch, sessions):
         refresh_batch._commit_changes()
@@ -141,7 +140,23 @@ class TestFullRefreshRunner(object):
         refresh_batch._read_session.execute.assert_not_called()
         refresh_batch._write_session.execute.assert_not_called()
 
-    def test_get_rows(self, refresh_batch, table_name):
-        with mock.patch.object(refresh_batch, 'execute_sql', return_value=[]) as mock_write:
-            assert tuple(refresh_batch.get_rows()) == ()
-            mock_write.assert_called_once_with('SELECT * FROM {0}'.format(table_name), is_write_session=False)
+    def test_insert_batch(self, refresh_batch, mock_execute, table_name, temp_name):
+        offset = 0
+        limit = 10
+        refresh_batch.insert_batch(offset, limit)
+        query = 'INSERT INTO {0} SELECT * FROM {1} ORDER BY id LIMIT {2}, {3}'.format(
+            temp_name,
+            table_name,
+            offset,
+            limit
+        )
+        mock_execute.assert_called_once_with(query, is_write_session=True)
+
+    def test_process_table(self, refresh_batch, mock_row_count, mock_process_rows):
+        with mock.patch.object(refresh_batch, 'insert_batch') as mock_insert, \
+                mock.patch.object(refresh_batch, 'options', autospec=True) as mock_options:
+            mock_options.batch_size = 10
+            mock_row_count.return_value = 25
+            refresh_batch.process_table()
+            calls = [mock.call(0, 10), mock.call(10, 10), mock.call(20, 5)]
+            mock_insert.assert_has_calls(calls, any_order=False)
