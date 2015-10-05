@@ -115,7 +115,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self._after_processing_rows()
 
     def final_action(self):
-        query = 'DROP TABLE {0}'.format(self.temp_table)
+        query = 'DROP TABLE IF EXISTS {0}'.format(self.temp_table)
         self.execute_sql(query, is_write_session=True)
         self.log.info("Dropped table: {table}".format(table=self.temp_table))
 
@@ -133,7 +133,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             offset,
             self.options.batch_size
         )
-        inserted_rows = self.execute_sql(query, is_write_session=True)
+        inserted_rows = self.execute_sql(query, is_write_session=False)
         return inserted_rows.scalar()
 
     def insert_batch(self, offset):
@@ -163,10 +163,12 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.processed_row_count += count
 
     def run(self):
-        self.initial_action()
-        self.process_table()
-        self.log_run_info()
-        self.final_action()
+        try:
+            self.initial_action()
+            self.process_table()
+            self.log_run_info()
+        finally:
+            self.final_action()
 
     def execute_sql(self, query, is_write_session):
         if is_write_session:
