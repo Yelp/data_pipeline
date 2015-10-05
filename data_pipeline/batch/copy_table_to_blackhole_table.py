@@ -18,7 +18,6 @@ from yelp_servlib import config_util
 
 
 class FullRefreshRunner(Batch, BatchDBMixin):
-    db_name = 'primary'
     notify_emails = ['bam+batch@yelp.com']
     is_readonly_batch = False
     ro_replica_name = 'batch_ro'
@@ -28,7 +27,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
     def total_row_count(self):
         query = 'SELECT COUNT(*) FROM {0}'.format(self.table_name)
         value = self.execute_sql(query, is_write_session=False).scalar()
-        return value if value is not None else 1
+        return value if value is not None else 0
 
     @batch_configure
     def configure(self):
@@ -46,9 +45,16 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         opt_group = OptionGroup(option_parser, 'Full Refresh Runner Options')
 
         opt_group.add_option(
+            '--cluster',
+            dest='cluster',
+            default='primary',
+            help='Specifies table cluster (default: %default).'
+        )
+
+        opt_group.add_option(
             '--table-name',
             dest='table_name',
-            help='Name of table to be refreshed (default: %default).'
+            help='Required: Name of table to be refreshed.'
         )
 
         opt_group.add_option(
@@ -59,14 +65,18 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             help='Number of rows to process between commits (default: %default).'
         )
 
-        opt_group.add_option('--primary', dest='primary', help='Primary key column name')
+        opt_group.add_option(
+            '--primary',
+            dest='primary',
+            help='Required: Comma separated string of primary key column names'
+        )
 
         opt_group.add_option('--dry-run', action="store_true", dest='dry_run', default=False)
 
         opt_group.add_option(
             '--config-path',
             dest='config_path',
-            help='Required Config file path for FullRefreshRunner'
+            help='Required: Config file path for FullRefreshRunner'
         )
 
         opt_group.add_option(
@@ -83,6 +93,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         if self.options.batch_size <= 0:
             raise ValueError("batch size should be greater than 0")
 
+        self.db_name = self.options.cluster
         self.table_name = self.options.table_name
         # TODO(psuben|2015-09-30): Decide the actual naming convention for blackhole table
         self.temp_table = 'temp_{0}'.format(self.table_name)
