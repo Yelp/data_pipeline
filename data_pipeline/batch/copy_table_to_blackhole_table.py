@@ -18,7 +18,7 @@ from yelp_servlib import config_util
 
 
 class FullRefreshRunner(Batch, BatchDBMixin):
-    notify_emails = ['psuben@yelp.com']
+    notify_emails = ['bam+batch@yelp.com']
     is_readonly_batch = False
     ro_replica_name = str('batch_ro')
     rw_replica_name = str('batch_rw')
@@ -67,7 +67,6 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         opt_group.add_option(
             '--config-path',
             dest='config_path',
-            default='/nail/home/psuben/pg/yelp-main/config/test_config.yaml',
             help='Required: Config file path for FullRefreshRunner'
         )
         opt_group.add_option(
