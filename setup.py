@@ -35,9 +35,9 @@ setup(
         'PyStaticConfiguration',
         'simplejson',
         'swaggerpy',
+        'yelp_conn',
         'yelp_kafka>=4.0.0',
-        'yelp_servlib',
-        'yelp_conn'
+        'yelp_servlib'
     ],
     zip_safe=False,
     keywords='data_pipeline',
