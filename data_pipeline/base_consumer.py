@@ -389,7 +389,7 @@ class BaseConsumer(Client):
             for partition, offset in consumer_topic_state.partition_offset_map.iteritems():
                 offset_requests.append(
                     OffsetCommitRequest(
-                        topic=topic,
+                        topic=kafka_bytestring(topic),
                         partition=partition,
                         offset=offset,
                         metadata=None
