@@ -153,7 +153,7 @@ class TestFullRefreshRunner(object):
     def test_after_row_processing(self, refresh_batch, sessions):
         refresh_batch._commit_changes()
         refresh_batch._read_session.rollback.assert_called_once_with()
-        refresh_batch._write_session.commit.assert_not_called()
+        assert refresh_batch._write_session.commit.call_count == 0
 
     def test_create_table_from_src_table(
         self,
@@ -181,12 +181,12 @@ class TestFullRefreshRunner(object):
     def test_execute_sql_read(self, refresh_batch, sessions, fake_query):
         refresh_batch.execute_sql(fake_query, is_write_session=False)
         refresh_batch._read_session.execute.assert_called_once_with(fake_query)
-        refresh_batch._write_session.execute.assert_not_called()
+        assert refresh_batch._write_session.execute.call_count == 0
 
     def test_execute_sql_write(self, refresh_batch, sessions, fake_query):
         refresh_batch.execute_sql(fake_query, is_write_session=True)
-        refresh_batch._read_session.execute.assert_not_called()
-        refresh_batch._write_session.execute.assert_not_called()
+        assert refresh_batch._read_session.execute.call_count == 0
+        assert refresh_batch._write_session.execute.call_count == 0
 
     def test_insert_batch(
         self,
