@@ -1,27 +1,28 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
+from __future__ import unicode_literals
 
 import re
 import time
-import yelp_conn
 
 from datetime import datetime
 from optparse import OptionGroup
 
+import yelp_conn
 from yelp_batch import batch_command_line_options
 from yelp_batch import batch_configure
 from yelp_batch import batch_context
-from yelp_batch.for_each import Batch
 from yelp_batch._db import BatchDBMixin
+from yelp_batch.for_each import Batch
 from yelp_lib.classutil import cached_property
 from yelp_servlib import config_util
 
 
 class FullRefreshRunner(Batch, BatchDBMixin):
-    notify_emails = ['bam+batch@yelp.com']
+    notify_emails = ['psuben@yelp.com']
     is_readonly_batch = False
-    ro_replica_name = 'batch_ro'
-    rw_replica_name = 'batch_rw'
+    ro_replica_name = str('batch_ro')
+    rw_replica_name = str('batch_rw')
 
     @batch_context
     def _session_manager(self):
@@ -67,6 +68,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         opt_group.add_option(
             '--config-path',
             dest='config_path',
+            default='/nail/home/psuben/pg/yelp-main/config/test_config.yaml',
             help='Required: Config file path for FullRefreshRunner'
         )
         opt_group.add_option(
