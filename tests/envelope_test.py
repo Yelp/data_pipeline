@@ -25,11 +25,10 @@ class TestEnvelope(object):
             Envelope,
             '_pack_meta_attribute',
             return_value={'schema_id': 10, 'payload': bytes(20)}
-        ), \
-            mock.patch.object(
-                Envelope,
-                '_unpack_meta_attribute',
-                return_value=unpacked_meta
+        ), mock.patch.object(
+            Envelope,
+            '_unpack_meta_attribute',
+            return_value=unpacked_meta
         ):
             yield
 

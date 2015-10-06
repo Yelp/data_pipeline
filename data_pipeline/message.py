@@ -30,7 +30,8 @@ PayloadFieldDiff = namedtuple('PayloadFieldDiff', [
 ])
 
 MetaAttribute = namedtuple('MetaAttribute', [
-    'schema_id',            # Schema id of meta attribute, must be an int
+    'schema_id',            # Schema id of meta attribute used to
+                            # encode/decode the payload, must be an int
     'payload'               # Payload of meta attribute
 ])
 
@@ -51,8 +52,9 @@ class Message(object):
             recommended to leave it unassigned and let the Schematizer decide
             the topic of the schema.  Use caution when overriding the topic.
         payload (bytes): Avro-encoded message - encoded with schema identified
-            by `schema_id`.  Either `payload` or `payload_data` must be provided
-            but not both.
+            by `schema_id`. This is expected to be None for messages on their
+            way to being published. Either `payload` or `payload_data` must be
+            provided but not both.
         payload_data (dict): The contents of message, which will be lazily
             encoded with schema identified by `schema_id`.  Either `payload` or
             `payload_data` must be provided but not both.
@@ -61,7 +63,11 @@ class Message(object):
             provided.
         contains_pii (bool, optional): Indicates that the payload contains PII,
             so the clientlib can properly encrypt the data and mark it as
-            sensitive, default to False.
+            sensitive, defaults to False. The data pipeline consumer will
+            automatically decrypt fields containing PII. This field should not
+            be used to indicate that a topic should be encrypted, because
+            PII information will be used to indicate to various systems how
+            to handle the data, in addition to automatic decryption.
         timestamp (int, optional): A unix timestamp for the message.  If this is
             not provided, a timestamp will be generated automatically.  If the
             message is coming directly from an upstream source, and the
@@ -90,6 +96,12 @@ class Message(object):
             representation of the payload and previous payload, instead of
             the avro encoded message.  This is to avoid loading the schema
             from the schema store.  Defaults to False.
+        meta (list of MetaAttribute, optional): This should be a list of
+            MetaAttribute tuples or None. This is used to contain information
+            about metadata. These meta attributes are serialized using their
+            respective avro schema, which is registered with the schematizer.
+            Hence the MetaAttribute tuples contain a schema_id and a payload.
+            The payload is deserialized using the schema_id.
 
     Remarks:
         Although `previous_payload` and `previous_payload_data` are not
@@ -112,7 +124,6 @@ class Message(object):
 
     @property
     def topic(self):
-        """The kafka topic the message should be published to."""
         return self._topic
 
     @topic.setter
@@ -125,7 +136,6 @@ class Message(object):
 
     @property
     def schema_id(self):
-        """Integer identifying the schema used to encode the payload"""
         return self._schema_id
 
     @schema_id.setter
@@ -141,9 +151,6 @@ class Message(object):
 
     @property
     def uuid(self):
-        """Globally-unique 16-byte identifier for the message.  A uuid4 will
-        be generated automatically if this isn't provided.
-        """
         return self._uuid
 
     @uuid.setter
@@ -164,13 +171,6 @@ class Message(object):
 
     @property
     def contains_pii(self):
-        """Boolean indicating that the payload contains PII, so the clientlib
-        can properly encrypt the data and mark it as sensitive.  The data
-        pipeline consumer will automatically decrypt fields containing PII.
-        This field shouldn't be used to indicate that a topic should be
-        encrypted, because PII information will be used to indicate to various
-        systems how to handle the data, in addition to automatic decryption.
-        """
         if self._contains_pii is None:
             self._contains_pii = self._schematizer.get_contains_pii_for_schema_id(self.schema_id)
         return self._contains_pii
@@ -189,22 +189,20 @@ class Message(object):
 
     @property
     def meta(self):
-        """List of optional meta attributes of the message."""
         return self._meta
 
     @meta.setter
     def meta(self, meta):
-        if meta:
-            if any([
-                not isinstance(meta, list),
-                any((
-                    not isinstance(meta_attr, MetaAttribute) or
-                    not isinstance(meta_attr.schema_id, int)
-                )for meta_attr in meta)
-            ]):
-                raise ValueError(
-                    "Meta must be None or list of MetaAttribute tuples."
-                )
+        is_meta_attr_list = isinstance(meta, list) and all(
+            (
+                isinstance(meta_attr, MetaAttribute) and
+                isinstance(meta_attr.schema_id, int)
+            ) for meta_attr in meta
+        )
+        if meta is not None and not is_meta_attr_list:
+            raise TypeError(
+                "Meta must be None or list of MetaAttribute tuples."
+            )
         self._meta = meta
 
     @property
@@ -214,6 +212,7 @@ class Message(object):
                 self._get_meta_attribute_name(meta_attribute.schema_id): meta_attribute
                 for meta_attribute in self.meta
             }
+        return None
 
     def _get_meta_attribute_name(self, schema_id):
         # TODO(askatti|DATAPIPE-467): Use new schematizer_client here.
@@ -227,30 +226,13 @@ class Message(object):
 
     @meta_attributes_map.setter
     def meta_attributes_map(self, meta_attributes_map):
-        for meta_attr in meta_attributes_map.values():
-            for old_meta_attr in self.meta:
-                if old_meta_attr.schema_id == meta_attr.schema_id:
-                    self.meta.remove(old_meta_attr)
-                self.meta.append(meta_attr)
+        self.meta = {
+            meta_attr.schema_id: meta_attr
+            for meta_attr in meta_attributes_map.values()
+        }.values()
 
     @property
     def timestamp(self):
-        """A unix timestamp for the message.  If this is not provided, a
-        timestamp will be generated automatically.  If the message is coming
-        directly from an upstream source, and the modification time is
-        available in that source, it's appropriate to use that timestamp.
-        Otherwise, it's probably best to have the timestamp represent when the
-        message was generated.  If the message is derived from an upstream data
-        pipeline message, the timestamp should be the timestamp from that
-        upstream message.
-
-        Timestamp is used internally by the clientlib to monitor timings and
-        other metadata about the data pipeline as a system.
-        Consequently, there is no need to store information about when this
-        message passed through individual systems in the message itself,
-        as it is otherwise recorded.  See DATAPIPE-169 for details about
-        monitoring.
-        """
         return self._timestamp
 
     @timestamp.setter
@@ -261,10 +243,6 @@ class Message(object):
 
     @property
     def upstream_position_info(self):
-        """The clientlib will track these objects and provide them back from
-        the producer to identify the last message that was successfully
-        published, both overall and per topic.
-        """
         return self._upstream_position_info
 
     @upstream_position_info.setter
@@ -316,8 +294,6 @@ class Message(object):
 
     @property
     def payload(self):
-        """Avro-encoded message - encoded with schema identified by `schema_id`.
-        """
         self._encode_payload_data_if_necessary()
         return self._payload
 
