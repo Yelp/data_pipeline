@@ -4,7 +4,6 @@ from __future__ import unicode_literals
 
 import re
 import time
-
 from datetime import datetime
 from optparse import OptionGroup
 
