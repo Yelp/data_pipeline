@@ -200,7 +200,7 @@ class TestFullRefreshRunner(object):
         assert refresh_batch._read_session.execute.call_count == 0
         assert refresh_batch._write_session.execute.call_count == 0
 
-    def insert_batch_fixture(
+    def insert_batch_test_helper(
         self,
         batch,
         temp_name,
@@ -228,7 +228,7 @@ class TestFullRefreshRunner(object):
         temp_name
     ):
         clause = True
-        self.insert_batch_fixture(
+        self.insert_batch_test_helper(
             refresh_batch,
             temp_name,
             table_name,
@@ -244,7 +244,7 @@ class TestFullRefreshRunner(object):
         mock_execute,
     ):
         clause = "country='CA'"
-        self.insert_batch_fixture(
+        self.insert_batch_test_helper(
             refresh_batch_custom_where,
             temp_name,
             table_name,
