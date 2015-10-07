@@ -73,9 +73,10 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             '--where',
             dest='where_clause',
             default=True,
-            help='Custom where clause to specify which rows to refresh '
+            help='Custom WHERE clause to specify which rows to refresh '
                  'Note: This option takes everything that would come '
                  'after the WHERE in a sql statement.'
+                 'e.g: --where="country=\'CA\' AND city=\'Waterloo\'"'
         )
         opt_group.add_option(
             '--no-start-up-replication-wait',
