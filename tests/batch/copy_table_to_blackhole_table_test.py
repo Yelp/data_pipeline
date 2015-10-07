@@ -62,6 +62,18 @@ class TestFullRefreshRunner(object):
         yield batch
 
     @pytest.yield_fixture
+    def refresh_batch_custom_where(self, table_name):
+        batch = FullRefreshRunner()
+        batch.process_commandline_options([
+            '--dry-run',
+            '--table-name={0}'.format(table_name),
+            '--primary=id',
+            '--where={0}'.format("country='CA'")
+        ])
+        batch._init_global_state()
+        yield batch
+
+    @pytest.yield_fixture
     def _read(self, refresh_batch):
         with mock.patch.object(
                 refresh_batch,
@@ -188,23 +200,57 @@ class TestFullRefreshRunner(object):
         assert refresh_batch._read_session.execute.call_count == 0
         assert refresh_batch._write_session.execute.call_count == 0
 
-    def test_insert_batch(
+    def insert_batch_fixture(
+        self,
+        batch,
+        temp_name,
+        table_name,
+        mock_execute,
+        clause
+    ):
+        offset = 0
+        batch.insert_batch(offset)
+        query = ('INSERT INTO {0} SELECT * FROM {1} WHERE {2} '
+                 'ORDER BY id LIMIT {3}, {4}').format(
+            temp_name,
+            table_name,
+            clause,
+            offset,
+            batch.options.batch_size
+        )
+        mock_execute.assert_called_once_with(query, is_write_session=True)
+
+    def test_insert_batch_default_where(
         self,
         refresh_batch,
         mock_execute,
         table_name,
         temp_name
     ):
-        offset = 0
-        refresh_batch.insert_batch(offset)
-        query = ('INSERT INTO {0} SELECT * FROM {1} '
-                 'ORDER BY id LIMIT {2}, {3}').format(
+        clause = True
+        self.insert_batch_fixture(
+            refresh_batch,
             temp_name,
             table_name,
-            offset,
-            refresh_batch.options.batch_size
+            mock_execute,
+            clause
         )
-        mock_execute.assert_called_once_with(query, is_write_session=True)
+
+    def test_insert_batch_custom_where(
+        self,
+        refresh_batch_custom_where,
+        temp_name,
+        table_name,
+        mock_execute,
+    ):
+        clause = "country='CA'"
+        self.insert_batch_fixture(
+            refresh_batch_custom_where,
+            temp_name,
+            table_name,
+            mock_execute,
+            clause
+        )
 
     def test_process_table(
         self,
