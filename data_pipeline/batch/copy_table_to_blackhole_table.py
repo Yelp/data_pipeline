@@ -70,6 +70,14 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             help='Required: Config file path for FullRefreshRunner'
         )
         opt_group.add_option(
+            '--where',
+            dest='where_clause',
+            default=True,
+            help='Custom where clause to specify which rows to refresh '
+                 'Note: This option takes everything that would come '
+                 'after the WHERE in a sql statement.'
+        )
+        opt_group.add_option(
             '--no-start-up-replication-wait',
             dest='wait_for_replication_on_startup',
             action='store_false',
@@ -94,13 +102,19 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
         self.db_name = self.options.cluster
         self.table_name = self.options.table_name
-        self.temp_table = '{table}_data_pipeline_refresh'.format(table=self.table_name)
+        self.temp_table = '{table}_data_pipeline_refresh'.format(
+            table=self.table_name
+        )
         self.primary_key = self.options.primary
         self.processed_row_count = 0
+        self.where_clause = self.options.where_clause
 
     @cached_property
     def total_row_count(self):
-        query = 'SELECT COUNT(*) FROM {table_name}'.format(table_name=self.table_name)
+        query = 'SELECT COUNT(*) FROM {table_name} WHERE {clause}'.format(
+            table_name=self.table_name,
+            clause=self.where_clause
+        )
         value = self.execute_sql(query, is_write_session=False).scalar()
         return value if value is not None else 0
 
@@ -190,10 +204,11 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
     def count_inserted(self, offset):
         query = (
-            'SELECT COUNT(*) FROM (SELECT * FROM {origin} '
+            'SELECT COUNT(*) FROM (SELECT * FROM {origin} WHERE {clause} '
             'ORDER BY {pk} LIMIT {offset}, {batch_size}) AS T'
         ).format(
             origin=self.table_name,
+            clause=self.where_clause,
             pk=self.primary_key,
             offset=offset,
             batch_size=self.options.batch_size
@@ -203,11 +218,12 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
     def insert_batch(self, offset):
         insert_query = (
-            'INSERT INTO {temp} SELECT * FROM {origin} '
+            'INSERT INTO {temp} SELECT * FROM {origin} WHERE {clause} '
             'ORDER BY {pk} LIMIT {offset}, {batch_size}'
         ).format(
             temp=self.temp_table,
             origin=self.table_name,
+            clause=self.where_clause,
             pk=self.primary_key,
             offset=offset,
             batch_size=self.options.batch_size
