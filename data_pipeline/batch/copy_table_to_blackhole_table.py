@@ -70,6 +70,15 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             help='Required: Config file path for FullRefreshRunner'
         )
         opt_group.add_option(
+            '--where',
+            dest='where_clause',
+            default=None,
+            help='Custom WHERE clause to specify which rows to refresh '
+                 'Note: This option takes everything that would come '
+                 'after the WHERE in a sql statement. '
+                 'e.g: --where="country=\'CA\' AND city=\'Waterloo\'"'
+        )
+        opt_group.add_option(
             '--no-start-up-replication-wait',
             dest='wait_for_replication_on_startup',
             action='store_false',
@@ -94,15 +103,40 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
         self.db_name = self.options.cluster
         self.table_name = self.options.table_name
-        self.temp_table = '{table}_data_pipeline_refresh'.format(table=self.table_name)
+        self.temp_table = '{table}_data_pipeline_refresh'.format(
+            table=self.table_name
+        )
         self.primary_key = self.options.primary
         self.processed_row_count = 0
+        self.where_clause = self.options.where_clause
 
     @cached_property
     def total_row_count(self):
-        query = 'SELECT COUNT(*) FROM {table_name}'.format(table_name=self.table_name)
+        query = self.build_select('COUNT(*)')
         value = self.execute_sql(query, is_write_session=False).scalar()
         return value if value is not None else 0
+
+    def build_select(
+            self,
+            select_item,
+            order_col=None,
+            offset=None,
+            size=None
+    ):
+        base_query = 'SELECT {col} FROM {origin}'.format(
+            col=select_item,
+            origin=self.table_name
+        )
+        if self.where_clause is not None:
+            base_query += ' WHERE {clause}'.format(clause=self.where_clause)
+        if order_col is not None:
+            base_query += ' ORDER BY {order}'.format(order=order_col)
+        if offset is not None and size is not None:
+            base_query += ' LIMIT {offset}, {size}'.format(
+                offset=offset,
+                size=size
+            )
+        return base_query
 
     def _wait_for_replication(self):
         """Lets first wait for ro_conn replication to catch up with the
@@ -189,29 +223,27 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         )
 
     def count_inserted(self, offset):
-        query = (
-            'SELECT COUNT(*) FROM (SELECT * FROM {origin} '
-            'ORDER BY {pk} LIMIT {offset}, {batch_size}) AS T'
-        ).format(
-            origin=self.table_name,
-            pk=self.primary_key,
-            offset=offset,
-            batch_size=self.options.batch_size
+        select_query = self.build_select(
+            '*',
+            self.primary_key,
+            offset,
+            self.options.batch_size
+        )
+        query = 'SELECT COUNT(*) FROM ({query}) AS T'.format(
+            query=select_query
         )
         inserted_rows = self.execute_sql(query, is_write_session=False)
         return inserted_rows.scalar()
 
     def insert_batch(self, offset):
-        insert_query = (
-            'INSERT INTO {temp} SELECT * FROM {origin} '
-            'ORDER BY {pk} LIMIT {offset}, {batch_size}'
-        ).format(
-            temp=self.temp_table,
-            origin=self.table_name,
-            pk=self.primary_key,
-            offset=offset,
-            batch_size=self.options.batch_size
+        insert_query = 'INSERT INTO {temp} '.format(temp=self.temp_table)
+        select_query = self.build_select(
+            '*',
+            self.primary_key,
+            offset,
+            self.options.batch_size
         )
+        insert_query += select_query
         self.execute_sql(insert_query, is_write_session=True)
 
     def process_table(self):

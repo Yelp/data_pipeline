@@ -62,6 +62,18 @@ class TestFullRefreshRunner(object):
         yield batch
 
     @pytest.yield_fixture
+    def refresh_batch_custom_where(self, table_name):
+        batch = FullRefreshRunner()
+        batch.process_commandline_options([
+            '--dry-run',
+            '--table-name={0}'.format(table_name),
+            '--primary=id',
+            '--where={0}'.format("country='CA'")
+        ])
+        batch._init_global_state()
+        yield batch
+
+    @pytest.yield_fixture
     def _read(self, refresh_batch):
         with mock.patch.object(
                 refresh_batch,
@@ -155,6 +167,24 @@ class TestFullRefreshRunner(object):
         refresh_batch._read_session.rollback.assert_called_once_with()
         assert refresh_batch._write_session.commit.call_count == 0
 
+    def test_build_select(self, refresh_batch, refresh_batch_custom_where, table_name):
+        offset = 0
+        batch_size = refresh_batch_custom_where.options.batch_size
+        expected_where_query = (
+            'SELECT * FROM {origin} WHERE {clause} ORDER BY id '
+            'LIMIT {offset}, {batch_size}'
+        ).format(
+            origin=table_name,
+            clause="country='CA'",
+            offset=offset,
+            batch_size=batch_size
+        )
+        where_query = refresh_batch_custom_where.build_select('*', 'id', offset, batch_size)
+        expected_count_query = 'SELECT COUNT(*) FROM {origin}'.format(origin=table_name)
+        count_query = refresh_batch.build_select('COUNT(*)')
+        assert expected_where_query == where_query
+        assert expected_count_query == count_query
+
     def test_create_table_from_src_table(
         self,
         refresh_batch,
@@ -188,23 +218,70 @@ class TestFullRefreshRunner(object):
         assert refresh_batch._read_session.execute.call_count == 0
         assert refresh_batch._write_session.execute.call_count == 0
 
-    def test_insert_batch(
+    def insert_batch_test_helper(
+        self,
+        batch,
+        temp_name,
+        table_name,
+        mock_execute,
+        clause
+    ):
+        offset = 0
+        batch.insert_batch(offset)
+        if clause is not None:
+            query = (
+                'INSERT INTO {0} SELECT * FROM {1} WHERE {2} '
+                'ORDER BY id LIMIT {3}, {4}'
+            ).format(
+                temp_name,
+                table_name,
+                clause,
+                offset,
+                batch.options.batch_size
+            )
+        else:
+            query = (
+                'INSERT INTO {0} SELECT * FROM {1} '
+                'ORDER BY id LIMIT {2}, {3}'
+            ).format(
+                temp_name,
+                table_name,
+                offset,
+                batch.options.batch_size
+            )
+        mock_execute.assert_called_once_with(query, is_write_session=True)
+
+    def test_insert_batch_default_where(
         self,
         refresh_batch,
         mock_execute,
         table_name,
         temp_name
     ):
-        offset = 0
-        refresh_batch.insert_batch(offset)
-        query = ('INSERT INTO {0} SELECT * FROM {1} '
-                 'ORDER BY id LIMIT {2}, {3}').format(
+        clause = None
+        self.insert_batch_test_helper(
+            refresh_batch,
             temp_name,
             table_name,
-            offset,
-            refresh_batch.options.batch_size
+            mock_execute,
+            clause
         )
-        mock_execute.assert_called_once_with(query, is_write_session=True)
+
+    def test_insert_batch_custom_where(
+        self,
+        refresh_batch_custom_where,
+        temp_name,
+        table_name,
+        mock_execute,
+    ):
+        clause = "country='CA'"
+        self.insert_batch_test_helper(
+            refresh_batch_custom_where,
+            temp_name,
+            table_name,
+            mock_execute,
+            clause
+        )
 
     def test_process_table(
         self,
