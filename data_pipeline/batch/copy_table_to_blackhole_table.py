@@ -69,6 +69,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             dest='config_path',
             help='Required: Config file path for FullRefreshRunner'
         )
+        # --where defaulting to True causes every row to be refreshed
+        # if a custom clause isn't provided.
         opt_group.add_option(
             '--where',
             dest='where_clause',
