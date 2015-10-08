@@ -116,14 +116,26 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         value = self.execute_sql(query, is_write_session=False).scalar()
         return value if value is not None else 0
 
-    def build_select(self, select_item, order_col=None, offset=None, size=None):
-        base_query = 'SELECT {col} FROM {origin}'.format(col=select_item, origin=self.table_name)
+    def build_select(
+            self,
+            select_item,
+            order_col=None,
+            offset=None,
+            size=None
+    ):
+        base_query = 'SELECT {col} FROM {origin}'.format(
+            col=select_item,
+            origin=self.table_name
+        )
         if self.where_clause is not None:
             base_query += ' WHERE {clause}'.format(clause=self.where_clause)
         if order_col is not None:
             base_query += ' ORDER BY {order}'.format(order=order_col)
         if offset is not None and size is not None:
-            base_query += ' LIMIT {offset}, {size}'.format(offset=offset, size=size)
+            base_query += ' LIMIT {offset}, {size}'.format(
+                offset=offset,
+                size=size
+            )
         return base_query
 
     def _wait_for_replication(self):
@@ -211,14 +223,26 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         )
 
     def count_inserted(self, offset):
-        select_query = self.build_select('*', self.primary_key, offset, self.options.batch_size)
-        query = 'SELECT COUNT(*) FROM ({query}) AS T'.format(query=select_query)
+        select_query = self.build_select(
+            '*',
+            self.primary_key,
+            offset,
+            self.options.batch_size
+        )
+        query = 'SELECT COUNT(*) FROM ({query}) AS T'.format(
+            query=select_query
+        )
         inserted_rows = self.execute_sql(query, is_write_session=False)
         return inserted_rows.scalar()
 
     def insert_batch(self, offset):
         insert_query = 'INSERT INTO {temp} '.format(temp=self.temp_table)
-        select_query = self.build_select('*', self.primary_key, offset, self.options.batch_size)
+        select_query = self.build_select(
+            '*',
+            self.primary_key,
+            offset,
+            self.options.batch_size
+        )
         insert_query += select_query
         self.execute_sql(insert_query, is_write_session=True)
 
