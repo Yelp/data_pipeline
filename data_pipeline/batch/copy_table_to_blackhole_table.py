@@ -8,11 +8,11 @@ from datetime import datetime
 from optparse import OptionGroup
 
 import yelp_conn
+from yelp_batch import Batch
 from yelp_batch import batch_command_line_options
 from yelp_batch import batch_configure
 from yelp_batch import batch_context
 from yelp_batch._db import BatchDBMixin
-from yelp_batch.for_each import Batch
 from yelp_lib.classutil import cached_property
 from yelp_servlib import config_util
 
