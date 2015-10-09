@@ -29,6 +29,7 @@ lib64
 *.iml
 *.log
 /.venv.touch
+/.venv.docs.touch
 /virtualenv_run
 
 # Installer logs
