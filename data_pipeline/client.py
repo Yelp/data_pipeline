@@ -14,7 +14,7 @@ from data_pipeline._kafka_producer import LoggingKafkaProducer
 from data_pipeline.config import get_config
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import MonitorMessage
-from data_pipeline.schema_cache import get_schema_cache
+from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.team import Team
 
 
@@ -237,15 +237,13 @@ class _Monitor(object):
 
     @cached_property
     def monitor_schema(self):
-        return get_schema_cache().schematizer_client.schemas.register_schema(
-            body={
-                'schema': simplejson.dumps(self._monitor_schema),
-                'namespace': self._monitor_schema['namespace'],
-                'source': self._monitor_schema['name'],
-                'source_owner_email': 'bam+data_pipeline+monitor@yelp.com',
-                'contains_pii': False
-            }
-        ).result()
+        return get_schematizer().register_schema(
+            namespace=self._monitor_schema['namespace'],
+            source=self._monitor_schema['name'],
+            schema_str=simplejson.dumps(self._monitor_schema),
+            source_owner_email='bam+data_pipeline+monitor@yelp.com',
+            contains_pii=False
+        )
 
     @cached_property
     def _monitor_schema(self):

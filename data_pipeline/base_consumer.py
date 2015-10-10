@@ -11,7 +11,7 @@ from yelp_kafka.config import KafkaConsumerConfig
 from data_pipeline.client import Client
 from data_pipeline.config import get_config
 from data_pipeline.message import Message
-from data_pipeline.schema_cache import get_schematizer_client
+from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 
 logger = get_config().logger
@@ -389,7 +389,7 @@ class BaseConsumer(Client):
             for partition, offset in consumer_topic_state.partition_offset_map.iteritems():
                 offset_requests.append(
                     OffsetCommitRequest(
-                        topic=topic,
+                        topic=kafka_bytestring(topic),
                         partition=partition,
                         offset=offset,
                         metadata=None
@@ -436,14 +436,15 @@ class BaseConsumer(Client):
         Args:
             topic_filter (Optional[TopicFilter]): criteria to filter newly
                 created topics.
-            before_refresh_handler (Optional[Callable[[List[schema_cache.Topic]], Any]]):
+            before_refresh_handler
+                (Optional[Callable[[List[data_pipeline.schematizer_clientlib.models.Topic]], Any]]):
                 function that performs custom logic before the consumer resets
                 topics.  The function will take a list of new topics filtered
                 by the given filter and currently not in the topic state map.
                 The return value of the function is ignored.
 
         Returns:
-            [schema_cache.Topic]: A list of new topics.
+            [data_pipeline.schematizer_clientlib.models.Topic]: A list of new topics.
         """
         new_topics = self._get_new_topics(topic_filter)
 
@@ -461,8 +462,7 @@ class BaseConsumer(Client):
         return new_topics
 
     def _get_new_topics(self, topic_filter):
-        schematizer_client = get_schematizer_client()
-        new_topics = schematizer_client.get_topics_by_criteria(
+        new_topics = get_schematizer().get_topics_by_criteria(
             namespace_name=topic_filter.namespace_name,
             source_name=topic_filter.source_name,
             created_after=topic_filter.created_after
@@ -487,9 +487,9 @@ class TopicFilter(object):
             The topics created at the same timestamp are included as well.
         filter_func (Optional[function]): function that performs custom logic
             to filter topics.  The input of this function will be a list of
-            `schema_cache.Topic` already filtered by specified namespace,
-            source, and/or created_after timestamp.  This function should
-            return a list of filtered `schema_cache.Topic`.
+            topics already filtered by specified namespace, source, and/or
+            created_after timestamp.  This function should return a list of
+            filtered topics.
     """
 
     def __init__(

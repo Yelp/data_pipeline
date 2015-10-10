@@ -15,7 +15,7 @@ from yelp_avro.util import get_avro_schema_object
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import CreateMessage
-from data_pipeline.schema_cache import get_schema_cache
+from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.testing_helpers.kafka_docker import KafkaDocker
 from tests.helpers.config import reconfigure
 from tests.helpers.containers import Containers
@@ -29,26 +29,19 @@ logging.basicConfig(
 
 
 @pytest.fixture
-def schema_cache(containers):
-    return get_schema_cache()
-
-
-@pytest.fixture
-def schematizer_client(schema_cache):
-    return schema_cache.schematizer_client
+def schematizer_client(containers):
+    return get_schematizer()
 
 
 @pytest.fixture
 def registered_schema(schematizer_client, example_schema):
-    return schematizer_client.schemas.register_schema(
-        body={
-            'schema': example_schema,
-            'namespace': 'test_namespace',
-            'source': 'good_source',
-            'source_owner_email': 'test@yelp.com',
-            'contains_pii': False
-        }
-    ).result()
+    return schematizer_client.register_schema(
+        namespace='test_namespace',
+        source='good_source',
+        schema_str=example_schema,
+        source_owner_email='test@yelp.com',
+        contains_pii=False
+    )
 
 
 @pytest.fixture

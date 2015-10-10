@@ -17,7 +17,7 @@ from data_pipeline.base_consumer import TopicFilter
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import UpdateMessage
 from data_pipeline.producer import Producer
-from data_pipeline.schema_cache import get_schematizer_client
+from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.testing_helpers.kafka_docker import create_kafka_docker_topic
 
 
@@ -249,10 +249,6 @@ class ConsumerAsserter(object):
 @pytest.mark.usefixtures("configure_teams")
 class RefreshTopicsTest(object):
 
-    @pytest.yield_fixture(scope='class')
-    def schematizer(self):
-        yield get_schematizer_client()
-
     @pytest.fixture
     def yelp_namespace(self):
         return 'yelp_{0}'.format(random.random())
@@ -262,16 +258,16 @@ class RefreshTopicsTest(object):
         return 'biz_{0}'.format(random.random())
 
     @pytest.fixture
-    def biz_schema(self, schematizer, yelp_namespace, biz_src):
-        return self._register_schema(schematizer, yelp_namespace, biz_src)
+    def biz_schema(self, yelp_namespace, biz_src):
+        return self._register_schema(yelp_namespace, biz_src)
 
     @pytest.fixture
     def usr_src(self):
         return 'user_{0}'.format(random.random())
 
     @pytest.fixture
-    def usr_schema(self, schematizer, yelp_namespace, usr_src):
-        return self._register_schema(schematizer, yelp_namespace, usr_src)
+    def usr_schema(self, yelp_namespace, usr_src):
+        return self._register_schema(yelp_namespace, usr_src)
 
     @pytest.fixture
     def aux_namespace(self):
@@ -282,27 +278,27 @@ class RefreshTopicsTest(object):
         return 'cta_{0}'.format(random.random())
 
     @pytest.fixture(autouse=True)
-    def cta_schema(self, schematizer, aux_namespace, cta_src):
-        return self._register_schema(schematizer, aux_namespace, cta_src)
+    def cta_schema(self, aux_namespace, cta_src):
+        return self._register_schema(aux_namespace, cta_src)
 
-    def _register_schema(self, schematizer_client, namespace, source):
+    def _register_schema(self, namespace, source):
         avro_schema = {
             'type': 'record',
             'name': source,
             'namespace': namespace,
             'fields': [{'type': 'int', 'name': 'id'}]
         }
-        return schematizer_client.register_schema_by_schema_json(
+        return get_schematizer().register_schema_from_schema_json(
             namespace=namespace,
             source=source,
             schema_json=avro_schema,
-            owner_email='bam+test@yelp.com',
+            source_owner_email='bam+test@yelp.com',
             contains_pii=False
         )
 
     @pytest.fixture(scope='class')
-    def test_schema(self, schematizer):
-        return self._register_schema(schematizer, 'test_namespace', 'test_src')
+    def test_schema(self):
+        return self._register_schema('test_namespace', 'test_src')
 
     @pytest.fixture(scope='class')
     def topic(self, test_schema, kafka_docker):

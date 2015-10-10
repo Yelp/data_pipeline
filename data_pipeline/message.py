@@ -13,7 +13,7 @@ from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
 from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
-from data_pipeline.schema_cache import get_schema_cache
+from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 
 logger = get_config().logger
@@ -120,7 +120,7 @@ class Message(object):
 
     @property
     def _schematizer(self):
-        return get_schema_cache()
+        return get_schematizer()
 
     @property
     def topic(self):
@@ -172,7 +172,9 @@ class Message(object):
     @property
     def contains_pii(self):
         if self._contains_pii is None:
-            self._contains_pii = self._schematizer.get_contains_pii_for_schema_id(self.schema_id)
+            self._contains_pii = self._schematizer.get_schema_by_id(
+                self.schema_id
+            ).topic.contains_pii
         return self._contains_pii
 
     @contains_pii.setter
@@ -215,14 +217,13 @@ class Message(object):
         return None
 
     def _get_meta_attribute_name(self, schema_id):
-        # TODO(askatti|DATAPIPE-467): Use new schematizer_client here.
-        schema_response = get_schema_cache().schematizer_client.schemas.get_schema_by_id(
+        namespace = self._schematizer.get_schema_by_id(
             schema_id=schema_id
-        ).result()
-        return '.'.join([
-            schema_response.topic.source.namespace.name,
-            schema_response.topic.source.source
-        ])
+        ).topic.source.namespace.name
+        source = self._schematizer.get_schema_by_id(
+            schema_id=schema_id
+        ).topic.source.source
+        return '.'.join([namespace, source])
 
     @meta_attributes_map.setter
     def meta_attributes_map(self, meta_attributes_map):
@@ -277,7 +278,7 @@ class Message(object):
 
     @property
     def _avro_schema(self):
-        return self._schematizer.get_schema(self.schema_id)
+        return self._schematizer.get_schema_by_id(self.schema_id).schema_json
 
     @property
     def _avro_string_writer(self):
@@ -350,7 +351,7 @@ class Message(object):
         # serialize the payload in a subclass if necessary.
         self.schema_id = schema_id
         self.topic = (topic or
-                      str(self._schematizer.get_topic_for_schema_id(schema_id)))
+                      str(self._schematizer.get_schema_by_id(schema_id).topic.name))
         self.uuid = uuid
         self.timestamp = timestamp
         self.upstream_position_info = upstream_position_info

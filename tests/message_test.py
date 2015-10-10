@@ -167,6 +167,19 @@ class SharedMessageTest(object):
                         'DummyAttributeName': meta
                     }
 
+    def test_get_contains_pii_from_schematizer_by_default(
+        self,
+        registered_schema,
+        valid_message_data
+    ):
+        message_data = self._make_message_data(
+            valid_message_data,
+            schema_id=registered_schema.schema_id
+        )
+        message_data.pop('contains_pii')
+        message = self.message_class(**message_data)
+        assert not message.contains_pii
+
     def test_dry_run(self, valid_message_data):
         payload_data = {'data': 'test'}
         message_data = self._make_message_data(
