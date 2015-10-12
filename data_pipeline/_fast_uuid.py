@@ -139,7 +139,6 @@ class FastUUID(object):
                     "libuuid is unavailable, falling back to the slower built-in "
                     "uuid implementation.  On ubuntu, apt-get install uuid-dev."
                 )
-                pass
 
     def uuid1(self):
         """Generates a uuid1 - a device specific uuid
