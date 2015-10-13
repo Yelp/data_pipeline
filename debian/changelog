@@ -1,0 +1,5 @@
+data-pipeline (0.0.0) UNRELEASED; urgency=low
+
+  * Initial file bootstrap.
+
+ -- Justin Cunningham <justinc@yelp.com>  Mon, 12 Oct 2015 18:13:54 -0700
