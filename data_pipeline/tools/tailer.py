@@ -4,12 +4,14 @@ from __future__ import unicode_literals
 
 import signal
 from optparse import OptionGroup
+from uuid import UUID
 
 from yelp_batch.batch import Batch
 from yelp_batch.batch import batch_command_line_options
 from yelp_batch.batch import batch_configure
 from yelp_servlib.config_util import load_default_config
 
+from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
 from data_pipeline.consumer import Consumer
 from data_pipeline.expected_frequency import ExpectedFrequency
@@ -124,7 +126,9 @@ class Tailer(Batch):
         )
 
         with Consumer(
-            'data_pipeline_tailer',
+            # The tailer name should be unique - if it's not, partitions will
+            # be split between multiple tailer instances
+            'data_pipeline_tailer-%s' % str(UUID(bytes=FastUUID().uuid4()).hex),
             'bam',
             ExpectedFrequency.constantly,
             {str(topic): None for topic in self.options.topics},
