@@ -44,7 +44,7 @@ setup(
         'tools': [
             # yelp_clog isn't compatible with triftpy 0.2.0 on
             'thriftpy<0.2.0',
-            'yelp_batch>=0.19.2',
+            'yelp_batch>=0.19.4',
         ]
     },
     zip_safe=False,

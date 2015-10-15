@@ -39,7 +39,7 @@ thriftpy==0.1.15
 tornado==2.4.1
 Twisted==15.4.0
 yelp-avro==0.1.2
-yelp-batch==0.19.2
+yelp-batch==0.19.4
 yelp-bytes==0.2.0
 yelp-cgeom==1.3.1
 yelp-clog==2.2.8
