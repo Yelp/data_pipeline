@@ -14,8 +14,8 @@ help:
 	@echo "test - run tests quickly with the default Python"
 	@echo "coverage - check code coverage"
 	@echo "docs - generate Sphinx HTML documentation, including API docs"
-	@echo "prepare-release - Bump the version number and add a changelog entry"
-	@echo "release - Commit the latest version, tag the commit, and push it"
+	@echo "prepare-release - Bump the version number and add a changelog entry (pushmasters only)"
+	@echo "release - Commit the latest version, tag the commit, and push it (pushmasters only)"
 
 all: production install-hooks
 
@@ -73,7 +73,8 @@ install-hooks:
 itest_%:
 	make -C yelp_package $@
 
-# Steps to release
+# Steps to release (Don't do this if your not a pushmaster - see "Pushing Code"
+# on y/datapipeline)
 # 1. `make prepare-release`
 # 2. `make release`
 LAST_COMMIT_MSG = $(shell git log -1 --pretty=%B )

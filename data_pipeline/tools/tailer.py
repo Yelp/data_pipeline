@@ -22,10 +22,10 @@ class Tailer(Batch):
     enable_error_emails = False
 
     @batch_command_line_options
-    def _define_tools_options(self, option_parser):
+    def _define_tailer_options(self, option_parser):
         opt_group = OptionGroup(
             option_parser,
-            'Data Pipeline tailer options'
+            'Data Pipeline Tailer options'
         )
 
         opt_group.add_option(
@@ -128,7 +128,9 @@ class Tailer(Batch):
         with Consumer(
             # The tailer name should be unique - if it's not, partitions will
             # be split between multiple tailer instances
-            'data_pipeline_tailer-%s' % str(UUID(bytes=FastUUID().uuid4()).hex),
+            'data_pipeline_tailer-{}'.format(
+                str(UUID(bytes=FastUUID().uuid4()).hex)
+            ),
             'bam',
             ExpectedFrequency.constantly,
             {str(topic): None for topic in self.options.topics},
