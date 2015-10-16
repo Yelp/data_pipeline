@@ -1,3 +1,9 @@
+data-pipeline-tools (0.1.28) lucid; urgency=low
+
+  * Commit: Not packaging missing file
+
+ -- Justin Cunningham <justinc@yelp.com>  Fri, 16 Oct 2015 10:26:23 -0700
+
 data-pipeline-tools (0.1.27) lucid; urgency=low
 
   * Commit: Responded to CR
