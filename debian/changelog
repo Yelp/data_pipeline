@@ -1,3 +1,9 @@
+data-pipeline-tools (0.1.30) lucid; urgency=low
+
+  * Commit: Removed lint code that was replaced by pre-commit
+
+ -- Justin Cunningham <justinc@yelp.com>  Fri, 16 Oct 2015 11:37:52 -0700
+
 data-pipeline-tools (0.1.29) lucid; urgency=low
 
   * Commit: Fixed some minor build issues
