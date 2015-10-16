@@ -2,35 +2,30 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import mock
 import pytest
 
 from data_pipeline import message as dp_message
-from data_pipeline.envelope import Envelope
 
 
 class TestEnvelope(object):
 
     @pytest.fixture(params=[
-        {'meta': None},
-        {'meta': [dp_message.MetaAttribute(10, 'meta attr payload')]}
+        None,
+        r'666'
     ])
-    def meta_param(self, request):
+    def meta_attr_payload(self, request):
         return request.param
 
-    @pytest.yield_fixture(autouse=True)
-    def mock_meta_envelope(self, meta_param):
-        unpacked_meta = meta_param['meta'][0] if meta_param['meta'] else None
-        with mock.patch.object(
-            Envelope,
-            '_pack_meta_attribute',
-            return_value={'schema_id': 10, 'payload': bytes(20)}
-        ), mock.patch.object(
-            Envelope,
-            '_unpack_meta_attribute',
-            return_value=unpacked_meta
-        ):
-            yield
+    @pytest.fixture
+    def meta_attr_param(self, registered_meta_attribute, meta_attr_payload):
+        if meta_attr_payload is None:
+            return None
+        return {'meta': [
+            {
+                'schema_id': registered_meta_attribute.schema_id,
+                'payload': meta_attr_payload
+            }
+        ]}
 
     @pytest.fixture(params=[
         (dp_message.CreateMessage, {}),
@@ -38,10 +33,10 @@ class TestEnvelope(object):
         (dp_message.DeleteMessage, {}),
         (dp_message.UpdateMessage, {'previous_payload': bytes(20)})
     ])
-    def message(self, request, topic_name, payload, meta_param):
+    def message(self, request, topic_name, payload, meta_attr_param):
         message_class, additional_params = request.param
-        if meta_param:
-            additional_params.update(meta_param)
+        if meta_attr_param:
+            additional_params.update(meta_attr_param)
         return message_class(
             schema_id=10,
             topic=topic_name,
@@ -57,7 +52,10 @@ class TestEnvelope(object):
         return dict(
             encryption_type=None,
             message_type=message.message_type.name,
-            meta=message.meta,
+            meta=[
+                meta_attr.avro_repr
+                for meta_attr in message.meta
+            ],
             payload=message.payload,
             previous_payload=previous_payload,
             schema_id=message.schema_id,

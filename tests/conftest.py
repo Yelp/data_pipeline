@@ -59,6 +59,31 @@ def example_schema():
 
 
 @pytest.fixture
+def registered_meta_attribute(schematizer_client, example_meta_attr_schema):
+    return schematizer_client.register_schema(
+        namespace='test_namespace',
+        source='good_meta_attribute',
+        schema_str=example_meta_attr_schema,
+        source_owner_email='test_meta@yelp.com',
+        contains_pii=False
+    )
+
+
+@pytest.fixture
+def example_meta_attr_schema():
+    return '''
+    {
+        "type":"record",
+        "namespace":"test_namespace",
+        "name":"good_meta_attribute",
+        "fields":[
+            {"type":"int", "name":"good_payload"}
+        ]
+    }
+    '''
+
+
+@pytest.fixture
 def example_schema_obj(example_schema):
     return get_avro_schema_object(example_schema)
 

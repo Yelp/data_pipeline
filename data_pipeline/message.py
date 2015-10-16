@@ -13,6 +13,7 @@ from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
 from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
+from data_pipeline.meta_attribute import MetaAttribute
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 
@@ -27,12 +28,6 @@ KafkaPositionInfo = namedtuple('KafkaPositionInfo', [
 PayloadFieldDiff = namedtuple('PayloadFieldDiff', [
     'old_value',            # Value of the field before update
     'current_value'         # Value of the field after update
-])
-
-MetaAttribute = namedtuple('MetaAttribute', [
-    'schema_id',            # Schema id of meta attribute used to
-                            # encode/decode the payload, must be an int
-    'payload'               # Payload of meta attribute
 ])
 
 
@@ -97,11 +92,12 @@ class Message(object):
             the avro encoded message.  This is to avoid loading the schema
             from the schema store.  Defaults to False.
         meta (list of MetaAttribute, optional): This should be a list of
-            MetaAttribute tuples or None. This is used to contain information
+            MetaAttribute objects or None. This is used to contain information
             about metadata. These meta attributes are serialized using their
             respective avro schema, which is registered with the schematizer.
-            Hence the MetaAttribute tuples contain a schema_id and a payload.
-            The payload is deserialized using the schema_id.
+            Hence meta should be set with a dict which contains schema_id and
+            payload as keys to construct the MetaAttribute objects. The
+            payload is deserialized using the schema_id.
 
     Remarks:
         Although `previous_payload` and `previous_payload_data` are not
@@ -195,42 +191,22 @@ class Message(object):
 
     @meta.setter
     def meta(self, meta):
-        is_meta_attr_list = isinstance(meta, list) and all(
-            (
-                isinstance(meta_attr, MetaAttribute) and
-                isinstance(meta_attr.schema_id, int)
-            ) for meta_attr in meta
-        )
-        if meta is not None and not is_meta_attr_list:
+        if meta is None:
+            self._meta = None
+        elif not isinstance(meta, list):
             raise TypeError(
-                "Meta must be None or list of MetaAttribute tuples."
+                "Meta must be None or list of dicts."
             )
-        self._meta = meta
+        else:
+            self._meta = [
+                MetaAttribute(unpack_from_meta_attr=meta_attr)
+                for meta_attr in meta
+            ]
 
-    @property
-    def meta_attributes_map(self):
-        if self.meta:
-            return {
-                self._get_meta_attribute_name(meta_attribute.schema_id): meta_attribute
-                for meta_attribute in self.meta
-            }
+    def _get_meta_attr_avro_repr(self):
+        if self.meta is not None:
+            return [meta_attr.avro_repr for meta_attr in self.meta]
         return None
-
-    def _get_meta_attribute_name(self, schema_id):
-        namespace = self._schematizer.get_schema_by_id(
-            schema_id=schema_id
-        ).topic.source.namespace.name
-        source = self._schematizer.get_schema_by_id(
-            schema_id=schema_id
-        ).topic.source.source
-        return '.'.join([namespace, source])
-
-    @meta_attributes_map.setter
-    def meta_attributes_map(self, meta_attributes_map):
-        self.meta = {
-            meta_attr.schema_id: meta_attr
-            for meta_attr in meta_attributes_map.values()
-        }.values()
 
     @property
     def timestamp(self):
@@ -421,7 +397,7 @@ class Message(object):
             'schema_id': self.schema_id,
             'payload': self.payload,
             'timestamp': self.timestamp,
-            'meta': self.meta,
+            'meta': self._get_meta_attr_avro_repr(),
         }
 
     def _encode_payload_data_if_necessary(self):
@@ -597,7 +573,7 @@ class UpdateMessage(Message):
             'payload': self.payload,
             'previous_payload': self.previous_payload,
             'timestamp': self.timestamp,
-            'meta': self.meta,
+            'meta': self._get_meta_attr_avro_repr(),
         }
 
     def _encode_previous_payload_data_if_necessary(self):

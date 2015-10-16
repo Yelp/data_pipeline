@@ -10,8 +10,6 @@ from cached_property import cached_property
 from yelp_avro.avro_string_reader import AvroStringReader
 from yelp_avro.avro_string_writer import AvroStringWriter
 
-from data_pipeline.schema_cache import get_schema_cache
-
 
 class Envelope(object):
     """Envelope used to encode and identify a message for transport.
@@ -63,25 +61,12 @@ class Envelope(object):
         Returns:
             bytes: Avro byte string prepended by magic envelope version byte
         """
-        message_avro_repr = message.avro_repr
-        if message_avro_repr.get('meta'):
-            message_avro_repr['meta'] = [
-                self._pack_meta_attribute(schema_id, payload)
-                for schema_id, payload in message_avro_repr['meta']
-            ]
-
         # The initial "magic byte" is currently unused, but is meant to specify
         # the envelope schema version.  see y/cep342 for details.  In other
         # words, the version number of the current schema is the null byte.  In
         # the event we need to add additional envelope versions, we'll use this
         # byte to identify it.
-        return bytes(0) + self._avro_string_writer.encode(message_avro_repr)
-
-    def _pack_meta_attribute(self, schema_id, payload):
-        """Encodes the payload using the schema associated with schema_id"""
-        schema = get_schema_cache().get_schema(schema_id)
-        encoded_payload = AvroStringWriter(schema).encode(payload)
-        return {'schema_id': schema_id, 'payload': encoded_payload}
+        return bytes(0) + self._avro_string_writer.encode(message.avro_repr)
 
     def unpack(self, packed_message):
         """Decodes a message packed with :func:`pack`.
@@ -97,22 +82,7 @@ class Envelope(object):
             dict: A dictionary with the decoded Avro representation.
         """
         # The initial "magic byte" is ignored, see the comment in `pack`.
-        message = self._avro_string_reader.decode(packed_message[1:])
-        if message.get('meta'):
-            message['meta'] = [
-                self._unpack_meta_attribute(
-                    meta_attribute['schema_id'],
-                    meta_attribute['payload']
-                )
-                for meta_attribute in message['meta']
-            ]
-        return message
-
-    def _unpack_meta_attribute(self, schema_id, encoded_payload):
-        """Decodes the encoded payload using the schema associated with schema_id"""
-        schema = get_schema_cache().get_schema(schema_id)
-        decoded_payload = AvroStringReader(schema, schema).decode(encoded_payload)
-        return schema_id, decoded_payload
+        return self._avro_string_reader.decode(packed_message[1:])
 
     def pack_keys(self, keys):
         """Encode primary keys in message.

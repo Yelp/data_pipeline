@@ -11,7 +11,6 @@ from data_pipeline import message as dp_message
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import create_from_offset_and_message
-from data_pipeline.message import Message
 from data_pipeline.message import MetaAttribute
 from data_pipeline.message import PayloadFieldDiff
 from data_pipeline.message_type import MessageType
@@ -113,6 +112,19 @@ class SharedMessageTest(object):
     def test_message_contains_pii(self, message):
         assert message.contains_pii is False
 
+    def test_get_contains_pii_from_schematizer_by_default(
+        self,
+        registered_schema,
+        valid_message_data
+    ):
+        message_data = self._make_message_data(
+            valid_message_data,
+            schema_id=registered_schema.schema_id
+        )
+        message_data.pop('contains_pii')
+        message = self.message_class(**message_data)
+        assert not message.contains_pii
+
     @pytest.fixture(params=[
         'not a list',
         ['not_a_tuple'],
@@ -130,10 +142,19 @@ class SharedMessageTest(object):
 
     @pytest.fixture(params=[
         None,
-        [MetaAttribute(schema_id=10, payload='meta attr payload')],
+        {'good_payload': 26}
     ])
-    def valid_meta(self, request):
+    def meta_attr_payload(self, request):
         return request.param
+
+    @pytest.fixture
+    def valid_meta(self, meta_attr_payload, registered_meta_attribute):
+        if meta_attr_payload is None:
+            return None
+        meta_attr = MetaAttribute()
+        meta_attr.schema_id = registered_meta_attribute.schema_id
+        meta_attr.payload = meta_attr_payload
+        return [meta_attr.avro_repr]
 
     def _get_dry_run_message_with_meta(self, valid_message_data, valid_meta):
         message_data = self._make_message_data(
@@ -142,43 +163,14 @@ class SharedMessageTest(object):
         )
         return self.message_class(**message_data)
 
-    def test_accepts_valid_meta(self, valid_message_data, valid_meta):
+    def test_accepts_valid_meta(self, valid_message_data, valid_meta, meta_attr_payload):
         dry_run_message = self._get_dry_run_message_with_meta(
             valid_message_data,
             valid_meta
         )
-        assert dry_run_message.meta == valid_meta
-
-    def test_meta_attributes_map(self, valid_message_data, valid_meta):
-        dry_run_message = self._get_dry_run_message_with_meta(
-            valid_message_data,
-            valid_meta
-        )
-        with mock.patch.object(
-            Message,
-            '_get_meta_attribute_name',
-            return_value='DummyAttributeName'
-        ):
-            if not valid_meta:
-                assert dry_run_message.meta_attributes_map is None
-            else:
-                for meta in valid_meta:
-                    assert dry_run_message.meta_attributes_map == {
-                        'DummyAttributeName': meta
-                    }
-
-    def test_get_contains_pii_from_schematizer_by_default(
-        self,
-        registered_schema,
-        valid_message_data
-    ):
-        message_data = self._make_message_data(
-            valid_message_data,
-            schema_id=registered_schema.schema_id
-        )
-        message_data.pop('contains_pii')
-        message = self.message_class(**message_data)
-        assert not message.contains_pii
+        if valid_meta:
+            assert dry_run_message.meta[0].schema_id == valid_meta[0]['schema_id']
+            assert dry_run_message.meta[0].payload == meta_attr_payload
 
     def test_dry_run(self, valid_message_data):
         payload_data = {'data': 'test'}
