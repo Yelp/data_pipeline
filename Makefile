@@ -10,7 +10,6 @@ help:
 	@echo "clean-pyc - remove Python file artifacts"
 	@echo "clean-docs - remove doc creation artifacts"
 	@echo "clean-vim - remove vim swap file artifacts"
-	@echo "lint - check style with flake8"
 	@echo "test - run tests quickly with the default Python"
 	@echo "coverage - check code coverage"
 	@echo "docs - generate Sphinx HTML documentation, including API docs"
@@ -41,9 +40,6 @@ clean-docs:
 clean-vim:
 	find . -name '*.swp' -exec rm -f {} +
 	find . -name '*.swo' -exec rm -f {} +
-
-lint:
-	tox -e style
 
 test:.venv.touch
 	# This will timeout after 15 minutes, in case there is a hang on jenkins
