@@ -53,7 +53,6 @@ setup(
     package_data={
         str('data_pipeline'): [
             'schemas/*.avsc',
-            'tools/*.yaml'
         ],
     },
     scripts=['bin/data_pipeline_tailer'],
