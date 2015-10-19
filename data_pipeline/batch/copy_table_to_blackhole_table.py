@@ -20,8 +20,6 @@ from yelp_servlib import config_util
 class FullRefreshRunner(Batch, BatchDBMixin):
     notify_emails = ['bam+batch@yelp.com']
     is_readonly_batch = False
-    ro_replica_name = str('batch_ro')
-    rw_replica_name = str('batch_rw')
 
     @batch_context
     def _session_manager(self):
@@ -33,12 +31,21 @@ class FullRefreshRunner(Batch, BatchDBMixin):
     @batch_command_line_options
     def define_options(self, option_parser):
         opt_group = OptionGroup(option_parser, 'Full Refresh Runner Options')
-
+        opt_group.add_option(
+            '--ro-replica',
+            dest='ro_replica',
+            help='Required: Read-only replica name.'
+        )
+        opt_group.add_option(
+            '--rw-replica',
+            dest='rw_replica',
+            help='Required: Read-write replica name.'
+        )
         opt_group.add_option(
             '--cluster',
             dest='cluster',
             default='primary',
-            help='Specifies table cluster (default: %default).'
+            help='Required: Specifies table cluster (default: %default).'
         )
         opt_group.add_option(
             '--table-name',
@@ -101,6 +108,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         if self.options.batch_size <= 0:
             raise ValueError("Batch size should be greater than 0")
 
+        self.ro_replica_name = self.options.ro_replica
+        self.rw_replica_name = self.options.rw_replica
         self.db_name = self.options.cluster
         self.table_name = self.options.table_name
         self.temp_table = '{table}_data_pipeline_refresh'.format(
