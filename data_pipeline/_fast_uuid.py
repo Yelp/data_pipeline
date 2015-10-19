@@ -2,7 +2,11 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import uuid
+
 from cffi import FFI
+
+from data_pipeline.config import get_config
 
 
 class FastUUID(object):
@@ -60,31 +64,40 @@ class FastUUID(object):
 
     _ffi = None
     _libuuid = None
+    _libuuid_unavailable = False
 
     def __init__(self):
         # Store these on the class since they should only ever be called
         # once
-        if FastUUID._ffi is None:
-            FastUUID._ffi = FFI()
+        if FastUUID._ffi is None and not FastUUID._libuuid_unavailable:
+            try:
+                FastUUID._ffi = FFI()
 
-            # These definitions are from uuid.h
-            FastUUID._ffi.cdef("""
-                typedef unsigned char uuid_t[16];
+                # These definitions are from uuid.h
+                FastUUID._ffi.cdef("""
+                    typedef unsigned char uuid_t[16];
 
-                void uuid_generate(uuid_t out);
-                void uuid_generate_random(uuid_t out);
-                void uuid_generate_time(uuid_t out);
-            """)
+                    void uuid_generate(uuid_t out);
+                    void uuid_generate_random(uuid_t out);
+                    void uuid_generate_time(uuid_t out);
+                """)
 
-            FastUUID._libuuid = FastUUID._ffi.verify(
-                "#include <uuid/uuid.h>",
-                libraries=[str('uuid')]
-            )
+                FastUUID._libuuid = FastUUID._ffi.verify(
+                    "#include <uuid/uuid.h>",
+                    libraries=[str('uuid')]
+                )
+            except:
+                FastUUID._libuuid_unavailable = True
+                get_config().logger.error(
+                    "libuuid is unavailable, falling back to the slower built-in "
+                    "uuid implementation.  On ubuntu, apt-get install uuid-dev."
+                )
 
-        # Keeping only one copy of this around does result in
-        # pretty substantial performance improvements - in the 10,000s of
-        # messages per second range
-        self.output = FastUUID._ffi.new("uuid_t")
+        if not FastUUID._libuuid_unavailable:
+            # Keeping only one copy of this around does result in
+            # pretty substantial performance improvements - in the 10,000s of
+            # messages per second range
+            self.output = FastUUID._ffi.new("uuid_t")
 
     def uuid1(self):
         """Generates a uuid1 - a device specific uuid
@@ -92,8 +105,11 @@ class FastUUID(object):
         Returns:
             bytes: 16-byte uuid
         """
-        FastUUID._libuuid.uuid_generate_time(self.output)
-        return self._get_output_bytes()
+        if FastUUID._libuuid is None:
+            return uuid.uuid1().bytes
+        else:
+            FastUUID._libuuid.uuid_generate_time(self.output)
+            return self._get_output_bytes()
 
     def uuid4(self):
         """Generates a uuid4 - a random uuid
@@ -101,8 +117,11 @@ class FastUUID(object):
         Returns:
             bytes: 16-byte uuid
         """
-        FastUUID._libuuid.uuid_generate_random(self.output)
-        return self._get_output_bytes()
+        if FastUUID._libuuid is None:
+            return uuid.uuid4().bytes
+        else:
+            FastUUID._libuuid.uuid_generate_random(self.output)
+            return self._get_output_bytes()
 
     def _get_output_bytes(self):
         return bytes(FastUUID._ffi.buffer(self.output))

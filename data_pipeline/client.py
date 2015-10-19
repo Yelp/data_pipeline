@@ -2,12 +2,19 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import math
+import os
 import socket
+import time
+
+import simplejson
+from cached_property import cached_property
 
 from data_pipeline._kafka_producer import LoggingKafkaProducer
 from data_pipeline.config import get_config
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import MonitorMessage
+from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.team import Team
 
 
@@ -77,11 +84,14 @@ class Client(object):
         team_name,
         expected_frequency_seconds,
         monitoring_enabled=True,
-        dry_run=False,
+        dry_run=False
     ):
-        self.monitoring_message = _Monitor(
+        self.monitor = _Monitor(
             client_name,
             self.client_type,
+            start_time=_Monitor.get_monitor_window_start_timestamp(
+                time.time()
+            ),
             monitoring_enabled=monitoring_enabled,
             dry_run=dry_run
         )
@@ -147,11 +157,11 @@ class _Monitor(object):
     the client.
 
     Args:
-        client_name (str): name of the associated client
-        client_type (str): type of the client the _Monitor object is associated to.
-        Could be either producer or consumer
-        start_time (int): start_time when _Monitor object will start counting the
-            number of messages produced/consumed by the associated client
+        client_name (str): name of the associated client.
+        client_type (str): type of the client the _Monitor is associated to.
+            Could be either producer or consumer.
+        start_time (int): unix start_time when _Monitor will start tracking
+            the number of messages produced/consumed by the associated client.
         monitoring_enabled (Optional[bool]): If true, monitoring will be enabled
             to record client's activities. Default is true.
         dry_run (Optional[bool]): If true, client will skip publishing message to
@@ -166,10 +176,11 @@ class _Monitor(object):
         monitoring_enabled=True,
         dry_run=False
     ):
-        self.monitoring_enabled = monitoring_enabled
         self.client_name = client_name
         self.client_type = client_type
-        if not monitoring_enabled:
+
+        self.monitoring_enabled = monitoring_enabled
+        if not self.monitoring_enabled:
             return
 
         self.topic_to_tracking_info_map = {}
@@ -179,8 +190,14 @@ class _Monitor(object):
             self._notify_messages_published,
             dry_run=dry_run
         )
-        self.monitoring_schema_id = self._get_monitoring_schema_id()
         self.dry_run = dry_run
+        self._last_msg_timestamp = None
+
+    @classmethod
+    def get_monitor_window_start_timestamp(cls, timestamp):
+        _monitor_window_in_sec = get_config().monitoring_window_in_sec
+        return (int(math.floor(int(timestamp) / _monitor_window_in_sec)) *
+                _monitor_window_in_sec)
 
     def _get_default_record(self, topic):
         """Returns the default version of the topic_to_tracking_info_map entry
@@ -210,19 +227,41 @@ class _Monitor(object):
         """
         self.producer.publish(
             MonitorMessage(
-                topic=str('message-monitoring-log'),
-                schema_id=self.monitoring_schema_id,
+                topic=self.monitor_topic,
+                schema_id=self.monitor_schema_id,
                 payload_data=tracking_info,
-                dry_run=self.dry_run
+                dry_run=self.dry_run,
+                contains_pii=False
             )
         )
 
-    def _get_monitoring_schema_id(self):
-        """Returns the schema used to encode the payload.
-        TODO(DATAPIPE-274|pujun): return the schema_id associated with
-        the monitoring_message avro schema
-        """
-        return 0
+    @cached_property
+    def monitor_schema(self):
+        return get_schematizer().register_schema(
+            namespace=self._monitor_schema['namespace'],
+            source=self._monitor_schema['name'],
+            schema_str=simplejson.dumps(self._monitor_schema),
+            source_owner_email='bam+data_pipeline+monitor@yelp.com',
+            contains_pii=False
+        )
+
+    @cached_property
+    def _monitor_schema(self):
+        schema_file = os.path.join(
+            os.path.dirname(__file__),
+            'schemas/monitoring_message_v1.avsc'
+        )
+        with open(schema_file, 'r') as f:
+            schema_string = f.read()
+        return simplejson.loads(schema_string)
+
+    @cached_property
+    def monitor_schema_id(self):
+        return self.monitor_schema.schema_id
+
+    @cached_property
+    def monitor_topic(self):
+        return str(self.monitor_schema.topic.name)
 
     def _reset_monitoring_record(self, tracking_info):
         """resets the record for a particular topic by resetting
@@ -243,17 +282,27 @@ class _Monitor(object):
         logger.info("Client: " + self.client_name + " published monitoring message")
 
     def record_message(self, message):
-        """Used to handle the logic of recording monitoring_message in kafka and resetting
-        it if necessary
+        """Used to handle the logic of recording monitoring_message in kafka
+        and resetting it if necessary.
         """
         if not self.monitoring_enabled:
             return
 
-        tracking_info = self._get_record(message.topic)
-        while tracking_info['start_timestamp'] + self._monitoring_window_in_sec < message.timestamp:
-            self._publish(tracking_info)
-            self._reset_monitoring_record(tracking_info)
-        tracking_info['message_count'] += 1
+        self._last_msg_timestamp = message.timestamp
+
+        track_info = self._get_record(message.topic)
+        track_info = self._flush_previous_track_info(track_info)
+        track_info['message_count'] += 1
+
+    def _flush_previous_track_info(self, current_track_info):
+        next_start_time = (current_track_info['start_timestamp'] +
+                           self._monitoring_window_in_sec)
+        while next_start_time <= self._last_msg_timestamp:
+            self._publish(current_track_info)
+            self._reset_monitoring_record(current_track_info)
+            next_start_time = (current_track_info['start_timestamp'] +
+                               self._monitoring_window_in_sec)
+        return current_track_info
 
     def flush_buffered_info(self):
         """Publishes the buffered information, stored in topic_to_tracking_info_map,
@@ -262,8 +311,9 @@ class _Monitor(object):
         if not self.monitoring_enabled:
             return
 
-        for remaining_monitoring_topic, tracking_info in self.topic_to_tracking_info_map.items():
-            self._publish(tracking_info)
+        for track_info in self.topic_to_tracking_info_map.values():
+            last_track_info = self._flush_previous_track_info(track_info)
+            self._publish(last_track_info)
         self.producer.flush_buffered_messages()
         self.topic_to_tracking_info_map = {}
 

@@ -28,23 +28,34 @@ setup(
     include_package_data=True,
     install_requires=[
         'avro>=1.7.7',
-        'cached-property>=0.1.2',
-        'cffi',
+        'cached-property>=0.1.5',
+        'cffi>=1.1.2',
         'enum34>=1.0.4',
-        'kafka-python',
-        'PyStaticConfiguration',
-        'simplejson',
-        'swaggerpy',
-        'yelp_kafka>=4.0.0',
-        'yelp_servlib',
+        'kafka-python>=0.9.4.post1',
+        'PyStaticConfiguration>=0.9.0',
+        'simplejson>=2.1.2',
+        'swaggerpy>=0.7.6',
+        'yelp-avro>=0.1.1',
+        'yelp-kafka>=4.1.0',
+        'yelp-lib>=10.0.5',
+        'yelp-servlib>=4.3.0',
     ],
+    extras_require={
+        'tools': [
+            # yelp_clog isn't compatible with triftpy 0.2.0, which is an
+            # implicit dependency of yelp_batch
+            'thriftpy<0.2.0',
+            'yelp_batch>=0.19.4',
+        ]
+    },
     zip_safe=False,
     keywords='data_pipeline',
     package_data={
         str('data_pipeline'): [
-            'schemas/*.avsc'
-        ]
+            'schemas/*.avsc',
+        ],
     },
+    scripts=['bin/data_pipeline_tailer'],
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',

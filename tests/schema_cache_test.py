@@ -5,8 +5,14 @@ from __future__ import unicode_literals
 import pytest
 import simplejson as json
 
+from data_pipeline.schema_cache import get_schema_cache
+
 
 class TestSchemaCache(object):
+
+    @pytest.fixture
+    def schema_cache(containers):
+        return get_schema_cache()
 
     @property
     def sample_schema_create_from_mysql_stmts_data(self):
@@ -35,7 +41,7 @@ class TestSchemaCache(object):
 
     def test_get_schema(self, registered_schema, schema_cache):
         actual_schema = schema_cache.get_schema(registered_schema.schema_id)
-        assert actual_schema == registered_schema.schema
+        assert actual_schema.to_json() == registered_schema.schema_json
 
     def test_register_transformed_schema(
             self,
@@ -52,7 +58,7 @@ class TestSchemaCache(object):
             owner_email='test_owner@yelp.com',
             contains_pii=False
         )
-        schema_response = schematizer_client.schemas.get_schema_by_id(
+        schema_response = schematizer_client._client.schemas.get_schema_by_id(
             schema_id=schema_id
         ).result()
         schema = schema_cache.get_schema(schema_id=schema_id)
@@ -62,7 +68,7 @@ class TestSchemaCache(object):
         assert schema_response.schema == schema
         assert schema_response.topic.name == topic
         assert schema_response.topic.source.namespace.name == 'test_namespace'
-        assert schema_response.topic.source.source == 'test_source'
+        assert schema_response.topic.source.name == 'test_source'
 
     def test_register_transformed_schema_repeated_alternate_source(
             self,
@@ -133,7 +139,7 @@ class TestSchemaCache(object):
         schema_id_and_topic
     ):
         schema_id, topic = schema_id_and_topic
-        schema_response = schematizer_client.schemas.get_schema_by_id(
+        schema_response = schematizer_client._client.schemas.get_schema_by_id(
             schema_id=schema_id
         ).result()
         schema = schema_cache.get_schema(schema_id=schema_id)
@@ -143,9 +149,9 @@ class TestSchemaCache(object):
             self.sample_schema_create_from_mysql_stmts_data['contains_pii']
         assert schema_response.topic.source.namespace.name == \
             self.sample_schema_create_from_mysql_stmts_data['namespace']
-        assert schema_response.topic.source.source == \
+        assert schema_response.topic.source.name == \
             self.sample_schema_create_from_mysql_stmts_data['source']
-        assert schema_response.topic.source.source_owner_email == \
+        assert schema_response.topic.source.owner_email == \
             self.sample_schema_create_from_mysql_stmts_data['owner_email']
 
     def test_register_schema_from_mysql_stmts_alter(

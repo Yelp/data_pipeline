@@ -7,9 +7,8 @@ import os
 import avro.io
 import avro.schema
 from cached_property import cached_property
-
-from data_pipeline._avro_util import AvroStringReader
-from data_pipeline._avro_util import AvroStringWriter
+from yelp_avro.avro_string_reader import AvroStringReader
+from yelp_avro.avro_string_writer import AvroStringWriter
 
 
 class Envelope(object):
@@ -84,3 +83,16 @@ class Envelope(object):
         """
         # The initial "magic byte" is ignored, see the comment in `pack`.
         return self._avro_string_reader.decode(packed_message[1:])
+
+    def pack_keys(self, keys):
+        """Encode primary keys in message.
+
+        Args:
+            keys (tuple of str): a tuple of primary keys
+
+        Returns:
+            bytes: return bytes with encoded keys. All non-alphanumerics are
+                escaped.
+        """
+        escaped_keys = ('\'' + key.replace('\\', '\\\\').replace("'", "\\'") + '\'' for key in keys)
+        return '\x1f'.join(escaped_keys).encode('utf-8')

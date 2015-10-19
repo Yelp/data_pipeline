@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 import multiprocessing
 from collections import defaultdict
 
+import simplejson as json
 from cached_property import cached_property
 from yelp_kafka.offsets import get_topics_watermarks
 
@@ -172,7 +173,7 @@ class Producer(Client):
             message (data_pipeline.message.Message): message to publish
         """
         self.publish_message(message)
-        self.monitoring_message.record_message(message)
+        self.monitor.record_message(message)
 
     def publish_message(self, message):
         self._kafka_producer.publish(message)
@@ -217,7 +218,20 @@ class Producer(Client):
         )
 
         for topic, messages in topic_messages_map.iteritems():
-            already_published_count = topic_watermarks_map[topic] - topic_offsets.get(topic, 0)
+            saved_offset = topic_offsets.get(topic, 0)
+            already_published_count = topic_watermarks_map[topic] - saved_offset
+
+            info_to_log = dict(
+                message="Attempting to ensure messages published",
+                topic=topic,
+                saved_offset=saved_offset,
+                high_watermark=topic_watermarks_map[topic],
+                message_count=len(messages),
+                already_published_count=already_published_count
+            )
+
+            logger.info(json.dumps(info_to_log))
+
             if already_published_count < 0 or already_published_count > len(messages):
                 raise PublicationUnensurableError()
             for message in messages[already_published_count:]:
@@ -241,7 +255,7 @@ class Producer(Client):
                 ...
                 producer.publish(message)
         """
-        self.monitoring_message.close()
+        self.monitor.close()
         self._kafka_producer.close()
         assert len(multiprocessing.active_children()) == 0
 
