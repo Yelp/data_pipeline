@@ -87,7 +87,7 @@ class MetaAttribute(object):
                 "Can set a MetaAttribute object from a dict containing schema_id (int) and payload(bytes)."
             )
         if not isinstance(meta_attr_dict.get('schema_id'), int):
-            raise TypeError(
+            raise ValueError(
                 "Can set a MetaAttribute object from a dict containing schema_id (int) and payload(bytes)."
             )
         self.schema_id = meta_attr_dict.get('schema_id')
