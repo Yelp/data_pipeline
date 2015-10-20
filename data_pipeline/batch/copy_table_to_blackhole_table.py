@@ -34,11 +34,13 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         opt_group.add_option(
             '--ro-replica',
             dest='ro_replica',
+            default=str('batch_ro'),
             help='Required: Read-only replica name.'
         )
         opt_group.add_option(
             '--rw-replica',
             dest='rw_replica',
+            default=str('batch_rw'),
             help='Required: Read-write replica name.'
         )
         opt_group.add_option(
