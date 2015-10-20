@@ -3,13 +3,14 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import time
+import simplejson as json
 from collections import defaultdict
 from collections import namedtuple
 
 from cached_property import cached_property
 from kafka import create_message
 from kafka.common import ProduceRequest
-
+from yelp_crypto import encrypt_blob
 from data_pipeline._position_data_tracker import PositionDataTracker
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
@@ -59,6 +60,8 @@ class KafkaProducer(object):
         self.position_data_tracker = PositionDataTracker()
         self._reset_message_buffer()
         self.skip_messages_with_pii = get_config().skip_messages_with_pii
+        self.user = get_config().user
+        self.acceptable_users = ['batch']
 
     def wake(self):
         """Should be called periodically if we're not otherwise waking up by
@@ -68,11 +71,46 @@ class KafkaProducer(object):
         self._flush_if_necessary()
 
     def publish(self, message):
-        if self.skip_messages_with_pii and message.contains_pii:
-            return
+        if  message.contains_pii:
+            if self.skip_messages_with_pii or !(self.user in self.acceptable_users):
+                return
+            elif self._encrypt_message_with_pii(message) !=  True:
+                return
         self._add_message_to_buffer(message)
         self.position_data_tracker.record_message_buffered(message)
         self._flush_if_necessary()
+    
+    def _encrypt_message_with_pii(message):
+        """Encrypt message with key on machine, using AES.
+        This method will only be called if the user has
+        prod access. Returns None if the key was not found,
+        or if the message could not be encrypted, and
+        otherwise returns 1 and mutates the message
+        to have an encrypted payload"""
+        if key = self._retrieve_key():
+            return self._encrypt_message_using_yelp_crypto(key, message)
+        return None
+
+    def _retrieve_key(self):
+        try:
+            #TODO(krane): fill in key-getting logic.
+
+        except(Exception e):
+            self.logger.log(
+                    "Retrieving encryption key failed with traceback {}".format(e.traceback()
+            )
+            return False
+
+    def _encrypt_message_using_yelp_crypto(self, key, message):
+        payload = message.payload() or message.payload_data()
+        if payload isinstance(dict):
+            new_payload = encrypt_blob(key, json.dumps(payload))
+            message.payload_data(json.loads(new_payload))
+        else: 
+            new_payload = encrypt_blob(key, payload)
+            message.payload(new_payload)
+        return True
+            
 
     def flush_buffered_messages(self):
         produce_method = self._publish_produce_requests_dry_run if self.dry_run else self._publish_produce_requests
