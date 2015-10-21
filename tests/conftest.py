@@ -142,8 +142,7 @@ def envelope():
 @pytest.yield_fixture(scope='session')
 def containers():
     with Containers() as containers:
-        with containers.use_testing_containers():
-            yield
+        yield containers
 
 
 @pytest.fixture(scope='session')
@@ -151,7 +150,7 @@ def kafka_docker(containers):
     return KafkaDocker.get_connection()
 
 
-@pytest.yield_fixture(scope='session')
+@pytest.yield_fixture
 def configure_teams():
     config_path = os.path.join(
         os.path.dirname(__file__),

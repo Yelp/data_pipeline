@@ -4,13 +4,12 @@ from __future__ import unicode_literals
 
 import subprocess
 import time
-from contextlib import contextmanager
 
 import requests
 from docker import Client
 
+from data_pipeline.config import configure_from_dict
 from data_pipeline.config import get_config
-from tests.helpers.config import reconfigure
 
 
 logger = get_config().logger
@@ -82,6 +81,8 @@ class Containers(object):
         else:
             logger.info("Using running containers")
 
+        self.use_testing_containers()
+
         return self
 
     def __exit__(self, type, value, traceback):
@@ -90,7 +91,6 @@ class Containers(object):
             self._stop_containers()
         return False  # Don't Supress Exception
 
-    @contextmanager
     def use_testing_containers(self, project='datapipeline'):
         schematizer_ip = Containers.get_container_ip_address(project, 'schematizer')
         schematizer_host_and_port = "{}:8888".format(schematizer_ip)
@@ -101,12 +101,11 @@ class Containers(object):
         kafka_ip = Containers.get_container_ip_address(project, 'kafka')
         kafka_host_and_port = "{}:9092".format(kafka_ip)
 
-        with reconfigure(
+        configure_from_dict(dict(
             schematizer_host_and_port=schematizer_host_and_port,
             kafka_zookeeper=zookeeper_host_and_port,
             kafka_broker_list=[kafka_host_and_port]
-        ):
-            yield
+        ))
 
     def _are_containers_already_running(self):
         return all(self._is_service_running(service) for service in self.services)
@@ -132,19 +131,19 @@ class Containers(object):
         logger.info("Waiting for schematizer to pass health check")
         count = 0
         while end_time > time.time():
+            time.sleep(0.1)
             try:
                 r = requests.get(
                     "http://{0}/status".format(get_config().schematizer_host_and_port)
                 )
                 if 200 <= r.status_code < 300:
                     count += 1
-                    if count == 2:
+                    if count >= 2:
                         return
             except:
                 count = 0
             finally:
                 logger.info("Schematizer not yet available, waiting...")
-                time.sleep(0.1)
         raise ContainerUnavailable()
 
     def _stop_containers(self):
