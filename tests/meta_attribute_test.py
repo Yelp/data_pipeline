@@ -3,7 +3,6 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import pytest
-import simplejson
 from cached_property import cached_property
 
 from data_pipeline.meta_attribute import MetaAttribute
@@ -11,28 +10,28 @@ from data_pipeline.meta_attribute import MetaAttribute
 
 class TestMetaAttribute(object):
 
-    @pytest.fixture(params=[
-        {'me_name_meta': 666}
-    ])
-    def meta_attr_payload(self, request):
-        return request.param
+    @pytest.fixture
+    def meta_attr_payload(self):
+        return {'me_name_meta': 666}
 
     @pytest.fixture
-    def avr_schema_json(self):
-        schema_str = '''
-        {
-            "type":"record",
-            "namespace":"test_namespace",
-            "name":"i_am_so_meta",
-            "fields":[
-                {"type":"int", "name":"me_name_meta"}
+    def avro_schema_json(self):
+        return {
+            "type": "record",
+            "namespace": "test_namespace",
+            "name": "i_am_so_meta",
+            "fields": [
+                {"type": "int", "name": "me_name_meta"}
             ]
         }
-        '''
-        return simplejson.loads(schema_str)
 
     @pytest.fixture
-    def new_meta_attribute(self, schematizer_client, avr_schema_json, meta_attr_payload):
+    def new_meta_attribute(
+        self,
+        schematizer_client,
+        avro_schema_json,
+        meta_attr_payload
+    ):
 
         class NewMetaAttribute(MetaAttribute):
 
@@ -57,12 +56,8 @@ class TestMetaAttribute(object):
                 return False
 
             @cached_property
-            def base_schema_id(self):
-                return 0
-
-            @cached_property
             def avro_schema(self):
-                return avr_schema_json
+                return avro_schema_json
 
             @cached_property
             def payload(self):
@@ -70,17 +65,20 @@ class TestMetaAttribute(object):
 
         return NewMetaAttribute()
 
-    def test_meta_attr_decoding_fails_without_dict(self):
-        with pytest.raises(TypeError):
-            MetaAttribute(unpack_from_meta_attr='not_a_dict')
+    @pytest.fixture(params=[
+        {'schema_id': 10},
+        {'encoded_payload': bytes(10)}
+    ])
+    def invalid_arg(self, request):
+        return request.param
 
-    def test_meta_attr_decoding_fails_with_incorrect_dict(self):
-        dict_without_schema_id_key = {
-            'not_schema_id': 1,
-            'payload': bytes(10)
-        }
+    def test_create_meta_attr_fails_with_invalid_args(self, invalid_arg):
         with pytest.raises(ValueError):
-            MetaAttribute(unpack_from_meta_attr=dict_without_schema_id_key)
+            MetaAttribute(**invalid_arg)
+
+    def test_create_meta_attr_fails_with_invalid_schema_id(self):
+        with pytest.raises(TypeError):
+            MetaAttribute(schema_id='not_an_int', encoded_payload=bytes(10))
 
     def test_meta_attribute_encoding(self, new_meta_attribute):
         assert isinstance(new_meta_attribute.avro_repr, dict)
@@ -89,5 +87,8 @@ class TestMetaAttribute(object):
 
     def test_meta_attribute_decoding(self, new_meta_attribute, meta_attr_payload):
         meta_attr_avro_repr = new_meta_attribute.avro_repr
-        decoded_meta_attr = MetaAttribute(unpack_from_meta_attr=meta_attr_avro_repr)
+        decoded_meta_attr = MetaAttribute(
+            schema_id=meta_attr_avro_repr['schema_id'],
+            encoded_payload=meta_attr_avro_repr['payload']
+        )
         assert decoded_meta_attr.payload == meta_attr_payload

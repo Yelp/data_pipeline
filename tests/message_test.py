@@ -127,50 +127,58 @@ class SharedMessageTest(object):
 
     @pytest.fixture(params=[
         'not a list',
-        ['not_a_tuple'],
-        [('tuple does not', 'have 2', 'elements')],
-        [('schema_id', 'is not int')],
+        ['not_a_dict'],
+        [{'schema_id': 'not_an_int', 'payload': bytes(10)}],
     ])
-    def invalid_meta(self, request):
+    def invalid_meta_type(self, request):
         return request.param
 
-    def test_rejects_invalid_meta(self, valid_message_data, invalid_meta):
+    def test_rejects_invalid_meta_type(self, valid_message_data, invalid_meta_type):
         self._assert_invalid_data(
             valid_message_data,
-            meta=invalid_meta
+            meta=invalid_meta_type
         )
 
-    @pytest.fixture(params=[
-        None,
-        {'good_payload': 26}
-    ])
-    def meta_attr_payload(self, request):
-        return request.param
+    @pytest.fixture
+    def invalid_meta_value(self):
+        return [{'no_schema_id': 1, 'not_payload': bytes(10)}]
+
+    def test_rejects_invalid_meta_value(self, valid_message_data, invalid_meta_value):
+        self._assert_invalid_data(
+            valid_message_data,
+            error=ValueError,
+            meta=invalid_meta_value
+        )
+
+    @pytest.fixture
+    def meta_attr_payload(self):
+        return {'good_payload': 26}
 
     @pytest.fixture
     def valid_meta(self, meta_attr_payload, registered_meta_attribute):
-        if meta_attr_payload is None:
-            return None
         meta_attr = MetaAttribute()
         meta_attr.schema_id = registered_meta_attribute.schema_id
         meta_attr.payload = meta_attr_payload
         return [meta_attr.avro_repr]
 
-    def _get_dry_run_message_with_meta(self, valid_message_data, valid_meta):
+    def _get_dry_run_message_with_meta(self, valid_message_data, meta_param=None):
         message_data = self._make_message_data(
             valid_message_data,
-            meta=valid_meta
+            meta=meta_param
         )
         return self.message_class(**message_data)
+
+    def test_accepts_no_meta(self, valid_message_data):
+        dry_run_message = self._get_dry_run_message_with_meta(valid_message_data)
+        assert dry_run_message.meta is None
 
     def test_accepts_valid_meta(self, valid_message_data, valid_meta, meta_attr_payload):
         dry_run_message = self._get_dry_run_message_with_meta(
             valid_message_data,
             valid_meta
         )
-        if valid_meta:
-            assert dry_run_message.meta[0].schema_id == valid_meta[0]['schema_id']
-            assert dry_run_message.meta[0].payload == meta_attr_payload
+        assert dry_run_message.meta[0].schema_id == valid_meta[0]['schema_id']
+        assert dry_run_message.meta[0].payload == meta_attr_payload
 
     def test_dry_run(self, valid_message_data):
         payload_data = {'data': 'test'}
