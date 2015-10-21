@@ -10,6 +10,7 @@ import multiprocessing
 import mock
 import pytest
 import simplejson as json
+from Crypto.Cipher import AES
 
 import data_pipeline.producer
 from data_pipeline._fast_uuid import FastUUID
@@ -213,18 +214,19 @@ class TestProducer(TestProducerBase):
         producer,
         registered_schema
     ):
-        messages = self._publish_message(
-            topic,
-            self.create_message(
+        with mock.patch.object(producer, 'user', return_value='notbatch'):
+            messages = self._publish_message(
                 topic,
-                payload,
-                registered_schema,
-                contains_pii=True
-            ),
-            producer
-        )
+                self.create_message(
+                    topic,
+                    payload,
+                    registered_schema,
+                    contains_pii=True
+                ),
+                producer
+            )
 
-        assert len(messages) == 0
+            assert len(messages) == 0
 
     def test_basic_publish_message_with_payload_data(
         self,
@@ -239,6 +241,63 @@ class TestProducer(TestProducerBase):
             producer,
             envelope
         )
+
+    def test_publish_encrypted_message_with_pii(
+        self,
+        topic,
+        payload,
+        producer,
+        registered_schema
+    ):
+        key = 'This is a key123'
+        with mock.patch.object(producer, 'user', return_value='batch'):
+            with mock.patch.object(producer, '_retrieve_key', return_value=key):
+                with capture_new_messages(topic) as get_messages:
+                    producer.publish(
+                        self.create_message(
+                            topic,
+                            payload,
+                            registered_schema,
+                            contains_pii=True
+                        )
+                    )
+                    producer.flush()
+                assert self._check_encrypted_payload_versus_unecrypted_payload(
+                    get_messages()[0].message.payload,
+                    payload,
+                    key
+                )
+
+    def _check_encrypted_payload_versus_unecrypted_payload(
+        self,
+        encrypted_payload,
+        unencrypted_payload,
+        key
+    ):
+        decrypter = AES.new(key, AES.MODE_CBC)
+        return decrypter.decrypt(encrypted_payload) == unencrypted_payload
+
+    def test_no_publish_pii_with_non_acceptable_user(
+        self,
+        topic,
+        payload,
+        producer,
+        registered_schema
+    ):
+        with mock.patch.object(producer, 'user', return_value='notbatch'):
+            messages = self._publish_message(
+                topic,
+                self.create_message(
+                    topic,
+                    payload,
+                    registered_schema,
+                    contains_pii=True,
+                    skip_messages_with_pii=False
+                ),
+                producer
+            )
+
+            assert len(messages) == 0
 
     def test_basic_publish_message_with_primary_keys(
         self,
