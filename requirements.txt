@@ -1,2 +1,53 @@
-# The -e . syntax means to install the package in this directory as well.
--e .
+# This file is used to build the data-pipeline-tools debian package.  Because
+# of this, it installs the tools extras dependencies.  All versions should be
+# pinned here, because  these packages will be included in a virtualenv
+# deployed inside a debian package - so the build must be repeatable.
+# This list was originally constructed by running
+# `pip install -i https://pypi.yelpcorp.com/simple/ ".[tools]"`
+# and `pip freeze > requirements.txt` in a virtualenv.
+avro==1.7.7
+cached-property==1.2.0
+cffi==1.2.1
+contextdecorator==0.10.0
+crochet==1.4.0
+dateglob==0.1
+enum34==1.0.4
+functools32==3.2.3-1
+future==0.14.3
+geogrid==1.0.9
+ipaddress==1.0.14
+iso8601==0.1.10
+jsonschema==2.5.1
+kafka-python==0.9.4.post1
+kazoo==2.2
+ply==3.4
+pycparser==2.14
+pycrypto==2.6.1
+PyStaticConfiguration==0.9.0
+pysubnettree==0.23
+python-dateutil==2.4.2
+pytz==2014.10
+PyYAML==3.11
+requests==2.7.0
+send-nsca==0.1.4.1
+setproctitle==1.1.8
+simplejson==3.6.5
+six==1.9.0
+subprocess32==3.2.6
+swaggerpy==0.7.10
+thriftpy==0.1.15
+tornado==2.4.1
+Twisted==15.4.0
+yelp-avro==0.1.2
+yelp-batch==0.19.4
+yelp-bytes==0.2.0
+yelp-cgeom==1.3.1
+yelp-clog==2.2.8
+yelp-encodings==0.1.3
+yelp-kafka==4.1.0
+yelp-lib==11.0.2
+yelp-logging==1.3.7
+yelp-meteorite==0.2.3
+yelp-servlib==4.5.3
+yelp-uri==1.1.0
+zope.interface==4.1.2

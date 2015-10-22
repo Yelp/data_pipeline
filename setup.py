@@ -40,13 +40,22 @@ setup(
         'yelp-lib>=10.0.5',
         'yelp-servlib>=4.3.0',
     ],
+    extras_require={
+        'tools': [
+            # yelp_clog isn't compatible with triftpy 0.2.0, which is an
+            # implicit dependency of yelp_batch
+            'thriftpy<0.2.0',
+            'yelp_batch>=0.19.4',
+        ]
+    },
     zip_safe=False,
     keywords='data_pipeline',
     package_data={
         str('data_pipeline'): [
-            'schemas/*.avsc'
-        ]
+            'schemas/*.avsc',
+        ],
     },
+    scripts=['bin/data_pipeline_tailer'],
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',

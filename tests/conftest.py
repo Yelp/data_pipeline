@@ -16,6 +16,7 @@ from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import CreateMessage
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+from data_pipeline.testing_helpers.kafka_docker import create_kafka_docker_topic
 from data_pipeline.testing_helpers.kafka_docker import KafkaDocker
 from tests.helpers.config import reconfigure
 from tests.helpers.containers import Containers
@@ -34,10 +35,20 @@ def schematizer_client(containers):
 
 
 @pytest.fixture
-def registered_schema(schematizer_client, example_schema):
+def namespace():
+    return 'test_namespace'
+
+
+@pytest.fixture
+def source():
+    return 'good_source'
+
+
+@pytest.fixture
+def registered_schema(schematizer_client, example_schema, namespace, source):
     return schematizer_client.register_schema(
-        namespace='test_namespace',
-        source='good_source',
+        namespace=namespace,
+        source=source,
         schema_str=example_schema,
         source_owner_email='test@yelp.com',
         contains_pii=False
@@ -45,17 +56,17 @@ def registered_schema(schematizer_client, example_schema):
 
 
 @pytest.fixture
-def example_schema():
+def example_schema(namespace, source):
     return '''
     {
         "type":"record",
-        "namespace":"test_namespace",
-        "name":"good_source",
+        "namespace": "%s",
+        "name": "%s",
         "fields":[
             {"type":"int", "name":"good_field"}
         ]
     }
-    '''
+    ''' % (namespace, source)
 
 
 @pytest.fixture
@@ -81,6 +92,12 @@ def example_previous_payload_data(example_schema_obj):
 @pytest.fixture(scope='module')
 def topic_name():
     return str(UUID(bytes=FastUUID().uuid4()).hex)
+
+
+@pytest.fixture(scope='module')
+def topic(kafka_docker, topic_name):
+    create_kafka_docker_topic(kafka_docker, topic_name)
+    return topic_name
 
 
 @pytest.fixture()
