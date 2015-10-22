@@ -53,6 +53,7 @@ setup(
     package_data={
         str('data_pipeline'): [
             'schemas/*.avsc',
+            'testing_helpers/docker-compose.yml'
         ],
     },
     scripts=['bin/data_pipeline_tailer'],

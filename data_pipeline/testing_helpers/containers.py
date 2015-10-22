@@ -1,0 +1,275 @@
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import
+from __future__ import unicode_literals
+
+import getpass
+import os
+import re
+import subprocess
+import time
+
+import requests
+from docker import Client
+from kafka.common import KafkaUnavailableError
+
+from data_pipeline.config import configure_from_dict
+from data_pipeline.config import get_config
+
+
+logger = get_config().logger
+
+
+class ContainerUnavailable(Exception):
+    pass
+
+
+class Containers(object):
+    """Context manager that defers to already running docker
+    containers if available, and if not, runs new containers for the duration
+    of tests.
+
+    Examples:
+
+        To use the data pipeline containers in another project, include a
+        fixture in `conftest.py` that will launch kafka, schematizer and
+        dependent containers, then configure the clientlib to use them::
+
+            @pytest.yield_fixture(scope='session')
+            def containers():
+                with Containers() as containers:
+                    yield containers
+
+        :meth:`create_kafka_topic` can be used to create a new kafka topic in
+        the running container::
+
+            @pytest.fixture
+            def topic(containers):
+                containers.create_kafka_topic(str('some-topic-name'))
+
+        When set to `true`, the `LEAVE_CONTAINERS_RUNNING` environment variable
+        will prevent this class from shutting down testing containers between
+        runs::
+
+            $ LEAVE_CONTAINERS_RUNNING=true py.test tests/
+
+        If you want to manually inspect the containers with docker-compose, you
+        can get the preconfigured docker-compose command by running something
+        like the following from within a virtualenv::
+
+            python -c "from data_pipeline.testing_helpers.containers import Containers; print Containers.compose_prefix()"
+
+        That will return something along the lines of::
+
+            docker-compose --file=/nail/home/justinc/pg/data_pipeline/data_pipeline/testing_helpers/docker-compose.yml --project-name=datapipelinejustinc  # NOQA
+
+        In this project, a make target wraps this, which allows
+        users to run commands like::
+
+            $(make compose-prefix) ps
+    """
+
+    services = ["kafka", "schematizer"]
+
+    @classmethod
+    def compose_prefix(cls):
+        """Returns a configured docker-compose command for the user and project
+        """
+        return "docker-compose {}".format(Containers()._compose_options)
+
+    @classmethod
+    def get_container_info(cls, project, service, docker_client=Client(version='auto')):
+        # intentionally letting this blow up if it can't find the container
+        # - we can't do anything if the container doesn't exist
+        return next(
+            c for c in docker_client.containers() if
+            c['Labels'].get('com.docker.compose.project') == project and
+            c['Labels'].get('com.docker.compose.service') == service
+        )
+
+    @classmethod
+    def get_container_ip_address(cls, project, service):
+        """Fetches the ip address assigned to the running container."""
+        docker_client = Client(version='auto')
+        container_id = cls.get_container_info(
+            project,
+            service,
+            docker_client
+        )['Id']
+
+        return docker_client.inspect_container(
+            container_id
+        )['NetworkSettings']['IPAddress']
+
+    @classmethod
+    def exec_command(cls, command, project, service):
+        """Execs the command in the project and service container running under
+        docker-compose.
+        """
+        docker_client = Client(version='auto')
+        container_id = cls.get_container_info(
+            project,
+            service,
+            docker_client=docker_client
+        )['Id']
+
+        exec_id = docker_client.exec_create(container_id, command)['Id']
+        docker_client.exec_start(exec_id)
+
+    @classmethod
+    def get_kafka_connection(cls, timeout_seconds=15):
+        """Returns a kafka connection, waiting timeout_seconds for the container
+        to come up.
+        """
+        end_time = time.time() + timeout_seconds
+        logger.info("Getting connection to Kafka container on yocalhost")
+        while end_time > time.time():
+            try:
+                return get_config().kafka_client
+            except KafkaUnavailableError:
+                logger.info("Kafka not yet available, waiting...")
+                time.sleep(0.1)
+        raise KafkaUnavailableError()
+
+    def __init__(self):
+        dir_name = os.path.split(os.getcwd())[-1]
+        self.project = "{}{}".format(
+            re.sub(r'[^a-z0-9]', '', dir_name.lower()),
+            getpass.getuser()
+        )
+        # This variable is meant to capture the running/not-running state of
+        # the dependent testing containers when tests start running.  The idea
+        # is, we'll only start and stop containers if they aren't already
+        # running.  If they are running, we'll just use the ones that exist.
+        # It takes a while to start all the containers, so when running lots of
+        # tests, it's best to start them out-of-band and leave them up for the
+        # duration of the session.
+        self.containers_already_running = self._are_containers_already_running()
+
+    def __enter__(self):
+        if not self.containers_already_running:
+            self._start_containers()
+        else:
+            logger.info("Using running containers")
+
+        self.use_testing_containers()
+
+        return self
+
+    def __exit__(self, type, value, traceback):
+        if not (
+            self.containers_already_running or
+            os.getenv('LEAVE_CONTAINERS_RUNNING', 'false').lower() in ['t', 'true', 'y', 'yes']
+        ):
+            # only stop containers that we started
+            self._stop_containers()
+        return False  # Don't Suppress Exception
+
+    def create_kafka_topic(self, topic):
+        """This method execs in the docker container because it's the only way to
+        control how the topic is created.
+
+        Args:
+            topic (str): Topic name to create
+        """
+        conn = Containers.get_kafka_connection()
+        if conn.has_metadata_for_topic(topic):
+            return
+
+        logger.info("Creating Fake Topic")
+        if not isinstance(topic, str):
+            raise ValueError("topic must be a str, it cannot be unicode")
+
+        kafka_create_topic_command = (
+            "$KAFKA_HOME/bin/kafka-topics.sh --create --zookeeper zk:2181 "
+            "--replication-factor 1 --partition 1 --topic {topic}"
+        ).format(topic=topic)
+
+        Containers.exec_command(kafka_create_topic_command, self.project, 'kafka')
+
+        logger.info("Waiting for topic")
+        conn.ensure_topic_exists(
+            topic,
+            timeout=get_config().topic_creation_wait_timeout
+        )
+        logger.info("Topic Exists")
+        assert conn.has_metadata_for_topic(topic)
+
+    @property
+    def _compose_options(self):
+        compose_file = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "docker-compose.yml")
+        )
+        return "--file={} --project-name={}".format(compose_file, self.project)
+
+    def use_testing_containers(self):
+        """Configures the data pipeline clientlib to use the containers"""
+        schematizer_ip = Containers.get_container_ip_address(self.project, 'schematizer')
+        schematizer_host_and_port = "{}:8888".format(schematizer_ip)
+
+        zookeeper_ip = Containers.get_container_ip_address(self.project, 'zookeeper')
+        zookeeper_host_and_port = "{}:2181".format(zookeeper_ip)
+
+        kafka_ip = Containers.get_container_ip_address(self.project, 'kafka')
+        kafka_host_and_port = "{}:9092".format(kafka_ip)
+
+        configure_from_dict(dict(
+            schematizer_host_and_port=schematizer_host_and_port,
+            kafka_zookeeper=zookeeper_host_and_port,
+            kafka_broker_list=[kafka_host_and_port]
+        ))
+
+    def _are_containers_already_running(self):
+        return all(self._is_service_running(service) for service in self.services)
+
+    def _is_service_running(self, service):
+        return int(subprocess.call(
+            "docker-compose {} ps {} | grep Up".format(self._compose_options, service),
+            shell=True,
+            stdout=subprocess.PIPE
+        )) == 0
+
+    def _start_containers(self):
+        self._stop_containers()
+        logger.info("Starting Containers")
+        self._run_compose('up', '-d', *self.services)
+        self._wait_for_services()
+
+    def _wait_for_services(self, timeout_seconds=15):
+        self.use_testing_containers()
+        self._wait_for_schematizer(timeout_seconds)
+        self._wait_for_kafka(timeout_seconds)
+
+    def _wait_for_schematizer(self, timeout_seconds):
+        # wait for schematizer to pass health check
+        end_time = time.time() + timeout_seconds
+        logger.info("Waiting for schematizer to pass health check")
+        count = 0
+        while end_time > time.time():
+            time.sleep(0.1)
+            try:
+                r = requests.get(
+                    "http://{0}/status".format(get_config().schematizer_host_and_port)
+                )
+                if 200 <= r.status_code < 300:
+                    count += 1
+                    if count >= 2:
+                        return
+            except:
+                count = 0
+            finally:
+                logger.info("Schematizer not yet available, waiting...")
+        raise ContainerUnavailable()
+
+    def _wait_for_kafka(self, timeout_seconds):
+        # This will raise an exception after timeout_seconds, if it can't get
+        # a connection
+        Containers.get_kafka_connection(timeout_seconds)
+
+    def _stop_containers(self):
+        logger.info("Stopping containers")
+        self._run_compose('kill')
+        self._run_compose('rm', '--force')
+
+    def _run_compose(self, *args):
+        args = list(args)
+        subprocess.call(['docker-compose'] + self._compose_options.split() + args)

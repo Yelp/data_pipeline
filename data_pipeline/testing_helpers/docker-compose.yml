@@ -1,9 +1,3 @@
-pypy:
-  build: .
-  links:
-    - kafka
-  volumes:
-      - .:/data
 zookeeper:
   image: wurstmeister/zookeeper
   ports:
