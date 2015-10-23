@@ -333,7 +333,7 @@ class Message(object):
         self.kafka_position_info = kafka_position_info
         self.keys = keys
         self.dry_run = dry_run
-        self._set_meta_attributes(meta)
+        self.meta = meta
         self._set_payload_or_payload_data(payload, payload_data)
         # TODO(DATAPIPE-416|psuben):
         # Make it so contains_pii is no longer overrideable.
@@ -342,27 +342,6 @@ class Message(object):
         if topic:
             logger.debug("Overriding message topic: {0} for schema {1}."
                          .format(topic, schema_id))
-
-    def _set_meta_attributes(self, meta):
-        if meta is None:
-            self.meta = None
-            return
-
-        meta_attributes = []
-        meta_param_error = "Meta param must be None or list of dicts " \
-                           "with schema_id and payload keys."
-        for meta_attr in meta:
-            if not isinstance(meta_attr, dict):
-                raise TypeError(meta_param_error)
-            if 'schema_id' not in meta_attr or 'payload' not in meta_attr:
-                raise ValueError(meta_param_error)
-            meta_attributes.append(
-                MetaAttribute(
-                    schema_id=meta_attr['schema_id'],
-                    encoded_payload=meta_attr['payload']
-                )
-            )
-        self.meta = meta_attributes
 
     def _set_payload_or_payload_data(self, payload, payload_data):
         # payload or payload_data are lazily constructed only on request
@@ -737,7 +716,10 @@ def _create_message_from_packed_message(
         'schema_id': unpacked_message['schema_id'],
         'payload': unpacked_message['payload'],
         'timestamp': unpacked_message['timestamp'],
-        'meta': unpacked_message['meta'],
+        'meta': [
+            MetaAttribute(schema_id=o['schema_id'], encoded_payload=o['payload'])
+            for o in unpacked_message['meta']
+        ] if unpacked_message['meta'] else None,
         'kafka_position_info': kafka_position_info
     }
     if message_class is UpdateMessage:

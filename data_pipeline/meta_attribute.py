@@ -20,15 +20,23 @@ class MetaAttribute(object):
 
     def __init__(self, schema_id=None, encoded_payload=None):
         if schema_id and encoded_payload:
-            if not isinstance(schema_id, int):
-                raise TypeError("Schema_id should be an integer.")
-            self.schema_id = schema_id
-            self.payload = self._get_decoded_payload(encoded_payload)
+            self._validate_and_set_schema_id(schema_id)
+            self._validate_and_set_payload(encoded_payload)
         elif schema_id or encoded_payload:
             raise ValueError(
                 "Should provide either both schema_id and encoded payload "
                 "or neither of them"
             )
+
+    def _validate_and_set_schema_id(self, schema_id):
+        if not isinstance(schema_id, int):
+            raise TypeError("Schema_id should be an integer.")
+        self.schema_id = schema_id
+
+    def _validate_and_set_payload(self, encoded_payload):
+        if not isinstance(encoded_payload, bytes):
+            raise TypeError("Encoded payload should be an byte string.")
+        self.payload = self._get_decoded_payload(encoded_payload)
 
     @cached_property
     def schematizer(self):
@@ -69,7 +77,6 @@ class MetaAttribute(object):
             schema_json=self.avro_schema,
             source_owner_email=self.owner_email,
             contains_pii=self.contains_pii
-
         )
         return schema_info.schema_id
 

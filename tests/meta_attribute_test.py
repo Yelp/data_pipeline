@@ -69,16 +69,23 @@ class TestMetaAttribute(object):
         {'schema_id': 10},
         {'encoded_payload': bytes(10)}
     ])
-    def invalid_arg(self, request):
+    def invalid_arg_value(self, request):
         return request.param
 
-    def test_create_meta_attr_fails_with_invalid_args(self, invalid_arg):
+    def test_create_meta_attr_fails_without_both_args(self, invalid_arg_value):
         with pytest.raises(ValueError):
-            MetaAttribute(**invalid_arg)
+            MetaAttribute(**invalid_arg_value)
 
-    def test_create_meta_attr_fails_with_invalid_schema_id(self):
+    @pytest.fixture(params=[
+        {'schema_id': 'not_an_int', 'encoded_payload': bytes(10)},
+        {'schema_id': 10, 'encoded_payload': u'not_bytes'}
+    ])
+    def invalid_arg_type(self, request):
+        return request.param
+
+    def test_create_meta_attr_fails_with_invalid_arg_type(self, invalid_arg_type):
         with pytest.raises(TypeError):
-            MetaAttribute(schema_id='not_an_int', encoded_payload=bytes(10))
+            MetaAttribute(**invalid_arg_type)
 
     def test_meta_attribute_encoding(self, new_meta_attribute):
         assert isinstance(new_meta_attribute.avro_repr, dict)

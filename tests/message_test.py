@@ -127,8 +127,7 @@ class SharedMessageTest(object):
 
     @pytest.fixture(params=[
         'not a list',
-        ['not_a_dict'],
-        [{'schema_id': 'not_an_int', 'payload': bytes(10)}],
+        ['not_a_MetaAttribute_object'],
     ])
     def invalid_meta_type(self, request):
         return request.param
@@ -140,26 +139,15 @@ class SharedMessageTest(object):
         )
 
     @pytest.fixture
-    def invalid_meta_value(self):
-        return [{'no_schema_id': 1, 'not_payload': bytes(10)}]
-
-    def test_rejects_invalid_meta_value(self, valid_message_data, invalid_meta_value):
-        self._assert_invalid_data(
-            valid_message_data,
-            error=ValueError,
-            meta=invalid_meta_value
-        )
-
-    @pytest.fixture
     def meta_attr_payload(self):
         return {'good_payload': 26}
 
     @pytest.fixture
-    def valid_meta(self, meta_attr_payload, registered_meta_attribute):
+    def valid_meta_param(self, meta_attr_payload, registered_meta_attribute):
         meta_attr = MetaAttribute()
         meta_attr.schema_id = registered_meta_attribute.schema_id
         meta_attr.payload = meta_attr_payload
-        return [meta_attr.avro_repr]
+        return [meta_attr]
 
     def _get_dry_run_message_with_meta(self, valid_message_data, meta_param=None):
         message_data = self._make_message_data(
@@ -172,12 +160,17 @@ class SharedMessageTest(object):
         dry_run_message = self._get_dry_run_message_with_meta(valid_message_data)
         assert dry_run_message.meta is None
 
-    def test_accepts_valid_meta(self, valid_message_data, valid_meta, meta_attr_payload):
+    def test_accepts_valid_meta(
+        self,
+        valid_message_data,
+        valid_meta_param,
+        meta_attr_payload
+    ):
         dry_run_message = self._get_dry_run_message_with_meta(
             valid_message_data,
-            valid_meta
+            valid_meta_param
         )
-        assert dry_run_message.meta[0].schema_id == valid_meta[0]['schema_id']
+        assert dry_run_message.meta[0].schema_id == valid_meta_param[0].schema_id
         assert dry_run_message.meta[0].payload == meta_attr_payload
 
     def test_dry_run(self, valid_message_data):
