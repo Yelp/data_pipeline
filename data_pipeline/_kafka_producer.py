@@ -63,7 +63,7 @@ class KafkaProducer(object):
         self.skip_messages_with_pii = get_config().skip_messages_with_pii
         self.user = get_config().user
         self.acceptable_users = ['batch']
-        self.key_location = '/nail/srv/configs/ecosystem/devc/data_pipeline/key-{}.key'
+        self.key_location = '/nail/srv/configs/data_pipeline/key-{}.key'
 
     def wake(self):
         """Should be called periodically if we're not otherwise waking up by
@@ -95,6 +95,7 @@ class KafkaProducer(object):
 
     def _retrieve_key(self):
         try:
+            # TODO: allow for key rotation, checking for key-id
             with open(self.key_location.format("1"), 'r') as f:
                 return f.readline()
         except IOError as key_read_failures:
@@ -116,6 +117,9 @@ class KafkaProducer(object):
 
     def _encrypt_message_using_pycrypto(self, key, message):
         payload = message.payload or message.payload_data
+        # TODO: ECB is not secure. We should use CFB,
+        # and eventually we should allow for multiple
+        # encryption methods. 
         encrypter = AES.new(key, AES.MODE_ECB)
         if isinstance(payload, dict):
             payload = self._pad_payload(json.dumps(payload))
@@ -128,6 +132,7 @@ class KafkaProducer(object):
         return True
 
     def _pad_payload(self, payload):
+        # TODO: Remove this logic, since CFB won't need it
         length = 16 - (len(payload) % 16)
         return payload + chr(length) * length
 
