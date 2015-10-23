@@ -5,27 +5,30 @@ from __future__ import unicode_literals
 import pytest
 
 from data_pipeline import message as dp_message
+from data_pipeline.meta_attribute import MetaAttribute
 
 
 class TestEnvelope(object):
 
     @pytest.fixture(params=[
         None,
-        r'666'
+        {'good_payload': 26}
     ])
     def meta_attr_payload(self, request):
         return request.param
 
     @pytest.fixture
-    def meta_attr_param(self, registered_meta_attribute, meta_attr_payload):
+    def valid_meta(self, meta_attr_payload, registered_meta_attribute):
         if meta_attr_payload is None:
             return None
-        return {'meta': [
-            {
-                'schema_id': registered_meta_attribute.schema_id,
-                'payload': meta_attr_payload
-            }
-        ]}
+        meta_attr = MetaAttribute()
+        meta_attr.schema_id = registered_meta_attribute.schema_id
+        meta_attr.payload = meta_attr_payload
+        return [meta_attr]
+
+    @pytest.fixture
+    def meta_attr_param(self, valid_meta):
+        return {'meta': valid_meta}
 
     @pytest.fixture(params=[
         (dp_message.CreateMessage, {}),
@@ -55,7 +58,7 @@ class TestEnvelope(object):
             meta=[
                 meta_attr.avro_repr
                 for meta_attr in message.meta
-            ],
+            ] if message.meta else None,
             payload=message.payload,
             previous_payload=previous_payload,
             schema_id=message.schema_id,
