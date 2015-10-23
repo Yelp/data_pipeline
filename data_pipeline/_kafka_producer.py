@@ -119,7 +119,7 @@ class KafkaProducer(object):
         payload = message.payload or message.payload_data
         # TODO: ECB is not secure. We should use CFB,
         # and eventually we should allow for multiple
-        # encryption methods. 
+        # encryption methods.
         encrypter = AES.new(key, AES.MODE_ECB)
         if isinstance(payload, dict):
             payload = self._pad_payload(json.dumps(payload))
