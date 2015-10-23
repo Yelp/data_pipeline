@@ -14,7 +14,6 @@ from Crypto.Cipher import AES
 
 import data_pipeline.producer
 from data_pipeline._fast_uuid import FastUUID
-from data_pipeline._kafka_producer import KafkaProducer
 from data_pipeline.config import get_config
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import CreateMessage
@@ -215,7 +214,7 @@ class TestProducer(TestProducerBase):
         producer,
         registered_schema
     ):
-        with mock.patch.object(producer._kafka_producer, 'user', return_value='notbatch'):
+        with mock.patch.object(producer._kafka_producer, 'user', 'notbatch'):
             messages = self._publish_message(
                 topic,
                 self.create_message(
@@ -251,7 +250,7 @@ class TestProducer(TestProducerBase):
     ):
         payload = b'hello world!'
         key = 'This is a key123'
-        with mock.patch.object(producer._kafka_producer, 'user', return_value='batch'):
+        with mock.patch.object(producer._kafka_producer, 'user', 'batch'):
             with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
                 with mock.patch.object(producer._kafka_producer, '_retrieve_key', return_value=key):
                     messages = self._publish_message(
@@ -283,7 +282,7 @@ class TestProducer(TestProducerBase):
         producer,
         registered_schema
     ):
-        with mock.patch.object(KafkaProducer, 'user', return_value='notbatch'):
+        with mock.patch.object(producer._kafka_producer, 'user', 'notbatch'):
             with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
                 messages = self._publish_message(
                     topic,

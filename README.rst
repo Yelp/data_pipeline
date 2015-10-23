@@ -51,14 +51,3 @@ and didn't provide a concrete performance benefit (see
 https://pb.yelpcorp.com/150070 for benchmark results).  If we ever want to
 revive that producer, a SHA containing the producer just before its removal
 has been tagged as before-async-producer-removal.
-
-In order to publish PII, producers encrypt messages containing sensitive info
-using AES, which is a symmetric encryption algorithm. Because it's symmetric,
-the key itself has to be encrypted. A locked private key must be placed in 
-/etc/cep159 for every machine in production running a producer or consumer.
-This key is used to encrypt the symmetric key that the pipeline actually uses--
-Puppet decrypts it and puts it in /nail/datapipeline/key.txt. The clientlib
-uses that file to encrypt and decrypt the data. Because the file has owner 
-'batch', only people with prod access can start producers or consumers that
-handle PII. This restriction is also enforced in the clientlib code via
-a list of 'acceptable users', i.e., 'batch.'
