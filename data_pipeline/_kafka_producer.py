@@ -61,8 +61,11 @@ class KafkaProducer(object):
         self.position_data_tracker = PositionDataTracker()
         self._reset_message_buffer()
         self.skip_messages_with_pii = get_config().skip_messages_with_pii
-        self.user = get_config().user
         self.acceptable_users = ['batch']
+        self.key_location = '/nail/etc/datapipeline/key-{}.key'
+
+    def user(self):
+        return get_config().user
 
     def wake(self):
         """Should be called periodically if we're not otherwise waking up by
@@ -73,7 +76,7 @@ class KafkaProducer(object):
 
     def publish(self, message):
         if message.contains_pii:
-            if self.skip_messages_with_pii or (self.user not in self.acceptable_users):
+            if self.skip_messages_with_pii or (self.user() not in self.acceptable_users):
                 return
             elif not self._encrypt_message_with_pii(message):
                 return
@@ -95,23 +98,39 @@ class KafkaProducer(object):
 
     def _retrieve_key(self):
         try:
-            # TODO(krane): fill in key-getting logic.
-            return ""
-        except IOError:
-            self.logger.log(
-                "Retrieving encryption key failed due to an IO Error"
-            )
+            with open(self.key_location.format("1"), 'r') as f:
+                return f.readline()
+        except IOError as key_read_failures:
+            (errno, strerror) = key_raid_failures.args
+            if errno == 2:
+                self.logger.log("Retrieving encryption key failed because the\
+                    key does not exist."
+                                )
+            elif errno == 13:
+                self.logger.log("Retrieving encryption key failed because user {}\
+                    does not have permission to read the key(user\
+                    must be \'batch\').".format(self.user())
+                                )
+            else:
+                self.logger.log("Retrieving encryption key failed because of\
+                    an unknown IOError."
+                                )
             return False
 
     def _encrypt_message_using_pycrypto(self, key, message):
-        payload = message.payload() or message.payload_data()
-        encrypter = AES.new(key, AES.MODE_CBC)
+        payload = message.payload or message.payload_data
+        encrypter = AES.new(key, AES.MODE_ECB)
         if isinstance(payload, dict):
-            new_payload = encrypter.encrypt(json.dumps(payload))
-            message.payload_data(json.loads(new_payload))
+            data = json.dumps(payload)
+            length = 16 - (len(data) % 16)
+            data += chr(length) * length
+            new_payload = encrypter.encrypt(data)
+            message.payload_data = json.loads(new_payload)
         else:
+            length = 16 - (len(payload) % 16)
+            payload += chr(length) * length
             new_payload = encrypter.encrypt(payload)
-            message.payload(new_payload)
+            message.payload = new_payload
         return True
 
     def flush_buffered_messages(self):

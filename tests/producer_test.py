@@ -14,6 +14,7 @@ from Crypto.Cipher import AES
 
 import data_pipeline.producer
 from data_pipeline._fast_uuid import FastUUID
+from data_pipeline._kafka_producer import KafkaProducer
 from data_pipeline.config import get_config
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import CreateMessage
@@ -214,7 +215,7 @@ class TestProducer(TestProducerBase):
         producer,
         registered_schema
     ):
-        with mock.patch.object(producer, 'user', return_value='notbatch'):
+        with mock.patch.object(producer._kafka_producer, 'user', return_value='notbatch'):
             messages = self._publish_message(
                 topic,
                 self.create_message(
@@ -249,33 +250,32 @@ class TestProducer(TestProducerBase):
         producer,
         registered_schema
     ):
+        payload = b'hello world!'
         key = 'This is a key123'
-        with mock.patch.object(producer, 'user', return_value='batch'):
-            with mock.patch.object(producer, '_retrieve_key', return_value=key):
-                with capture_new_messages(topic) as get_messages:
-                    producer.publish(
+        with mock.patch.object(producer._kafka_producer, 'user', return_value='batch'):
+            with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
+                with mock.patch.object(producer._kafka_producer, '_retrieve_key', return_value=key):
+                    messages = self._publish_message(
+                        topic,
                         self.create_message(
                             topic,
                             payload,
                             registered_schema,
                             contains_pii=True
-                        )
+                        ),
+                        producer
                     )
-                    producer.flush()
-                assert self._check_encrypted_payload_versus_unecrypted_payload(
-                    get_messages()[0].message.payload,
-                    payload,
-                    key
-                )
+                    assert len(messages) == 1
+                    actual_payload = self._decrypt_payload(key, messages[0].payload)
+                    assert self._unpad(actual_payload) == payload
 
-    def _check_encrypted_payload_versus_unecrypted_payload(
-        self,
-        encrypted_payload,
-        unencrypted_payload,
-        key
-    ):
-        decrypter = AES.new(key, AES.MODE_CBC)
-        return decrypter.decrypt(encrypted_payload) == unencrypted_payload
+    def _decrypt_payload(self, key, encrypted_payload):
+        decrypter = AES.new(key, AES.MODE_ECB)
+        data = decrypter.decrypt(encrypted_payload)
+        return data
+
+    def _unpad(self, s):
+        return s[:-ord(s[len(s) - 1:])]
 
     def test_no_publish_pii_with_non_acceptable_user(
         self,
@@ -284,7 +284,7 @@ class TestProducer(TestProducerBase):
         producer,
         registered_schema
     ):
-        with mock.patch.object(producer, 'user', return_value='notbatch'):
+        with mock.patch.object(KafkaProducer, 'user', return_value='notbatch'):
             messages = self._publish_message(
                 topic,
                 self.create_message(
