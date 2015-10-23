@@ -63,7 +63,7 @@ class KafkaProducer(object):
         self.skip_messages_with_pii = get_config().skip_messages_with_pii
         self.user = get_config().user
         self.acceptable_users = ['batch']
-        self.key_location = '/nail/etc/datapipeline/key-{}.key'
+        self.key_location = 'srv-configs/ecosystem/devc/data_pipeline/key-{}.key'
 
     def wake(self):
         """Should be called periodically if we're not otherwise waking up by
@@ -119,7 +119,7 @@ class KafkaProducer(object):
         encrypter = AES.new(key, AES.MODE_ECB)
         if isinstance(payload, dict):
             payload = self._pad_payload(json.dumps(payload))
-            new_payload = encrypter.encrypt(data)
+            new_payload = encrypter.encrypt(payload)
             message.payload_data = json.loads(new_payload)
         else:
             payload = self._pad_payload(payload)
