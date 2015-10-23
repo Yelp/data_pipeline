@@ -101,7 +101,7 @@ class KafkaProducer(object):
             with open(self.key_location.format("1"), 'r') as f:
                 return f.readline()
         except IOError as key_read_failures:
-            (errno, strerror) = key_raid_failures.args
+            (errno, strerror) = key_read_failures.args
             if errno == 2:
                 self.logger.log("Retrieving encryption key failed because the\
                     key does not exist."

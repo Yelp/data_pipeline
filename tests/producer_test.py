@@ -246,7 +246,6 @@ class TestProducer(TestProducerBase):
     def test_publish_encrypted_message_with_pii(
         self,
         topic,
-        payload,
         producer,
         registered_schema
     ):
@@ -285,19 +284,19 @@ class TestProducer(TestProducerBase):
         registered_schema
     ):
         with mock.patch.object(KafkaProducer, 'user', return_value='notbatch'):
-            messages = self._publish_message(
-                topic,
-                self.create_message(
+            with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
+                messages = self._publish_message(
                     topic,
-                    payload,
-                    registered_schema,
-                    contains_pii=True,
-                    skip_messages_with_pii=False
-                ),
-                producer
-            )
+                    self.create_message(
+                        topic,
+                        payload,
+                        registered_schema,
+                        contains_pii=True
+                    ),
+                    producer
+                )
 
-            assert len(messages) == 0
+                assert len(messages) == 0
 
     def test_basic_publish_message_with_primary_keys(
         self,
