@@ -39,6 +39,12 @@ class Containers(object):
                 with Containers() as containers:
                     yield containers
 
+        You'll also need to install the data_pipeline testing_helpers extras,
+        to get all the necessary dependencies.  The easiest way to do that is
+        to include the following in your packages `requirements-dev.txt`::
+
+            data_pipeline[testing_helpers]
+
         :meth:`create_kafka_topic` can be used to create a new kafka topic in
         the running container::
 
@@ -51,6 +57,39 @@ class Containers(object):
         runs::
 
             $ LEAVE_CONTAINERS_RUNNING=true py.test tests/
+
+        The `FORCE_FRESH_CONTAINERS` environment variable will force this class
+        to stop any already-running containers, remove them, and start them
+        again from scratch::
+
+            $ FORCE_FRESH_CONTAINERS=true py.test tests/
+
+        The `PULL_CONTAINERS` environment variable updates all of the underlying
+        containers before starting containers, if it's necessary to start new
+        containers::
+
+            $ PULL_CONTAINERS=true py.test tests/
+
+        When running tests using an automated system like Jenkins, both
+        `FORCE_FRESH_CONTAINERS` and `PULL_CONTAINERS` should be set, so tests
+        are always run against pristene containers and the most recently deployed
+        version of the schematizer. A Makefile target can set these variables
+        directly::
+
+            test:
+                # This will timeout after 15 minutes, in case there is a hang on jenkins
+                PULL_CONTAINERS=true FORCE_FRESH_CONTAINERS=true timeout -9 900 tox $(REBUILD_FLAG)
+
+        An "Archive Artifacts" step can be added to the automated build
+        capturing the projects "logs/**/*", which will contain the projects
+        docker-compose log.  Additional debugging logs for the test run can be
+        captured by adding the following to `conftest.py`::
+
+            logging.basicConfig(
+                level=logging.DEBUG,
+                filename='logs/test.log',
+                format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
+            )
 
         If you want to manually inspect the containers with docker-compose, you
         can get the preconfigured docker-compose command by running something
@@ -68,7 +107,7 @@ class Containers(object):
             $(make compose-prefix) ps
     """
 
-    services = ["kafka", "schematizer"]
+    services = ["zookeeper", "schematizer", "kafka"]
 
     @classmethod
     def compose_prefix(cls):
@@ -78,6 +117,9 @@ class Containers(object):
 
     @classmethod
     def get_container_info(cls, project, service, docker_client=Client(version='auto')):
+        """Returns container information for the first container matching project
+        and service.
+        """
         # intentionally letting this blow up if it can't find the container
         # - we can't do anything if the container doesn't exist
         return next(
@@ -146,7 +188,10 @@ class Containers(object):
         self.containers_already_running = self._are_containers_already_running()
 
     def __enter__(self):
-        if not self.containers_already_running:
+        if (
+            not self.containers_already_running or
+            self._is_envvar_set('FORCE_FRESH_CONTAINERS')
+        ):
             self._start_containers()
         else:
             logger.info("Using running containers")
@@ -158,7 +203,7 @@ class Containers(object):
     def __exit__(self, type, value, traceback):
         if not (
             self.containers_already_running or
-            os.getenv('LEAVE_CONTAINERS_RUNNING', 'false').lower() in ['t', 'true', 'y', 'yes']
+            self._is_envvar_set('LEAVE_CONTAINERS_RUNNING')
         ):
             # only stop containers that we started
             self._stop_containers()
@@ -230,11 +275,14 @@ class Containers(object):
 
     def _start_containers(self):
         self._stop_containers()
+        if self._is_envvar_set('PULL_CONTAINERS'):
+            logger.info("Updating Containers")
+            self._run_compose('pull')
         logger.info("Starting Containers")
         self._run_compose('up', '-d', *self.services)
         self._wait_for_services()
 
-    def _wait_for_services(self, timeout_seconds=15):
+    def _wait_for_services(self, timeout_seconds=60):
         self.use_testing_containers()
         self._wait_for_schematizer(timeout_seconds)
         self._wait_for_kafka(timeout_seconds)
@@ -272,4 +320,16 @@ class Containers(object):
 
     def _run_compose(self, *args):
         args = list(args)
-        subprocess.call(['docker-compose'] + self._compose_options.split() + args)
+
+        if not os.path.isdir('logs'):
+            os.mkdir('logs')
+
+        with open("logs/docker-compose.log", "a") as f:
+            subprocess.call(
+                ['docker-compose'] + self._compose_options.split() + args,
+                stdout=f,
+                stderr=subprocess.STDOUT
+            )
+
+    def _is_envvar_set(self, envvar):
+        return os.getenv(envvar, 'false').lower() in ['t', 'true', 'y', 'yes']

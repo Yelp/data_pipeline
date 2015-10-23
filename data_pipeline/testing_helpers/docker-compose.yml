@@ -1,11 +1,7 @@
 zookeeper:
   image: wurstmeister/zookeeper
-  ports:
-    - "2181"
 kafka:
   image: jcnnghm/kafka:latest
-  ports:
-    - "9092"
   links:
     - zookeeper:zk
   environment:
@@ -17,8 +13,6 @@ schematizerconfigs:
   image: docker-dev.yelpcorp.com/schematizer_configs:latest
 schematizer:
   image: docker-dev.yelpcorp.com/schematizer_service:latest
-  ports:
-    - "8888"
   links:
     - schematizerdatabase
   volumes_from:

@@ -1,10 +1,9 @@
--e .
+# Installs the package with the testing_helpers extras
+-e .[testing_helpers]
 # TODO(DATAPIPE-167): Add the packages that don't exist yet to the interal Pypi
 # and remove this extra-index-url
 --extra-index-url https://pypi.python.org/simple/
 -r requirements-tools.txt
-docker-compose==1.3.3
-docker-py==1.3.1
 flake8
 honcho
 ipdb
@@ -16,7 +15,6 @@ pytest<2.8.2
 pytest-cov==1.8.1
 pytest-raisesregexp
 # requests is locked at <2.7 to satisfy a docker-compose requirement
-requests<2.7
 Sphinx==1.3.1
 terminaltables>=1.0.2
 wheel>=0.22

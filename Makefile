@@ -44,7 +44,7 @@ clean-vim:
 
 test:.venv.touch
 	# This will timeout after 15 minutes, in case there is a hang on jenkins
-	timeout -9 900 tox $(REBUILD_FLAG)
+	PULL_CONTAINERS=true FORCE_FRESH_CONTAINERS=true timeout -9 900 tox $(REBUILD_FLAG)
 
 docs: clean-docs .venv.docs.touch
 	tox -e docs $(REBUILD_FLAG)
