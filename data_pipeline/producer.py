@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 import multiprocessing
 from collections import defaultdict
 
+import simplejson as json
 from cached_property import cached_property
 
 from data_pipeline._kafka_producer import LoggingKafkaProducer
@@ -220,6 +221,19 @@ class Producer(Client):
 
         for topic, messages in topic_messages_map.iteritems():
             already_published_count = topic_actual_published_count_map[topic]
+            saved_offset = topic_offsets.get(topic, 0)
+
+            info_to_log = dict(
+                message="Attempting to ensure messages published",
+                topic=topic,
+                saved_offset=saved_offset,
+                high_watermark=already_published_count + saved_offset,
+                message_count=len(messages),
+                already_published_count=already_published_count
+            )
+
+            logger.info(json.dumps(info_to_log))
+
             if already_published_count < 0 or already_published_count > len(messages):
                 raise PublicationUnensurableError()
             for message in messages[already_published_count:]:

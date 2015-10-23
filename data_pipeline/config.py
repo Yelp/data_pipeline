@@ -173,15 +173,6 @@ class Config(object):
         )
 
     @property
-    def consumer_max_buffer_size_default(self):
-        """ Maximum queue size for Consumer objects
-        """
-        return data_pipeline_conf.read_int(
-            'consumer_max_buffer_size_default',
-            default=1000,
-        )
-
-    @property
     def consumer_get_messages_timeout_default(self):
         """ Default timeout for blocking calls to ``Consumer.get_messages``
         """
@@ -198,26 +189,6 @@ class Config(object):
         return data_pipeline_conf.read_float(
             'consumer_partitioner_cooldown_default',
             default=0.5,
-        )
-
-    @property
-    def consumer_worker_min_sleep_time_default(self):
-        """ Default ``KafkaConsumerWorker`` sleep time minimum. Must be lower
-        than the maximum sleep time.
-        """
-        return data_pipeline_conf.read_float(
-            'consumer_worker_min_sleep_time_default',
-            default=0.1,
-        )
-
-    @property
-    def consumer_worker_max_sleep_time_default(self):
-        """ Default ``KafkaConsumerWorker`` sleep time maximum. Must be higher
-        than the minimum sleep time.
-        """
-        return data_pipeline_conf.read_float(
-            'consumer_worker_max_sleep_time_default',
-            default=0.2,
         )
 
     @property

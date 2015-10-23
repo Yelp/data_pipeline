@@ -18,9 +18,9 @@ class TestEnvelope(object):
     def message(self, request, topic_name, payload):
         message_class, additional_params = request.param
         return message_class(
-            topic_name,
-            10,
-            payload,
+            schema_id=10,
+            topic=topic_name,
+            payload=payload,
             **additional_params
         )
 

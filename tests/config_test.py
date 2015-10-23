@@ -51,20 +51,11 @@ class TestConfigDefaults(TestConfigBase):
     def test_kafka_zookeeper(self, config, zookeeper):
         assert config.kafka_zookeeper == zookeeper
 
-    def test_consumer_max_buffer_size_default(self, config):
-        assert config.consumer_max_buffer_size_default == 1000
-
     def test_consumer_get_messages_timeout_default(self, config):
         assert config.consumer_get_messages_timeout_default == 0.1
 
     def test_consumer_partitioner_cooldown_default(self, config):
         assert config.consumer_partitioner_cooldown_default == 0.5
-
-    def test_consumer_worker_min_sleep_time_default(self, config):
-        assert config.consumer_worker_min_sleep_time_default == 0.1
-
-    def test_consumer_worker_max_sleep_time_default(self, config):
-        assert config.consumer_worker_max_sleep_time_default == 0.2
 
     def test_monitoring_window_in_sec(self, config):
         assert config.monitoring_window_in_sec == 600
@@ -156,10 +147,6 @@ class TestConfigurationOverrides(TestConfigBase):
         with reconfigure(kafka_zookeeper=addr):
             assert config.cluster_config.zookeeper == addr
 
-    def test_consumer_max_buffer_size_default(self, config):
-        with reconfigure(consumer_max_buffer_size_default=10):
-            assert config.consumer_max_buffer_size_default == 10
-
     def test_consumer_get_messages_timeout_default(self, config):
         with reconfigure(consumer_get_messages_timeout_default=10.0):
             assert config.consumer_get_messages_timeout_default == 10.0
@@ -167,14 +154,6 @@ class TestConfigurationOverrides(TestConfigBase):
     def test_consumer_partitioner_cooldown_default(self, config):
         with reconfigure(consumer_partitioner_cooldown_default=10.0):
             assert config.consumer_partitioner_cooldown_default == 10.0
-
-    def test_consumer_worker_min_sleep_time_default(self, config):
-        with reconfigure(consumer_worker_min_sleep_time_default=10.0):
-            assert config.consumer_worker_min_sleep_time_default == 10.0
-
-    def test_consumer_worker_max_sleep_time_default(self, config):
-        with reconfigure(consumer_worker_max_sleep_time_default=10.0):
-            assert config.consumer_worker_max_sleep_time_default == 10.0
 
     def test_monitoring_window_in_sec(self, config):
         with reconfigure(monitoring_window_in_sec=10):

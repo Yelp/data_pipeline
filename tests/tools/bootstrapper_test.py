@@ -19,7 +19,7 @@ class TestFileBootstrapperBase(object):
         mock_schema_result.schema = '{"doc":"","fields":' \
                                     '[{"name":"good_field"}]}'
         mock_schema_result.schema_id = 1
-        mock_schema_result.topic.source.source = good_source_ref['source']
+        mock_schema_result.topic.source.name = good_source_ref['source']
         return mock_schema_result
 
     @pytest.fixture

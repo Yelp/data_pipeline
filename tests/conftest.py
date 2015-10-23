@@ -7,14 +7,16 @@ import os
 from uuid import UUID
 
 import pytest
+from yelp_avro.avro_string_writer import AvroStringWriter
+from yelp_avro.testing_helpers.generate_payload_data import \
+    generate_payload_data
+from yelp_avro.util import get_avro_schema_object
 
-from data_pipeline._avro_util import AvroStringWriter
-from data_pipeline._avro_util import generate_payload_data
-from data_pipeline._avro_util import get_avro_schema_object
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import CreateMessage
-from data_pipeline.schema_cache import get_schema_cache
+from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+from data_pipeline.testing_helpers.kafka_docker import create_kafka_docker_topic
 from data_pipeline.testing_helpers.kafka_docker import KafkaDocker
 from tests.helpers.config import reconfigure
 from tests.helpers.containers import Containers
@@ -28,40 +30,43 @@ logging.basicConfig(
 
 
 @pytest.fixture
-def schema_cache(containers):
-    return get_schema_cache()
+def schematizer_client(containers):
+    return get_schematizer()
 
 
 @pytest.fixture
-def schematizer_client(schema_cache):
-    return schema_cache.schematizer_client
+def namespace():
+    return 'test_namespace'
 
 
 @pytest.fixture
-def registered_schema(schematizer_client, example_schema):
-    return schematizer_client.schemas.register_schema(
-        body={
-            'schema': example_schema,
-            'namespace': 'test_namespace',
-            'source': 'good_source',
-            'source_owner_email': 'test@yelp.com',
-            'contains_pii': False
-        }
-    ).result()
+def source():
+    return 'good_source'
 
 
 @pytest.fixture
-def example_schema():
+def registered_schema(schematizer_client, example_schema, namespace, source):
+    return schematizer_client.register_schema(
+        namespace=namespace,
+        source=source,
+        schema_str=example_schema,
+        source_owner_email='test@yelp.com',
+        contains_pii=False
+    )
+
+
+@pytest.fixture
+def example_schema(namespace, source):
     return '''
     {
         "type":"record",
-        "namespace":"test_namespace",
-        "name":"good_source",
+        "namespace": "%s",
+        "name": "%s",
         "fields":[
             {"type":"int", "name":"good_field"}
         ]
     }
-    '''
+    ''' % (namespace, source)
 
 
 @pytest.fixture
@@ -87,6 +92,12 @@ def example_previous_payload_data(example_schema_obj):
 @pytest.fixture(scope='module')
 def topic_name():
     return str(UUID(bytes=FastUUID().uuid4()).hex)
+
+
+@pytest.fixture(scope='module')
+def topic(kafka_docker, topic_name):
+    create_kafka_docker_topic(kafka_docker, topic_name)
+    return topic_name
 
 
 @pytest.fixture()
@@ -118,7 +129,8 @@ def message_with_payload_data(topic_name, registered_schema):
         topic=topic_name,
         schema_id=registered_schema.schema_id,
         payload_data={'good_field': 100},
-        timestamp=1500
+        timestamp=1500,
+        contains_pii=False
     )
 
 

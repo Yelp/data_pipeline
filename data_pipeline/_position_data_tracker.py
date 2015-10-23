@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 from collections import defaultdict
+from collections import Mapping
 
 from data_pipeline.config import get_config
 from data_pipeline.position_data import PositionData
@@ -31,12 +32,14 @@ class _PositionDataTracker(object):
     def __init__(self):
         self.unpublished_messages = 0
         self.topic_to_kafka_offset_map = {}
+        self.merged_upstream_position_info_map = {}
         self._setup_position_info()
 
     def record_message_buffered(self, message):
         logger.debug("Message buffered: %s" % message)
         if self._should_update_position_info(message):
             self._update_position_info(message)
+        self._update_merged_upstream_position_info(message)
         self.unpublished_messages += 1
 
     def record_messages_published(self, topic, offset, message_count):
@@ -50,7 +53,8 @@ class _PositionDataTracker(object):
         return PositionData(
             last_published_message_position_info=self.last_published_message_position_info,
             topic_to_last_position_info_map=dict(self.topic_to_last_position_info_map),
-            topic_to_kafka_offset_map=dict(self.topic_to_kafka_offset_map)
+            topic_to_kafka_offset_map=dict(self.topic_to_kafka_offset_map),
+            merged_upstream_position_info_map=dict(self.merged_upstream_position_info_map)
         )
 
     def _setup_position_info(self):
@@ -67,6 +71,13 @@ class _PositionDataTracker(object):
         self.last_published_message_position_info = message.upstream_position_info
         self.topic_to_last_position_info_map[message.topic] = message.upstream_position_info
 
+    def _update_merged_upstream_position_info(self, message):
+        if message.upstream_position_info is not None:
+            _update_nested_dict(
+                self.merged_upstream_position_info_map,
+                message.upstream_position_info
+            )
+
 
 class _MergingPositionDataTracker(_PositionDataTracker):
     def _setup_position_info(self):
@@ -80,3 +91,29 @@ class _MergingPositionDataTracker(_PositionDataTracker):
         self.topic_to_last_position_info_map[message.topic].update(
             message.upstream_position_info
         )
+
+
+# TODO(joshszep|YELPLIB-65): Remove this and use function from yelp_lib
+# when yelp-main makes it possible
+def _update_nested_dict(original_dict, new_dict):
+    """Update the dictionary and its nested dictionary fields.
+
+    Note: This was copy-pasted from:
+        https://opengrok.yelpcorp.com/xref/submodules/yelp_lib/yelp_lib/containers/dicts.py?r=92297a46#40
+        The reason is that this revision requires yelp_lib>=11.0.0 but we
+        can not use this version yelp-main yet (see YELPLIB-65 for details).
+        It's simpler to just temporarily pull this in.
+
+    :param original_dict: Original dictionary
+    :param new_dict: Dictionary with data to update
+    """
+    # Using our own stack to avoid recursion.
+    stack = [(original_dict, new_dict)]
+    while stack:
+        original_dict, new_dict = stack.pop()
+        for key, value in new_dict.items():
+            if isinstance(value, Mapping):
+                original_dict.setdefault(key, {})
+                stack.append((original_dict[key], value))
+            else:
+                original_dict[key] = value

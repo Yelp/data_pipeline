@@ -5,14 +5,15 @@ from __future__ import unicode_literals
 import time
 from collections import namedtuple
 
-from data_pipeline._avro_util import AvroStringReader
-from data_pipeline._avro_util import AvroStringWriter
+from yelp_avro.avro_string_reader import AvroStringReader
+from yelp_avro.avro_string_writer import AvroStringWriter
+
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
 from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
-from data_pipeline.schema_cache import get_schema_cache
+from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 
 logger = get_config().logger
@@ -40,8 +41,10 @@ class Message(object):
     :class:`data_pipeline.message.RefreshMessage`.
 
     Args:
-        topic (str): Kafka topic to publish into
         schema_id (int): Identifies the schema used to encode the payload
+        topic (Optional[str]): Kafka topic to publish into.  It is highly
+            recommended to leave it unassigned and let the Schematizer decide
+            the topic of the schema.  Use caution when overriding the topic.
         payload (bytes): Avro-encoded message - encoded with schema identified
             by `schema_id`.  Either `payload` or `payload_data` must be provided
             but not both.
@@ -99,13 +102,19 @@ class Message(object):
     """UUID generator - this isn't a @cached_property so it can be serialized"""
 
     @property
+    def _schematizer(self):
+        return get_schematizer()
+
+    @property
     def topic(self):
         """The kafka topic the message should be published to."""
         return self._topic
 
     @topic.setter
     def topic(self, topic):
-        if not isinstance(topic, str) or len(topic) == 0:
+        if not isinstance(topic, str):
+            raise TypeError("Topic must be a non-empty string")
+        if len(topic) == 0:
             raise ValueError("Topic must be a non-empty string")
         self._topic = topic
 
@@ -117,7 +126,7 @@ class Message(object):
     @schema_id.setter
     def schema_id(self, schema_id):
         if not isinstance(schema_id, int):
-            raise ValueError("Schema id should be an int")
+            raise TypeError("Schema id should be an int")
         self._schema_id = schema_id
 
     @property
@@ -142,7 +151,7 @@ class Message(object):
             # second.
             uuid = self._fast_uuid.uuid4()
         elif len(uuid) != 16:
-            raise ValueError(
+            raise TypeError(
                 "UUIDs should be exactly 16 bytes.  Conforming UUID's can be "
                 "generated with `import uuid; uuid.uuid4().bytes`."
             )
@@ -158,7 +167,9 @@ class Message(object):
         systems how to handle the data, in addition to automatic decryption.
         """
         if self._contains_pii is None:
-            self._contains_pii = get_schema_cache().get_contains_pii_for_schema_id(self.schema_id)
+            self._contains_pii = self._schematizer.get_schema_by_id(
+                self.schema_id
+            ).topic.contains_pii
         return self._contains_pii
 
     @contains_pii.setter
@@ -209,8 +220,12 @@ class Message(object):
 
     @upstream_position_info.setter
     def upstream_position_info(self, upstream_position_info):
-        if upstream_position_info is not None and not isinstance(upstream_position_info, dict):
-            raise ValueError("upstream_position_info should be None or a dict")
+        # TODO [clin|DATAPIPE-469] re-visit the style when we get a chance
+        if (
+            upstream_position_info is not None and
+            not isinstance(upstream_position_info, dict)
+        ):
+            raise TypeError("upstream_position_info should be None or a dict")
         self._upstream_position_info = upstream_position_info
 
     @property
@@ -223,13 +238,19 @@ class Message(object):
 
     @kafka_position_info.setter
     def kafka_position_info(self, kafka_position_info):
-        if kafka_position_info is not None and not isinstance(kafka_position_info, KafkaPositionInfo):
-            raise ValueError("kafka_position_info should be None or a KafkaPositionInfo")
+        # TODO [clin|DATAPIPE-469] re-visit the style when we get a chance
+        if (
+            kafka_position_info is not None and
+            not isinstance(kafka_position_info, KafkaPositionInfo)
+        ):
+            raise TypeError(
+                "kafka_position_info should be None or a KafkaPositionInfo"
+            )
         self._kafka_position_info = kafka_position_info
 
     @property
     def _avro_schema(self):
-        return get_schema_cache().get_schema(self.schema_id)
+        return self._schematizer.get_schema_by_id(self.schema_id).schema_json
 
     @property
     def _avro_string_writer(self):
@@ -254,7 +275,7 @@ class Message(object):
     @payload.setter
     def payload(self, payload):
         if not isinstance(payload, bytes):
-            raise ValueError("Payload must be bytes")
+            raise TypeError("Payload must be bytes")
         self._payload = payload
         self._payload_data = None  # force payload_data to be re-decoded
 
@@ -266,7 +287,7 @@ class Message(object):
     @payload_data.setter
     def payload_data(self, payload_data):
         if not isinstance(payload_data, dict):
-            raise ValueError("Payload data must be a dict")
+            raise TypeError("Payload data must be a dict")
         self._payload_data = payload_data
         self._payload = None  # force payload to be re-encoded
 
@@ -277,15 +298,15 @@ class Message(object):
     @keys.setter
     def keys(self, keys):
         if keys is not None and not isinstance(keys, tuple):
-            raise ValueError("Keys must be a tuple.")
+            raise TypeError("Keys must be a tuple.")
         if keys and not all(isinstance(key, unicode) for key in keys):
-            raise ValueError("Element of keys must be unicode.")
+            raise TypeError("Element of keys must be unicode.")
         self._keys = keys
 
     def __init__(
         self,
-        topic,
         schema_id,
+        topic=None,
         payload=None,
         payload_data=None,
         uuid=None,
@@ -301,8 +322,9 @@ class Message(object):
         # does, and in addition, this check is quite a bit faster than
         # serialization.  Finally, if we do it this way, we can lazily
         # serialize the payload in a subclass if necessary.
-        self.topic = topic
         self.schema_id = schema_id
+        self.topic = (topic or
+                      str(self._schematizer.get_schema_by_id(schema_id).topic.name))
         self.uuid = uuid
         self.timestamp = timestamp
         self.upstream_position_info = upstream_position_info
@@ -314,31 +336,36 @@ class Message(object):
         # Make it so contains_pii is no longer overrideable.
         self.contains_pii = contains_pii
 
+        if topic:
+            logger.debug("Overriding message topic: {0} for schema {1}."
+                         .format(topic, schema_id))
+
     def _set_payload_or_payload_data(self, payload, payload_data):
         # payload or payload_data are lazily constructed only on request
         is_not_none_payload = payload is not None
         is_not_none_payload_data = payload_data is not None
 
         if is_not_none_payload and is_not_none_payload_data:
-            raise ValueError("Cannot pass both payload and payload_data.")
+            raise TypeError("Cannot pass both payload and payload_data.")
         if is_not_none_payload:
             self.payload = payload
         elif is_not_none_payload_data:
             self.payload_data = payload_data
         else:
-            raise ValueError("Either payload or payload_data must be provided.")
+            raise TypeError("Either payload or payload_data must be provided.")
 
     def __eq__(self, other):
-        return self.__key == other.__key
+        return type(self) is type(other) and self._eq_key == other._eq_key
 
     def __ne__(self, other):
-        return self.__key != other.__key
+        return not self.__eq__(other)
 
     def __hash__(self):
-        return hash(self.__key)
+        # TODO [clin|DATAPIPE-468] Revisit this when we get a chance
+        return hash(self._eq_key)
 
     @property
-    def __key(self):
+    def _eq_key(self):
         """Returns a tuple representing a unique key for this Message.
 
         Note:
@@ -347,7 +374,6 @@ class Message(object):
             well, and there is an extra overhead from decoding.
         """
         return (
-            self.__class__,
             self.message_type,
             self.topic,
             self.schema_id,
@@ -436,8 +462,8 @@ class UpdateMessage(Message):
 
     def __init__(
         self,
-        topic,
         schema_id,
+        topic=None,
         payload=None,
         payload_data=None,
         previous_payload=None,
@@ -451,8 +477,8 @@ class UpdateMessage(Message):
         dry_run=False
     ):
         super(UpdateMessage, self).__init__(
-            topic,
             schema_id,
+            topic=topic,
             payload=payload,
             payload_data=payload_data,
             uuid=uuid,
@@ -479,7 +505,7 @@ class UpdateMessage(Message):
         is_not_none_previous_payload_data = previous_payload_data is not None
 
         if is_not_none_previous_payload and is_not_none_previous_payload_data:
-            raise ValueError(
+            raise TypeError(
                 "Cannot pass both previous_payload and previous_payload_data."
             )
         if is_not_none_previous_payload:
@@ -487,12 +513,12 @@ class UpdateMessage(Message):
         elif is_not_none_previous_payload_data:
             self.previous_payload_data = previous_payload_data
         else:
-            raise ValueError(
+            raise TypeError(
                 "Either previous_payload or previous_payload_data must be provided."
             )
 
     @property
-    def __key(self):
+    def _eq_key(self):
         """Returns a tuple representing a unique key for this Message.
 
         Note:
@@ -501,7 +527,7 @@ class UpdateMessage(Message):
             `previous_payload_data` will as well, and there is an extra
             overhead from decoding.
         """
-        return super(UpdateMessage, self).__key + (self.previous_payload, )
+        return super(UpdateMessage, self)._eq_key + (self.previous_payload,)
 
     @property
     def previous_payload(self):
@@ -514,7 +540,7 @@ class UpdateMessage(Message):
     @previous_payload.setter
     def previous_payload(self, previous_payload):
         if not isinstance(previous_payload, bytes):
-            raise ValueError("Previous payload must be bytes")
+            raise TypeError("Previous payload must be bytes")
         self._previous_payload = previous_payload
         self._previous_payload_data = None  # force previous_payload_data to be re-decoded
 
@@ -526,7 +552,7 @@ class UpdateMessage(Message):
     @previous_payload_data.setter
     def previous_payload_data(self, previous_payload_data):
         if not isinstance(previous_payload_data, dict):
-            raise ValueError("Previous payload data must be a dict")
+            raise TypeError("Previous payload data must be a dict")
 
         self._previous_payload_data = previous_payload_data
         self._previous_payload = None  # force previous_payload to be re-encoded
