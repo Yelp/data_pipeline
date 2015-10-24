@@ -33,8 +33,10 @@ class TestFastUUID(object):
                     data_pipeline._fast_uuid._LibUUID._ffi,
                     None
                 )
-                yield FastUUID()
-                data_pipeline._fast_uuid._LibUUID._ffi = original_ffi
+                try:
+                    yield FastUUID()
+                finally:
+                    data_pipeline._fast_uuid._LibUUID._ffi = original_ffi
 
     def test_uuid1(self, fast_uuid):
         assert self._is_valid_uuid(fast_uuid.uuid1())
