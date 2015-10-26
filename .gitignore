@@ -19,7 +19,6 @@ dist
 build
 eggs
 parts
-bin
 var
 sdist
 develop-eggs
@@ -29,6 +28,7 @@ lib64
 *.iml
 *.log
 /.venv.touch
+/.venv.docs.touch
 /virtualenv_run
 
 # Installer logs

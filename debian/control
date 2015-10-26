@@ -1,0 +1,11 @@
+Source: data-pipeline-tools
+Section: python
+Priority: optional
+Maintainer: Justin Cunningham <justinc@yelp.com>
+Build-Depends: debhelper (>= 7), python (>= 2.7), dh-virtualenv, libffi-dev
+Standards-Version: 3.8.3
+
+Package: data-pipeline-tools
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libffi-dev, uuid-dev
+Description: Data pipeline clientlib tools

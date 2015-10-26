@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 import simplejson
 
 from data_pipeline.config import get_config
+from data_pipeline.helpers.singleton import Singleton
 from data_pipeline.schematizer_clientlib.models.avro_schema import _AvroSchema
 from data_pipeline.schematizer_clientlib.models.source import _Source
 from data_pipeline.schematizer_clientlib.models.topic import _Topic
@@ -18,6 +19,8 @@ class SchematizerClient(object):
     It caches schemas, topics, and sources separately instead of caching nested
     objects to avoid storing duplicate data repeatedly.
     """
+
+    __metaclass__ = Singleton
 
     def __init__(self):
         self._client = get_config().schematizer_client  # swaggerpy client
@@ -345,8 +348,5 @@ class SchematizerClient(object):
         self._source_cache[new_source.source_id] = new_source.to_cache_value()
 
 
-_schematizer_client = SchematizerClient()
-
-
 def get_schematizer():
-    return _schematizer_client
+    return SchematizerClient()

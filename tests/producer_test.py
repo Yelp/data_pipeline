@@ -65,11 +65,6 @@ class TestProducerBase(object):
         assert len(multiprocessing.active_children()) == 0
 
     @pytest.fixture(scope='module')
-    def topic(self, kafka_docker, topic_name):
-        create_kafka_docker_topic(kafka_docker, topic_name)
-        return topic_name
-
-    @pytest.fixture(scope='module')
     def topic_two(self, kafka_docker):
         topic_two_name = str(binascii.hexlify(FastUUID().uuid4()))
         create_kafka_docker_topic(kafka_docker, topic_two_name)
