@@ -13,6 +13,7 @@ from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
 from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
+from data_pipeline.meta_attribute import MetaAttribute
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 
@@ -46,8 +47,9 @@ class Message(object):
             recommended to leave it unassigned and let the Schematizer decide
             the topic of the schema.  Use caution when overriding the topic.
         payload (bytes): Avro-encoded message - encoded with schema identified
-            by `schema_id`.  Either `payload` or `payload_data` must be provided
-            but not both.
+            by `schema_id`. This is expected to be None for messages on their
+            way to being published. Either `payload` or `payload_data` must be
+            provided but not both.
         payload_data (dict): The contents of message, which will be lazily
             encoded with schema identified by `schema_id`.  Either `payload` or
             `payload_data` must be provided but not both.
@@ -56,7 +58,11 @@ class Message(object):
             provided.
         contains_pii (bool, optional): Indicates that the payload contains PII,
             so the clientlib can properly encrypt the data and mark it as
-            sensitive, default to False.
+            sensitive, defaults to False. The data pipeline consumer will
+            automatically decrypt fields containing PII. This field should not
+            be used to indicate that a topic should be encrypted, because
+            PII information will be used to indicate to various systems how
+            to handle the data, in addition to automatic decryption.
         timestamp (int, optional): A unix timestamp for the message.  If this is
             not provided, a timestamp will be generated automatically.  If the
             message is coming directly from an upstream source, and the
@@ -85,6 +91,13 @@ class Message(object):
             representation of the payload and previous payload, instead of
             the avro encoded message.  This is to avoid loading the schema
             from the schema store.  Defaults to False.
+        meta (list of MetaAttribute, optional): This should be a list of
+            MetaAttribute objects or None. This is used to contain information
+            about metadata. These meta attributes are serialized using their
+            respective avro schema, which is registered with the schematizer.
+            Hence meta should be set with a dict which contains schema_id and
+            payload as keys to construct the MetaAttribute objects. The
+            payload is deserialized using the schema_id.
 
     Remarks:
         Although `previous_payload` and `previous_payload_data` are not
@@ -107,7 +120,6 @@ class Message(object):
 
     @property
     def topic(self):
-        """The kafka topic the message should be published to."""
         return self._topic
 
     @topic.setter
@@ -120,7 +132,6 @@ class Message(object):
 
     @property
     def schema_id(self):
-        """Integer identifying the schema used to encode the payload"""
         return self._schema_id
 
     @schema_id.setter
@@ -136,9 +147,6 @@ class Message(object):
 
     @property
     def uuid(self):
-        """Globally-unique 16-byte identifier for the message.  A uuid4 will
-        be generated automatically if this isn't provided.
-        """
         return self._uuid
 
     @uuid.setter
@@ -159,13 +167,6 @@ class Message(object):
 
     @property
     def contains_pii(self):
-        """Boolean indicating that the payload contains PII, so the clientlib
-        can properly encrypt the data and mark it as sensitive.  The data
-        pipeline consumer will automatically decrypt fields containing PII.
-        This field shouldn't be used to indicate that a topic should be
-        encrypted, because PII information will be used to indicate to various
-        systems how to handle the data, in addition to automatic decryption.
-        """
         if self._contains_pii is None:
             self._contains_pii = self._schematizer.get_schema_by_id(
                 self.schema_id
@@ -185,23 +186,29 @@ class Message(object):
         self._dry_run = dry_run
 
     @property
-    def timestamp(self):
-        """A unix timestamp for the message.  If this is not provided, a
-        timestamp will be generated automatically.  If the message is coming
-        directly from an upstream source, and the modification time is
-        available in that source, it's appropriate to use that timestamp.
-        Otherwise, it's probably best to have the timestamp represent when the
-        message was generated.  If the message is derived from an upstream data
-        pipeline message, the timestamp should be the timestamp from that
-        upstream message.
+    def meta(self):
+        return self._meta
 
-        Timestamp is used internally by the clientlib to monitor timings and
-        other metadata about the data pipeline as a system.
-        Consequently, there is no need to store information about when this
-        message passed through individual systems in the message itself,
-        as it is otherwise recorded.  See DATAPIPE-169 for details about
-        monitoring.
-        """
+    @meta.setter
+    def meta(self, meta):
+        if meta is None:
+            self._meta = None
+        elif not isinstance(meta, list) or not all(
+            isinstance(meta_attr, MetaAttribute)
+            for meta_attr in meta
+        ):
+            raise TypeError(
+                "Meta must be None or list of MetaAttribute objects."
+            )
+        self._meta = meta
+
+    def _get_meta_attr_avro_repr(self):
+        if self.meta is not None:
+            return [meta_attr.avro_repr for meta_attr in self.meta]
+        return None
+
+    @property
+    def timestamp(self):
         return self._timestamp
 
     @timestamp.setter
@@ -212,10 +219,6 @@ class Message(object):
 
     @property
     def upstream_position_info(self):
-        """The clientlib will track these objects and provide them back from
-        the producer to identify the last message that was successfully
-        published, both overall and per topic.
-        """
         return self._upstream_position_info
 
     @upstream_position_info.setter
@@ -267,8 +270,6 @@ class Message(object):
 
     @property
     def payload(self):
-        """Avro-encoded message - encoded with schema identified by `schema_id`.
-        """
         self._encode_payload_data_if_necessary()
         return self._payload
 
@@ -315,7 +316,8 @@ class Message(object):
         upstream_position_info=None,
         kafka_position_info=None,
         keys=None,
-        dry_run=False
+        dry_run=False,
+        meta=None
     ):
         # The decision not to just pack the message to validate it is
         # intentional here.  We want to perform more sanity checks than avro
@@ -331,6 +333,7 @@ class Message(object):
         self.kafka_position_info = kafka_position_info
         self.keys = keys
         self.dry_run = dry_run
+        self.meta = meta
         self._set_payload_or_payload_data(payload, payload_data)
         # TODO(DATAPIPE-416|psuben):
         # Make it so contains_pii is no longer overrideable.
@@ -392,7 +395,8 @@ class Message(object):
             'message_type': self.message_type.name,
             'schema_id': self.schema_id,
             'payload': self.payload,
-            'timestamp': self.timestamp
+            'timestamp': self.timestamp,
+            'meta': self._get_meta_attr_avro_repr(),
         }
 
     def _encode_payload_data_if_necessary(self):
@@ -474,7 +478,8 @@ class UpdateMessage(Message):
         upstream_position_info=None,
         kafka_position_info=None,
         keys=None,
-        dry_run=False
+        dry_run=False,
+        meta=None
     ):
         super(UpdateMessage, self).__init__(
             schema_id,
@@ -487,7 +492,8 @@ class UpdateMessage(Message):
             upstream_position_info=upstream_position_info,
             kafka_position_info=kafka_position_info,
             keys=keys,
-            dry_run=dry_run
+            dry_run=dry_run,
+            meta=meta
         )
         self._set_previous_payload_or_payload_data(
             previous_payload,
@@ -565,7 +571,8 @@ class UpdateMessage(Message):
             'schema_id': self.schema_id,
             'payload': self.payload,
             'previous_payload': self.previous_payload,
-            'timestamp': self.timestamp
+            'timestamp': self.timestamp,
+            'meta': self._get_meta_attr_avro_repr(),
         }
 
     def _encode_previous_payload_data_if_necessary(self):
@@ -709,6 +716,10 @@ def _create_message_from_packed_message(
         'schema_id': unpacked_message['schema_id'],
         'payload': unpacked_message['payload'],
         'timestamp': unpacked_message['timestamp'],
+        'meta': [
+            MetaAttribute(schema_id=o['schema_id'], encoded_payload=o['payload'])
+            for o in unpacked_message['meta']
+        ] if unpacked_message['meta'] else None,
         'kafka_position_info': kafka_position_info
     }
     if message_class is UpdateMessage:
