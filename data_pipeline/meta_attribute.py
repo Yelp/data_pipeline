@@ -10,12 +10,20 @@ from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 
 class MetaAttribute(object):
-    """This is an base class to define a meta attribute. A MetaAttribute is
-    embedded in a data pipeline message's meta field. It essentially needs to:
-        1. Specify an avro schema to encode its payload.
-        2. Register that schema with the schematizer.
-        3. Enable creating a MetaAttribute object from optional
-        schema_id & encoded_payload parameters.
+    """This is an base class to define a meta attribute. It serves 2 purposes:
+    1. Create MetaAttributes: To define a new MetaAttribute, you need to
+    inherit from this class and:
+        a. Override the avro schema cached property to encode its payload.
+        b. Override the cached properties required to register the schema like
+        namespace, source, owner_email, etc.
+        c. Define a payload which is serializable by the schema specified.
+
+    2. Expose the meta attributes in a data pipeline message as a list of
+    MetaAttribute objects. The Message takes care of creating a MetaAttribute
+    object by specifying schema_id and encoded payload args in the constructor.
+    It populates all the fields like payload, namespace, source, owner_email,
+    etc using that information. In this case these fields once set should be
+    treated as immutable fields and should not be directly changed.
     """
 
     def __init__(self, schema_id=None, encoded_payload=None):
@@ -35,7 +43,7 @@ class MetaAttribute(object):
 
     def _validate_and_set_payload(self, encoded_payload):
         if not isinstance(encoded_payload, bytes):
-            raise TypeError("Encoded payload should be an byte string.")
+            raise TypeError("Encoded payload must be bytes type.")
         self.payload = self._get_decoded_payload(encoded_payload)
 
     @cached_property
