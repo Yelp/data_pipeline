@@ -166,6 +166,16 @@ class Message(object):
         self._uuid = uuid
 
     @property
+    def encryption_type(self):
+        return self._encryption_type
+
+    @encryption_type.setter
+    def encryption_type(self, encryption_type):
+        if encryption_type is None:
+            encryption_type = "MODE_CFB-1"
+        self._encryption_type = encryption_type
+
+    @property
     def contains_pii(self):
         if self._contains_pii is None:
             self._contains_pii = self._schematizer.get_schema_by_id(
@@ -317,9 +327,10 @@ class Message(object):
         kafka_position_info=None,
         keys=None,
         dry_run=False,
-        meta=None
+        meta=None,
+        encryption_type=None
     ):
-        # The decision not to just pack the message to validate it is
+        # The decision not to just pack the message, but to validate it, is
         # intentional here.  We want to perform more sanity checks than avro
         # does, and in addition, this check is quite a bit faster than
         # serialization.  Finally, if we do it this way, we can lazily
@@ -338,6 +349,7 @@ class Message(object):
         # TODO(DATAPIPE-416|psuben):
         # Make it so contains_pii is no longer overrideable.
         self.contains_pii = contains_pii
+        self.encryption_type = encryption_type
 
         if topic:
             logger.debug("Overriding message topic: {0} for schema {1}."

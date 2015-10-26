@@ -82,22 +82,32 @@ class KafkaProducer(object):
         self.position_data_tracker.record_message_buffered(message)
         self._flush_if_necessary()
 
+    def _get_key_id(self, message):
+        """returns the key number to use when
+        encrypting/decrypting pii, allowing for
+        key rotation. encryption_type must be
+        of the form "ALGORITHM_NAME_NO_HYPHENS-{key_id}"""
+        encryption_type = message.encryption_type
+        if encryption_type is not None:
+            return encryption_type.split('-')[1]
+        return '0'
+
     def _encrypt_message_with_pii(self, message):
         """Encrypt message with key on machine, using AES.
          Returns False if the key was not found
         or if the message could not be encrypted, and
         otherwise returns True and mutates the message
         to have an encrypted payload"""
-        key = self._retrieve_key()
+        key = self._retrieve_key(self._get_key_id(message))
         if key:
             return self._encrypt_message_using_pycrypto(key, message)
         return False
 
-    def _retrieve_key(self):
+    def _retrieve_key(self, key_id):
         try:
             # TODO: allow for key rotation, checking for key-id
-            with open(self.key_location.format("1"), 'r') as f:
-                return f.readline()
+            with open(self.key_location.format(key_id), 'r') as f:
+                return f.readline().rstrip()
         except IOError as key_read_failures:
             (errno, strerror) = key_read_failures.args
             if errno == 2:

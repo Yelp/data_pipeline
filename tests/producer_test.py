@@ -275,6 +275,44 @@ class TestProducer(TestProducerBase):
     def _unpad(self, s):
         return s[:-ord(s[len(s) - 1:])]
 
+    def test_key_rotation(
+        self,
+        topic,
+        payload,
+        producer,
+        registered_schema
+    ):
+        message_with_key_one = self.create_message(
+            topic,
+            payload,
+            registered_schema,
+            contains_pii=True,
+            encryption_type='MODE_CFB-1'
+        )
+        message_with_key_two = self.create_message(
+            topic,
+            payload,
+            registered_schema,
+            contains_pii=True,
+            encryption_type='MODE_CFB-2'
+        )
+        with mock.patch.object(producer._kafka_producer, 'user', 'batch'):
+            with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
+                with mock.patch.object(producer._kafka_producer, '_encrypt_message_using_pycrypto'):
+                    with mock.patch.object(producer._kafka_producer, '_retrieve_key') as retrieve_key_function:
+                        self._publish_message(
+                            topic,
+                            message_with_key_one,
+                            producer
+                        )
+                        self._publish_message(
+                            topic,
+                            message_with_key_two,
+                            producer
+                        )
+
+                        assert retrieve_key_function.call_args_list == [mock.call('1'), mock.call('2')]
+
     def test_no_publish_pii_with_non_acceptable_user(
         self,
         topic,
