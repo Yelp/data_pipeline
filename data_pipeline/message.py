@@ -171,8 +171,6 @@ class Message(object):
 
     @encryption_type.setter
     def encryption_type(self, encryption_type):
-        if encryption_type is None:
-            encryption_type = "MODE_CFB-1"
         self._encryption_type = encryption_type
 
     @property
@@ -397,7 +395,8 @@ class Message(object):
             self.timestamp,
             self.upstream_position_info,
             self.kafka_position_info,
-            self.dry_run
+            self.dry_run,
+            self.encryption_type
         )
 
     @property
@@ -409,6 +408,7 @@ class Message(object):
             'payload': self.payload,
             'timestamp': self.timestamp,
             'meta': self._get_meta_attr_avro_repr(),
+            'encryption_type': self.encryption_type
         }
 
     def _encode_payload_data_if_necessary(self):
