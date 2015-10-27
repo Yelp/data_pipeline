@@ -12,6 +12,9 @@ from data_pipeline.config import namespace
 
 @contextmanager
 def reconfigure(**kwargs):
+    """Reconfigures the given kwargs, restoring the current configuration for
+    only those kwargs when the contextmanager exits.
+    """
     conf_namespace = staticconf.config.get_namespace(namespace)
     starting_config = {
         k: v for k, v in conf_namespace.get_config_values().iteritems()

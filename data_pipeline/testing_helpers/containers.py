@@ -116,10 +116,13 @@ class Containers(object):
         return "docker-compose {}".format(Containers()._compose_options)
 
     @classmethod
-    def get_container_info(cls, project, service, docker_client=Client(version='auto')):
+    def get_container_info(cls, project, service, docker_client=None):
         """Returns container information for the first container matching project
         and service.
         """
+        if docker_client is None:
+            docker_client = Client(version='auto')
+
         # intentionally letting this blow up if it can't find the container
         # - we can't do anything if the container doesn't exist
         return next(
@@ -302,7 +305,7 @@ class Containers(object):
                     count += 1
                     if count >= 2:
                         return
-            except:
+            except Exception:
                 count = 0
             finally:
                 logger.info("Schematizer not yet available, waiting...")
