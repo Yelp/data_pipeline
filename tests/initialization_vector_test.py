@@ -3,10 +3,10 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import pytest
-from cached_property import cached_property
 
 from data_pipeline.initialization_vector import InitializationVector
 from data_pipeline.message import CreateMessage
+
 
 class TestInitializationVector(object):
 
@@ -37,10 +37,10 @@ class TestInitializationVector(object):
         assert isinstance(new_initialization_vector.avro_repr['payload'], bytes)
 
     def test_create_message_with_initialization_vector(
-            self, 
-            vector_payload, 
-            new_initialization_vector
-        ):
+        self,
+        vector_payload,
+        new_initialization_vector
+    ):
         test_message = CreateMessage(1, str('my-topic'), bytes(10))
         test_message.meta = [new_initialization_vector]
         assert test_message.meta[0].payload == vector_payload

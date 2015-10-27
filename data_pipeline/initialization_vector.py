@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import os
+
 import simplejson
 from cached_property import cached_property
 
@@ -14,7 +15,7 @@ class InitializationVector(MetaAttribute):
     mode or other strong encryption algorithms requiring a unique random
     seed for each message to be encrypted. The payload is a 16-byte array
     representing the initialization vector used to encrypt a
-    message. 
+    message.
     """
 
     @cached_property
@@ -47,7 +48,7 @@ class InitializationVector(MetaAttribute):
         self.initialization_vector_array = initialization_vector_array
 
     def _verify_init_params(self, vector_array):
-        if not isinstance(vector_array, bytes) or not len(vector_array)==16:
+        if not isinstance(vector_array, bytes) or not len(vector_array) == 16:
             raise TypeError('Initialization Vectory must be a 16-byte array')
 
     @cached_property
