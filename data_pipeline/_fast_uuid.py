@@ -9,7 +9,16 @@ from cffi import FFI
 from data_pipeline.config import get_config
 
 
-class FastUUID(object):
+class _UUIDBase(object):
+
+    def uuid1(self):
+        raise NotImplementedError()
+
+    def uuid4(self):
+        raise NotImplementedError()
+
+
+class _LibUUID(_UUIDBase):
     """Fast c-wrapper for for uuid generation
 
     This class wraps the libuuid (http://linux.die.net/man/3/libuuid)
@@ -64,40 +73,72 @@ class FastUUID(object):
 
     _ffi = None
     _libuuid = None
-    _libuuid_unavailable = False
 
     def __init__(self):
-        # Store these on the class since they should only ever be called
-        # once
-        if FastUUID._ffi is None and not FastUUID._libuuid_unavailable:
+        # Store these on the class since they should only ever be called once
+        if _LibUUID._ffi is None:
+            _LibUUID._ffi = FFI()
+
+            # These definitions are from uuid.h
+            _LibUUID._ffi.cdef("""
+                typedef unsigned char uuid_t[16];
+
+                void uuid_generate(uuid_t out);
+                void uuid_generate_random(uuid_t out);
+                void uuid_generate_time(uuid_t out);
+            """)
+
+            _LibUUID._libuuid = _LibUUID._ffi.verify(
+                "#include <uuid/uuid.h>",
+                libraries=[str('uuid')]
+            )
+
+        # Keeping only one copy of this around does result in
+        # pretty substantial performance improvements - in the 10,000s of
+        # messages per second range
+        self.output = _LibUUID._ffi.new("uuid_t")
+
+    def uuid1(self):
+        _LibUUID._libuuid.uuid_generate_time(self.output)
+        return self._get_output_bytes()
+
+    def uuid4(self):
+        _LibUUID._libuuid.uuid_generate_random(self.output)
+        return self._get_output_bytes()
+
+    def _get_output_bytes(self):
+        return bytes(_LibUUID._ffi.buffer(self.output))
+
+
+class _DefaultUUID(_UUIDBase):
+    """Built-in uuid.
+    """
+
+    def uuid1(self):
+        return uuid.uuid1().bytes
+
+    def uuid4(self):
+        return uuid.uuid4().bytes
+
+
+class FastUUID(object):
+    """It uses the fast c-wrapper (:class: data_pipeline._fast_uuid._FastUUID)
+    for uuid generation, and falls back to use built-in uuid if that's not
+    available.
+    """
+
+    _avail_uuids = [_LibUUID, _DefaultUUID]
+
+    def __init__(self):
+        for avail_uuid in self._avail_uuids:
             try:
-                FastUUID._ffi = FFI()
-
-                # These definitions are from uuid.h
-                FastUUID._ffi.cdef("""
-                    typedef unsigned char uuid_t[16];
-
-                    void uuid_generate(uuid_t out);
-                    void uuid_generate_random(uuid_t out);
-                    void uuid_generate_time(uuid_t out);
-                """)
-
-                FastUUID._libuuid = FastUUID._ffi.verify(
-                    "#include <uuid/uuid.h>",
-                    libraries=[str('uuid')]
-                )
-            except:
-                FastUUID._libuuid_unavailable = True
+                self._uuid_in_use = avail_uuid()
+                break
+            except Exception:
                 get_config().logger.error(
                     "libuuid is unavailable, falling back to the slower built-in "
                     "uuid implementation.  On ubuntu, apt-get install uuid-dev."
                 )
-
-        if not FastUUID._libuuid_unavailable:
-            # Keeping only one copy of this around does result in
-            # pretty substantial performance improvements - in the 10,000s of
-            # messages per second range
-            self.output = FastUUID._ffi.new("uuid_t")
 
     def uuid1(self):
         """Generates a uuid1 - a device specific uuid
@@ -105,11 +146,7 @@ class FastUUID(object):
         Returns:
             bytes: 16-byte uuid
         """
-        if FastUUID._libuuid is None:
-            return uuid.uuid1().bytes
-        else:
-            FastUUID._libuuid.uuid_generate_time(self.output)
-            return self._get_output_bytes()
+        return self._uuid_in_use.uuid1()
 
     def uuid4(self):
         """Generates a uuid4 - a random uuid
@@ -117,11 +154,4 @@ class FastUUID(object):
         Returns:
             bytes: 16-byte uuid
         """
-        if FastUUID._libuuid is None:
-            return uuid.uuid4().bytes
-        else:
-            FastUUID._libuuid.uuid_generate_random(self.output)
-            return self._get_output_bytes()
-
-    def _get_output_bytes(self):
-        return bytes(FastUUID._ffi.buffer(self.output))
+        return self._uuid_in_use.uuid4()
