@@ -51,6 +51,8 @@ class BaseConsumer(Client):
         force_payload_decode=True,
         auto_offset_reset='smallest',
         partitioner_cooldown=get_config().consumer_partitioner_cooldown_default,
+        pre_rebalance_callback=None,
+        post_rebalance_callback=None
     ):
         """ Creates the base BaseConsumer object
 
@@ -75,6 +77,12 @@ class BaseConsumer(Client):
             partitioner_cooldown (float): Waiting time (in seconds) for the
                 consumer to acquire the partitions. See
                 yelp_kafka/yelp_kafka/partitioner.py for more details
+            pre_rebalance_callback: Optional callback called prior to
+                topic/partition rebalancing.
+                Required args, dict of partitions to offset.
+            post_rebalance_callback: Optional callback called following
+                topic/partition rebalancing.
+                Required args, dict of partitions to offset.
         """
         super(BaseConsumer, self).__init__(
             consumer_name,
@@ -88,6 +96,8 @@ class BaseConsumer(Client):
         self.partitioner_cooldown = partitioner_cooldown
         self.running = False
         self.consumer_group = None
+        self.pre_rebalance_callback = pre_rebalance_callback
+        self.post_rebalance_callback = post_rebalance_callback
 
     @property
     def client_type(self):
@@ -421,8 +431,25 @@ class BaseConsumer(Client):
             cluster=get_config().cluster_config,
             auto_offset_reset=self.auto_offset_reset,
             auto_commit=False,
-            partitioner_cooldown=self.partitioner_cooldown
+            partitioner_cooldown=self.partitioner_cooldown,
+            pre_rebalance_callback=self.pre_rebalance_callback,
+            post_rebalance_callback=self.apply_post_rebalance_callback_to_partition
         )
+
+    def apply_post_rebalance_callback_to_partition(self, partitions):
+        """
+        Removes the topics not present in the partitions list
+        from the topic_to_consumer_topic_state_map
+
+        Args:
+            partitions: List of current partitions the kafka
+            broker holds
+        """
+        self.topic_to_consumer_topic_state_map = {
+            key: self.topic_to_consumer_topic_state_map.get(key)
+            for key in partitions
+        }
+        return self.post_rebalance_callback(partitions)
 
     def refresh_new_topics(
         self,

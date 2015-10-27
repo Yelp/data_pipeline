@@ -118,9 +118,20 @@ def topic_name():
 
 
 @pytest.fixture(scope='module')
+def topic_name_two():
+    return str(UUID(bytes=FastUUID().uuid4()).hex)
+
+
+@pytest.fixture(scope='module')
 def topic(containers, topic_name):
     containers.create_kafka_topic(topic_name)
     return topic_name
+
+
+@pytest.fixture(scope='module')
+def topic_two(containers, topic_name_two):
+    containers.create_kafka_topic(topic_name_two)
+    return topic_name_two
 
 
 @pytest.fixture()
