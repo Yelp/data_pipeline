@@ -15,6 +15,7 @@ from kafka.common import ProduceRequest
 from data_pipeline._position_data_tracker import PositionDataTracker
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
+from data_pipeline.initialization_vector import InitializationVector
 
 
 _EnvelopeAndMessage = namedtuple("_EnvelopeAndMessage", ["envelope", "message"])
@@ -86,11 +87,20 @@ class KafkaProducer(object):
         """returns the key number to use when
         encrypting/decrypting pii, allowing for
         key rotation. encryption_type must be
-        of the form "ALGORITHM_NAME_NO_HYPHENS-{key_id}"""
+        of the form "ALGORITHM_NAME-{key_id}"""
         encryption_type = message.encryption_type
         if encryption_type is not None:
-            return encryption_type.split('-')[1]
+            return encryption_type.split('-')[-1]
         return '0'
+
+    def _get_initialization_vector(self, message):
+        meta = message.meta
+        if meta is not None:
+            # list comprehension is required to retrieve
+            # the InitializationVector object, since
+            # message.meta is an unordered list
+            vectors = [m for m in meta if isinstance(m, InitializationVector)]
+            return vectors.pop().payload
 
     def _encrypt_message_with_pii(self, message):
         """Encrypt message with key on machine, using AES.
@@ -105,7 +115,6 @@ class KafkaProducer(object):
 
     def _retrieve_key(self, key_id):
         try:
-            # TODO: allow for key rotation, checking for key-id
             with open(self.key_location.format(key_id), 'r') as f:
                 return f.readline().rstrip()
         except IOError as key_read_failures:
@@ -127,10 +136,13 @@ class KafkaProducer(object):
 
     def _encrypt_message_using_pycrypto(self, key, message):
         payload = message.payload or message.payload_data
-        # TODO: ECB is not secure. We should use CFB,
-        # and eventually we should allow for multiple
+        # TODO(Krane): eventually we should allow for multiple
         # encryption methods.
-        encrypter = AES.new(key, AES.MODE_ECB)
+        encrypter = AES.new(
+            key,
+            AES.MODE_CBC,
+            self._get_initialization_vector(message)
+        )
         if isinstance(payload, dict):
             payload = self._pad_payload(json.dumps(payload))
             new_payload = encrypter.encrypt(payload)
@@ -142,7 +154,6 @@ class KafkaProducer(object):
         return True
 
     def _pad_payload(self, payload):
-        # TODO: Remove this logic, since CFB won't need it
         length = 16 - (len(payload) % 16)
         return payload + chr(length) * length
 

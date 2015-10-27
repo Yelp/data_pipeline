@@ -16,6 +16,7 @@ import data_pipeline.producer
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
 from data_pipeline.expected_frequency import ExpectedFrequency
+from data_pipeline.initialization_vector import InitializationVector
 from data_pipeline.message import CreateMessage
 from data_pipeline.message import Message
 from data_pipeline.message_type import _ProtectedMessageType
@@ -250,6 +251,8 @@ class TestProducer(TestProducerBase):
     ):
         payload = b'hello world!'
         key = 'This is a key123'
+        init_vector = InitializationVector(b'0000000000000000')
+
         with mock.patch.object(producer._kafka_producer, 'user', 'batch'):
             with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
                 with mock.patch.object(producer._kafka_producer, '_retrieve_key', return_value=key):
@@ -259,16 +262,17 @@ class TestProducer(TestProducerBase):
                             topic,
                             payload,
                             registered_schema,
-                            contains_pii=True
+                            contains_pii=True,
+                            meta=[init_vector]
                         ),
                         producer
                     )
                     assert len(messages) == 1
-                    actual_payload = self._decrypt_payload(key, messages[0].payload)
+                    actual_payload = self._decrypt_payload(key, init_vector.payload, messages[0].payload)
                     assert self._unpad(actual_payload) == payload
 
-    def _decrypt_payload(self, key, encrypted_payload):
-        decrypter = AES.new(key, AES.MODE_ECB)
+    def _decrypt_payload(self, key, vector, encrypted_payload):
+        decrypter = AES.new(key, AES.MODE_CBC, vector)
         data = decrypter.decrypt(encrypted_payload)
         return data
 
