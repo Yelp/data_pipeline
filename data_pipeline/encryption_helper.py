@@ -59,7 +59,7 @@ class EncryptionHelper(object):
     def _encrypt_message_using_pycrypto(self, key, message, encryption_algorithm=None):
         payload = message.payload or message.payload_data
         # eventually we should allow for multiple
-        # encryption methods, but for now we assume AES 
+        # encryption methods, but for now we assume AES
         encrypter = AES.new(
             key,
             AES.MODE_CBC,
@@ -83,8 +83,8 @@ class EncryptionHelper(object):
         if initialization_vector is None:
             initialization_vector = self._get_initialization_vector(self.message)
         decrypter = AES.new(
-            self.key, 
-            AES.MODE_CBC, 
+            self.key,
+            AES.MODE_CBC,
             initialization_vector
         )
         data = decrypter.decrypt(self.message.payload)
