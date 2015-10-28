@@ -14,7 +14,7 @@ class EncryptionHelper(object):
     in the data pipeline, given a key and message.
 
     Args:
-      producer_position_callback (function): The key to be used in the encryption
+      key (string): The key to be used in the encryption
       message (data_pipeline.Message): The message with a payload to be encrypted
     """
 
