@@ -10,11 +10,11 @@ import multiprocessing
 import mock
 import pytest
 import simplejson as json
-from Crypto.Cipher import AES
 
 import data_pipeline.producer
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
+from data_pipeline.encryption_helper import EncryptionHelper
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.initialization_vector import InitializationVector
 from data_pipeline.message import CreateMessage
@@ -268,16 +268,12 @@ class TestProducer(TestProducerBase):
                         producer
                     )
                     assert len(messages) == 1
-                    actual_payload = self._decrypt_payload(key, init_vector.payload, messages[0].payload)
-                    assert self._unpad(actual_payload) == payload
 
-    def _decrypt_payload(self, key, vector, encrypted_payload):
-        decrypter = AES.new(key, AES.MODE_CBC, vector)
-        data = decrypter.decrypt(encrypted_payload)
-        return data
-
-    def _unpad(self, s):
-        return s[:-ord(s[len(s) - 1:])]
+                    decrypt_helper = EncryptionHelper(key=key, message=messages[0])
+                    decrypted_payload = decrypt_helper.decrypt_payload(
+                        initialization_vector=init_vector.payload
+                    )
+                    assert decrypted_payload == payload
 
     def test_key_rotation(
         self,
@@ -302,8 +298,8 @@ class TestProducer(TestProducerBase):
         )
         with mock.patch.object(producer._kafka_producer, 'user', 'batch'):
             with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
-                with mock.patch.object(producer._kafka_producer, '_encrypt_message_using_pycrypto'):
-                    with mock.patch.object(producer._kafka_producer, '_retrieve_key') as retrieve_key_function:
+                with mock.patch.object(EncryptionHelper, '_encrypt_message_using_pycrypto'):
+                    with mock.patch.object(producer._kafka_producer, '_retrieve_key', return_value='key') as retrieve_key_function:
                         self._publish_message(
                             topic,
                             message_with_key_one,

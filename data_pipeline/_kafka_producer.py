@@ -6,17 +6,14 @@ import time
 from collections import defaultdict
 from collections import namedtuple
 
-import simplejson as json
 from cached_property import cached_property
-from Crypto.Cipher import AES
 from kafka import create_message
 from kafka.common import ProduceRequest
 
 from data_pipeline._position_data_tracker import PositionDataTracker
 from data_pipeline.config import get_config
+from data_pipeline.encryption_helper import EncryptionHelper
 from data_pipeline.envelope import Envelope
-from data_pipeline.initialization_vector import InitializationVector
-
 
 _EnvelopeAndMessage = namedtuple("_EnvelopeAndMessage", ["envelope", "message"])
 logger = get_config().logger
@@ -77,7 +74,9 @@ class KafkaProducer(object):
         if message.contains_pii:
             if self.skip_messages_with_pii or (self.user not in self.acceptable_users):
                 return
-            elif not self._encrypt_message_with_pii(message):
+            key = self._retrieve_key(self._get_key_id(message))
+            helper = EncryptionHelper(key=key, message=message)
+            if not helper.encrypt_message_with_pii():
                 return
         self._add_message_to_buffer(message)
         self.position_data_tracker.record_message_buffered(message)
@@ -92,26 +91,6 @@ class KafkaProducer(object):
         if encryption_type is not None:
             return encryption_type.split('-')[-1]
         return '0'
-
-    def _get_initialization_vector(self, message):
-        meta = message.meta
-        if meta is not None:
-            # list comprehension is required to retrieve
-            # the InitializationVector object, since
-            # message.meta is an unordered list
-            vectors = [m for m in meta if isinstance(m, InitializationVector)]
-            return vectors.pop().payload
-
-    def _encrypt_message_with_pii(self, message):
-        """Encrypt message with key on machine, using AES.
-         Returns False if the key was not found
-        or if the message could not be encrypted, and
-        otherwise returns True and mutates the message
-        to have an encrypted payload"""
-        key = self._retrieve_key(self._get_key_id(message))
-        if key:
-            return self._encrypt_message_using_pycrypto(key, message)
-        return False
 
     def _retrieve_key(self, key_id):
         try:
@@ -133,29 +112,6 @@ class KafkaProducer(object):
                     an unknown IOError."
                                 )
             return False
-
-    def _encrypt_message_using_pycrypto(self, key, message):
-        payload = message.payload or message.payload_data
-        # TODO(Krane): eventually we should allow for multiple
-        # encryption methods.
-        encrypter = AES.new(
-            key,
-            AES.MODE_CBC,
-            self._get_initialization_vector(message)
-        )
-        if isinstance(payload, dict):
-            payload = self._pad_payload(json.dumps(payload))
-            new_payload = encrypter.encrypt(payload)
-            message.payload_data = json.loads(new_payload)
-        else:
-            payload = self._pad_payload(payload)
-            new_payload = encrypter.encrypt(payload)
-            message.payload = new_payload
-        return True
-
-    def _pad_payload(self, payload):
-        length = 16 - (len(payload) % 16)
-        return payload + chr(length) * length
 
     def flush_buffered_messages(self):
         produce_method = self._publish_produce_requests_dry_run if self.dry_run else self._publish_produce_requests
