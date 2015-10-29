@@ -491,7 +491,8 @@ class UpdateMessage(Message):
         kafka_position_info=None,
         keys=None,
         dry_run=False,
-        meta=None
+        meta=None,
+        encryption_type=None
     ):
         super(UpdateMessage, self).__init__(
             schema_id,
@@ -505,7 +506,8 @@ class UpdateMessage(Message):
             kafka_position_info=kafka_position_info,
             keys=keys,
             dry_run=dry_run,
-            meta=meta
+            meta=meta,
+            encryption_type=encryption_type
         )
         self._set_previous_payload_or_payload_data(
             previous_payload,
@@ -585,6 +587,7 @@ class UpdateMessage(Message):
             'previous_payload': self.previous_payload,
             'timestamp': self.timestamp,
             'meta': self._get_meta_attr_avro_repr(),
+            'encryption_type': self.encryption_type
         }
 
     def _encode_previous_payload_data_if_necessary(self):
@@ -728,6 +731,8 @@ def _create_message_from_packed_message(
         'schema_id': unpacked_message['schema_id'],
         'payload': unpacked_message['payload'],
         'timestamp': unpacked_message['timestamp'],
+        'contains_pii': unpacked_message.get('contains_pii', None),
+        'encryption_type': unpacked_message.get('encryption_type', None),
         'meta': [
             MetaAttribute(schema_id=o['schema_id'], encoded_payload=o['payload'])
             for o in unpacked_message['meta']
