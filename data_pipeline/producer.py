@@ -215,7 +215,7 @@ class Producer(Client):
         topic_actual_published_count_map = (
             self._kafka_producer.get_actual_published_messages_count(
                 topics=topic_messages_map.keys(),
-                topic_to_tracked_offset_map=topic_offsets
+                topic_tracked_offset_map=topic_offsets
             )
         )
 

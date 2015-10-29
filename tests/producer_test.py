@@ -6,6 +6,7 @@ import binascii
 import copy
 import math
 import multiprocessing
+import random
 
 import mock
 import pytest
@@ -34,6 +35,7 @@ from data_pipeline.testing_helpers.kafka_docker import capture_new_messages
 from data_pipeline.testing_helpers.kafka_docker import create_kafka_docker_topic
 from data_pipeline.testing_helpers.kafka_docker import setup_capture_new_messages_consumer
 from tests.helpers.config import reconfigure
+from tests.helpers.mock_utils import attach_spy_on_func
 
 
 class RandomException(Exception):
@@ -643,29 +645,24 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             assert len(messages) == 0
             assert mock_send_request.call_count == self.max_retry_count
 
-    def test_publish_succeeds_after_retry(self, topic, message, producer):
-        orig_func = producer._kafka_producer.kafka_client.send_produce_request
+    def test_publish_to_new_topic(self, message, producer):
+        new_topic = str('retry.{}'.format(random.random()))
+        message.topic = new_topic
 
-        def fail_1st_time_then_succeed_2nd_time(*args, **kwargs):
-            def run_original_func(*args, **kwargs):
-                return orig_func(*args, **kwargs)
-            mock_send_request.side_effect = run_original_func
-            return FailedPayloadsError(payload=mock.Mock())
-
-        with mock.patch.object(
+        with attach_spy_on_func(
             producer._kafka_producer.kafka_client,
-            'send_produce_request',
-            side_effect=fail_1st_time_then_succeed_2nd_time
-        ) as mock_send_request, setup_capture_new_messages_consumer(
-            topic
-        ) as consumer:
+            'send_produce_request'
+        ) as mock_send_request:
             mock_send_request.reset()
             producer.publish(message)
             producer.flush()
+            # should succeed in the 2nd retry
+            assert mock_send_request.call_count == 2
 
+        with setup_capture_new_messages_consumer(new_topic) as consumer:
+            consumer.seek(0, 0)  # set to the first message
             messages = consumer.get_messages()
             self.assert_equal_msgs(expected_msgs=[message], actual_msgs=messages)
-            assert mock_send_request.call_count == 2
 
     def test_publish_one_msg_succeeds_one_fails_after_retry(
         self,
@@ -693,7 +690,7 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             producer.publish(another_message)
             producer.flush()
 
-        actual_failed_requests, actual_published_msgs_count = e.value.last_result
+        actual_failed_requests, actual_published_msgs_count, _ = e.value.last_result
         assert actual_published_msgs_count == 1
         expected_requests = [ProduceRequest(
             topic=another_message.topic,
@@ -702,7 +699,7 @@ class TestPublishMessagesWithRetry(TestProducerBase):
         )]
         assert actual_failed_requests == expected_requests
 
-    def test_error_occurs_after_publish_succeeds(self, message, topic, producer):
+    def test_retry_false_failed_publish(self, message, topic, producer):
         orig_func = producer._kafka_producer.kafka_client.send_produce_request
 
         def run_original_func_but_throw_exception(*args, **kwargs):
@@ -722,14 +719,39 @@ class TestPublishMessagesWithRetry(TestProducerBase):
 
             messages = consumer.get_messages()
             self.assert_equal_msgs(expected_msgs=[message], actual_msgs=messages)
-            assert mock_send_request.call_count == 1
+            assert mock_send_request.call_count == 1  # should be no retry
+
+    def test_retry_failed_publish_without_highwatermark(self, message, topic, producer):
+        with mock.patch.object(
+            producer._kafka_producer.kafka_client,
+            'send_produce_request',
+            side_effect=Exception
+        ) as mock_send_request, mock.patch(
+            'yelp_kafka.offsets.get_topics_watermarks',
+            side_effect=Exception
+        ), setup_capture_new_messages_consumer(
+            topic
+        ) as consumer, pytest.raises(
+            MaxRetryError
+        ) as e:
+            mock_send_request.reset()
+            producer.publish(message)
+            producer.flush()
+
+            messages = consumer.get_messages()
+            assert len(messages) == 0
+            assert mock_send_request.call_count == 1  # should be no retry
+
+            _, _, excluded_requests = e.value.last_result
+            assert len(excluded_requests) == 1
+            assert excluded_requests[0].topic == topic
 
     def assert_equal_msgs(self, expected_msgs, actual_msgs):
         envelope = Envelope()
         assert len(actual_msgs) == len(expected_msgs)
-        for i, actual in enumerate(actual_msgs):
+        for actual, expected in zip(actual_msgs, expected_msgs):
             actual_payload = envelope.unpack(actual.message.value)['payload']
-            expected_payload = expected_msgs[i].payload
+            expected_payload = expected.payload
             assert actual_payload == expected_payload
 
     def _refresh_topic_two_tracked_offset(self, producer, topic_two_message):
