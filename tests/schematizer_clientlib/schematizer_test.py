@@ -14,10 +14,11 @@ from data_pipeline.config import get_config
 from data_pipeline.schematizer_clientlib.schematizer import SchematizerClient
 
 
+@pytest.mark.usefixtures('containers')
 class SchematizerClientTestBase(object):
 
     @pytest.fixture
-    def schematizer(self):
+    def schematizer(self, containers):
         return SchematizerClient()
 
     def attach_spy_on_api(self, resource, api_name):
@@ -52,8 +53,12 @@ class SchematizerClientTestBase(object):
     def source_owner_email(self):
         return 'bam+test@yelp.com'
 
-    @property
-    def _client(self):
+    def _get_client(self):
+        """This is a method instead of a property.  Pytest was accessing this
+        attribute before setting up fixtures, resulting in this code failing
+        since the clientlib hadn't yet been reconfigured to access the
+        schematizer container.
+        """
         return get_config().schematizer_client
 
     def _register_avro_schema(self, namespace, source, **overrides):
@@ -72,10 +77,10 @@ class SchematizerClientTestBase(object):
         }
         if overrides:
             params.update(**overrides)
-        return self._client.schemas.register_schema(body=params).result()
+        return self._get_client().schemas.register_schema(body=params).result()
 
     def _get_schema_by_id(self, schema_id):
-        return self._client.schemas.get_schema_by_id(
+        return self._get_client().schemas.get_schema_by_id(
             schema_id=schema_id
         ).result()
 

@@ -16,10 +16,8 @@ from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import CreateMessage
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
-from data_pipeline.testing_helpers.kafka_docker import create_kafka_docker_topic
-from data_pipeline.testing_helpers.kafka_docker import KafkaDocker
+from data_pipeline.testing_helpers.containers import Containers
 from tests.helpers.config import reconfigure
-from tests.helpers.containers import Containers
 
 
 logging.basicConfig(
@@ -120,8 +118,8 @@ def topic_name():
 
 
 @pytest.fixture(scope='module')
-def topic(kafka_docker, topic_name):
-    create_kafka_docker_topic(kafka_docker, topic_name)
+def topic(containers, topic_name):
+    containers.create_kafka_topic(topic_name)
     return topic_name
 
 
@@ -166,13 +164,13 @@ def envelope():
 
 @pytest.yield_fixture(scope='session')
 def containers():
-    with Containers():
-        yield
+    with Containers() as containers:
+        yield containers
 
 
 @pytest.fixture(scope='session')
 def kafka_docker(containers):
-    return KafkaDocker.get_connection()
+    return containers.get_kafka_connection()
 
 
 @pytest.yield_fixture

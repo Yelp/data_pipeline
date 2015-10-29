@@ -18,7 +18,6 @@ from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import UpdateMessage
 from data_pipeline.producer import Producer
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
-from data_pipeline.testing_helpers.kafka_docker import create_kafka_docker_topic
 
 
 TIMEOUT = 1.0
@@ -46,14 +45,14 @@ class BaseConsumerTest(object):
         return 'producer_1'
 
     @pytest.fixture
-    def producer_instance(self, kafka_docker, producer_name, team_name):
+    def producer_instance(self, containers, producer_name, team_name):
         instance = Producer(
             producer_name=producer_name,
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
             use_work_pool=False
         )
-        create_kafka_docker_topic(kafka_docker, instance.monitor.monitor_topic)
+        containers.create_kafka_topic(instance.monitor.monitor_topic)
         return instance
 
     @pytest.yield_fixture
@@ -71,8 +70,8 @@ class BaseConsumerTest(object):
         return ConsumerAsserter(consumer=consumer, expected_msg=message)
 
     @pytest.fixture(scope='module')
-    def topic(self, topic_name, kafka_docker):
-        create_kafka_docker_topic(kafka_docker, topic_name)
+    def topic(self, containers, topic_name):
+        containers.create_kafka_topic(topic_name)
         return topic_name
 
     def test_get_message_none(self, consumer, topic):
@@ -301,9 +300,9 @@ class RefreshTopicsTest(object):
         return self._register_schema('test_namespace', 'test_src')
 
     @pytest.fixture(scope='class')
-    def topic(self, test_schema, kafka_docker):
+    def topic(self, containers, test_schema):
         topic_name = str(test_schema.topic.name)
-        create_kafka_docker_topic(kafka_docker, topic_name)
+        containers.create_kafka_topic(topic_name)
         return topic_name
 
     @pytest.yield_fixture
