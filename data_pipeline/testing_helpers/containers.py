@@ -58,6 +58,12 @@ class Containers(object):
 
             $ LEAVE_CONTAINERS_RUNNING=true py.test tests/
 
+        If you leave containers running, you'll need to manually clean up.  If
+        you add a make target as described below, that can be accomplished
+        by running something like::
+
+            $ $(make compose-prefix) kill && $(make compose-prefix) rm
+
         The `FORCE_FRESH_CONTAINERS` environment variable will force this class
         to stop any already-running containers, remove them, and start them
         again from scratch::
