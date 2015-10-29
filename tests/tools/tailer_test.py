@@ -128,15 +128,7 @@ class TestTailer(object):
         topic,
         capsys
     ):
-        # Prevent loading the env config
-        with mock.patch.object(
-            data_pipeline.tools.tailer,
-            'load_default_config',
-        ) as load_default_config_mock:
-            self._init_batch(batch, ['--topic', topic])
-            (config_file, env_config_file), _ = load_default_config_mock.call_args
-            assert config_file == '/nail/srv/configs/data_pipeline_tools.yaml'
-            assert env_config_file is None
+        self._init_batch(batch, ['--topic', topic])
 
         # Only run for one iteration - and publish a message before starting
         # that iteration.
@@ -162,8 +154,17 @@ class TestTailer(object):
         assert out == "{u'good_field': 100}\n"
 
     def _init_batch(self, batch, batch_args):
-        batch.process_commandline_options(batch_args)
-        batch._call_configure_functions()
+        # Prevent loading the env config
+        with mock.patch.object(
+            data_pipeline.tools.tailer,
+            'load_default_config',
+        ) as load_default_config_mock:
+            batch.process_commandline_options(batch_args)
+            batch._call_configure_functions()
+
+        (config_file, env_config_file), _ = load_default_config_mock.call_args
+        assert config_file == '/nail/srv/configs/data_pipeline_tools.yaml'
+        assert env_config_file is None
 
     def _assert_no_topics_error(self, mock_exit):
         (exit_code, error_message), _ = mock_exit.call_args
