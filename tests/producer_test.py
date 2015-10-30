@@ -254,7 +254,7 @@ class TestProducer(TestProducerBase):
 
         with mock.patch.object(producer._kafka_producer, 'user', 'batch'):
             with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
-                with mock.patch.object(producer._kafka_producer, '_retrieve_key', return_value=key):
+                with mock.patch.object(EncryptionHelper, '_retrieve_key', return_value=key):
                     messages = self._publish_message(
                         topic,
                         self.create_message(
@@ -268,7 +268,7 @@ class TestProducer(TestProducerBase):
                     )
                     assert len(messages) == 1
 
-                    decrypt_helper = EncryptionHelper(key=key, message=messages[0])
+                    decrypt_helper = EncryptionHelper(message=messages[0])
                     decrypted_payload = decrypt_helper.decrypt_payload(
                         initialization_vector=init_vector.payload
                     )
@@ -298,7 +298,7 @@ class TestProducer(TestProducerBase):
         with mock.patch.object(producer._kafka_producer, 'user', 'batch'):
             with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
                 with mock.patch.object(EncryptionHelper, '_encrypt_message_using_pycrypto'):
-                    with mock.patch.object(producer._kafka_producer, '_retrieve_key', return_value='key') as retrieve_key_function:
+                    with mock.patch.object(EncryptionHelper, '_retrieve_key', return_value='key') as retrieve_key_function:
                         self._publish_message(
                             topic,
                             message_with_key_one,

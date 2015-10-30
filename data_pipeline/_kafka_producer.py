@@ -74,44 +74,15 @@ class KafkaProducer(object):
         if message.contains_pii:
             if self.skip_messages_with_pii or (self.user not in self.acceptable_users):
                 return
-            key = self._retrieve_key(self._get_key_id(message))
-            helper = EncryptionHelper(key=key, message=message)
-            if not helper.encrypt_message_with_pii():
+            try:
+                helper = EncryptionHelper(message=message)
+                if not helper.encrypt_message_with_pii():
+                    return
+            except IOError:
                 return
         self._add_message_to_buffer(message)
         self.position_data_tracker.record_message_buffered(message)
         self._flush_if_necessary()
-
-    def _get_key_id(self, message):
-        """returns the key number to use when
-        encrypting/decrypting pii, allowing for
-        key rotation. encryption_type must be
-        of the form "ALGORITHM_NAME-{key_id}"""
-        encryption_type = message.encryption_type
-        if encryption_type is not None:
-            return encryption_type.split('-')[-1]
-        return '0'
-
-    def _retrieve_key(self, key_id):
-        try:
-            with open(self.key_location.format(key_id), 'r') as f:
-                return f.readline().rstrip()
-        except IOError as key_read_failures:
-            (errno, strerror) = key_read_failures.args
-            if errno == 2:
-                self.logger.log("Retrieving encryption key failed because the\
-                    key does not exist."
-                                )
-            elif errno == 13:
-                self.logger.log("Retrieving encryption key failed because user {}\
-                    does not have permission to read the key(user\
-                    must be \'batch\').".format(self.user)
-                                )
-            else:
-                self.logger.log("Retrieving encryption key failed because of\
-                    an unknown IOError."
-                                )
-            return False
 
     def flush_buffered_messages(self):
         produce_method = self._publish_produce_requests_dry_run if self.dry_run else self._publish_produce_requests
