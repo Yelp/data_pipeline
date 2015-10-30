@@ -24,7 +24,6 @@ from data_pipeline.producer import Producer
 from data_pipeline.producer import PublicationUnensurableError
 from data_pipeline.testing_helpers.kafka_docker import capture_new_data_pipeline_messages
 from data_pipeline.testing_helpers.kafka_docker import capture_new_messages
-from data_pipeline.testing_helpers.kafka_docker import create_kafka_docker_topic
 from data_pipeline.testing_helpers.kafka_docker import setup_capture_new_messages_consumer
 
 
@@ -50,14 +49,14 @@ class TestProducerBase(object):
         return 'producer_1'
 
     @pytest.fixture
-    def producer_instance(self, producer_name, use_work_pool, team_name, kafka_docker):
+    def producer_instance(self, containers, producer_name, use_work_pool, team_name):
         instance = Producer(
             producer_name=producer_name,
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
             use_work_pool=use_work_pool
         )
-        create_kafka_docker_topic(kafka_docker, instance.monitor.monitor_topic)
+        containers.create_kafka_topic(instance.monitor.monitor_topic)
         return instance
 
     @pytest.yield_fixture
@@ -67,9 +66,9 @@ class TestProducerBase(object):
         assert len(multiprocessing.active_children()) == 0
 
     @pytest.fixture(scope='module')
-    def topic_two(self, kafka_docker):
+    def topic_two(self, containers):
         topic_two_name = str(binascii.hexlify(FastUUID().uuid4()))
-        create_kafka_docker_topic(kafka_docker, topic_two_name)
+        containers.create_kafka_topic(topic_two_name)
         return topic_two_name
 
     @pytest.yield_fixture
@@ -544,10 +543,10 @@ class TestEnsureMessagesPublished(TestProducerBase):
     number_of_messages = 5
 
     @pytest.fixture
-    def topic(self, kafka_docker):
+    def topic(self, containers):
         uuid = binascii.hexlify(FastUUID().uuid4())
         topic_name = str("ensure-published-{0}".format(uuid))
-        create_kafka_docker_topic(kafka_docker, topic_name)
+        containers.create_kafka_topic(topic_name)
         return topic_name
 
     @pytest.fixture(params=[True, False])
