@@ -61,7 +61,6 @@ class KafkaProducer(object):
         self.skip_messages_with_pii = get_config().skip_messages_with_pii
         self.user = get_config().user
         self.acceptable_users = ['batch']
-        self.key_location = '/nail/srv/configs/data_pipeline/key-{}.key'
 
     def wake(self):
         """Should be called periodically if we're not otherwise waking up by
