@@ -6,6 +6,8 @@ import os
 
 import simplejson
 from cached_property import cached_property
+from Crypto import Random
+from Crypto.Cipher import AES
 
 from data_pipeline.meta_attribute import MetaAttribute
 
@@ -43,20 +45,19 @@ class InitializationVector(MetaAttribute):
         with open(schema_path, 'r') as f:
             return simplejson.loads(f.read())
 
-    def __init__(self, initialization_vector_array):
+    def __init__(self, initialization_vector_array=None):
+        if initialization_vector_array is None:
+            initialization_vector_array = Random.new().read(AES.block_size)
         self._verify_init_params(initialization_vector_array)
         self.initialization_vector_array = initialization_vector_array
 
     def _verify_init_params(self, vector_array):
         if not isinstance(vector_array, bytes) or not len(vector_array) == 16:
-            raise TypeError('Initialization Vectory must be a 16-byte array')
+            raise TypeError('Initialization Vector must be a 16-byte array')
 
     @cached_property
     def payload(self):
         return self.initialization_vector_array
-        return {
-            'initialization_vector': self.initialization_vector_array
-        }
 
     def __eq__(self, other):
         return type(self) is type(other) and \

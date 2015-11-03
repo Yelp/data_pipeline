@@ -59,8 +59,6 @@ class KafkaProducer(object):
         self.position_data_tracker = PositionDataTracker()
         self._reset_message_buffer()
         self.skip_messages_with_pii = get_config().skip_messages_with_pii
-        self.user = get_config().user
-        self.acceptable_users = ['batch']
 
     def wake(self):
         """Should be called periodically if we're not otherwise waking up by
@@ -71,13 +69,14 @@ class KafkaProducer(object):
 
     def publish(self, message):
         if message.contains_pii:
-            if self.skip_messages_with_pii or (self.user not in self.acceptable_users):
+            if self.skip_messages_with_pii:
                 return
             try:
                 helper = EncryptionHelper(message=message)
                 if not helper.encrypt_message_with_pii():
                     return
-            except IOError:
+            except IOError as io:
+                logger.error("Could not retrieve key to encrypt pii: {}".format(io.strerror))
                 return
         self._add_message_to_buffer(message)
         self.position_data_tracker.record_message_buffered(message)
