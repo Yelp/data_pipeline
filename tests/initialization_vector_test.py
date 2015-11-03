@@ -41,6 +41,6 @@ class TestInitializationVector(object):
         vector_payload,
         new_initialization_vector
     ):
-        test_message = CreateMessage(1, str('my-topic'), bytes(10))
+        test_message = CreateMessage(1, topic=str('my-topic'), payload=bytes(10))
         test_message.meta = [new_initialization_vector]
         assert test_message.meta[0].payload == vector_payload

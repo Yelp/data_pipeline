@@ -2,11 +2,9 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import simplejson as json
 from Crypto.Cipher import AES
 
 from data_pipeline.initialization_vector import InitializationVector
-from data_pipeline.message import Message
 
 
 class EncryptionHelper(object):
@@ -34,48 +32,50 @@ class EncryptionHelper(object):
 
     @message.setter
     def message(self, message):
-        if not isinstance(message, Message):
-            raise TypeError("Message should be a Data Pipeline message")
         self._message = message
 
-    def __init__(self, key=None, message=None):
-        self.key = key
+    def __init__(self, message=None):
         self.message = message
+        self.key_location = '/nail/srv/configs/data_pipeline/key-{}.key'
+        self.key = self._retrieve_key(self._get_key_id(self.message))
 
-    def _get_initialization_vector(self, message):
-        meta = message.meta
-        if meta is not None:
-            # list comprehension is required to retrieve
-            # the InitializationVector object, since
-            # message.meta is an unordered list
-            vectors = [m for m in meta if isinstance(m, InitializationVector)]
-            return vectors.pop().payload
+    def _get_key_id(self, message):
+        """returns the key number to use when
+        encrypting/decrypting pii, allowing for
+        key rotation. encryption_type must be
+        of the form "ALGORITHM_NAME-{key_id}"""
+        encryption_type = message.encryption_type
+        if encryption_type is not None:
+            return encryption_type.split('-')[-1]
+        return '0'
 
-    def encrypt_message_with_pii(self):
-        """Encrypt message with key on machine, using AES.
-         Mutates the message to have an encrypted payload"""
-        return self._encrypt_message_using_pycrypto(self.key, self.message)
+    def _retrieve_key(self, key_id):
+        with open(self.key_location.format(key_id), 'r') as f:
+            return f.readline().rstrip()
 
-    def _encrypt_message_using_pycrypto(self, key, message, encryption_algorithm=None):
-        payload = message.payload or message.payload_data
+    def encrypt_message_with_pii(self, payload):
+        """Encrypt message with key on machine, using AES."""
+        return self._encrypt_message_using_pycrypto(self.key, payload)
+
+    def _encrypt_message_using_pycrypto(self, key, payload, encryption_algorithm=None):
         # eventually we should allow for multiple
         # encryption methods, but for now we assume AES
         encrypter = AES.new(
             key,
             AES.MODE_CBC,
-            self._get_initialization_vector(self.message)
+            self.message.get_meta_attr_by_type(self.message.meta, InitializationVector).payload
         )
-        if isinstance(payload, dict):
-            payload = self._pad_payload(json.dumps(payload))
-            new_payload = encrypter.encrypt(payload)
-            message.payload = new_payload
-        else:
-            payload = self._pad_payload(payload)
-            new_payload = encrypter.encrypt(payload)
-            message.payload = new_payload
-        return True
+        payload = self._pad_payload(payload)
+        return encrypter.encrypt(payload)
 
     def _pad_payload(self, payload):
+        """payloads must be have length equal to
+        a multiple of 16 in order to be encrypted
+        by AES's CBC algorithm, because it uses
+        block chaining. This method adds null bytes
+        to the end of payload before encrypting it,
+        and the _unpad method removes those null bytes"""
+
         length = 16 - (len(payload) % 16)
         return payload + chr(length) * length
 

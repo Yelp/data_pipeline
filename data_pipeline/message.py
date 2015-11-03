@@ -10,12 +10,13 @@ from yelp_avro.avro_string_writer import AvroStringWriter
 
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
+from data_pipeline.encryption_helper import EncryptionHelper
 from data_pipeline.envelope import Envelope
+from data_pipeline.initialization_vector import InitializationVector
 from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
 from data_pipeline.meta_attribute import MetaAttribute
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
-
 
 logger = get_config().logger
 
@@ -166,14 +167,6 @@ class Message(object):
         self._uuid = uuid
 
     @property
-    def encryption_type(self):
-        return self._encryption_type
-
-    @encryption_type.setter
-    def encryption_type(self, encryption_type):
-        self._encryption_type = encryption_type
-
-    @property
     def contains_pii(self):
         if self._contains_pii is None:
             self._contains_pii = self._schematizer.get_schema_by_id(
@@ -209,6 +202,10 @@ class Message(object):
                 "Meta must be None or list of MetaAttribute objects."
             )
         self._meta = meta
+
+    def get_meta_attr_by_type(self, meta, meta_type):
+        attributes_with_type = [m for m in meta if isinstance(m, meta_type)]
+        return attributes_with_type.pop()
 
     def _get_meta_attr_avro_repr(self):
         if self.meta is not None:
@@ -343,12 +340,12 @@ class Message(object):
         self.keys = keys
         self.dry_run = dry_run
         self.meta = meta
+        self.contains_pii = contains_pii
+        self.encryption_type = encryption_type
+        self.encryption_helper = None
         self._set_payload_or_payload_data(payload, payload_data)
         # TODO(DATAPIPE-416|psuben):
         # Make it so contains_pii is no longer overrideable.
-        self.contains_pii = contains_pii
-        self.encryption_type = encryption_type
-
         if topic:
             logger.debug("Overriding message topic: {0} for schema {1}."
                          .format(topic, schema_id))
@@ -361,6 +358,12 @@ class Message(object):
         if is_not_none_payload and is_not_none_payload_data:
             raise TypeError("Cannot pass both payload and payload_data.")
         if is_not_none_payload:
+            if self.contains_pii:
+                iv = InitializationVector()
+                self.meta.append(iv)
+                self.encryption_helper = EncryptionHelper(message=self)
+                payload = self.encryption_helper.encrypt_message_with_pii(payload)
+
             self.payload = payload
         elif is_not_none_payload_data:
             self.payload_data = payload_data
@@ -419,6 +422,9 @@ class Message(object):
         """Encodes data, returning a repr in dry_run mode"""
         if self.dry_run:
             return repr(data)
+        # if self.contains_pii:
+        #       self.encryption_helper = EncryptionHelper(payload=data, encryption_type=encryption_type, meta=meta)
+        #       data = self.encryption_helper.encrypt_payload(data)
         return self._avro_string_writer.encode(message_avro_representation=data)
 
     def _decode_payload_if_necessary(self):
@@ -731,7 +737,6 @@ def _create_message_from_packed_message(
         'schema_id': unpacked_message['schema_id'],
         'payload': unpacked_message['payload'],
         'timestamp': unpacked_message['timestamp'],
-        'contains_pii': unpacked_message.get('contains_pii', None),
         'encryption_type': unpacked_message.get('encryption_type', None),
         'meta': [
             MetaAttribute(schema_id=o['schema_id'], encoded_payload=o['payload'])

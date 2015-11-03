@@ -3,8 +3,6 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import logging
-import os
-import pwd
 
 import staticconf
 from cached_property import cached_property
@@ -221,11 +219,6 @@ class Config(object):
             'skip_messages_with_pii',
             default=True
         )
-
-    @property
-    def user(self):
-        """Returns the user who initialized this producer or consumer"""
-        return pwd.getpwuid(os.getuid()).pw_name
 
     @property
     def data_pipeline_teams_config_file_path(self):

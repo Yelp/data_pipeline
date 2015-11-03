@@ -9,8 +9,8 @@ from yelp_kafka.consumer_group import KafkaConsumerGroup
 
 from data_pipeline.base_consumer import BaseConsumer
 from data_pipeline.config import get_config
+from data_pipeline.encryption_helper import EncryptionHelper
 from data_pipeline.message import create_from_kafka_message
-
 
 logger = get_config().logger
 
@@ -68,6 +68,13 @@ class Consumer(BaseConsumer):
                 message,
                 self.force_payload_decode
             )
+            if message.contains_pii:
+                try:
+                    helper = EncryptionHelper(message=message)
+                    message.payload = helper.decrypt_payload(message.payload)
+                except IOError as io:
+                    logger.error("Decrypting PII failed with IOError: {}".format(io.strerror))
+
             self._update_topic_map(message)
             messages.append(message)
             if not blocking or (has_timeout and time() > max_time):
