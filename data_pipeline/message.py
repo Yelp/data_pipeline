@@ -204,8 +204,11 @@ class Message(object):
         self._meta = meta
 
     def get_meta_attr_by_type(self, meta, meta_type):
-        attributes_with_type = [m for m in meta if isinstance(m, meta_type)]
-        return attributes_with_type.pop()
+        if meta is not None:
+            attributes_with_type = [m for m in meta if isinstance(m, meta_type)]
+            if len(attributes_with_type) > 0:
+                return attributes_with_type.pop()
+        return None
 
     def _get_meta_attr_avro_repr(self):
         if self.meta is not None:
@@ -343,14 +346,14 @@ class Message(object):
         self.contains_pii = contains_pii
         self.encryption_type = encryption_type
         self.encryption_helper = None
-        self._set_payload_or_payload_data(payload, payload_data)
+        self._set_payload_or_payload_data(payload, payload_data, contains_pii=contains_pii)
         # TODO(DATAPIPE-416|psuben):
         # Make it so contains_pii is no longer overrideable.
         if topic:
             logger.debug("Overriding message topic: {0} for schema {1}."
                          .format(topic, schema_id))
 
-    def _set_payload_or_payload_data(self, payload, payload_data):
+    def _set_payload_or_payload_data(self, payload, payload_data, contains_pii=False):
         # payload or payload_data are lazily constructed only on request
         is_not_none_payload = payload is not None
         is_not_none_payload_data = payload_data is not None
@@ -358,13 +361,17 @@ class Message(object):
         if is_not_none_payload and is_not_none_payload_data:
             raise TypeError("Cannot pass both payload and payload_data.")
         if is_not_none_payload:
-            if self.contains_pii:
-                iv = InitializationVector()
-                self.meta.append(iv)
-                self.encryption_helper = EncryptionHelper(message=self)
-                payload = self.encryption_helper.encrypt_message_with_pii(payload)
-
             self.payload = payload
+            if contains_pii:
+                iv = self.get_meta_attr_by_type(self.meta, InitializationVector)
+                if iv is None:
+                    if self.meta is None:
+                        self.meta = []
+                    iv = InitializationVector()
+                    self.meta.append(iv)
+                self.encryption_helper = EncryptionHelper(message=self)
+                self.payload = self.encryption_helper.encrypt_message_with_pii(payload)
+
         elif is_not_none_payload_data:
             self.payload_data = payload_data
         else:
@@ -376,6 +383,7 @@ class Message(object):
     def __ne__(self, other):
         return not self.__eq__(other)
 
+        #       data = self.encryption_helper.encrypt_payload(data)
     def __hash__(self):
         # TODO [clin|DATAPIPE-468] Revisit this when we get a chance
         return hash(self._eq_key)
@@ -422,13 +430,18 @@ class Message(object):
         """Encodes data, returning a repr in dry_run mode"""
         if self.dry_run:
             return repr(data)
-        # if self.contains_pii:
-        #       self.encryption_helper = EncryptionHelper(payload=data, encryption_type=encryption_type, meta=meta)
-        #       data = self.encryption_helper.encrypt_payload(data)
         return self._avro_string_writer.encode(message_avro_representation=data)
 
     def _decode_payload_if_necessary(self):
         if self._payload_data is None:
+            self.contains_pii = None  # force contains_pii to be rechecked
+            if self.contains_pii:
+                import ipdb
+                ipdb.set_trace()
+                #self.encryption_helper = EncryptionHelper(message=self)
+                iv = self.get_meta_attr_by_type(self.meta, InitializationVector)
+                self._payload = self.encryption_helper.decrypt_payload(iv, self._payload)
+
             self._payload_data = self._avro_string_reader.decode(
                 encoded_message=self._payload
             )

@@ -47,11 +47,11 @@ class EncryptionHelper(object):
         encryption_type = message.encryption_type
         if encryption_type is not None:
             return encryption_type.split('-')[-1]
-        return '0'
+        return '1'
 
     def _retrieve_key(self, key_id):
         with open(self.key_location.format(key_id), 'r') as f:
-            return f.readline().rstrip()
+            return f.read(AES.block_size)
 
     def encrypt_message_with_pii(self, payload):
         """Encrypt message with key on machine, using AES."""
@@ -79,15 +79,15 @@ class EncryptionHelper(object):
         length = 16 - (len(payload) % 16)
         return payload + chr(length) * length
 
-    def decrypt_payload(self, initialization_vector=None):
+    def decrypt_payload(self, initialization_vector, decoded_payload):
         if initialization_vector is None:
-            initialization_vector = self._get_initialization_vector(self.message)
+            raise TypeError("InitializationVector must not be None")
         decrypter = AES.new(
             self.key,
             AES.MODE_CBC,
-            initialization_vector
+            initialization_vector.payload
         )
-        data = decrypter.decrypt(self.message.payload)
+        data = decrypter.decrypt(decoded_payload)
         return self._unpad(data)
 
     def _unpad(self, s):

@@ -68,16 +68,8 @@ class KafkaProducer(object):
         self._flush_if_necessary()
 
     def publish(self, message):
-        if message.contains_pii:
-            if self.skip_messages_with_pii:
-                return
-            try:
-                helper = EncryptionHelper(message=message)
-                if not helper.encrypt_message_with_pii():
-                    return
-            except IOError as io:
-                logger.error("Could not retrieve key to encrypt pii: {}".format(io.strerror))
-                return
+        if message.contains_pii and self.skip_messages_with_pii:
+            return
         self._add_message_to_buffer(message)
         self.position_data_tracker.record_message_buffered(message)
         self._flush_if_necessary()
