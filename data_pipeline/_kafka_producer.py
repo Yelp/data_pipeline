@@ -12,7 +12,6 @@ from kafka.common import ProduceRequest
 
 from data_pipeline._position_data_tracker import PositionDataTracker
 from data_pipeline.config import get_config
-from data_pipeline.encryption_helper import EncryptionHelper
 from data_pipeline.envelope import Envelope
 
 _EnvelopeAndMessage = namedtuple("_EnvelopeAndMessage", ["envelope", "message"])

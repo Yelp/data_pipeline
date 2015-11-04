@@ -82,6 +82,13 @@ class TestProducerBase(object):
 
 class TestProducer(TestProducerBase):
 
+    @pytest.fixture(params=[
+        True,
+        False
+    ])
+    def contains_pii(self, request):
+        return request.param
+
     def create_message(self, topic_name, payload, registered_schema, **kwargs):
         return CreateMessage(
             topic=topic_name,
@@ -248,7 +255,6 @@ class TestProducer(TestProducerBase):
         registered_schema
     ):
         payload = b'hello world!'
-        key = 'This is a key123'
 
         with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
             test_message = self.create_message(
@@ -282,14 +288,14 @@ class TestProducer(TestProducerBase):
                     '_retrieve_key',
                     return_value='this is a key123'
                 ) as retrieve_key_function:
-                    message_with_key_one = self.create_message(
+                    self.create_message(
                         topic,
                         payload,
                         registered_schema,
                         contains_pii=True,
                         encryption_type='MODE_CFB-1'
                     )
-                    message_with_key_two = self.create_message(
+                    self.create_message(
                         topic,
                         payload,
                         registered_schema,
@@ -299,49 +305,29 @@ class TestProducer(TestProducerBase):
 
                     assert retrieve_key_function.call_args_list == [mock.call('1'), mock.call('2')]
 
-    """def test_no_publish_pii_with_non_acceptable_user(
-        self,
-        topic,
-        payload,
-        producer,
-        registered_schema
-    ):
-        with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
-            with mock.patch.object(EncryptionHelper, '_retrieve_key', side_effect=IOError):
-                    messages = self._publish_message(
-                        topic,
-                        self.create_message(
-                            topic,
-                            payload,
-                            registered_schema,
-                            contains_pii=True
-                        ),
-                        producer
-                    )
-
-                    assert len(messages) == 0"""
-
     def test_basic_publish_message_with_primary_keys(
         self,
         topic,
         payload,
         producer,
         registered_schema,
-        envelope
+        envelope,
+        contains_pii
     ):
         sample_keys = (u'key1=\'', u'key2=\\', u'key3=哎ù\x1f')
-        with capture_new_messages(topic) as get_messages:
-            producer.publish(
-                self.create_message(
-                    topic,
-                    payload,
-                    registered_schema,
-                    keys=sample_keys,
-                    contains_pii=False
+        with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
+            with capture_new_messages(topic) as get_messages:
+                producer.publish(
+                    self.create_message(
+                        topic,
+                        payload,
+                        registered_schema,
+                        keys=sample_keys,
+                        contains_pii=contains_pii
+                    )
                 )
-            )
-            producer.flush()
-        assert get_messages()[0].message.key == '\'key1=\\\'\'\x1f\'key2=\\\\\'\x1f\'key3=哎ù\x1f\''.encode('utf-8')
+                producer.flush()
+            assert get_messages()[0].message.key == '\'key1=\\\'\'\x1f\'key2=\\\\\'\x1f\'key3=哎ù\x1f\''.encode('utf-8')
 
 
 class TestPublishMonitorMessage(TestProducerBase):

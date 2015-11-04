@@ -179,6 +179,10 @@ class Message(object):
         self._contains_pii = contains_pii
 
     @property
+    def encryption_type(self):
+        return self._encryption_type
+
+    @property
     def dry_run(self):
         return self._dry_run
 
@@ -320,13 +324,13 @@ class Message(object):
         payload_data=None,
         uuid=None,
         contains_pii=None,
+        encryption_type=None,
         timestamp=None,
         upstream_position_info=None,
         kafka_position_info=None,
         keys=None,
         dry_run=False,
         meta=None,
-        encryption_type=None
     ):
         # The decision not to just pack the message, but to validate it, is
         # intentional here.  We want to perform more sanity checks than avro
@@ -344,7 +348,7 @@ class Message(object):
         self.dry_run = dry_run
         self.meta = meta
         self.contains_pii = contains_pii
-        self.encryption_type = encryption_type
+        self._encryption_type = encryption_type  # This can only be set during init
         self.encryption_helper = None
         self._set_payload_or_payload_data(payload, payload_data, contains_pii=contains_pii)
         # TODO(DATAPIPE-416|psuben):
@@ -436,12 +440,8 @@ class Message(object):
         if self._payload_data is None:
             self.contains_pii = None  # force contains_pii to be rechecked
             if self.contains_pii:
-                import ipdb
-                ipdb.set_trace()
-                #self.encryption_helper = EncryptionHelper(message=self)
                 iv = self.get_meta_attr_by_type(self.meta, InitializationVector)
                 self._payload = self.encryption_helper.decrypt_payload(iv, self._payload)
-
             self._payload_data = self._avro_string_reader.decode(
                 encoded_message=self._payload
             )
@@ -511,7 +511,6 @@ class UpdateMessage(Message):
         keys=None,
         dry_run=False,
         meta=None,
-        encryption_type=None
     ):
         super(UpdateMessage, self).__init__(
             schema_id,
@@ -526,7 +525,6 @@ class UpdateMessage(Message):
             keys=keys,
             dry_run=dry_run,
             meta=meta,
-            encryption_type=encryption_type
         )
         self._set_previous_payload_or_payload_data(
             previous_payload,
@@ -750,7 +748,6 @@ def _create_message_from_packed_message(
         'schema_id': unpacked_message['schema_id'],
         'payload': unpacked_message['payload'],
         'timestamp': unpacked_message['timestamp'],
-        'encryption_type': unpacked_message.get('encryption_type', None),
         'meta': [
             MetaAttribute(schema_id=o['schema_id'], encoded_payload=o['payload'])
             for o in unpacked_message['meta']
