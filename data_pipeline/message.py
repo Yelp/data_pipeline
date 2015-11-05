@@ -330,7 +330,7 @@ class Message(object):
         kafka_position_info=None,
         keys=None,
         dry_run=False,
-        meta=None,
+        meta=None
     ):
         # The decision not to just pack the message, but to validate it, is
         # intentional here.  We want to perform more sanity checks than avro
@@ -348,7 +348,7 @@ class Message(object):
         self.dry_run = dry_run
         self.meta = meta
         self.contains_pii = contains_pii
-        self._encryption_type = encryption_type  # This can only be set during init
+        self._encryption_type = encryption_type  # This should only be set during init
         self.encryption_helper = None
         self._set_payload_or_payload_data(payload, payload_data, contains_pii=contains_pii)
         # TODO(DATAPIPE-416|psuben):
@@ -387,7 +387,6 @@ class Message(object):
     def __ne__(self, other):
         return not self.__eq__(other)
 
-        #       data = self.encryption_helper.encrypt_payload(data)
     def __hash__(self):
         # TODO [clin|DATAPIPE-468] Revisit this when we get a chance
         return hash(self._eq_key)

@@ -265,7 +265,9 @@ class TestProducer(TestProducerBase):
                 meta=[InitializationVector(b'0000000000000000')]
             )
             assert test_message.payload != payload
-            expected_payload_data = test_message._avro_string_reader.decode(encoded_message=test_message.payload)
+            expected_payload_data = test_message._avro_string_reader.decode(
+                encoded_message=test_message.payload
+            )
             messages = self._publish_message(
                 topic,
                 test_message,
