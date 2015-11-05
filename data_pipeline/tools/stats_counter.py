@@ -13,6 +13,7 @@ class StatsCounter(object):
     Args:
       stats_counter_name(str): the name of this stat.
       message_counte_timer(float): the time interval between batch flushes.
+      kwargs(dict): the stat dimensions
     """
 
     def __init__(self, stat_counter_name, message_count_timer=0.25, **kwargs):
