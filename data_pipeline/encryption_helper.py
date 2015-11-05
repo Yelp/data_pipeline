@@ -2,6 +2,8 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import os
+
 from Crypto.Cipher import AES
 
 from data_pipeline.initialization_vector import InitializationVector
@@ -47,7 +49,10 @@ class EncryptionHelper(object):
         encryption_type = message.encryption_type
         if encryption_type is not None:
             return encryption_type.split('-')[-1]
-        return '1'
+        else:
+            list_of_files = os.listdir(os.path.dirname(self.key_location))
+            max_key_file = max(list_of_files, key=lambda name: int(name.replace('.', '-').split('-')[-2]))
+            return max_key_file.replace('.', '-').split('-')[-2]
 
     def _retrieve_key(self, key_id):
         with open(self.key_location.format(key_id), 'r') as f:
