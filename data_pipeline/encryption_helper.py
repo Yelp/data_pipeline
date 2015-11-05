@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import os
+import re
 
 from Crypto.Cipher import AES
 
@@ -51,8 +52,9 @@ class EncryptionHelper(object):
             return encryption_type.split('-')[-1]
         else:
             list_of_files = os.listdir(os.path.dirname(self.key_location))
-            max_key_file = max(list_of_files, key=lambda name: int(name.replace('.', '-').split('-')[-2]))
-            return max_key_file.replace('.', '-').split('-')[-2]
+            pattern = r"key-([0-9]+)"
+            max_key_file = max(list_of_files, key=lambda name: int(re.search(pattern, name).group(1)))
+            return re.search(pattern, max_key_file).group(1)
 
     def _retrieve_key(self, key_id):
         with open(self.key_location.format(key_id), 'r') as f:
