@@ -1,3 +1,9 @@
+data-pipeline-tools (0.1.36) lucid; urgency=low
+
+  * Commit: Added some extra logging on FastUUID
+
+ -- Justin Cunningham <justinc@yelp.com>  Fri, 06 Nov 2015 12:26:29 -0800
+
 data-pipeline-tools (0.1.35) lucid; urgency=low
 
   * Commit: Merge branch 'master' of
