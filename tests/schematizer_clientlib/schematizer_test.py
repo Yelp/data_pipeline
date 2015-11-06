@@ -534,6 +534,37 @@ class TestRegisterSchema(SchematizerClientTestBase):
         assert schema_one.topic.topic_id != schema_two.topic.topic_id
         assert schema_one.topic.name != schema_two.topic.name
 
+    def test_get_or_register_schema(
+        self,
+        schematizer,
+        yelp_namespace,
+        schema_json
+    ):
+        new_biz_src_name = 'biz_{0}'.format(random.random())
+        new_schema_json = schema_json.copy()
+        new_schema_json['name'] = new_biz_src_name
+        assert simplejson.dumps(new_schema_json, sort_keys=True) not in schematizer._avro_schema_cache
+
+        schema_one = schematizer.get_cached_or_register_schema(
+            namespace=yelp_namespace,
+            source=new_biz_src_name,
+            schema_json=new_schema_json,
+            source_owner_email=self.source_owner_email,
+            contains_pii=False
+        )
+        assert simplejson.dumps(new_schema_json, sort_keys=True) in schematizer._avro_schema_cache
+
+        with mock.patch.object(SchematizerClient, 'register_schema_from_schema_json') as mock_register_schema:
+            schema_two = schematizer.get_cached_or_register_schema(
+                namespace=yelp_namespace,
+                source=new_biz_src_name,
+                schema_json=new_schema_json,
+                source_owner_email=self.source_owner_email,
+                contains_pii=False
+            )
+            assert mock_register_schema.called == 0
+        assert schema_one == schema_two
+
 
 class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
 

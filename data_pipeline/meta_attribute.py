@@ -79,7 +79,7 @@ class MetaAttribute(object):
         return self._register_schema()
 
     def _register_schema(self):
-        schema_info = self.schematizer.register_schema_from_schema_json(
+        schema_info = self.schematizer.get_cached_or_register_schema(
             namespace=self.namespace,
             source=self.source,
             schema_json=self.avro_schema,
