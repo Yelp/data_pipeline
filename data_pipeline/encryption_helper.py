@@ -46,10 +46,10 @@ class EncryptionHelper(object):
         """returns the key number to use when
         encrypting/decrypting pii, allowing for
         key rotation. encryption_type must be
-        of the form '{key_id}'"""
+        of the form 'Algorithm_name-{key_id}'"""
         encryption_type = message.encryption_type
         if encryption_type is not None:
-            return encryption_type
+            return encryption_type.split('-')[-1]
         else:
             list_of_files = os.listdir(os.path.dirname(self.key_location))
             pattern = r"key-([0-9]+)"

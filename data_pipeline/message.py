@@ -347,7 +347,10 @@ class Message(object):
         self.dry_run = dry_run
         self.meta = meta
         self.contains_pii = contains_pii
-        self._encryption_type = get_config().active_encryption_key  # This should only be set during init
+        # _encryption_type should only be set during init
+        self._encryption_type = "AES_MODE_CBC-{}".format(
+            get_config().active_encryption_key
+        )
         self.encryption_helper = None
         self._set_payload_or_payload_data(payload, payload_data, contains_pii=contains_pii)
         # TODO(DATAPIPE-416|psuben):
@@ -364,7 +367,6 @@ class Message(object):
         if is_not_none_payload and is_not_none_payload_data:
             raise TypeError("Cannot pass both payload and payload_data.")
         if is_not_none_payload:
-            self.payload = payload
             if contains_pii:
                 iv = self.get_meta_attr_by_type(self.meta, InitializationVector)
                 if iv is None:
@@ -373,8 +375,8 @@ class Message(object):
                     iv = InitializationVector()
                     self.meta.append(iv)
                 self.encryption_helper = EncryptionHelper(message=self)
-                self.payload = self.encryption_helper.encrypt_message_with_pii(payload)
-
+                payload = self.encryption_helper.encrypt_message_with_pii(payload)
+            self.payload = payload
         elif is_not_none_payload_data:
             self.payload_data = payload_data
         else:
