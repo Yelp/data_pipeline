@@ -66,6 +66,9 @@ class TestConfigDefaults(TestConfigBase):
     def test_skip_messages_with_pii(self, config):
         assert config.skip_messages_with_pii
 
+    def test_active_encryption_key(self, config):
+        assert config.active_encryption_key
+
     def test_data_pipeline_teams_config_file_path(self, config):
         assert config.data_pipeline_teams_config_file_path == '/nail/etc/services/data_pipeline/teams.yaml'
 
