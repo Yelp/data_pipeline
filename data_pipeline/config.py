@@ -221,6 +221,14 @@ class Config(object):
         )
 
     @property
+    def active_encryption_key(self):
+        """Key id to use when encrypting pii, e.g., '1'"""
+        return data_pipeline_conf.read_string(
+            'active_encryption_key',
+            default='1'
+        )
+
+    @property
     def data_pipeline_teams_config_file_path(self):
         """Returns the path to the config file which specifies valid teams for
         the data pipeline.

@@ -53,7 +53,7 @@ class TestEnvelope(object):
         if isinstance(message, dp_message.UpdateMessage):
             previous_payload = message.previous_payload
         return dict(
-            encryption_type=None,
+            encryption_type=message.encryption_type,
             message_type=message.message_type.name,
             meta=[
                 meta_attr.avro_repr

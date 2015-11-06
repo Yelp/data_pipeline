@@ -14,7 +14,6 @@ import simplejson as json
 import data_pipeline.producer
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
-from data_pipeline.encryption_helper import EncryptionHelper
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.initialization_vector import InitializationVector
 from data_pipeline.message import CreateMessage
@@ -275,37 +274,6 @@ class TestProducer(TestProducerBase):
             )
             assert len(messages) == 1
             assert messages[0].payload_data == expected_payload_data
-
-    def test_key_rotation(
-        self,
-        topic,
-        payload,
-        producer,
-        registered_schema
-    ):
-        with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
-            with mock.patch.object(EncryptionHelper, '_encrypt_message_using_pycrypto', return_value=b'000'):
-                with mock.patch.object(
-                    EncryptionHelper,
-                    '_retrieve_key',
-                    return_value='this is a key123'
-                ) as retrieve_key_function:
-                    self.create_message(
-                        topic,
-                        payload,
-                        registered_schema,
-                        contains_pii=True,
-                        encryption_type='MODE_CFB-1'
-                    )
-                    self.create_message(
-                        topic,
-                        payload,
-                        registered_schema,
-                        contains_pii=True,
-                        encryption_type='MODE_CFB-2'
-                    )
-
-                    assert retrieve_key_function.call_args_list == [mock.call('1'), mock.call('2')]
 
     def test_basic_publish_message_with_primary_keys(
         self,

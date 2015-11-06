@@ -16,7 +16,7 @@ class EncryptionHelper(object):
 
     Args:
       key (string): The key to be used in the encryption
-      message (data_pipeline.Message): The message with a payload to be encrypted
+      message (data_pipeline.message.Message): The message with a payload to be encrypted
     """
 
     @property
@@ -46,10 +46,10 @@ class EncryptionHelper(object):
         """returns the key number to use when
         encrypting/decrypting pii, allowing for
         key rotation. encryption_type must be
-        of the form "ALGORITHM_NAME-{key_id}"""
+        of the form '{key_id}'"""
         encryption_type = message.encryption_type
         if encryption_type is not None:
-            return encryption_type.split('-')[-1]
+            return encryption_type
         else:
             list_of_files = os.listdir(os.path.dirname(self.key_location))
             pattern = r"key-([0-9]+)"

@@ -324,7 +324,6 @@ class Message(object):
         payload_data=None,
         uuid=None,
         contains_pii=None,
-        encryption_type=None,
         timestamp=None,
         upstream_position_info=None,
         kafka_position_info=None,
@@ -348,7 +347,7 @@ class Message(object):
         self.dry_run = dry_run
         self.meta = meta
         self.contains_pii = contains_pii
-        self._encryption_type = encryption_type  # This should only be set during init
+        self._encryption_type = get_config().active_encryption_key  # This should only be set during init
         self.encryption_helper = None
         self._set_payload_or_payload_data(payload, payload_data, contains_pii=contains_pii)
         # TODO(DATAPIPE-416|psuben):
