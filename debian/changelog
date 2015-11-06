@@ -1,8 +1,8 @@
-data-pipeline-tools (0.1.33) lucid; urgency=low
+data-pipeline-tools (0.1.34) lucid; urgency=low
 
-  * Commit: Bumped to v0.1.32
+  * Commit: renmae to meteorite_wrappers
 
- -- Justin Cunningham <justinc@yelp.com>  Thu, 05 Nov 2015 17:33:50 -0800
+ -- Cheng Chen <cheng@yelp.com>  Thu, 05 Nov 2015 16:42:49 -0800
 
 data-pipeline-tools (0.1.30) lucid; urgency=low
 
