@@ -4,7 +4,7 @@ from __future__ import unicode_literals
 
 import mock
 
-from data_pipeline.tools.stats_counter import StatsCounter
+from data_pipeline.tools.meteorite_wrappers import StatsCounter
 
 
 class TestStatsCounter(object):
@@ -18,7 +18,7 @@ class TestStatsCounter(object):
     @mock.patch('yelp_meteorite.metrics.Counter.count', autospec=True)
     def test_batched_counter(self, mock_count):
         with mock.patch(
-            'data_pipeline.tools.stats_counter.time',
+            'data_pipeline.tools.meteorite_wrappers.time',
         ) as mock_time:
             mock_time.time.side_effect = [
                 2, 3, 8, 9
