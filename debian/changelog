@@ -1,3 +1,23 @@
+data-pipeline-tools (0.1.36) lucid; urgency=low
+
+  * Commit: Added some extra logging on FastUUID
+
+ -- Justin Cunningham <justinc@yelp.com>  Fri, 06 Nov 2015 12:26:29 -0800
+
+data-pipeline-tools (0.1.35) lucid; urgency=low
+
+  * Commit: Merge branch 'master' of
+    git.yelpcorp.com:clientlibs/data_pipeline  Conflicts:
+    data_pipeline/__init__.py  debian/changelog
+
+ -- Justin Cunningham <justinc@yelp.com>  Thu, 05 Nov 2015 17:36:55 -0800
+
+data-pipeline-tools (0.1.34) lucid; urgency=low
+
+  * Commit: renmae to meteorite_wrappers
+
+ -- Cheng Chen <cheng@yelp.com>  Thu, 05 Nov 2015 16:42:49 -0800
+
 data-pipeline-tools (0.1.30) lucid; urgency=low
 
   * Commit: Removed lint code that was replaced by pre-commit
