@@ -650,8 +650,10 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             mock_send_request.reset()
             producer.publish(message)
             producer.flush()
-            # should succeed in the 2nd retry
-            assert mock_send_request.call_count == 2
+            # it should fail at least the 1st time because the topic doesn't
+            # exist. Depending on how fast the topic is created, it could retry
+            # more than 2 times.
+            assert mock_send_request.call_count >= 2
 
         with setup_capture_new_messages_consumer(new_topic) as consumer:
             consumer.seek(0, 0)  # set to the first message
