@@ -6,6 +6,7 @@ import binascii
 import copy
 import math
 import multiprocessing
+from uuid import UUID
 
 import mock
 import pytest
@@ -537,6 +538,16 @@ class TestEnsureMessagesPublished(TestProducerBase):
             topic_offsets,
             message_count=len(messages[:2])
         )
+
+    def test_ensure_messages_published_on_new_topic(self, message, producer):
+        """When a topic doesn't exist, all of the messages on that topic should
+        be published.
+        """
+        topic = str(UUID(bytes=FastUUID().uuid4()).hex)
+        message.topic = topic
+        with mock.patch.object(producer, 'publish') as mock_publish:
+            producer.ensure_messages_published([message], {})
+            assert mock_publish.call_count == 1
 
     def _assert_logged_info_correct(
         self,
