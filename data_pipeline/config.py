@@ -221,11 +221,20 @@ class Config(object):
         )
 
     @property
-    def active_encryption_key(self):
-        """Key id to use when encrypting pii, e.g., '1'"""
+    def encryption_type(self):
+        """Algorithm and key to use when encrypting pii,
+        e.g., 'AES_MODE_CBC-1'"""
         return data_pipeline_conf.read_string(
-            'active_encryption_key',
-            default='1'
+            'encryption_type',
+            default=None
+        )
+
+    @property
+    def key_location(self):
+        """Directory in which to look for key to encrypt pii."""
+        return data_pipeline_conf.read_string(
+            'key_location',
+            default='/nail/srv/configs/data_pipeline/'
         )
 
     @property

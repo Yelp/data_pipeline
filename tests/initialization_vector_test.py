@@ -23,7 +23,7 @@ class TestInitializationVector(object):
 
     @pytest.fixture(params=[
         {'schema_id': 10},
-        {'encoded_payload': bytes(10)}
+        {'initialization_vector_array': bytes(10)}
     ])
     def invalid_arg_value(self, request):
         return request.param

@@ -15,7 +15,6 @@ import data_pipeline.producer
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
 from data_pipeline.expected_frequency import ExpectedFrequency
-from data_pipeline.initialization_vector import InitializationVector
 from data_pipeline.message import CreateMessage
 from data_pipeline.message import Message
 from data_pipeline.message_type import _ProtectedMessageType
@@ -149,6 +148,7 @@ class TestProducer(TestProducerBase):
     def test_messages_published_without_flush(self, topic, message, producer_instance):
         with capture_new_messages(topic) as get_messages, producer_instance as producer:
             producer.publish(message)
+
         assert len(multiprocessing.active_children()) == 0
         assert len(get_messages()) == 1
 
@@ -260,12 +260,31 @@ class TestProducer(TestProducerBase):
                 topic,
                 payload,
                 registered_schema,
-                contains_pii=True,
-                meta=[InitializationVector(b'0000000000000000')]
+                contains_pii=True
             )
             assert test_message.payload != payload
-            expected_payload_data = test_message._avro_string_reader.decode(
-                encoded_message=test_message.payload
+            messages = self._publish_message(
+                topic,
+                test_message,
+                producer
+            )
+            assert len(messages) == 1
+            assert messages[0].payload_data == test_message.payload_data
+
+    def test_publish_encrypted_message_from_payload_data_with_pii(
+        self,
+        topic,
+        producer,
+        registered_schema
+    ):
+        payload_data = {'good_field': 1}
+        with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
+            test_message = CreateMessage(
+                topic=topic,
+                payload_data=payload_data,
+                schema_id=registered_schema.schema_id,
+                timestamp=1500,
+                contains_pii=True
             )
             messages = self._publish_message(
                 topic,
@@ -273,7 +292,7 @@ class TestProducer(TestProducerBase):
                 producer
             )
             assert len(messages) == 1
-            assert messages[0].payload_data == expected_payload_data
+            assert messages[0].payload_data == test_message.payload_data
 
     def test_basic_publish_message_with_primary_keys(
         self,

@@ -8,9 +8,9 @@ from collections import namedtuple
 from yelp_avro.avro_string_reader import AvroStringReader
 from yelp_avro.avro_string_writer import AvroStringWriter
 
+from data_pipeline._encryption_helper import EncryptionHelper
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
-from data_pipeline.encryption_helper import EncryptionHelper
 from data_pipeline.envelope import Envelope
 from data_pipeline.initialization_vector import InitializationVector
 from data_pipeline.message_type import _ProtectedMessageType
@@ -348,9 +348,7 @@ class Message(object):
         self.meta = meta
         self.contains_pii = contains_pii
         # _encryption_type should only be set during init
-        self._encryption_type = "AES_MODE_CBC-{}".format(
-            get_config().active_encryption_key
-        )
+        self._encryption_type = get_config().encryption_type
         self.encryption_helper = None
         self._set_payload_or_payload_data(payload, payload_data, contains_pii=contains_pii)
         # TODO(DATAPIPE-416|psuben):
@@ -368,19 +366,23 @@ class Message(object):
             raise TypeError("Cannot pass both payload and payload_data.")
         if is_not_none_payload:
             if contains_pii:
-                iv = self.get_meta_attr_by_type(self.meta, InitializationVector)
-                if iv is None:
-                    if self.meta is None:
-                        self.meta = []
-                    iv = InitializationVector()
-                    self.meta.append(iv)
-                self.encryption_helper = EncryptionHelper(message=self)
-                payload = self.encryption_helper.encrypt_message_with_pii(payload)
+                payload = self._encrypt_payload(payload)
             self.payload = payload
         elif is_not_none_payload_data:
             self.payload_data = payload_data
         else:
             raise TypeError("Either payload or payload_data must be provided.")
+
+    def _encrypt_payload(self, payload):
+        """Uses EncryptionHelper to encrypt pii payload."""
+        iv = self.get_meta_attr_by_type(self.meta, InitializationVector)
+        if iv is None:
+            if self.meta is None:
+                self.meta = []
+            iv = InitializationVector()
+            self.meta.append(iv)
+        self.encryption_helper = EncryptionHelper(message=self)
+        return self.encryption_helper.encrypt_message_with_pii(payload)
 
     def __eq__(self, other):
         return type(self) is type(other) and self._eq_key == other._eq_key
@@ -434,16 +436,21 @@ class Message(object):
         """Encodes data, returning a repr in dry_run mode"""
         if self.dry_run:
             return repr(data)
-        return self._avro_string_writer.encode(message_avro_representation=data)
+        encoded_payload = self._avro_string_writer.encode(message_avro_representation=data)
+        self.contains_pii = None
+        if self.contains_pii:
+            encoded_payload = self._encrypt_payload(encoded_payload)
+        return encoded_payload
 
     def _decode_payload_if_necessary(self):
         if self._payload_data is None:
             self.contains_pii = None  # force contains_pii to be rechecked
+            encoded_message = self._payload
             if self.contains_pii:
                 iv = self.get_meta_attr_by_type(self.meta, InitializationVector)
-                self._payload = self.encryption_helper.decrypt_payload(iv, self._payload)
+                encoded_message = self.encryption_helper.decrypt_payload(iv, self._payload)
             self._payload_data = self._avro_string_reader.decode(
-                encoded_message=self._payload
+                encoded_message=encoded_message
             )
 
     def reload_data(self):

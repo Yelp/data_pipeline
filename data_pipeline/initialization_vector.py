@@ -5,7 +5,6 @@ from __future__ import unicode_literals
 import os
 
 import simplejson
-from cached_property import cached_property
 from Crypto import Random
 from Crypto.Cipher import AES
 
@@ -20,23 +19,23 @@ class InitializationVector(MetaAttribute):
     message.
     """
 
-    @cached_property
+    @property
     def owner_email(self):
         return 'bam+data_pipeline@yelp.com'
 
-    @cached_property
+    @property
     def source(self):
         return 'initialization_vector'
 
-    @cached_property
+    @property
     def namespace(self):
         return 'yelp.data_pipeline'
 
-    @cached_property
+    @property
     def contains_pii(self):
         return False
 
-    @cached_property
+    @property
     def avro_schema(self):
         schema_path = os.path.join(
             os.path.dirname(__file__),
@@ -55,7 +54,7 @@ class InitializationVector(MetaAttribute):
         if not isinstance(vector_array, bytes) or not len(vector_array) == 16:
             raise TypeError('Initialization Vector must be a 16-byte array')
 
-    @cached_property
+    @property
     def payload(self):
         return self.initialization_vector_array
 
