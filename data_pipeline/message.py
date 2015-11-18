@@ -350,14 +350,14 @@ class Message(object):
         # _encryption_type should only be set during init
         self._encryption_type = get_config().encryption_type
         self.encryption_helper = None
-        self._set_payload_or_payload_data(payload, payload_data, contains_pii=contains_pii)
+        self._set_payload_or_payload_data(payload, payload_data)
         # TODO(DATAPIPE-416|psuben):
         # Make it so contains_pii is no longer overrideable.
         if topic:
             logger.debug("Overriding message topic: {0} for schema {1}."
                          .format(topic, schema_id))
 
-    def _set_payload_or_payload_data(self, payload, payload_data, contains_pii=False):
+    def _set_payload_or_payload_data(self, payload, payload_data):
         # payload or payload_data are lazily constructed only on request
         is_not_none_payload = payload is not None
         is_not_none_payload_data = payload_data is not None
@@ -365,7 +365,7 @@ class Message(object):
         if is_not_none_payload and is_not_none_payload_data:
             raise TypeError("Cannot pass both payload and payload_data.")
         if is_not_none_payload:
-            if contains_pii:
+            if self.contains_pii:
                 payload = self._encrypt_payload(payload)
             self.payload = payload
         elif is_not_none_payload_data:
