@@ -76,7 +76,7 @@ class _LibUUID(_UUIDBase):
 
     def __init__(self):
         # Store these on the class since they should only ever be called once
-        if _LibUUID._ffi is None:
+        if _LibUUID._ffi is None or _LibUUID._libuuid is None:
             _LibUUID._ffi = FFI()
 
             # These definitions are from uuid.h
@@ -91,6 +91,13 @@ class _LibUUID(_UUIDBase):
             _LibUUID._libuuid = _LibUUID._ffi.verify(
                 "#include <uuid/uuid.h>",
                 libraries=[str('uuid')]
+            )
+
+            get_config().logger.debug(
+                "FastUUID Created - FFI: (%s), LIBUUID: (%s)".format(
+                    _LibUUID._ffi,
+                    _LibUUID._libuuid
+                )
             )
 
         # Keeping only one copy of this around does result in
