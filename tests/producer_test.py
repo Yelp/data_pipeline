@@ -23,7 +23,7 @@ from data_pipeline.producer import PublicationUnensurableError
 from data_pipeline.testing_helpers.kafka_docker import capture_new_data_pipeline_messages
 from data_pipeline.testing_helpers.kafka_docker import capture_new_messages
 from data_pipeline.testing_helpers.kafka_docker import setup_capture_new_messages_consumer
-
+from tests.helpers.config import reconfigure
 
 class RandomException(Exception):
     pass
@@ -220,18 +220,19 @@ class TestProducer(TestProducerBase):
         producer,
         registered_schema
     ):
-        messages = self._publish_message(
-            topic,
-            self.create_message(
+        with reconfigure(encryption_type='AES_MODE_CBC-1'):
+            messages = self._publish_message(
                 topic,
-                payload,
-                registered_schema,
-                contains_pii=True
-            ),
-            producer
-        )
+                self.create_message(
+                    topic,
+                    payload,
+                    registered_schema,
+                    contains_pii=True
+                ),
+                producer
+            )
 
-        assert len(messages) == 0
+            assert len(messages) == 0
 
     def test_basic_publish_message_with_payload_data(
         self,
@@ -256,20 +257,21 @@ class TestProducer(TestProducerBase):
         payload = b'hello world!'
 
         with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
-            test_message = self.create_message(
-                topic,
-                payload,
-                registered_schema,
-                contains_pii=True
-            )
-            assert test_message.payload != payload
-            messages = self._publish_message(
-                topic,
-                test_message,
-                producer
-            )
-            assert len(messages) == 1
-            assert messages[0].payload_data == test_message.payload_data
+            with reconfigure(encryption_type='AES_MODE_CBC-1'):
+                test_message = self.create_message(
+                    topic,
+                    payload,
+                    registered_schema,
+                    contains_pii=True
+                )
+                assert test_message.payload != payload
+                messages = self._publish_message(
+                    topic,
+                    test_message,
+                    producer
+                )
+                assert len(messages) == 1
+                assert messages[0].payload_data == test_message.payload_data
 
     def test_publish_encrypted_message_from_payload_data_with_pii(
         self,
@@ -277,22 +279,23 @@ class TestProducer(TestProducerBase):
         producer,
         registered_schema
     ):
-        payload_data = {'good_field': 1}
+        payload_data = {'good_field': 20}
         with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
-            test_message = CreateMessage(
-                topic=topic,
-                payload_data=payload_data,
-                schema_id=registered_schema.schema_id,
-                timestamp=1500,
-                contains_pii=True
-            )
-            messages = self._publish_message(
-                topic,
-                test_message,
-                producer
-            )
-            assert len(messages) == 1
-            assert messages[0].payload_data == test_message.payload_data
+            with reconfigure(encryption_type='AES_MODE_CBC-1'):
+                test_message = CreateMessage(
+                    topic=topic,
+                    payload_data=payload_data,
+                    schema_id=registered_schema.schema_id,
+                    timestamp=1500,
+                    contains_pii=True
+                )
+                messages = self._publish_message(
+                    topic,
+                    test_message,
+                    producer
+                )
+                assert len(messages) == 1
+                assert messages[0].payload_data == test_message.payload_data
 
     def test_basic_publish_message_with_primary_keys(
         self,
@@ -300,23 +303,22 @@ class TestProducer(TestProducerBase):
         payload,
         producer,
         registered_schema,
-        envelope,
-        contains_pii
+        envelope
     ):
         sample_keys = (u'key1=\'', u'key2=\\', u'key3=哎ù\x1f')
         with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
-            with capture_new_messages(topic) as get_messages:
-                producer.publish(
-                    self.create_message(
-                        topic,
-                        payload,
-                        registered_schema,
-                        keys=sample_keys,
-                        contains_pii=contains_pii
+                with capture_new_messages(topic) as get_messages:
+                    producer.publish(
+                        self.create_message(
+                            topic,
+                            payload,
+                            registered_schema,
+                            keys=sample_keys,
+                            contains_pii=False
+                        )
                     )
-                )
-                producer.flush()
-            assert get_messages()[0].message.key == '\'key1=\\\'\'\x1f\'key2=\\\\\'\x1f\'key3=哎ù\x1f\''.encode('utf-8')
+                    producer.flush()
+                    assert get_messages()[0].message.key == '\'key1=\\\'\'\x1f\'key2=\\\\\'\x1f\'key3=哎ù\x1f\''.encode('utf-8')
 
 
 class TestPublishMonitorMessage(TestProducerBase):

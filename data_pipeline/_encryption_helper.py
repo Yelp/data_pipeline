@@ -52,10 +52,9 @@ class EncryptionHelper(object):
         if encryption_type is not None:
             return encryption_type.split('-')[-1]
         else:
-            list_of_files = os.listdir(os.path.dirname(self.key_location))
-            pattern = r"key-([0-9]+)"
-            max_key_file = max(list_of_files, key=lambda name: int(re.search(pattern, name).group(1)))
-            return re.search(pattern, max_key_file).group(1)
+            raise ValueError(
+                "Encryption type should be set."
+            )
 
     def _retrieve_key(self, key_id):
         with open(self.key_location.format(key_id), 'r') as f:
@@ -71,7 +70,7 @@ class EncryptionHelper(object):
         encrypter = AES.new(
             key,
             AES.MODE_CBC,
-            self.message.get_meta_attr_by_type(self.message.meta, InitializationVector).payload
+            self.message.get_meta_attr_by_type(self.message.meta, 'initialization_vector').payload
         )
         payload = self._pad_payload(payload)
         return encrypter.encrypt(payload)
