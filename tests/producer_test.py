@@ -25,6 +25,7 @@ from data_pipeline.testing_helpers.kafka_docker import capture_new_messages
 from data_pipeline.testing_helpers.kafka_docker import setup_capture_new_messages_consumer
 from tests.helpers.config import reconfigure
 
+
 class RandomException(Exception):
     pass
 
@@ -307,18 +308,18 @@ class TestProducer(TestProducerBase):
     ):
         sample_keys = (u'key1=\'', u'key2=\\', u'key3=哎ù\x1f')
         with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
-                with capture_new_messages(topic) as get_messages:
-                    producer.publish(
-                        self.create_message(
-                            topic,
-                            payload,
-                            registered_schema,
-                            keys=sample_keys,
-                            contains_pii=False
-                        )
+            with capture_new_messages(topic) as get_messages:
+                producer.publish(
+                    self.create_message(
+                        topic,
+                        payload,
+                        registered_schema,
+                        keys=sample_keys,
+                        contains_pii=False
                     )
-                    producer.flush()
-                    assert get_messages()[0].message.key == '\'key1=\\\'\'\x1f\'key2=\\\\\'\x1f\'key3=哎ù\x1f\''.encode('utf-8')
+                )
+                producer.flush()
+                assert get_messages()[0].message.key == '\'key1=\\\'\'\x1f\'key2=\\\\\'\x1f\'key3=哎ù\x1f\''.encode('utf-8')
 
 
 class TestPublishMonitorMessage(TestProducerBase):

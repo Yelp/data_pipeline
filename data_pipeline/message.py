@@ -177,7 +177,7 @@ class Message(object):
     @contains_pii.setter
     def contains_pii(self, contains_pii):
         self._contains_pii = contains_pii
-        self._encryption_type = None #force encryption_type to be rechecked
+        self._encryption_type = None  # force encryption_type to be rechecked
 
     @property
     def encryption_type(self):
@@ -430,7 +430,6 @@ class Message(object):
 
     @property
     def avro_repr(self):
-        self.reload_data()
         return {
             'uuid': self.uuid,
             'message_type': self.message_type.name,
@@ -460,7 +459,8 @@ class Message(object):
             if self.encryption_type is not None:
                 iv = self.get_meta_attr_by_type(self.meta, 'initialization_vector')
                 if iv is None:
-                    import ipdb; ipdb.set_trace()
+                    import ipdb
+                    ipdb.set_trace()
                 if self.encryption_helper is None:
                     self.encryption_helper = EncryptionHelper(message=self)
                 encoded_message = self.encryption_helper.decrypt_payload(iv, self._payload)
