@@ -66,7 +66,6 @@ class Envelope(object):
         # words, the version number of the current schema is the null byte.  In
         # the event we need to add additional envelope versions, we'll use this
         # byte to identify it.
-        message.reload_data()
         return bytes(0) + self._avro_string_writer.encode(message.avro_repr)
 
     def unpack(self, packed_message):
