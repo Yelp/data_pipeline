@@ -2,13 +2,9 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import os
-import re
-
 from Crypto.Cipher import AES
 
 from data_pipeline.config import get_config
-from data_pipeline.initialization_vector import InitializationVector
 
 
 class EncryptionHelper(object):

@@ -35,16 +35,3 @@ class TestInitializationVector(object):
     def test_initialization_vector_creation(self, new_initialization_vector):
         assert isinstance(new_initialization_vector, InitializationVector)
         assert isinstance(new_initialization_vector.avro_repr['payload'], bytes)
-
-    def test_create_message_with_initialization_vector(
-        self,
-        vector_payload,
-        new_initialization_vector
-    ):
-        test_message = CreateMessage(
-            1,
-            topic=str('my-topic'),
-            payload=bytes(10),
-            meta=[new_initialization_vector]
-        )
-        assert test_message.meta[0] == new_initialization_vector

@@ -27,7 +27,7 @@ def _prepare(envelope_and_message):
             kwargs['key'] = envelope_and_message.envelope.pack_keys(
                 envelope_and_message.message.keys
             )
-
+        print envelope_and_message.message.payload
         return create_message(
             envelope_and_message.envelope.pack(envelope_and_message.message),
             **kwargs

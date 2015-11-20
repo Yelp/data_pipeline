@@ -298,6 +298,8 @@ class Message(object):
     def payload(self, payload):
         if not isinstance(payload, bytes):
             raise TypeError("Payload must be bytes")
+        if self.contains_pii:
+            payload = self._encrypt_payload(payload)
         self._payload = payload
         self._payload_data = None  # force payload_data to be re-decoded
 
@@ -381,12 +383,9 @@ class Message(object):
         if is_not_none_payload and is_not_none_payload_data:
             raise TypeError("Cannot pass both payload and payload_data.")
         if is_not_none_payload:
-            if self.contains_pii:
-                payload = self._encrypt_payload(payload)
             self.payload = payload
         elif is_not_none_payload_data:
             self.payload_data = payload_data
-            self.reload_data()
         else:
             raise TypeError("Either payload or payload_data must be provided.")
 
@@ -458,9 +457,6 @@ class Message(object):
             encoded_message = self._payload
             if self.encryption_type is not None:
                 iv = self.get_meta_attr_by_type(self.meta, 'initialization_vector')
-                if iv is None:
-                    import ipdb
-                    ipdb.set_trace()
                 if self.encryption_helper is None:
                     self.encryption_helper = EncryptionHelper(message=self)
                 encoded_message = self.encryption_helper.decrypt_payload(iv, self._payload)
@@ -782,7 +778,6 @@ def _create_message_from_packed_message(
             {'previous_payload': unpacked_message['previous_payload']}
         )
     message = message_class(**message_params)
-    #import ipdb; ipdb.set_trace()
     if force_payload_decoding:
         # Access the cached, but lazily-calculated, properties
         message.reload_data()

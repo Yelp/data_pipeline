@@ -12,6 +12,9 @@ from data_pipeline.config import get_config
 
 logger = get_config().logger
 
+def get_payload(message):
+    getattr(message, 'payload')
+    return message
 
 class PooledKafkaProducer(LoggingKafkaProducer):
     """PooledKafkaProducer extends KafkaProducer to use a pool of subprocesses
@@ -72,6 +75,10 @@ class PooledKafkaProducer(LoggingKafkaProducer):
         # free workers). The send-requests workers can then send the messages
         # in bulk or every certain amount of time. The down side is this is a
         # more complicated approach.
+        """for topic, messages in self.message_buffer.items():
+            # First we force the messages to encode their payloads
+            new_messages = self.pool.map(get_payload, messages)
+            self.message_buffer[topic] = new_messages"""
         topics_and_messages_result = [
             (topic, self.pool.map_async(
                 _prepare,

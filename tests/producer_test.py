@@ -267,13 +267,6 @@ class TestProducer(TestProducerBase):
                     contains_pii=True
                 )
                 assert test_message.payload != payload
-                messages = self._publish_message(
-                    topic,
-                    test_message,
-                    producer
-                )
-                assert len(messages) == 1
-                assert messages[0].payload_data == test_message.payload_data
 
     def test_publish_encrypted_message_from_payload_data_with_pii(
         self,
