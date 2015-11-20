@@ -5,7 +5,6 @@ from __future__ import unicode_literals
 import pytest
 
 from data_pipeline.initialization_vector import InitializationVector
-from data_pipeline.message import CreateMessage
 
 
 class TestInitializationVector(object):

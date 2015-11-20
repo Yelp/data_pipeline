@@ -258,8 +258,8 @@ class TestProducer(TestProducerBase):
     ):
         payload = b'hello world!'
 
-        with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
-            with reconfigure(encryption_type='AES_MODE_CBC-1'):
+        with reconfigure(encryption_type='AES_MODE_CBC-1'):
+            with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
                 test_message = self.create_message(
                     topic,
                     payload,
@@ -271,12 +271,12 @@ class TestProducer(TestProducerBase):
     def test_publish_encrypted_message_from_payload_data_with_pii(
         self,
         topic,
-        producer,
-        registered_schema
+        producer_instance,
+        registered_schema,
     ):
         payload_data = {'good_field': 20}
-        with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
-            with reconfigure(encryption_type='AES_MODE_CBC-1'):
+        with reconfigure(encryption_type='AES_MODE_CBC-1'), reconfigure(skip_messages_with_pii=False):
+            with producer_instance as producer:
                 test_message = CreateMessage(
                     topic=topic,
                     payload_data=payload_data,

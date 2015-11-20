@@ -360,7 +360,6 @@ class Message(object):
         # Make it so contains_pii is no longer overrideable.
         self.contains_pii = contains_pii
         self.meta = meta
-        self._encryption_type = None
         self.encryption_helper = None
         self._set_payload_or_payload_data(payload, payload_data)
         if topic:
@@ -388,12 +387,6 @@ class Message(object):
             self.payload_data = payload_data
         else:
             raise TypeError("Either payload or payload_data must be provided.")
-
-    def _encrypt_payload(self, payload):
-        """Uses EncryptionHelper to encrypt pii payload."""
-        self._append_initialization_vector()
-        self.encryption_helper = EncryptionHelper(message=self)
-        return self.encryption_helper.encrypt_message_with_pii(payload)
 
     def __eq__(self, other):
         return type(self) is type(other) and self._eq_key == other._eq_key
@@ -451,6 +444,12 @@ class Message(object):
         if self.encryption_type is not None:
             encoded_payload = self._encrypt_payload(encoded_payload)
         return encoded_payload
+
+    def _encrypt_payload(self, payload):
+        """Uses EncryptionHelper to encrypt pii payload."""
+        self._append_initialization_vector()
+        self.encryption_helper = EncryptionHelper(message=self)
+        return self.encryption_helper.encrypt_message_with_pii(payload)
 
     def _decode_payload_if_necessary(self):
         if self._payload_data is None:
