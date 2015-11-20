@@ -47,7 +47,9 @@ class Tailer(Batch):
             help=(
                 'The topic to tail.  Can be specified multiple times to tail '
                 'more than one topic.  Topics can optionally include an offset '
-                'by formatting the topic like "topic_name|offset".'
+                'by formatting the topic like "topic_name|offset".  If offset '
+                'is not specified, its value will come from '
+                '--offset-reset-location.'
             ),
         )
         opt_group.add_option(
@@ -126,22 +128,15 @@ class Tailer(Batch):
         )
 
         self._setup_topics()
-
-        if self.options.namespace or self.options.source:
-            schematizer = get_schematizer()
-            additional_topics = schematizer.get_topics_by_criteria(
-                namespace_name=self.options.namespace,
-                source_name=self.options.source
-            )
-            for topic in additional_topics:
-                if str(topic.name) not in self.topics:
-                    self.topics[str(topic.name)] = None
-
-        if len(self.topics) == 0:
+        if len(self.topic_to_offsets_map) == 0:
             self.option_parser.error("At least one topic must be specified.")
 
     def _setup_topics(self):
-        self.topics = {}
+        self.topic_to_offsets_map = {}
+        self._setup_manual_topics()
+        self._setup_schematizer_topics()
+
+    def _setup_manual_topics(self):
         for topic in self.options.topics:
             offset = None
 
@@ -151,7 +146,18 @@ class Tailer(Batch):
                 topic = match.group(1)
                 offset = ConsumerTopicState({0: int(match.group(2))}, None)
 
-            self.topics[str(topic)] = offset
+            self.topic_to_offsets_map[str(topic)] = offset
+
+    def _setup_schematizer_topics(self):
+        if self.options.namespace or self.options.source:
+            schematizer = get_schematizer()
+            additional_topics = schematizer.get_topics_by_criteria(
+                namespace_name=self.options.namespace,
+                source_name=self.options.source
+            )
+            for topic in additional_topics:
+                if str(topic.name) not in self.topic_to_offsets_map:
+                    self.topic_to_offsets_map[str(topic.name)] = None
 
     @batch_configure
     def _configure_signals(self):
@@ -164,7 +170,7 @@ class Tailer(Batch):
 
     def run(self):
         get_config().logger.info(
-            "Starting to consume from {}".format(self.options.topics)
+            "Starting to consume from {}".format(self.topic_to_offsets_map)
         )
 
         with Consumer(
@@ -175,7 +181,7 @@ class Tailer(Batch):
             ),
             'bam',
             ExpectedFrequency.constantly,
-            self.topics,
+            self.topic_to_offsets_map,
             auto_offset_reset=self.options.offset_reset_location
         ) as consumer:
             message_count = 0

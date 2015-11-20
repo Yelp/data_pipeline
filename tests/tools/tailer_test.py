@@ -65,7 +65,9 @@ class TestTailer(object):
             yield producer
 
     def test_version(self, batch):
-        assert data_pipeline.__version__ in batch.version
+        assert batch.version == "data_pipeline {}".format(
+            data_pipeline.__version__
+        )
 
     def test_without_topics(self, batch, mock_exit):
         self._init_batch(batch, [])
@@ -228,7 +230,7 @@ class TestTailer(object):
         assert kwargs == {'namespace_name': namespace, 'source_name': source}
 
     def _assert_topics(self, batch, topics):
-        assert batch.topics == {topic: None for topic in topics}
+        assert batch.topic_to_offsets_map == {topic: None for topic in topics}
 
     def _publish_and_set_topic_offset(self, message, producer, topic):
         producer.publish(message)
