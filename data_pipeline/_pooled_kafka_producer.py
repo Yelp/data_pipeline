@@ -13,11 +13,6 @@ from data_pipeline.config import get_config
 logger = get_config().logger
 
 
-def get_payload(message):
-    getattr(message, 'payload')
-    return message
-
-
 class PooledKafkaProducer(LoggingKafkaProducer):
     """PooledKafkaProducer extends KafkaProducer to use a pool of subprocesses
     to schematize and pack envelopes, instead of performing those operations
