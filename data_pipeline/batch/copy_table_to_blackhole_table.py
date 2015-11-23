@@ -52,7 +52,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         opt_group.add_option(
             '--database',
             dest='database',
-            help='Specify the database to switch to after connecting to the cluster.'
+            help='Specify the database to switch to after connecting to the '
+                 'cluster.'
         )
         opt_group.add_option(
             '--table-name',
@@ -220,7 +221,12 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
     def initial_action(self):
         if self.database:
-            self.execute_sql("USE {0}".format(self.database), is_write_session=True)
+            self.execute_sql(
+                "USE {0}".format(
+                    self.database
+                ),
+                is_write_session=True
+            )
         self.create_table_from_src_table()
         self._after_processing_rows()
 
