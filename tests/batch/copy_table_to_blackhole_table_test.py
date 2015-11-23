@@ -62,6 +62,17 @@ class TestFullRefreshRunner(object):
         yield batch
 
     @pytest.yield_fixture
+    def refresh_batch_db_option(self, table_name):
+        batch = FullRefreshRunner()
+        batch.process_commandline_options([
+            '--dry-run',
+            '--table-name={0}'.format(table_name),
+            '--database={0}'.format("yelp")
+        ])
+        batch._init_global_state()
+        yield batch
+
+    @pytest.yield_fixture
     def refresh_batch_custom_where(self, table_name):
         batch = FullRefreshRunner()
         batch.process_commandline_options([
@@ -145,13 +156,30 @@ class TestFullRefreshRunner(object):
         ) as mock_create:
             yield mock_create
 
-    def test_initial_action(
+    def test_initial_action_no_db(
         self,
         refresh_batch,
+        mock_execute,
         mock_process_rows,
         mock_create_table_src
     ):
         refresh_batch.initial_action()
+        assert mock_execute.call_count == 0
+        mock_create_table_src.assert_called_once_with()
+        mock_process_rows.assert_called_once_with()
+
+    def test_initial_action_with_db(
+        self,
+        refresh_batch_db_option,
+        mock_execute,
+        mock_process_rows,
+        mock_create_table_src
+    ):
+        refresh_batch_db_option.initial_action()
+        mock_execute.assert_called_once_with(
+            "USE yelp",
+            is_write_session=True
+        )
         mock_create_table_src.assert_called_once_with()
         mock_process_rows.assert_called_once_with()
 
