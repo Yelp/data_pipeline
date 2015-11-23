@@ -222,8 +222,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
     def initial_action(self):
         if self.database:
             self.execute_sql(
-                "USE {0}".format(
-                    self.database
+                "USE {database}".format(
+                    database=self.database
                 ),
                 is_write_session=True
             )
