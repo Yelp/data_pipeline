@@ -318,6 +318,26 @@ class Producer(Client):
 
     def _get_high_water_mark_for_messages(self, topic_list):
         kafka_client = get_config().kafka_client
-        topic_watermarks = get_topics_watermarks(kafka_client, topic_list)
+        # raise_on_error must be set to False, otherwise this call will raise
+        # an exception when any topic doesn't exist, preventing the topic from
+        # ever being created in the context of ensure_messages_published
+        #
+        # get_topics_watermarks only returns information for topics that exist,
+        # so we have to manually set a highmark of 0 for topics that don't
+        # exist.
+        topic_watermarks = get_topics_watermarks(
+            kafka_client,
+            topic_list,
+            raise_on_error=False
+        )
 
-        return {topic: partition_offsets[0].highmark for topic, partition_offsets in topic_watermarks.iteritems()}
+        topic_to_highmark_map = {
+            topic: partition_offsets[0].highmark
+            for topic, partition_offsets in topic_watermarks.iteritems()
+        }
+
+        for topic in topic_list:
+            if topic not in topic_to_highmark_map:
+                topic_to_highmark_map[topic] = 0
+
+        return topic_to_highmark_map

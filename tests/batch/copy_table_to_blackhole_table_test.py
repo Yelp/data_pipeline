@@ -11,6 +11,10 @@ from data_pipeline.batch.copy_table_to_blackhole_table import FullRefreshRunner
 class TestFullRefreshRunner(object):
 
     @pytest.fixture
+    def database_name(self):
+        return "yelp"
+
+    @pytest.fixture
     def table_name(self):
         return "test_db"
 
@@ -57,6 +61,17 @@ class TestFullRefreshRunner(object):
             '--dry-run',
             '--table-name={0}'.format(table_name),
             '--primary=id'
+        ])
+        batch._init_global_state()
+        yield batch
+
+    @pytest.yield_fixture
+    def refresh_batch_db_option(self, database_name, table_name):
+        batch = FullRefreshRunner()
+        batch.process_commandline_options([
+            '--dry-run',
+            '--table-name={0}'.format(database_name),
+            '--database={0}'.format("yelp")
         ])
         batch._init_global_state()
         yield batch
@@ -145,15 +160,35 @@ class TestFullRefreshRunner(object):
         ) as mock_create:
             yield mock_create
 
-    def test_initial_action(
+    def test_initial_action_no_db(
         self,
         refresh_batch,
+        mock_execute,
         mock_process_rows,
         mock_create_table_src
     ):
         refresh_batch.initial_action()
-        mock_create_table_src.assert_called_once_with()
-        mock_process_rows.assert_called_once_with()
+        assert mock_execute.call_count == 0
+        self.assert_initial_action(mock_create_table_src, mock_process_rows)
+
+    def test_initial_action_with_db(
+        self,
+        database_name,
+        refresh_batch_db_option,
+        mock_execute,
+        mock_process_rows,
+        mock_create_table_src
+    ):
+        refresh_batch_db_option.initial_action()
+        mock_execute.assert_called_once_with(
+            "USE {0}".format(database_name),
+            is_write_session=True
+        )
+        self.assert_initial_action(mock_create_table_src, mock_process_rows)
+
+    def assert_initial_action(self, mock_create, mock_process):
+        mock_create.assert_called_once_with()
+        mock_process.assert_called_once_with()
 
     def test_final_action(self, refresh_batch, temp_name, mock_execute):
         refresh_batch.final_action()
@@ -167,7 +202,12 @@ class TestFullRefreshRunner(object):
         refresh_batch._read_session.rollback.assert_called_once_with()
         assert refresh_batch._write_session.commit.call_count == 0
 
-    def test_build_select(self, refresh_batch, refresh_batch_custom_where, table_name):
+    def test_build_select(
+        self,
+        refresh_batch,
+        refresh_batch_custom_where,
+        table_name
+    ):
         offset = 0
         batch_size = refresh_batch_custom_where.options.batch_size
         expected_where_query = (
@@ -179,8 +219,15 @@ class TestFullRefreshRunner(object):
             offset=offset,
             batch_size=batch_size
         )
-        where_query = refresh_batch_custom_where.build_select('*', 'id', offset, batch_size)
-        expected_count_query = 'SELECT COUNT(*) FROM {origin}'.format(origin=table_name)
+        where_query = refresh_batch_custom_where.build_select(
+            '*',
+            'id',
+            offset,
+            batch_size
+        )
+        expected_count_query = 'SELECT COUNT(*) FROM {origin}'.format(
+            origin=table_name
+        )
         count_query = refresh_batch.build_select('COUNT(*)')
         assert expected_where_query == where_query
         assert expected_count_query == count_query
@@ -210,7 +257,9 @@ class TestFullRefreshRunner(object):
 
     def test_execute_sql_read(self, refresh_batch, sessions, fake_query):
         refresh_batch.execute_sql(fake_query, is_write_session=False)
-        refresh_batch._read_session.execute.assert_called_once_with(fake_query)
+        refresh_batch._read_session.execute.assert_called_once_with(
+            fake_query
+        )
         assert refresh_batch._write_session.execute.call_count == 0
 
     def test_execute_sql_write(self, refresh_batch, sessions, fake_query):
