@@ -76,10 +76,15 @@ class MetaAttribute(object):
 
     @cached_property
     def schema_id(self):
+        avro_schema_obj = self.schematizer.get_schema_by_schema_json(
+            self.avro_schema
+        )
+        if avro_schema_obj:
+            return avro_schema_obj.schema_id
         return self._register_schema()
 
     def _register_schema(self):
-        schema_info = self.schematizer.get_cached_or_register_schema(
+        schema_info = self.schematizer.register_schema_from_schema_json(
             namespace=self.namespace,
             source=self.source,
             schema_json=self.avro_schema,

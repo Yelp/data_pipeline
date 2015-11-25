@@ -55,6 +55,31 @@ class SchematizerClient(object):
             self._update_cache_by_schema(_schema)
         return _schema
 
+    def make_avro_schema_key(self, schema_json):
+        return simplejson.dumps(schema_json, sort_keys=True)
+
+    def get_schema_by_schema_json(self, schema_json):
+        """ Get schema object if one exists for a given avro schema.
+        If not, return None.
+
+        Args:
+            schema_json (dict or list): Python object representation of the
+                avro schema json.
+
+        Returns:
+            (data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
+                Avro Schema object.
+        """
+        cached_schema = self._avro_schema_cache.get(
+            self.make_avro_schema_key(schema_json)
+        )
+        if cached_schema:
+            _schema = _AvroSchema.from_cache_value(cached_schema)
+            _schema.topic = self._get_topic_by_name(cached_schema['topic_name'])
+            return _schema.to_result()
+        else:
+            return None
+
     def get_topic_by_name(self, topic_name):
         """Get the topic of given topic name.
 
@@ -247,51 +272,6 @@ class SchematizerClient(object):
             base_schema_id=base_schema_id
         )
 
-    def get_cached_or_register_schema(
-        self,
-        namespace,
-        source,
-        schema_json,
-        source_owner_email,
-        contains_pii,
-        base_schema_id=None
-    ):
-        """ Get schema object if one exists for a given avro schema. If not,
-        register a new schema and return newly created schema object.
-
-        Args:
-            namespace (str): The namespace the new schema is registered to.
-            source (str): The source the new schema is registered to.
-            schema_json (dict or list): Python object representation of the
-                avro schema json.
-            source_owner_email (str): The owner email of the given source.
-            contains_pii (bool): Indicates if the schema being registered has
-                at least one field that can potentially contain PII.
-                See http://y/pii for help identifying what is or is not PII.
-            base_schema_id (Optional[int]): The id of the original schema which
-                the new schema was changed based on
-
-        Returns:
-            (data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
-                Avro Schema object.
-        """
-        cached_schema = self._avro_schema_cache.get(
-            simplejson.dumps(schema_json, sort_keys=True)
-        )
-        if cached_schema:
-            _schema = _AvroSchema.from_cache_value(cached_schema)
-            _schema.topic = self._get_topic_by_name(cached_schema['topic_name'])
-            return _schema.to_result()
-        else:
-            return self.register_schema_from_schema_json(
-                namespace,
-                source,
-                schema_json,
-                source_owner_email,
-                contains_pii,
-                base_schema_id
-            )
-
     def register_schema_from_mysql_stmts(
         self,
         namespace,
@@ -386,7 +366,7 @@ class SchematizerClient(object):
         self._schema_cache[new_schema.schema_id] = new_schema.to_cache_value()
         self._update_cache_by_topic(new_schema.topic)
         self._avro_schema_cache[
-            simplejson.dumps(new_schema.schema_json, sort_keys=True)
+            self.make_avro_schema_key(new_schema.schema_json)
         ] = new_schema.to_cache_value()
 
     def _update_cache_by_topic(self, new_topic):
