@@ -55,7 +55,7 @@ class SchematizerClient(object):
             self._update_cache_by_schema(_schema)
         return _schema
 
-    def make_avro_schema_key(self, schema_json):
+    def _make_avro_schema_key(self, schema_json):
         return simplejson.dumps(schema_json, sort_keys=True)
 
     def get_schema_by_schema_json(self, schema_json):
@@ -71,13 +71,15 @@ class SchematizerClient(object):
                 Avro Schema object.
         """
         cached_schema = self._avro_schema_cache.get(
-            self.make_avro_schema_key(schema_json)
+            self._make_avro_schema_key(schema_json)
         )
         if cached_schema:
             _schema = _AvroSchema.from_cache_value(cached_schema)
             _schema.topic = self._get_topic_by_name(cached_schema['topic_name'])
             return _schema.to_result()
         else:
+            # TODO(DATAPIPE-608|askatti): Add schematizer endpoint to return
+            # Schema object given a schema_json
             return None
 
     def get_topic_by_name(self, topic_name):
@@ -366,7 +368,7 @@ class SchematizerClient(object):
         self._schema_cache[new_schema.schema_id] = new_schema.to_cache_value()
         self._update_cache_by_topic(new_schema.topic)
         self._avro_schema_cache[
-            self.make_avro_schema_key(new_schema.schema_json)
+            self._make_avro_schema_key(new_schema.schema_json)
         ] = new_schema.to_cache_value()
 
     def _update_cache_by_topic(self, new_topic):
