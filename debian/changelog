@@ -1,3 +1,9 @@
+data-pipeline-tools (0.1.38) lucid; urgency=low
+
+  * Commit: Merge branch 'add-more-tailer-options'
+
+ -- Justin Cunningham <justinc@yelp.com>  Mon, 30 Nov 2015 11:53:06 -0800
+
 data-pipeline-tools (0.1.37) lucid; urgency=low
 
   * Commit: Make ensure_messages_published worked for topics that don't
