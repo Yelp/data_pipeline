@@ -534,6 +534,47 @@ class TestRegisterSchema(SchematizerClientTestBase):
         assert schema_one.topic.topic_id != schema_two.topic.topic_id
         assert schema_one.topic.name != schema_two.topic.name
 
+    def test_make_avro_schema_key(self, schematizer, schema_json):
+        assert schematizer.make_avro_schema_key(schema_json) == simplejson.dumps(schema_json, sort_keys=True)
+
+    def _get_different_schema_json(self, schema_json):
+        new_schema_json = schema_json.copy()
+        new_schema_json['name'] = 'biz_{0}'.format(random.random())
+        return new_schema_json
+
+    def test_get_schema_by_schema_json_returns_none_if_not_cached(
+        self,
+        schematizer,
+        schema_json
+    ):
+        new_schema_json = self._get_different_schema_json(schema_json)
+        assert schematizer.get_schema_by_schema_json(new_schema_json) is None
+
+    def test_get_schema_by_schema_json_returns_cached_schema(
+        self,
+        schematizer,
+        biz_src_name,
+        schema_json,
+        yelp_namespace
+    ):
+        new_schema_json = self._get_different_schema_json(schema_json)
+
+        schema_one = schematizer.register_schema_from_schema_json(
+            namespace=yelp_namespace,
+            source=biz_src_name,
+            schema_json=new_schema_json,
+            source_owner_email=self.source_owner_email,
+            contains_pii=False
+        )
+
+        with mock.patch.object(
+            SchematizerClient,
+            'register_schema_from_schema_json'
+        ) as mock_register_schema:
+            schema_two = schematizer.get_schema_by_schema_json(new_schema_json)
+            assert mock_register_schema.called == 0
+            assert schema_one == schema_two
+
 
 class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
 
