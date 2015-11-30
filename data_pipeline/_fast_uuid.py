@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import ctypes.util
 import uuid
 
 from cffi import FFI
@@ -88,13 +89,15 @@ class _LibUUID(_UUIDBase):
                 void uuid_generate_time(uuid_t out);
             """)
 
-            _LibUUID._libuuid = _LibUUID._ffi.verify(
-                "#include <uuid/uuid.h>",
-                libraries=[str('uuid')]
+            # By opening the library with dlopen, the compile step is skipped
+            # dodging a class of errors, since headers aren't needed, just the
+            # installed library.
+            _LibUUID._libuuid = _LibUUID._ffi.dlopen(
+                ctypes.util.find_library("uuid")
             )
 
             get_config().logger.debug(
-                "FastUUID Created - FFI: (%s), LIBUUID: (%s)".format(
+                "FastUUID Created - FFI: ({}), LIBUUID: ({})".format(
                     _LibUUID._ffi,
                     _LibUUID._libuuid
                 )
