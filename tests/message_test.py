@@ -2,6 +2,8 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+from uuid import UUID
+
 import mock
 import pytest
 from kafka import create_message
@@ -16,11 +18,19 @@ from data_pipeline.message import PayloadFieldDiff
 from data_pipeline.message_type import MessageType
 
 
+@pytest.mark.usefixtures("containers")
 class SharedMessageTest(object):
 
     @pytest.fixture
     def message(self, valid_message_data):
         return self.message_class(**valid_message_data)
+
+    @pytest.fixture
+    def registered_message(self, registered_schema):
+        return self.message_class(
+            schema_id=registered_schema.schema_id,
+            payload_data={'good_field': 42},
+        )
 
     @pytest.fixture(params=[
         None,
@@ -227,15 +237,17 @@ class SharedMessageTest(object):
     def test_get_topic_from_schematizer_by_default(
         self,
         registered_schema,
-        valid_message_data
+        registered_message
     ):
-        message_data = self._make_message_data(
-            valid_message_data,
-            schema_id=registered_schema.schema_id
-        )
-        message_data.pop('topic')
-        message = self.message_class(**message_data)
-        assert message.topic == str(registered_schema.topic.name)
+        assert registered_message.topic == str(registered_schema.topic.name)
+
+    def test_str(
+        self,
+        registered_message
+    ):
+        out_str = str(registered_message)
+        assert str(registered_message.payload_data) in out_str
+        assert UUID(bytes=registered_message.uuid).hex in out_str
 
 
 class PayloadOnlyMessageTest(SharedMessageTest):
@@ -325,6 +337,14 @@ class TestUpdateMessage(SharedMessageTest):
     def expected_message_type(self):
         return MessageType.update
 
+    @pytest.fixture
+    def registered_message(self, registered_schema):
+        return self.message_class(
+            schema_id=registered_schema.schema_id,
+            payload_data={'good_field': 42},
+            previous_payload_data={'good_field': 41}
+        )
+
     @pytest.fixture(params=[
         (bytes(10), None, bytes(100), None),
         (None, {'data': 'test'}, None, {'foo': 'bar'})
@@ -413,6 +433,13 @@ class TestUpdateMessage(SharedMessageTest):
         )
         expected_diff = {}
         self._test_has_changed_and_payload_diff(message_data_params, expected_diff)
+
+    def test_str_contains_update_specific_data(
+        self,
+        registered_message
+    ):
+        out_str = str(registered_message)
+        assert str(registered_message.previous_payload_data) in out_str
 
 
 class TestCreateFromMessageAndOffset(object):

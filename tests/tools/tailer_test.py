@@ -18,6 +18,7 @@ from data_pipeline.tools.tailer import Tailer
 
 @pytest.mark.usefixtures(
     "configure_teams",
+    "containers"
 )
 class TestTailer(object):
 
@@ -63,6 +64,11 @@ class TestTailer(object):
         with instance as producer:
             yield producer
 
+    def test_version(self, batch):
+        assert batch.version == "data_pipeline {}".format(
+            data_pipeline.__version__
+        )
+
     def test_without_topics(self, batch, mock_exit):
         self._init_batch(batch, [])
         self._assert_no_topics_error(mock_exit)
@@ -79,7 +85,7 @@ class TestTailer(object):
         namespace
     ):
         self._init_batch(batch, ['--namespace=%s' % namespace])
-        assert batch.options.topics == [topic_name]
+        self._assert_topics(batch, [topic_name])
         self._assert_get_topics_called(
             mock_get_topics_by_criteria,
             namespace=namespace
@@ -93,7 +99,7 @@ class TestTailer(object):
         source
     ):
         self._init_batch(batch, ['--source=%s' % source])
-        assert batch.options.topics == [topic_name]
+        self._assert_topics(batch, [topic_name])
         self._assert_get_topics_called(
             mock_get_topics_by_criteria,
             source=source
@@ -111,20 +117,18 @@ class TestTailer(object):
             '--namespace', namespace,
             '--source', source
         ])
-        assert batch.options.topics == [topic_name]
+        self._assert_topics(batch, [topic_name])
         self._assert_get_topics_called(
             mock_get_topics_by_criteria,
             namespace=namespace,
             source=source
         )
 
-    def test_output(
+    def test_tailing(
         self,
         batch,
         producer,
         message_with_payload_data,
-        namespace,
-        source,
         topic,
         capsys
     ):
@@ -132,26 +136,71 @@ class TestTailer(object):
 
         # Only run for one iteration - and publish a message before starting
         # that iteration.
-        def run_once_publishing_message():
-            if run_once_publishing_message.count > 0:
+        def run_once_publishing_message(message_count):
+            if message_count > 0:
                 return False
 
             producer.publish(message_with_payload_data)
             producer.flush()
-            run_once_publishing_message.count += 1
             return True
-        run_once_publishing_message.count = 0
 
         with mock.patch.object(
             Tailer,
-            'running',
-            new_callable=mock.PropertyMock,
+            'keep_running',
             side_effect=run_once_publishing_message
         ):
             batch.run()
 
         out, _ = capsys.readouterr()
         assert out == "{u'good_field': 100}\n"
+
+    def test_with_offset(
+        self,
+        batch,
+        producer,
+        message_with_payload_data,
+        topic,
+        capsys
+    ):
+        message_with_payload_data.payload_data['good_field'] = 42
+        topic_with_offset = self._publish_and_set_topic_offset(
+            message_with_payload_data,
+            producer,
+            topic
+        )
+        self._init_batch(batch, ['--topic', topic_with_offset, '--message-limit', '1'])
+
+        batch.run()
+
+        out, _ = capsys.readouterr()
+        assert out == "{u'good_field': 42}\n"
+
+    def test_with_envelope_data(
+        self,
+        batch,
+        producer,
+        message_with_payload_data,
+        topic,
+        capsys
+    ):
+        topic_with_offset = self._publish_and_set_topic_offset(
+            message_with_payload_data,
+            producer,
+            topic
+        )
+        self._init_batch(batch, [
+            '--topic', topic_with_offset,
+            '--message-limit', '1',
+            '--include-envelope-data'
+        ])
+
+        batch.run()
+
+        out, _ = capsys.readouterr()
+        assert "{u'good_field': 100}" in out
+        assert "'uuid'" in out
+        assert "'timestamp': 1500" in out
+        assert "'message_type': 'create'" in out
 
     def _init_batch(self, batch, batch_args):
         # Prevent loading the env config
@@ -179,3 +228,14 @@ class TestTailer(object):
     ):
         _, kwargs = mock_get_topics_by_criteria.call_args
         assert kwargs == {'namespace_name': namespace, 'source_name': source}
+
+    def _assert_topics(self, batch, topics):
+        assert batch.topic_to_offsets_map == {topic: None for topic in topics}
+
+    def _publish_and_set_topic_offset(self, message, producer, topic):
+        producer.publish(message)
+        producer.flush()
+        position_data = producer.get_checkpoint_position_data()
+        offset = position_data.topic_to_kafka_offset_map[topic]
+        topic_with_offset = "{}|{}".format(topic, offset - 1)
+        return topic_with_offset
