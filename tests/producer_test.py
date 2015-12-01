@@ -12,6 +12,7 @@ import mock
 import pytest
 import simplejson as json
 from kafka.common import FailedPayloadsError
+from kafka.common import LeaderNotAvailableError
 from kafka.common import ProduceRequest
 from kafka.common import ProduceResponse
 
@@ -615,6 +616,11 @@ class TestPublishMessagesWithRetry(TestProducerBase):
         producer.flush()
         return producer.get_checkpoint_position_data().topic_to_kafka_offset_map
 
+    @pytest.yield_fixture(autouse=True)
+    def setup_flush_time_limit(self):
+        # publish all msgs together
+        yield reconfigure(kafka_producer_flush_time_limit_seconds=10)
+
     def test_publish_succeeds_without_retry(self, topic, message, producer):
         with capture_new_messages(topic) as get_messages:
             producer.publish(message)
@@ -627,21 +633,20 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             producer._kafka_producer.kafka_client,
             'send_produce_request',
             side_effect=FailedPayloadsError
-        ) as mock_send_request, setup_capture_new_messages_consumer(
+        ) as mock_send_request, capture_new_messages(
             message.topic
-        ) as consumer, pytest.raises(
+        ) as get_messages, pytest.raises(
             MaxRetryError
         ):
             producer.publish(message)
             producer.flush()
 
-            messages = consumer.get_messages()
+            messages = get_messages()
             assert len(messages) == 0
             assert mock_send_request.call_count == self.max_retry_count
 
     def test_publish_to_new_topic(self, message, producer):
-        new_topic = str('retry.{}'.format(random.random()))
-        message.topic = new_topic
+        message.topic = self.generate_new_topic_name()
 
         with attach_spy_on_func(
             producer._kafka_producer.kafka_client,
@@ -655,10 +660,8 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             # more than 2 times.
             assert mock_send_request.call_count >= 2
 
-        with setup_capture_new_messages_consumer(new_topic) as consumer:
-            consumer.seek(0, 0)  # set to the first message
-            messages = consumer.get_messages()
-            self.assert_equal_msgs(expected_msgs=[message], actual_msgs=messages)
+        messages = self.get_messages_from_start(message.topic)
+        self.assert_equal_msgs(expected_msgs=[message], actual_msgs=messages)
 
     def test_publish_one_msg_succeeds_one_fails_after_retry(
         self,
@@ -677,8 +680,6 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             producer._kafka_producer.kafka_client,
             'send_produce_request',
             side_effect=side_effect
-        ), reconfigure(
-            kafka_producer_flush_time_limit_seconds=10  # publish all msgs together
         ), pytest.raises(
             MaxRetryError
         ) as e:
@@ -687,15 +688,15 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             producer.flush()
 
         actual_failed_requests, actual_published_msgs_count, _ = e.value.last_result
-        assert actual_published_msgs_count == 1
         expected_requests = [ProduceRequest(
             topic=another_message.topic,
             partition=0,
             messages=[_prepare(_EnvelopeAndMessage(Envelope(), another_message))]
         )]
         assert actual_failed_requests == expected_requests
+        assert actual_published_msgs_count == 1
 
-    def test_retry_false_failed_publish(self, message, topic, producer):
+    def test_retry_false_failed_publish(self, message, producer):
         orig_func = producer._kafka_producer.kafka_client.send_produce_request
 
         def run_original_func_but_throw_exception(*args, **kwargs):
@@ -706,41 +707,53 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             producer._kafka_producer.kafka_client,
             'send_produce_request',
             side_effect=run_original_func_but_throw_exception
-        ) as mock_send_request, setup_capture_new_messages_consumer(
-            topic
-        ) as consumer:
+        ) as mock_send_request, capture_new_messages(
+            message.topic
+        ) as get_messages:
             mock_send_request.reset()
             producer.publish(message)
             producer.flush()
 
-            messages = consumer.get_messages()
+            messages = get_messages()
             self.assert_equal_msgs(expected_msgs=[message], actual_msgs=messages)
             assert mock_send_request.call_count == 1  # should be no retry
 
-    def test_retry_failed_publish_without_highwatermark(self, message, topic, producer):
-        with mock.patch.object(
+    def test_retry_failed_publish_without_highwatermark(self, message, producer):
+        message.topic = self.generate_new_topic_name()
+
+        with attach_spy_on_func(
             producer._kafka_producer.kafka_client,
-            'send_produce_request',
-            side_effect=Exception
+            'send_produce_request'
         ) as mock_send_request, mock.patch(
-            'yelp_kafka.offsets.get_topics_watermarks',
+            'data_pipeline._kafka_producer.get_topics_watermarks',
             side_effect=Exception
-        ), setup_capture_new_messages_consumer(
-            topic
-        ) as consumer, pytest.raises(
-            MaxRetryError
-        ) as e:
+        ), pytest.raises(MaxRetryError) as e:
             mock_send_request.reset()
             producer.publish(message)
             producer.flush()
 
-            messages = consumer.get_messages()
-            assert len(messages) == 0
             assert mock_send_request.call_count == 1  # should be no retry
 
             _, _, excluded_requests = e.value.last_result
             assert len(excluded_requests) == 1
-            assert excluded_requests[0].topic == topic
+            assert excluded_requests[0].topic == message.topic
+
+        # The new topic shouldn't have any message; it is also ok if the topic
+        # hasn't been created yet.
+        try:
+            messages = self.get_messages_from_start(message.topic)
+            assert len(messages) == 0
+        except LeaderNotAvailableError:
+            # topic hasn't been created yet
+            pass
+
+    def generate_new_topic_name(self):
+        return str('retry.{}'.format(random.random()))
+
+    def get_messages_from_start(self, topic_name):
+        with setup_capture_new_messages_consumer(topic_name) as consumer:
+            consumer.seek(0, 0)  # set to the first message
+            return consumer.get_messages()
 
     def assert_equal_msgs(self, expected_msgs, actual_msgs):
         envelope = Envelope()
