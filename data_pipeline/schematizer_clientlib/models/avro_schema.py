@@ -20,6 +20,12 @@ Args:
         of the avro schema.
     base_schema_id (Optional[int]): The id of the base schema which this avro
         schema is changed based on.  `None` if there is no such base schema.
+    status (string): The status of the schema.  It could be: "RW" (read/write),
+        "R" (read-only), or "Disabled".  Read status means the schema can be
+        used to deserialize messages, and Write status means the schema can be
+        used to serialize messages.
+    primary_keys (list): List of primary key names.
+    note (Optional[str]): Information specified by users about the schema.
     created_at (str): The timestamp when the schema is created in ISO-8601
         format.
     updated_at (str): The timestamp when the schema is last updated in ISO-8601
@@ -27,7 +33,8 @@ Args:
 """
 AvroSchema = namedtuple(
     'AvroSchema',
-    ['schema_id', 'schema_json', 'topic', 'base_schema_id', 'created_at', 'updated_at']
+    ['schema_id', 'schema_json', 'topic', 'base_schema_id', 'status',
+     'primary_keys', 'note', 'created_at', 'updated_at']
 )
 
 
@@ -36,12 +43,15 @@ class _AvroSchema(BaseModel):
     facilitate constructing the return value of schematizer functions.
     """
 
-    def __init__(self, schema_id, schema_json, topic, base_schema_id,
-                 created_at, updated_at):
+    def __init__(self, schema_id, schema_json, topic, base_schema_id, status,
+                 primary_keys, note, created_at, updated_at):
         self.schema_id = schema_id
         self.schema_json = schema_json
         self.topic = topic
         self.base_schema_id = base_schema_id
+        self.status = status
+        self.primary_keys = primary_keys
+        self.note = note
         self.created_at = created_at
         self.updated_at = updated_at
 
@@ -52,6 +62,9 @@ class _AvroSchema(BaseModel):
             schema_json=simplejson.loads(response.schema),
             topic=_Topic.from_response(response.topic),
             base_schema_id=response.base_schema_id,
+            status=response.status,
+            primary_keys=response.primary_keys,
+            note=response.note,
             created_at=response.created_at,
             updated_at=response.updated_at
         )
@@ -62,6 +75,9 @@ class _AvroSchema(BaseModel):
             'schema_json': self.schema_json,
             'topic_name': self.topic.name,
             'base_schema_id': self.base_schema_id,
+            'status': self.status,
+            'primary_keys': self.primary_keys,
+            'note': self.note,
             'created_at': self.created_at,
             'updated_at': self.updated_at
         }
@@ -81,6 +97,9 @@ class _AvroSchema(BaseModel):
             schema_json=cache_value['schema_json'],
             topic=name_only_topic,
             base_schema_id=cache_value['base_schema_id'],
+            status=cache_value['status'],
+            primary_keys=cache_value['primary_keys'],
+            note=cache_value['note'],
             created_at=cache_value['created_at'],
             updated_at=cache_value['updated_at']
         )
@@ -91,6 +110,9 @@ class _AvroSchema(BaseModel):
             schema_json=self.schema_json,
             topic=self.topic.to_result(),
             base_schema_id=self.base_schema_id,
+            status=self.status,
+            primary_keys=self.primary_keys,
+            note=self.note,
             created_at=self.created_at,
             updated_at=self.updated_at
         )
