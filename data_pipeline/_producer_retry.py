@@ -8,12 +8,12 @@ from __future__ import unicode_literals
 
 from collections import namedtuple
 
-from enum import Enum
 from kafka.common import LeaderNotAvailableError
 from yelp_kafka import error
 
 from data_pipeline._kafka_util import get_actual_published_messages_count
 from data_pipeline.config import get_config
+from data_pipeline.publish_guarantee import PublishGuaranteeEnum
 
 
 _TopicPartition = namedtuple('_TopicOffset', ['topic_name', 'partition'])
@@ -30,12 +30,6 @@ class _Stats(namedtuple('_Stats', ['offset', 'message_count'])):
         )
 
 
-class PublishGuaranteeEnum(Enum):
-
-    exact_once = 0
-    at_least_once = 1
-
-
 class RetryHandler(object):
     """The class tracks the message publishing statistics in each retry,
     such as topic offset, number of published messages, etc., and determines
@@ -48,7 +42,8 @@ class RetryHandler(object):
         publish_guarantee=PublishGuaranteeEnum.exact_once,
         kafka_client=None
     ):
-        self.unpublished_requests = requests
+        self.initial_requests = requests
+        self.requests_to_be_sent = requests
         self.publish_guarantee = publish_guarantee
         self.success_topic_stats_map = {}
         self.success_topic_accum_stats_map = {}
@@ -66,40 +61,40 @@ class RetryHandler(object):
         """
         self.success_topic_stats_map = {}
 
-        failed_requests = self._update_success_requests_stats(
-            self.unpublished_requests,
+        requests_to_retry = self._update_success_requests_stats(
+            self.requests_to_be_sent,
             responses
         )
         if self.publish_guarantee == PublishGuaranteeEnum.exact_once:
-            failed_requests = self._verify_failed_requests(
-                failed_requests,
+            requests_to_retry = self._verify_failed_requests(
+                requests_to_retry,
                 topic_offsets
             )
 
-        self.unpublished_requests = failed_requests
+        self.requests_to_be_sent = requests_to_retry
 
     def _update_success_requests_stats(self, requests, responses):
         """Update publish stats of successful requests and return the list of
-        requests that do not have success responses.
+        requests that do not have success responses and need to be retried.
         """
         success_responses = {
             (r.topic, r.partition): r
             for r in responses if self._is_success_response(r)
         }
 
-        failed_requests = []
+        requests_to_retry = []
         for request in requests:
             topic, partition = request.topic, request.partition
 
             response = success_responses.get((topic, partition))
             if not response:
-                failed_requests.append(request)
+                requests_to_retry.append(request)
                 continue
 
             new_stats = _Stats(response.offset, len(request.messages))
             self._update_success_topic_stats(topic, partition, new_stats)
 
-        return failed_requests
+        return requests_to_retry
 
     def _is_success_response(self, response):
         """In our case, the response is either ProduceResponse (success) or
@@ -128,13 +123,13 @@ class RetryHandler(object):
         """
         # `get_topics_watermarks` fails all the topics if any partition leader
         # is not available, so here it checks each topic individually.
-        failed_requests = []
+        requests_to_retry = []
         for request in requests:
             topic, partition = request.topic, request.partition
             try:
                 published_count = self._get_published_msg_count(topic, topic_offsets)
                 if len(request.messages) != published_count:
-                    failed_requests.append(request)
+                    requests_to_retry.append(request)
                     continue
 
                 # Update stats for the request that actually succeeds
@@ -147,7 +142,7 @@ class RetryHandler(object):
                 # try to load the metadata for the latter case
                 should_retry = self._try_load_topic_metadata(request)
                 if should_retry:
-                    failed_requests.append(request)
+                    requests_to_retry.append(request)
 
             except Exception:
                 # Unable to get the high watermark of this topic; do not retry
@@ -155,7 +150,7 @@ class RetryHandler(object):
                 # successfully published.
                 pass
 
-        return failed_requests
+        return requests_to_retry
 
     def _get_published_msg_count(self, topic, topic_offsets):
         published_msgs_count_map = get_actual_published_messages_count(
@@ -182,3 +177,16 @@ class RetryHandler(object):
     def total_published_message_count(self):
         return sum(stats.message_count
                    for stats in self.success_topic_accum_stats_map.values())
+
+    @property
+    def has_unpublished_request(self):
+        """Whether any request from the initial publishing requests list hasn't
+        been successfully sent."""
+        request_topics_partitions = {
+            (r.topic, r.partition) for r in self.initial_requests
+        }
+        response_topics_partitions = {
+            (key.topic_name, key.partition)
+            for key in self.success_topic_accum_stats_map.keys()
+        }
+        return not request_topics_partitions.issubset(response_topics_partitions)

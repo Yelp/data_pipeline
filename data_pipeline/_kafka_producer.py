@@ -109,7 +109,7 @@ class KafkaProducer(object):
         retry_handler = RetryHandler(unpublished_requests)
 
         def has_unpublished_requests():
-            return bool(retry_handler.unpublished_requests)
+            return bool(retry_handler.requests_to_be_sent)
 
         retry_handler = retry_on_condition(
             retry_policy=self._publish_retry_policy,
@@ -118,7 +118,7 @@ class KafkaProducer(object):
             use_previous_result_as_param=True,
             retry_handler=retry_handler
         )
-        if self._any_failed_request(requests, retry_handler):
+        if retry_handler.has_unpublished_request:
             raise MaxRetryError(last_result=retry_handler)
 
     def _publish_requests(self, retry_handler):
@@ -129,11 +129,11 @@ class KafkaProducer(object):
             retry_handler: :class:`data_pipeline._producer_retry.RetryHandler`
                 that determines which messages should be retried next time.
         """
-        if not retry_handler.unpublished_requests:
+        if not retry_handler.requests_to_be_sent:
             return retry_handler
 
         responses = self._try_send_produce_requests(
-            retry_handler.unpublished_requests
+            retry_handler.requests_to_be_sent
         )
         retry_handler.update_unpublished_requests(
             responses,
@@ -170,16 +170,6 @@ class KafkaProducer(object):
                 message_count=stats.message_count
             )
             self.message_buffer.pop(topic)
-
-    def _any_failed_request(self, requests, last_retry_result):
-        request_topics_partitions = {
-            (r.topic, r.partition) for r in requests
-        }
-        response_topics_partitions = {
-            (key.topic_name, key.partition)
-            for key in last_retry_result.success_topic_accum_stats_map.keys()
-        }
-        return not request_topics_partitions.issubset(response_topics_partitions)
 
     def _publish_produce_requests_dry_run(self, requests):
         for request in requests:
