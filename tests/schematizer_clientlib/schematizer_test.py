@@ -157,9 +157,6 @@ class TestGetSchemaBySchemaJson(SchematizerClientTestBase):
     def schema_str(self, schema_json):
         return simplejson.dumps(schema_json)
 
-    def test_make_avro_schema_key(self, schematizer, schema_json):
-        assert schematizer._make_avro_schema_key(schema_json) == simplejson.dumps(schema_json, sort_keys=True)
-
     def test_get_schema_by_schema_json_returns_none_if_not_cached(
         self,
         schematizer,
