@@ -49,7 +49,7 @@ class RetryHandler(object):
         self.success_topic_accum_stats_map = {}
         self.kafka_client = kafka_client or get_config().kafka_client
 
-    def update_unpublished_requests(self, responses, topic_offsets=None):
+    def update_requests_to_be_sent(self, responses, topic_offsets=None):
         """Update stats from the responses of the publishing requests and
         determine which messages should be retried.
 

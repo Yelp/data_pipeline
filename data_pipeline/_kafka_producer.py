@@ -108,12 +108,12 @@ class KafkaProducer(object):
         unpublished_requests = list(requests)
         retry_handler = RetryHandler(unpublished_requests)
 
-        def has_unpublished_requests():
+        def has_requests_to_be_sent():
             return bool(retry_handler.requests_to_be_sent)
 
         retry_handler = retry_on_condition(
             retry_policy=self._publish_retry_policy,
-            retry_conditions=[Predicate(has_unpublished_requests)],
+            retry_conditions=[Predicate(has_requests_to_be_sent)],
             func_to_retry=self._publish_requests,
             use_previous_result_as_param=True,
             retry_handler=retry_handler
@@ -135,7 +135,7 @@ class KafkaProducer(object):
         responses = self._try_send_produce_requests(
             retry_handler.requests_to_be_sent
         )
-        retry_handler.update_unpublished_requests(
+        retry_handler.update_requests_to_be_sent(
             responses,
             self.position_data_tracker.topic_to_kafka_offset_map
         )
