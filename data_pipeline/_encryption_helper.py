@@ -83,7 +83,11 @@ class EncryptionHelper(object):
         length = 16 - (len(payload) % 16)
         return payload + chr(length) * length
 
-    def decrypt_payload(self, initialization_vector, decoded_payload):
+    def decrypt_payload(self, decoded_payload):
+        initialization_vector = self.message.get_meta_attr_by_type(
+            self.message.meta,
+            'initialization_vector'
+        )
         if initialization_vector is None:
             raise TypeError("InitializationVector must not be None")
         decrypter = AES.new(

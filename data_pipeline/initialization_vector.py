@@ -5,7 +5,6 @@ from __future__ import unicode_literals
 import os
 
 import simplejson
-from Crypto import Random
 from Crypto.Cipher import AES
 
 from data_pipeline.meta_attribute import MetaAttribute
@@ -46,8 +45,7 @@ class InitializationVector(MetaAttribute):
 
     def __init__(self, initialization_vector_array=None):
         if initialization_vector_array is None:
-            Random.atfork()  # required when encryption is happening in parallel
-            initialization_vector_array = Random.new().read(AES.block_size)
+            initialization_vector_array = os.urandom(AES.block_size)
         self._verify_init_params(initialization_vector_array)
         self.initialization_vector_array = initialization_vector_array
 

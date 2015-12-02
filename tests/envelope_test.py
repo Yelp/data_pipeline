@@ -54,6 +54,7 @@ class TestEnvelope(object):
             previous_payload = message.previous_payload
         return dict(
             encryption_type=message.encryption_type,
+            contains_pii=message.contains_pii,
             message_type=message.message_type.name,
             meta=[
                 meta_attr.avro_repr

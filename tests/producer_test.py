@@ -82,13 +82,6 @@ class TestProducerBase(object):
 
 class TestProducer(TestProducerBase):
 
-    @pytest.fixture(params=[
-        True,
-        False
-    ])
-    def contains_pii(self, request):
-        return request.param
-
     def create_message(self, topic_name, payload, registered_schema, **kwargs):
         return CreateMessage(
             topic=topic_name,
