@@ -83,6 +83,14 @@
       "doc": "If encryption is used, identifies the type and key used to encrypt the payload."
     },
     {
+      "name": "contains_pii",
+      "type": [
+        "null",
+        "boolean"
+      ],
+      "doc": "If encryption is used, identifies the type and key used to encrypt the payload."
+    },
+    {
       "name": "timestamp",
       "type": "int",
       "doc": "Time the message was produced."
