@@ -89,6 +89,9 @@ class SchematizerClientTestBase(object):
         assert actual.schema_json == simplejson.loads(expected_resp.schema)
         self._assert_topic_values(actual.topic, expected_resp.topic)
         assert actual.base_schema_id == expected_resp.base_schema_id
+        assert actual.status == expected_resp.status
+        assert actual.primary_keys == expected_resp.primary_keys
+        assert actual.note == expected_resp.note
         assert actual.created_at == expected_resp.created_at
         assert actual.updated_at == expected_resp.updated_at
 
@@ -662,6 +665,24 @@ class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
         assert pii_schema.topic.contains_pii
 
         assert non_pii_schema.topic.source == non_pii_schema.topic.source
+
+    def test_register_schema_with_primary_keys(
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name
+    ):
+        schema_sql = ('create table biz(id int(11) not null, name varchar(8), '
+                      'primary key (id));')
+        actual = schematizer.register_schema_from_mysql_stmts(
+            namespace=yelp_namespace,
+            source=biz_src_name,
+            source_owner_email=self.source_owner_email,
+            contains_pii=False,
+            new_create_table_stmt=schema_sql
+        )
+        expected = self._get_schema_by_id(actual.schema_id)
+        self._assert_schema_values(actual, expected)
 
 
 class TestGetTopicsByCriteria(SchematizerClientTestBase):
