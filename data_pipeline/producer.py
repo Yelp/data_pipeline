@@ -9,6 +9,7 @@ import simplejson as json
 from cached_property import cached_property
 
 from data_pipeline._kafka_producer import LoggingKafkaProducer
+from data_pipeline._kafka_util import get_actual_published_messages_count
 from data_pipeline._pooled_kafka_producer import PooledKafkaProducer
 from data_pipeline.client import Client
 from data_pipeline.config import get_config
@@ -213,7 +214,7 @@ class Producer(Client):
         """
         topic_messages_map = self._generate_topic_messages_map(messages)
         topic_actual_published_count_map = (
-            self._kafka_producer.get_actual_published_messages_count(
+            get_actual_published_messages_count(
                 topics=topic_messages_map.keys(),
                 topic_tracked_offset_map=topic_offsets
             )

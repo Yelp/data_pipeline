@@ -8,12 +8,10 @@ from collections import namedtuple
 
 from cached_property import cached_property
 from kafka import create_message
-from kafka.common import LeaderNotAvailableError
 from kafka.common import ProduceRequest
-from yelp_kafka import error
-from yelp_kafka.offsets import get_topics_watermarks
 
 from data_pipeline._position_data_tracker import PositionDataTracker
+from data_pipeline._producer_retry import RetryHandler
 from data_pipeline._retry_util import ExpBackoffPolicy
 from data_pipeline._retry_util import MaxRetryError
 from data_pipeline._retry_util import Predicate
@@ -107,60 +105,42 @@ class KafkaProducer(object):
         Each time the requests that are successfully published in the previous
         round will be removed from the requests and won't be published again.
         """
-        # TODO [DATAPIPE-325|clin] Have nicer handling
         unpublished_requests = list(requests)
-        published_msgs_count = 0
+        retry_handler = RetryHandler(unpublished_requests)
 
         def has_unpublished_requests():
-            return bool(unpublished_requests)
+            return bool(retry_handler.unpublished_requests)
 
-        failed_requests, published_count, excluded_requests = retry_on_condition(
+        retry_handler = retry_on_condition(
             retry_policy=self._publish_retry_policy,
             retry_conditions=[Predicate(has_unpublished_requests)],
             func_to_retry=self._publish_requests,
             use_previous_result_as_param=True,
-            unpublished_requests=unpublished_requests,
-            published_msgs_count=published_msgs_count,
-            excluded_requests=[]
+            retry_handler=retry_handler
         )
-        if excluded_requests:
-            raise MaxRetryError(
-                last_result=(failed_requests, published_count, excluded_requests)
-            )
+        if self._any_failed_request(requests, retry_handler):
+            raise MaxRetryError(last_result=retry_handler)
 
-    def _publish_requests(self, unpublished_requests, published_msgs_count,
-                          excluded_requests):
+    def _publish_requests(self, retry_handler):
         """Main function to publish message requests.  This function is wrapped
         with retry function and will be retried based on specified retry policy
 
         Args:
-            unpublished_requests: List of requests to be published
-            published_msgs_count: Number of messages successfully published so far
-            excluded_requests: List of requests that fail previously and cannot
-                be retried.
+            retry_handler: :class:`data_pipeline._producer_retry.RetryHandler`
+                that determines which messages should be retried next time.
         """
-        if not unpublished_requests:
-            return unpublished_requests, published_msgs_count, excluded_requests
+        if not retry_handler.unpublished_requests:
+            return retry_handler
 
-        responses = self._try_send_produce_requests(unpublished_requests)
-
-        published_count, failed_requests = self._process_success_responses(
-            unpublished_requests,
+        responses = self._try_send_produce_requests(
+            retry_handler.unpublished_requests
+        )
+        retry_handler.update_unpublished_requests(
             responses,
+            self.position_data_tracker.topic_to_kafka_offset_map
         )
-        published_msgs_count += published_count
-
-        published_count, retry_request_map = self._verify_failed_requests(
-            failed_requests,
-        )
-        published_msgs_count += published_count
-        excluded_requests += retry_request_map[False]
-
-        self._update_unpublished_requests(
-            unpublished_requests,
-            retry_request_map[True]
-        )
-        return unpublished_requests, published_msgs_count, excluded_requests
+        self._record_success_requests(retry_handler.success_topic_stats_map)
+        return retry_handler
 
     def _try_send_produce_requests(self, requests):
         # Either it throws exceptions and none of them succeeds, or it returns
@@ -180,153 +160,26 @@ class KafkaProducer(object):
             # maximum retry criteria.
             return []
 
-    def _process_success_responses(self, requests, responses):
-        success_resps = [r for r in responses if self._is_success_response(r)]
-        published_msgs_count = self._record_success_requests(
-            [(r.topic, r.offset) for r in success_resps],
-        )
-
-        failed_requests = self._get_failed_requests(requests, success_resps)
-        return published_msgs_count, failed_requests
-
-    def _is_success_response(self, response):
-        """In our case, the response is either ProduceResponse (success) or
-        FailedPayloadsError (failed) if no other exception is thrown.  The
-        ProduceResponse should have error == 0.
-        """
-        return not isinstance(response, Exception) and response.error == 0
-
-    def _get_failed_requests(self, requests, success_responses):
-        success_topics_and_partitions = set(
-            (r.topic, r.partition) for r in success_responses
-        )
-        return [r for r in requests
-                if (r.topic, r.partition) not in success_topics_and_partitions]
-
-    def _record_success_requests(self, success_topics_and_offsets):
-        published_msgs_count = 0
-        for topic, offset in success_topics_and_offsets:
+    def _record_success_requests(self, success_topic_stats_map):
+        for topic_partition, stats in success_topic_stats_map.iteritems():
+            topic = topic_partition.topic_name
+            assert stats.message_count == len(self.message_buffer[topic])
             self.position_data_tracker.record_messages_published(
                 topic=topic,
-                offset=offset,
-                message_count=len(self.message_buffer[topic])
+                offset=stats.offset,
+                message_count=stats.message_count
             )
-            published_msgs_count += len(self.message_buffer[topic])
             self.message_buffer.pop(topic)
-        return published_msgs_count
 
-    def _verify_failed_requests(self, requests):
-        """Verify if the requests actually fail by checking the high watermark
-        of the corresponding topics.  If the high watermark of a topic matches
-        the number of messages in the request, the request is considered as
-        successfully published, and the offset is saved in the position_data_tracker.
-
-        If the high watermark data cannot be retrieved and it is not due to
-        missing topic/partition, the request will be considered as failed but
-        won't be retried because it cannot determine whether the messages are
-        actually published.  Otherwise, the requests will be retried.
-        """
-        # `get_topics_watermarks` fails all the topics if any partition leader
-        # is not available, so here it checks each topic individually.
-        retry_requests_map = {True: [], False: []}
-        published_msgs_count = 0
-        topic_offset_map = self.position_data_tracker.topic_to_kafka_offset_map
-        for request in requests:
-            try:
-                topic = request.topic
-                published_msgs_count_map = self.get_actual_published_messages_count(
-                    [topic],
-                    topic_tracked_offset_map=topic_offset_map
-                )
-                published_count = published_msgs_count_map.get(topic)
-
-                if len(request.messages) != published_count:
-                    retry_requests_map[True].append(request)
-                    continue
-
-                published_msgs_count += published_count
-                offset = published_count + topic_offset_map[topic]
-                self._record_success_requests([(topic, offset)])
-
-            except (error.UnknownTopic, error.UnknownPartitions):
-                # May be due to the topic doesn't exist yet or stale metadata;
-                # try to load the metadata for the latter case
-                should_retry = self._try_load_topic_metadata(request)
-                retry_requests_map[should_retry].append(request)
-
-            except Exception:
-                # Unable to get the high watermark of this topic; do not retry
-                # this request since it's unclear if the messages are actually
-                # successfully published.
-                retry_requests_map[False].append(request)
-        return published_msgs_count, retry_requests_map
-
-    def _try_load_topic_metadata(self, request):
-        """Try to load the metadata of the topic of the given request.  It
-        returns True if the request should be retried, and False otherwise.
-        """
-        try:
-            self.kafka_client.load_metadata_for_topics(request.topic)
-            return True
-        except LeaderNotAvailableError:
-            # Topic doesn't exist yet but the broker is configured to create
-            # the topic automatically.
-            return True
-        except Exception:
-            return False
-
-    def get_actual_published_messages_count(
-        self,
-        topics,
-        topic_tracked_offset_map,
-        raise_on_error=True
-    ):
-        """Get the actual number of published messages of specified topics.
-
-        Args:
-            topics ([str]): List of topic names to get message count
-            topic_tracked_offset_map (dict(str, int)): dictionary which
-                contains each topic and its current stored offset value.
-            raise_on_error (Optional[bool]): if False,  the function ignores
-                missing topics and missing partitions. It still may fail on
-                the request send.  Default to True.
-
-        Returns:
-            dict(str, int): Each topic and its actual published messages count
-                since last offset.  If a topic or partition is missing when
-                `raise_on_error` is False, the returned dict will not contain
-                the missing topic.
-
-        Raises:
-            :class:`~yelp_kafka.error.UnknownTopic`: upon missing topics and
-                raise_on_error=True
-            :class:`~yelp_kafka.error.UnknownPartition`: upon missing partitions
-            and raise_on_error=True
-            FailedPayloadsError: upon send request error.
-        """
-        topic_watermarks = get_topics_watermarks(
-            self.kafka_client,
-            topics,
-            raise_on_error=raise_on_error
-        )
-
-        topic_to_published_msgs_count = {}
-        for topic, partition_offsets in topic_watermarks.iteritems():
-            high_watermark = partition_offsets[0].highmark
-            offset = topic_tracked_offset_map.get(topic, 0)
-            topic_to_published_msgs_count[topic] = high_watermark - offset
-
-        return topic_to_published_msgs_count
-
-    def _update_unpublished_requests(self, unpublished_requests, retry_requests):
-        # This is mainly for the retry condition `has_unpublished_requests` in
-        # the function `_publish_produce_requests`, which checks if it needs to
-        # retry sending the requests.
-        topics_and_partitions = set((r.topic, r.partition) for r in retry_requests)
-        for i in range(len(unpublished_requests) - 1, -1, -1):
-            r = unpublished_requests[i]
-            if (r.topic, r.partition) not in topics_and_partitions:
-                unpublished_requests.remove(unpublished_requests[i])
+    def _any_failed_request(self, requests, last_retry_result):
+        request_topics_partitions = {
+            (r.topic, r.partition) for r in requests
+        }
+        response_topics_partitions = {
+            (key.topic_name, key.partition)
+            for key in last_retry_result.success_topic_accum_stats_map.keys()
+        }
+        return not request_topics_partitions.issubset(response_topics_partitions)
 
     def _publish_produce_requests_dry_run(self, requests):
         for request in requests:
