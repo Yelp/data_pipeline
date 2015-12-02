@@ -636,6 +636,7 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             assert send_request_spy.call_count == 1
 
     def test_publish_fails_after_retry(self, message, producer):
+        # TODO(DATAPIPE-606|clin) investigate better way than mocking response
         with mock.patch.object(
             producer._kafka_producer.kafka_client,
             'send_produce_request',
@@ -677,6 +678,7 @@ class TestPublishMessagesWithRetry(TestProducerBase):
         topic,
         producer
     ):
+        # TODO(DATAPIPE-606|clin) investigate better way than mocking response
         self._refresh_topic_two_tracked_offset(producer, another_message)
 
         mock_response = ProduceResponse(topic, partition=0, error=0, offset=1)
@@ -701,6 +703,7 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             )
 
     def test_retry_false_failed_publish(self, message, producer):
+        # TODO(DATAPIPE-606|clin) investigate better way than mocking response
         orig_func = producer._kafka_producer.kafka_client.send_produce_request
 
         def run_original_func_but_throw_exception(*args, **kwargs):
