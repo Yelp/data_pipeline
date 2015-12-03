@@ -88,7 +88,7 @@
         "null",
         "boolean"
       ],
-      "doc": "If encryption is used, identifies the type and key used to encrypt the payload."
+      "doc": "Identifies whether the message contains sensitive information (PII)."
     },
     {
       "name": "timestamp",
