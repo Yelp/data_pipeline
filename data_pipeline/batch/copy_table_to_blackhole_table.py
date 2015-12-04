@@ -50,6 +50,12 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             help='Required: Specifies table cluster (default: %default).'
         )
         opt_group.add_option(
+            '--database',
+            dest='database',
+            help='Specify the database to switch to after connecting to the '
+                 'cluster.'
+        )
+        opt_group.add_option(
             '--table-name',
             dest='table_name',
             help='Required: Name of table to be refreshed.'
@@ -113,6 +119,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self.ro_replica_name = self.options.ro_replica
         self.rw_replica_name = self.options.rw_replica
         self.db_name = self.options.cluster
+        self.database = self.options.database
         self.table_name = self.options.table_name
         self.temp_table = '{table}_data_pipeline_refresh'.format(
             table=self.table_name
@@ -213,6 +220,13 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.log.info("Dry run: Writes would be committed here.")
 
     def initial_action(self):
+        if self.database:
+            self.execute_sql(
+                "USE {database}".format(
+                    database=self.database
+                ),
+                is_write_session=True
+            )
         self.create_table_from_src_table()
         self._after_processing_rows()
 

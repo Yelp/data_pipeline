@@ -213,15 +213,23 @@ class Producer(Client):
                 published.
         """
         topic_messages_map = self._generate_topic_messages_map(messages)
+        # raise_on_error must be set to False, otherwise this call will raise
+        # an exception when any topic doesn't exist, preventing the topic from
+        # ever being created in the context of ensure_messages_published
         topic_actual_published_count_map = (
             get_actual_published_messages_count(
                 topics=topic_messages_map.keys(),
-                topic_tracked_offset_map=topic_offsets
+                topic_tracked_offset_map=topic_offsets,
+                raise_on_error=False
             )
         )
 
         for topic, messages in topic_messages_map.iteritems():
-            already_published_count = topic_actual_published_count_map[topic]
+            # `get_actual_published_messages_count` only returns the message
+            # count for topics that exist, so for non-existent topics, here it
+            # sets the actual published message count to 0, i.e. high watermark
+            # is 0.
+            already_published_count = topic_actual_published_count_map.get(topic, 0)
             saved_offset = topic_offsets.get(topic, 0)
 
             info_to_log = dict(
