@@ -13,7 +13,6 @@ import mock
 import pytest
 import simplejson as json
 from kafka.common import FailedPayloadsError
-from kafka.common import LeaderNotAvailableError
 from kafka.common import ProduceRequest
 from kafka.common import ProduceResponse
 
@@ -651,7 +650,7 @@ class TestPublishMessagesWithRetry(TestProducerBase):
         with mock.patch.object(
             producer._kafka_producer.kafka_client,
             'send_produce_request',
-            side_effect=FailedPayloadsError
+            side_effect=[FailedPayloadsError]
         ) as mock_send_request, capture_new_messages(
             message.topic
         ) as get_messages, pytest.raises(
@@ -737,36 +736,31 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             assert mock_send_request.call_count == 1  # should be no retry
 
     def test_retry_failed_publish_without_highwatermark(self, message, producer):
-        message.topic = self.generate_new_topic_name()
-
-        with attach_spy_on_func(
+        # TODO(DATAPIPE-606|clin) investigate better way than mocking response
+        with mock.patch.object(
             producer._kafka_producer.kafka_client,
-            'send_produce_request'
-        ) as send_request_spy, mock.patch(
+            'send_produce_request',
+            side_effect=[FailedPayloadsError]
+        ) as mock_send_request, mock.patch(
             'data_pipeline._kafka_util.get_topics_watermarks',
             side_effect=Exception
-        ), pytest.raises(
+        ), capture_new_messages(
+            message.topic
+        ) as get_messages, pytest.raises(
             MaxRetryError
         ) as e:
-            send_request_spy.reset()
             producer.publish(message)
             producer.flush()
 
-            assert send_request_spy.call_count == 1  # should be no retry
+            assert mock_send_request.call_count == 1  # should be no retry
             self.assert_last_retry_result(
                 e.value.last_result,
                 message,
                 expected_published_msgs_count=0
             )
 
-        # The new topic shouldn't have any message; it is also ok if the topic
-        # hasn't been created yet.
-        try:
-            messages = self.get_messages_from_start(message.topic)
+            messages = get_messages()
             assert len(messages) == 0
-        except LeaderNotAvailableError:
-            # topic hasn't been created yet
-            pass
 
     def generate_new_topic_name(self):
         return str('retry.{}'.format(random.random()))

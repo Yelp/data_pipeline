@@ -9,25 +9,19 @@ from __future__ import unicode_literals
 from collections import namedtuple
 
 from kafka.common import LeaderNotAvailableError
-from yelp_kafka import error
 
 from data_pipeline._kafka_util import get_actual_published_messages_count
 from data_pipeline.config import get_config
 from data_pipeline.publish_guarantee import PublishGuaranteeEnum
 
 
-_TopicPartition = namedtuple('_TopicOffset', ['topic_name', 'partition'])
+logger = get_config().logger
 
 
-class _Stats(namedtuple('_Stats', ['offset', 'message_count'])):
+_TopicPartition = namedtuple('_TopicPartition', ['topic_name', 'partition'])
 
-    def __add__(self, other):
-        if type(other) is not type(self):
-            raise TypeError("Unable to add non _Stats type object.")
-        return _Stats(
-            self.offset + other.offset,
-            self.message_count + other.message_count
-        )
+
+_Stats = namedtuple('_Stats', ['offset', 'message_count'])
 
 
 class RetryHandler(object):
@@ -35,6 +29,9 @@ class RetryHandler(object):
     such as topic offset, number of published messages, etc., and determines
     which messages should be retried based on specified publishing guarantee.
     """
+
+    # The logging is explicitly added in the class instead of being delegated to
+    # `LoggingKafkaProducer` to help tracking issues when they occur.
 
     def __init__(
         self,
@@ -60,7 +57,6 @@ class RetryHandler(object):
                 producer so far.  It is used for exact-once publishing guarantee.
         """
         self.success_topic_stats_map = {}
-
         requests_to_retry = self._update_success_requests_stats(
             self.requests_to_be_sent,
             responses
@@ -70,7 +66,6 @@ class RetryHandler(object):
                 requests_to_retry,
                 topic_offsets
             )
-
         self.requests_to_be_sent = requests_to_retry
 
     def _update_success_requests_stats(self, requests, responses):
@@ -106,9 +101,7 @@ class RetryHandler(object):
     def _update_success_topic_stats(self, topic, partition, new_stats):
         key = _TopicPartition(topic, partition)
         self.success_topic_stats_map[key] = new_stats
-
-        accum_stats = self.success_topic_accum_stats_map.get(key) or _Stats(0, 0)
-        self.success_topic_accum_stats_map[key] = accum_stats + new_stats
+        self.success_topic_accum_stats_map[key] = new_stats
 
     def _verify_failed_requests(self, requests, topic_offsets):
         """Verify if the requests actually fail by checking the high watermark
@@ -119,35 +112,61 @@ class RetryHandler(object):
         If the high watermark data cannot be retrieved and it is not due to
         missing topic/partition, the request will be considered as failed but
         won't be retried because it cannot determine whether the messages are
-        actually published.  Otherwise, the requests will be retried.
+        actually published.  Otherwise, the request will be retried.
         """
         # `get_topics_watermarks` fails all the topics if any partition leader
         # is not available, so here it checks each topic individually.
         requests_to_retry = []
         for request in requests:
             topic, partition = request.topic, request.partition
+            topic_desc = "topic {} partition {}".format(topic, partition)
             try:
+                logger.debug("Verifying failed {}.".format(topic_desc))
+
+                # try to load the metadata in case it is stale
+                success = self._try_load_topic_metadata(request)
+                if not success:
+                    logger.debug("Cannot load the metadata of topic {}. "
+                                 "Skip retrying {}.".format(topic, topic_desc))
+                    continue
+
                 published_count = self._get_published_msg_count(topic, topic_offsets)
                 if len(request.messages) != published_count:
+                    logger.debug(
+                        "Request message count {} doesn't match actual published "
+                        "message count {}. Retry {}.".format(
+                            len(request.messages),
+                            published_count,
+                            topic_desc
+                        )
+                    )
                     requests_to_retry.append(request)
                     continue
 
                 # Update stats for the request that actually succeeds
+                logger.debug("{} actually succeeded.".format(topic_desc))
                 offset = published_count + topic_offsets[topic]
                 new_stats = _Stats(offset, published_count)
                 self._update_success_topic_stats(topic, partition, new_stats)
 
-            except (error.UnknownTopic, error.UnknownPartitions):
-                # May be due to the topic doesn't exist yet or stale metadata;
-                # try to load the metadata for the latter case
-                should_retry = self._try_load_topic_metadata(request)
-                if should_retry:
-                    requests_to_retry.append(request)
+            except LeaderNotAvailableError:
+                # Topic doesn't exist yet but the broker is configured to create
+                # the topic automatically. Retry the request.
+                logger.debug(
+                    "Topic {} doesn't exists. Retry {}.".format(topic, topic_desc)
+                )
+                requests_to_retry.append(request)
 
             except Exception:
                 # Unable to get the high watermark of this topic; do not retry
                 # this request since it's unclear if the messages are actually
                 # successfully published.
+                logger.debug(
+                    "Cannot get the high watermark for {}. Skip retry.".format(
+                        topic_desc
+                    ),
+                    exc_info=1
+                )
                 pass
 
         return requests_to_retry
@@ -161,16 +180,19 @@ class RetryHandler(object):
 
     def _try_load_topic_metadata(self, request):
         """Try to load the metadata of the topic of the given request.  It
-        returns True if the request should be retried, and False otherwise.
+        returns True if it succeeds, and False otherwise with one exception:
+        if the topic doesn't exist but the broker is configured to create it
+        automatically, it will re-raise LeaderNotAvailableError.
         """
         try:
             self.kafka_client.load_metadata_for_topics(request.topic)
             return True
         except LeaderNotAvailableError:
-            # Topic doesn't exist yet but the broker is configured to create
-            # the topic automatically.
-            return True
+            raise
         except Exception:
+            logger.exception(
+                "Failed to load metadata of topic {}.".format(request.topic)
+            )
             return False
 
     @property
