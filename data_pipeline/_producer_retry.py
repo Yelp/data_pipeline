@@ -124,7 +124,7 @@ class RetryHandler(object):
                 logger.debug("Verifying failed {}.".format(topic_desc))
 
                 # try to load the metadata in case it is stale
-                success = self._try_load_topic_metadata(request)
+                success = self._try_load_topic_metadata(topic)
                 if not success:
                     logger.debug("Cannot load the metadata of topic {}. Skip {}."
                                  .format(topic, topic_desc))
@@ -176,21 +176,19 @@ class RetryHandler(object):
         )
         return published_msgs_count_map.get(topic)
 
-    def _try_load_topic_metadata(self, request):
+    def _try_load_topic_metadata(self, topic):
         """Try to load the metadata of the topic of the given request.  It
         returns True if it succeeds, and False otherwise with one exception:
         if the topic doesn't exist but the broker is configured to create it
         automatically, it will re-raise LeaderNotAvailableError.
         """
         try:
-            self.kafka_client.load_metadata_for_topics(request.topic)
+            self.kafka_client.load_metadata_for_topics(topic)
             return True
         except LeaderNotAvailableError:
             raise
         except Exception:
-            logger.exception(
-                "Failed to load metadata of topic {}.".format(request.topic)
-            )
+            logger.exception("Failed to load metadata of topic {}.".format(topic))
             return False
 
     @property
