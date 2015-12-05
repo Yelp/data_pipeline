@@ -119,15 +119,15 @@ class RetryHandler(object):
         requests_to_retry = []
         for request in requests:
             topic, partition = request.topic, request.partition
-            topic_desc = "topic {} partition {}".format(topic, partition)
+            topic_desc = "topic {} partition {} request".format(topic, partition)
             try:
                 logger.debug("Verifying failed {}.".format(topic_desc))
 
                 # try to load the metadata in case it is stale
                 success = self._try_load_topic_metadata(request)
                 if not success:
-                    logger.debug("Cannot load the metadata of topic {}. "
-                                 "Skip retrying {}.".format(topic, topic_desc))
+                    logger.debug("Cannot load the metadata of topic {}. Skip {}."
+                                 .format(topic, topic_desc))
                     continue
 
                 published_count = self._get_published_msg_count(topic, topic_offsets)
@@ -162,9 +162,7 @@ class RetryHandler(object):
                 # this request since it's unclear if the messages are actually
                 # successfully published.
                 logger.debug(
-                    "Cannot get the high watermark for {}. Skip retry.".format(
-                        topic_desc
-                    ),
+                    "Cannot get the high watermark. Skip {}.".format(topic_desc),
                     exc_info=1
                 )
                 pass
