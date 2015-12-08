@@ -191,6 +191,9 @@ class Message(object):
                 )
         return self._encryption_type
 
+    def _encryption_type_setter(self, encryption_type):
+        self._encryption_type = encryption_type
+
     @property
     def encryption_helper(self):
         return EncryptionHelper(message=self)
@@ -430,7 +433,6 @@ class Message(object):
             'schema_id': self.schema_id,
             'timestamp': self.timestamp,
             'meta': self._get_meta_attr_avro_repr(),
-            'contains_pii': self.contains_pii,
             'encryption_type': self.encryption_type,
         }
 
@@ -630,7 +632,6 @@ class UpdateMessage(Message):
             'previous_payload': self.previous_payload,
             'timestamp': self.timestamp,
             'meta': self._get_meta_attr_avro_repr(),
-            'contains_pii': self.contains_pii,
             'encryption_type': self.encryption_type
         }
 
@@ -793,9 +794,7 @@ def _create_message_from_packed_message(
             {'previous_payload': unpacked_message['previous_payload']}
         )
     message = message_class(**message_params)
-    # This is a hack for the case where pii was manually set on the upstream message.
-    # It can be removed once contains_pii is only set by schematizer calls.
-    message.contains_pii = unpacked_message['contains_pii']
+    message._encryption_type_setter(unpacked_message['encryption_type'])
     if force_payload_decoding:
         # Access the cached, but lazily-calculated, properties
         message.reload_data()
