@@ -20,24 +20,14 @@ class EncryptionHelper(object):
     def key(self):
         return self._key
 
-    @key.setter
-    def key(self, key):
-        if len(key) == 0:
-            raise TypeError("Key should be non-zero length.")
-        self._key = key
-
     @property
     def message(self):
         return self._message
 
-    @message.setter
-    def message(self, message):
-        self._message = message
-
     def __init__(self, message=None):
-        self.message = message
+        self._message = message
         self.key_location = get_config().key_location + 'key-{}.key'
-        self.key = self._retrieve_key(self._get_key_id(self.message))
+        self._key = self._retrieve_key(self._get_key_id(self.message))
 
     def _get_key_id(self, message):
         """returns the key number to use when
