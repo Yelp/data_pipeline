@@ -302,8 +302,7 @@ class Message(object):
     def payload(self, payload):
         if not isinstance(payload, bytes):
             raise TypeError("Payload must be bytes")
-        if self.encryption_type is not None:
-            payload = self._encrypt_payload(payload)
+        payload = self._encrypt_payload_if_necessary(payload)
         self._payload = payload
         self._payload_data = None  # force payload_data to be re-decoded
 
@@ -436,22 +435,25 @@ class Message(object):
         if self.dry_run:
             return repr(data)
         encoded_payload = self._avro_string_writer.encode(message_avro_representation=data)
-        if self.encryption_type is not None:
-            encoded_payload = self._encrypt_payload(encoded_payload)
-        return encoded_payload
+        return self._encrypt_payload_if_necessary(encoded_payload)
 
-    def _encrypt_payload(self, payload):
+    def _encrypt_payload_if_necessary(self, payload):
         """Uses EncryptionHelper to encrypt pii payload."""
-        return self.encryption_helper.encrypt_message_with_pii(payload)
+        if self.encryption_type is not None:
+            return self.encryption_helper.encrypt_message_with_pii(payload)
+        return payload
 
     def _decode_payload_if_necessary(self):
         if self._payload_data is None:
-            encoded_message = self._payload
-            if self.encryption_type is not None:
-                encoded_message = self.encryption_helper.decrypt_payload(self._payload)
+            encoded_message = self._decrypt_payload_if_necessary(self._payload)
             self._payload_data = self._avro_string_reader.decode(
                 encoded_message=encoded_message
             )
+
+    def _decrypt_payload_if_necessary(self, payload):
+        if self.encryption_type is not None:
+            return self.encryption_helper.decrypt_message_with_pii(payload)
+        return payload
 
     def reload_data(self):
         """Encode the payload data or decode the payload if it hasn't done so.

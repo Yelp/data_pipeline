@@ -83,7 +83,7 @@ class EncryptionHelper(object):
         length = 16 - (len(payload) % 16)
         return payload + chr(length) * length
 
-    def decrypt_payload(self, decoded_payload):
+    def decrypt_message_with_pii(self, decoded_payload):
         initialization_vector = self.message.get_meta_attr_by_type(
             self.message.meta,
             'initialization_vector'
