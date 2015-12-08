@@ -1,0 +1,21 @@
+source_cluster: refresh_primary
+
+topology_path: /nail/srv/configs/topology.yaml
+
+module_config:
+    -   namespace: yelp_conn
+        file: /nail/srv/configs/yelp_conn_generic.yaml
+        initialize: yelp_conn.initialize
+        config:
+            connection_set_file: connection_sets.yaml
+
+            query_logging_listeners: []
+            enable_slow_query_logging: True
+            slow_query_logger_threshold: 500
+
+            connection_wrappers:
+                - yelp_conn.sqllogger.LoggingConnectionWrapper
+                - yelp_conn.wrappers.AnnotatingConnectionWrapper
+            db:
+                db_pool_listeners:
+                    - yelp_conn.engine.DisconnectedPoolListener

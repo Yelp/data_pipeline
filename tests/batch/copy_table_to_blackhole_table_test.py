@@ -56,37 +56,46 @@ class TestFullRefreshRunner(object):
 
     @pytest.yield_fixture
     def refresh_batch(self, table_name):
-        batch = FullRefreshRunner()
-        batch.process_commandline_options([
-            '--dry-run',
-            '--table-name={0}'.format(table_name),
-            '--primary=id'
-        ])
-        batch._init_global_state()
-        yield batch
+        with mock.patch(
+            'data_pipeline.batch.copy_table_to_blackhole_table.source_database_config'
+        ):
+            batch = FullRefreshRunner()
+            batch.process_commandline_options([
+                '--dry-run',
+                '--table-name={0}'.format(table_name),
+                '--primary=id'
+            ])
+            batch._init_global_state()
+            yield batch
 
     @pytest.yield_fixture
     def refresh_batch_db_option(self, database_name, table_name):
-        batch = FullRefreshRunner()
-        batch.process_commandline_options([
-            '--dry-run',
-            '--table-name={0}'.format(database_name),
-            '--database={0}'.format("yelp")
-        ])
-        batch._init_global_state()
-        yield batch
+        with mock.patch(
+            'data_pipeline.batch.copy_table_to_blackhole_table.source_database_config'
+        ):
+            batch = FullRefreshRunner()
+            batch.process_commandline_options([
+                '--dry-run',
+                '--table-name={0}'.format(database_name),
+                '--database={0}'.format("yelp")
+            ])
+            batch._init_global_state()
+            yield batch
 
     @pytest.yield_fixture
     def refresh_batch_custom_where(self, table_name):
-        batch = FullRefreshRunner()
-        batch.process_commandline_options([
-            '--dry-run',
-            '--table-name={0}'.format(table_name),
-            '--primary=id',
-            '--where={0}'.format("country='CA'")
-        ])
-        batch._init_global_state()
-        yield batch
+        with mock.patch(
+            'data_pipeline.batch.copy_table_to_blackhole_table.source_database_config'
+        ):
+            batch = FullRefreshRunner()
+            batch.process_commandline_options([
+                '--dry-run',
+                '--table-name={0}'.format(table_name),
+                '--primary=id',
+                '--where={0}'.format("country='CA'")
+            ])
+            batch._init_global_state()
+            yield batch
 
     @pytest.yield_fixture
     def _read(self, refresh_batch):

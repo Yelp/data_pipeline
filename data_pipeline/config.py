@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import logging
+import os
 
 import staticconf
 from cached_property import cached_property
@@ -11,6 +12,7 @@ from swaggerpy import client
 from yelp_kafka.config import ClusterConfig
 from yelp_kafka.discovery import get_cluster_by_name
 from yelp_servlib.config_util import get_service_host_and_port
+from yelp_servlib.config_util import load_default_config
 
 
 namespace = 'data_pipeline'
@@ -282,6 +284,82 @@ class Config(object):
             'merge_position_info_update',
             default=False
         )
+
+
+class BaseConfig(object):
+    """Staticconf base object for managing config
+    """
+
+    def __init__(self, config_path='config.yaml'):
+        SERVICE_CONFIG_PATH = os.environ.get('SERVICE_CONFIG_PATH', config_path)
+        load_default_config(SERVICE_CONFIG_PATH)
+
+
+class EnvConfig(BaseConfig):
+
+    @property
+    def source_cluster(self):
+        return staticconf.get('source_cluster').value
+
+    @property
+    def connection_set_path(self):
+        for module in staticconf.get('module_config'):
+            if module.get('namespace') == 'yelp_conn':
+                return module.get('config').get('connection_set_file')
+
+
+class DatabaseConfig(object):
+    """Used for reading database config out of topology.yaml in the environment
+    """
+
+    def __init__(self, cluster_name, connection_set_path):
+        staticconf.YamlConfiguration(
+            connection_set_path,
+            namespace=namespace,
+            flatten=False
+        )
+        self._cluster_name = cluster_name
+
+    def is_read_only_conn(self, cluster):
+        if 'connection_configuration' in cluster.keys():
+            for field in cluster['connection_configuration']:
+                if field == 'read_only':
+                    return cluster['connection_configuration']['read-only']
+        else:
+            return False
+
+    @property
+    def ro_replica(self):
+        connections = data_pipeline_conf.read(
+            'connection_sets',
+            default=None
+        )
+        for conn, cluster in connections.iteritems():
+            if self.is_read_only_conn(cluster):
+                if self._cluster_name in cluster.keys():
+                    return conn
+        # Re-use rw connection if there is no ro connection
+        return self.rw_replica
+
+    @property
+    def rw_replica(self):
+        connections = data_pipeline_conf.read(
+            'connection_sets',
+            default=None
+        )
+        for conn, cluster in connections.iteritems():
+            if not self.is_read_only_conn(cluster):
+                if (self._cluster_name in cluster.keys()
+                        and cluster[self._cluster_name] == 'master'):
+                    return conn
+
+
+env_config = EnvConfig()
+
+source_database_config = DatabaseConfig(
+    env_config.source_cluster,
+    env_config.connection_set_path
+)
 
 
 def configure_from_dict(config_dict):

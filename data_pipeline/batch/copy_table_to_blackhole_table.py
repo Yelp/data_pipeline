@@ -7,14 +7,14 @@ import time
 from datetime import datetime
 from optparse import OptionGroup
 
-import yelp_conn
 from yelp_batch import Batch
 from yelp_batch import batch_command_line_options
 from yelp_batch import batch_configure
 from yelp_batch import batch_context
 from yelp_batch._db import BatchDBMixin
 from yelp_lib.classutil import cached_property
-from yelp_servlib import config_util
+
+from data_pipeline.config import source_database_config
 
 
 class FullRefreshRunner(Batch, BatchDBMixin):
@@ -31,18 +31,6 @@ class FullRefreshRunner(Batch, BatchDBMixin):
     @batch_command_line_options
     def define_options(self, option_parser):
         opt_group = OptionGroup(option_parser, 'Full Refresh Runner Options')
-        opt_group.add_option(
-            '--ro-replica',
-            dest='ro_replica',
-            default=str('batch_ro'),
-            help='Required: Read-only replica name.'
-        )
-        opt_group.add_option(
-            '--rw-replica',
-            dest='rw_replica',
-            default=str('batch_rw'),
-            help='Required: Read-write replica name.'
-        )
         opt_group.add_option(
             '--cluster',
             dest='cluster',
@@ -104,20 +92,11 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         return opt_group
 
     @batch_configure
-    def configure(self):
-        config_util.load_package_config(
-            self.options.config_path,
-            field='module_config'
-        )
-        yelp_conn.initialize()
-
-    @batch_configure
     def _init_global_state(self):
         if self.options.batch_size <= 0:
             raise ValueError("Batch size should be greater than 0")
-
-        self.ro_replica_name = self.options.ro_replica
-        self.rw_replica_name = self.options.rw_replica
+        self.ro_replica_name = source_database_config.ro_replica
+        self.rw_replica_name = source_database_config.rw_replica
         self.db_name = self.options.cluster
         self.database = self.options.database
         self.table_name = self.options.table_name
@@ -213,11 +192,11 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.throttle_to_replication(rw_conn)
 
     def _commit_changes(self):
-        self._read_session.rollback()
         if not self.options.dry_run:
             self._write_session.commit()
         else:
             self.log.info("Dry run: Writes would be committed here.")
+        self._read_session.rollback()
 
     def initial_action(self):
         if self.database:
