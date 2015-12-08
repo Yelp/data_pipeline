@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 from Crypto.Cipher import AES
 
 from data_pipeline.config import get_config
+from data_pipeline.initialization_vector import InitializationVector
 
 
 class EncryptionHelper(object):
@@ -46,8 +47,17 @@ class EncryptionHelper(object):
         with open(self.key_location.format(key_id), 'r') as f:
             return f.read(AES.block_size)
 
+    def _append_initialization_vector(self):
+        iv = self.message.get_meta_attr_by_type(self.message.meta, 'initialization_vector')
+        if iv is None:
+            if self.message.meta is None:
+                self.message.meta = []
+            iv = InitializationVector()
+            self.message.meta.append(iv)
+
     def encrypt_message_with_pii(self, payload):
         """Encrypt message with key on machine, using AES."""
+        self._append_initialization_vector()
         return self._encrypt_message_using_pycrypto(self.key, payload)
 
     def _encrypt_message_using_pycrypto(self, key, payload, encryption_algorithm=None):

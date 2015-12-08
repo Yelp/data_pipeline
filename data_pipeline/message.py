@@ -14,7 +14,6 @@ from data_pipeline._encryption_helper import EncryptionHelper
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
-from data_pipeline.initialization_vector import InitializationVector
 from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
 from data_pipeline.meta_attribute import MetaAttribute
@@ -370,14 +369,6 @@ class Message(object):
             logger.debug("Overriding message topic: {0} for schema {1}."
                          .format(topic, schema_id))
 
-    def _append_initialization_vector(self):
-        iv = self.get_meta_attr_by_type(self.meta, 'initialization_vector')
-        if iv is None:
-            if self.meta is None:
-                self.meta = []
-            iv = InitializationVector()
-            self.meta.append(iv)
-
     def _set_payload_or_payload_data(self, payload, payload_data):
         # payload or payload_data are lazily constructed only on request
         is_not_none_payload = payload is not None
@@ -451,7 +442,6 @@ class Message(object):
 
     def _encrypt_payload(self, payload):
         """Uses EncryptionHelper to encrypt pii payload."""
-        self._append_initialization_vector()
         return self.encryption_helper.encrypt_message_with_pii(payload)
 
     def _decode_payload_if_necessary(self):
