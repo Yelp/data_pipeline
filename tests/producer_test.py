@@ -252,14 +252,13 @@ class TestProducer(TestProducerBase):
         payload = b'hello world!'
 
         with reconfigure(encryption_type='AES_MODE_CBC-1'):
-            with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
-                test_message = self.create_message(
-                    topic,
-                    payload,
-                    registered_schema,
-                    contains_pii=True
-                )
-                assert test_message.payload != payload
+            test_message = self.create_message(
+                topic,
+                payload,
+                registered_schema,
+                contains_pii=True
+            )
+            assert test_message.payload != payload
 
     def test_publish_encrypted_message_from_payload_data_with_pii(
         self,
@@ -294,19 +293,18 @@ class TestProducer(TestProducerBase):
         envelope
     ):
         sample_keys = (u'key1=\'', u'key2=\\', u'key3=哎ù\x1f')
-        with mock.patch.object(producer._kafka_producer, 'skip_messages_with_pii', False):
-            with capture_new_messages(topic) as get_messages:
-                producer.publish(
-                    self.create_message(
-                        topic,
-                        payload,
-                        registered_schema,
-                        keys=sample_keys,
-                        contains_pii=False
-                    )
+        with capture_new_messages(topic) as get_messages:
+            producer.publish(
+                self.create_message(
+                    topic,
+                    payload,
+                    registered_schema,
+                    keys=sample_keys,
+                    contains_pii=False
                 )
-                producer.flush()
-                assert get_messages()[0].message.key == '\'key1=\\\'\'\x1f\'key2=\\\\\'\x1f\'key3=哎ù\x1f\''.encode('utf-8')
+            )
+            producer.flush()
+            assert get_messages()[0].message.key == '\'key1=\\\'\'\x1f\'key2=\\\\\'\x1f\'key3=哎ù\x1f\''.encode('utf-8')
 
 
 class TestPublishMonitorMessage(TestProducerBase):
