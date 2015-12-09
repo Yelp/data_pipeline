@@ -181,12 +181,16 @@ class Containers(object):
                 time.sleep(0.1)
         raise KafkaUnavailableError()
 
-    def __init__(self):
+    def __init__(self, additional_compose_file=None, additional_services=None):
         dir_name = os.path.split(os.getcwd())[-1]
         self.project = "{}{}".format(
             re.sub(r'[^a-z0-9]', '', dir_name.lower()),
             getpass.getuser()
         )
+        self.additional_compose_file = additional_compose_file
+        if additional_services is not None:
+            self.services.extend(additional_services)
+
         # This variable is meant to capture the running/not-running state of
         # the dependent testing containers when tests start running.  The idea
         # is, we'll only start and stop containers if they aren't already
@@ -253,7 +257,13 @@ class Containers(object):
         compose_file = os.path.abspath(
             os.path.join(os.path.dirname(__file__), "docker-compose.yml")
         )
-        return "--file={} --project-name={}".format(compose_file, self.project)
+        if self.additional_compose_file:
+            # The additional compose file need to be put in front.
+            return "--file={} --file={} --project-name={}".format(
+                self.additional_compose_file, compose_file, self.project
+            )
+        else:
+            return "--file={} --project-name={}".format(compose_file, self.project)
 
     def use_testing_containers(self):
         """Configures the data pipeline clientlib to use the containers"""
@@ -287,6 +297,8 @@ class Containers(object):
         if self._is_envvar_set('PULL_CONTAINERS'):
             logger.info("Updating Containers")
             self._run_compose('pull')
+        logger.info("Building Containers")
+        self._run_compose('build')
         logger.info("Starting Containers")
         self._run_compose('up', '-d', *self.services)
         self._wait_for_services()

@@ -48,8 +48,8 @@ setup(
             'yelp_batch>=0.19.4',
         ],
         'testing_helpers': [
-            'docker-compose==1.3.3',
-            'docker-py==1.3.1',
+            'docker-compose==1.5.0',
+            'docker-py==1.5.0',
             # requests is locked at <2.7 to satisfy a docker-compose requirement
             'requests<2.7'
         ]
