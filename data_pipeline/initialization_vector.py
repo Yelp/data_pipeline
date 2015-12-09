@@ -56,16 +56,3 @@ class InitializationVector(MetaAttribute):
     @property
     def payload(self):
         return self.initialization_vector_array
-
-    def __eq__(self, other):
-        return type(self) is type(other) and \
-            self.initialization_vector_array == other.initialization_vector_array
-
-    def __ne__(self, other):
-        return not self. __eq__(other)
-
-    def __hash__(self):
-        return hash(self.__str__())
-
-    def __str__(self):
-        return self.initialization_vector_array
