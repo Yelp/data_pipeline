@@ -13,7 +13,6 @@ from yelp_batch import batch_configure
 from yelp_batch import batch_context
 from yelp_batch._db import BatchDBMixin
 from yelp_lib.classutil import cached_property
-
 from data_pipeline.config import source_database_config
 
 
@@ -34,7 +33,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         opt_group.add_option(
             '--cluster',
             dest='cluster',
-            default='primary',
+            default='refresh_primary',
             help='Required: Specifies table cluster (default: %default).'
         )
         opt_group.add_option(

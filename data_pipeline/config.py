@@ -321,35 +321,32 @@ class DatabaseConfig(object):
         self._cluster_name = cluster_name
 
     def is_read_only_conn(self, cluster):
-        if 'connection_configuration' in cluster.keys():
-            for field in cluster['connection_configuration']:
-                if field == 'read_only':
-                    return cluster['connection_configuration']['read-only']
-        else:
-            return False
+        return any(
+            cluster['connection_configuration'].get('read_only', False)
+            for _ in cluster.get('connection_configuration', [])
+        )
 
-    @property
-    def ro_replica(self):
-        connections = data_pipeline_conf.read(
+    @cached_property
+    def connections(self):
+        return data_pipeline_conf.read(
             'connection_sets',
             default=None
         )
-        for conn, cluster in connections.iteritems():
+
+    @property
+    def ro_replica(self):
+        for conn, cluster in self.connections.iteritems():
             if self.is_read_only_conn(cluster):
-                if self._cluster_name in cluster.keys():
+                if self._cluster_name in cluster:
                     return conn
         # Re-use rw connection if there is no ro connection
         return self.rw_replica
 
     @property
     def rw_replica(self):
-        connections = data_pipeline_conf.read(
-            'connection_sets',
-            default=None
-        )
-        for conn, cluster in connections.iteritems():
+        for conn, cluster in self.connections.iteritems():
             if not self.is_read_only_conn(cluster):
-                if (self._cluster_name in cluster.keys()
+                if (self._cluster_name in cluster
                         and cluster[self._cluster_name] == 'master'):
                     return conn
 
