@@ -12,8 +12,14 @@ from yelp_batch import batch_command_line_options
 from yelp_batch import batch_configure
 from yelp_batch import batch_context
 from yelp_batch._db import BatchDBMixin
+from yelp_conn.connection_set import ConnectionDef
+from yelp_conn.connection_set import ConnectionSet
+from yelp_conn.sqlatxn import TransactionManager
+from yelp_conn.topology import ConnectionSetConfig
+from yelp_conn.topology import TopologyFile
 from yelp_lib.classutil import cached_property
-from data_pipeline.config import source_database_config
+from yelp_lib.decorators import memoized
+from yelp_servlib.config_util import load_default_config
 
 
 class FullRefreshRunner(Batch, BatchDBMixin):
@@ -92,10 +98,11 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
     @batch_configure
     def _init_global_state(self):
+        load_default_config('config.yaml')
         if self.options.batch_size <= 0:
             raise ValueError("Batch size should be greater than 0")
-        self.ro_replica_name = source_database_config.ro_replica
-        self.rw_replica_name = source_database_config.rw_replica
+        self.ro_replica_name = self.options.cluster
+        self.rw_replica_name = self.options.cluster
         self.db_name = self.options.cluster
         self.database = self.options.database
         self.table_name = self.options.table_name
@@ -105,6 +112,26 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self.primary_key = self.options.primary
         self.processed_row_count = 0
         self.where_clause = self.options.where_clause
+
+    def setup_connections(self):
+        """Creates connections to the mySQL database.
+
+        Builds a connection set for each connection set specified in your
+        connection set configuration.
+
+        This is overriding BatchDBMixin because we want to get connections
+        based on the cluster.
+        TransactionManager also takes a custom connection_set_getter function
+        in order to get a connection set by cluster.
+        """
+        txnmgr_kwargs = {"connection_set_getter": get_connection_set_from_cluster}
+
+        if self.ro_replica_name:
+            txnmgr_kwargs.update({"ro_replica_name": self.db_name})
+        if self.rw_replica_name:
+            txnmgr_kwargs.update({"rw_replica_name": self.db_name})
+
+        self._txn_mgr = TransactionManager(self.db_name, **txnmgr_kwargs)
 
     @cached_property
     def total_row_count(self):
@@ -195,6 +222,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self._write_session.commit()
         else:
             self.log.info("Dry run: Writes would be committed here.")
+        # Commit the write session before rolling back the read session
+        # in case the same connection is used for both reading and writing.
         self._read_session.rollback()
 
     def initial_action(self):
@@ -281,6 +310,26 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.log_info()
         finally:
             self.final_action()
+
+
+@memoized
+def get_connection_set_from_cluster(cluster):
+    """Given a cluster name, returns a connection to that cluster.
+    """
+    topology = TopologyFile.new_from_file(
+        '/nail/srv/configs/topology.yaml'
+    )
+    replica_level = 'master'
+    connection_cluster = topology.topologies[cluster, replica_level]
+    conn_def = ConnectionDef(
+        cluster,
+        replica_level,
+        auto_commit=False,
+        database=connection_cluster.database
+    )
+    conn_defs = {cluster: (conn_def, connection_cluster)}
+    conn_config = ConnectionSetConfig(cluster, conn_defs, read_only=False)
+    return ConnectionSet.from_config(conn_config)
 
 
 if __name__ == '__main__':
