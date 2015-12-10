@@ -136,8 +136,6 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         load_default_config(self.options.config_path)
         if self.options.batch_size <= 0:
             raise ValueError("Batch size should be greater than 0")
-        self.ro_replica_name = self.options.cluster
-        self.rw_replica_name = self.options.cluster
         self.db_name = self.options.cluster
         self.database = self.options.database
         self.table_name = self.options.table_name
