@@ -187,8 +187,7 @@ class Containers(object):
             re.sub(r'[^a-z0-9]', '', dir_name.lower()),
             getpass.getuser()
         )
-        if additional_compose_file is not None:
-            self.additional_compose_file = additional_compose_file
+        self.additional_compose_file = additional_compose_file
         if additional_services is not None:
             self.services.extend(additional_services)
 
