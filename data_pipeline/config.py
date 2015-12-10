@@ -226,7 +226,7 @@ class Config(object):
         e.g., 'AES_MODE_CBC-1'"""
         return data_pipeline_conf.read_string(
             'encryption_type',
-            default=None
+            default='AES_MODE_CBC-1'
         )
 
     @property

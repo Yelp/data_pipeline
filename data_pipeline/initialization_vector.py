@@ -46,10 +46,10 @@ class InitializationVector(MetaAttribute):
     def __init__(self, initialization_vector_array=None):
         if initialization_vector_array is None:
             initialization_vector_array = os.urandom(AES.block_size)
-        self._verify_init_params(initialization_vector_array)
+        self._verify_initialization_vector_params(initialization_vector_array)
         self.initialization_vector_array = initialization_vector_array
 
-    def _verify_init_params(self, vector_array):
+    def _verify_initialization_vector_params(self, vector_array):
         if not isinstance(vector_array, bytes) or not len(vector_array) == 16:
             raise TypeError('Initialization Vector must be a 16-byte array')
 
