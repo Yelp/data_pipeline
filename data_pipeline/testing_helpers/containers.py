@@ -297,8 +297,6 @@ class Containers(object):
         if self._is_envvar_set('PULL_CONTAINERS'):
             logger.info("Updating Containers")
             self._run_compose('pull')
-        logger.info("Building Containers")
-        self._run_compose('build')
         logger.info("Starting Containers")
         self._run_compose('up', '-d', *self.services)
         self._wait_for_services()
