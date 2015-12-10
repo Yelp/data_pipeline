@@ -243,10 +243,9 @@ class TestProducer(TestProducerBase):
             envelope
         )
 
-    def test_publish_encrypted_message_with_pii(
+    def test_encrypt_message_with_pii(
         self,
         topic,
-        producer,
         registered_schema
     ):
         payload = b'hello world!'
