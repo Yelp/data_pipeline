@@ -8,6 +8,7 @@ import pytest
 from data_pipeline.batch.copy_table_to_blackhole_table import FullRefreshRunner
 from data_pipeline.batch.copy_table_to_blackhole_table import get_connection_set_from_cluster
 from data_pipeline.batch.copy_table_to_blackhole_table import TOPOLOGY_PATH
+from data_pipeline.batch.copy_table_to_blackhole_table import TopologyFile
 
 
 class TestFullRefreshRunner(object):
@@ -372,8 +373,9 @@ class TestFullRefreshRunner(object):
         mock_topology = mock.Mock()
         mock_conn_defs = mock.Mock()
         mock_conn_config = mock.Mock()
-        with mock.patch(
-            base_path + '.TopologyFile.new_from_file',
+        with mock.patch.object(
+            TopologyFile,
+            'new_from_file',
             return_value=mock_topology
         ) as mock_tf, mock.patch(
             base_path + '._get_conn_defs',
