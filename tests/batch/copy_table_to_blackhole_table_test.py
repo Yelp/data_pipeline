@@ -6,6 +6,8 @@ import mock
 import pytest
 
 from data_pipeline.batch.copy_table_to_blackhole_table import FullRefreshRunner
+from data_pipeline.batch.copy_table_to_blackhole_table import get_connection_set_from_cluster
+from data_pipeline.batch.copy_table_to_blackhole_table import TOPOLOGY_PATH
 
 
 class TestFullRefreshRunner(object):
@@ -55,7 +57,15 @@ class TestFullRefreshRunner(object):
         )
 
     @pytest.yield_fixture
-    def refresh_batch(self, table_name):
+    def mock_load_config(self):
+        with mock.patch(
+            ('data_pipeline.batch.copy_table_to_blackhole_table.'
+             'load_default_config')
+        ):
+            yield
+
+    @pytest.yield_fixture
+    def refresh_batch(self, table_name, mock_load_config):
         batch = FullRefreshRunner()
         batch.process_commandline_options([
             '--dry-run',
@@ -66,7 +76,7 @@ class TestFullRefreshRunner(object):
         yield batch
 
     @pytest.yield_fixture
-    def refresh_batch_db_option(self, database_name, table_name):
+    def refresh_batch_db_option(self, database_name, table_name, mock_load_config):
         batch = FullRefreshRunner()
         batch.process_commandline_options([
             '--dry-run',
@@ -78,7 +88,7 @@ class TestFullRefreshRunner(object):
         yield batch
 
     @pytest.yield_fixture
-    def refresh_batch_custom_where(self, table_name):
+    def refresh_batch_custom_where(self, table_name, mock_load_config):
         batch = FullRefreshRunner()
         batch.process_commandline_options([
             '--dry-run',
@@ -356,3 +366,33 @@ class TestFullRefreshRunner(object):
             refresh_batch.process_table()
             calls = [mock.call(0), mock.call(10), mock.call(20)]
             mock_insert.assert_has_calls(calls)
+
+    def test_get_connection_set_from_cluster(self, database_name):
+        base_path = 'data_pipeline.batch.copy_table_to_blackhole_table'
+        mock_topology = mock.Mock()
+        mock_conn_defs = mock.Mock()
+        mock_conn_config = mock.Mock()
+        with mock.patch(
+            base_path + '.TopologyFile.new_from_file',
+            return_value=mock_topology
+        ) as mock_tf, mock.patch(
+            base_path + '._get_conn_defs',
+            return_value=mock_conn_defs
+        ) as mock_get_defs, mock.patch(
+            base_path + '.ConnectionSetConfig',
+            return_value=mock_conn_config
+        ) as mock_init_config, mock.patch(
+            base_path + '.ConnectionSet'
+        ) as mock_conn:
+            get_connection_set_from_cluster(database_name)
+            mock_tf.assert_called_once_with(TOPOLOGY_PATH)
+            mock_get_defs.assert_called_once_with(
+                mock_topology,
+                database_name
+            )
+            mock_init_config.assert_called_once_with(
+                database_name,
+                mock_conn_defs,
+                read_only=False
+            )
+            mock_conn.from_config.assert_called_once_with(mock_conn_config)

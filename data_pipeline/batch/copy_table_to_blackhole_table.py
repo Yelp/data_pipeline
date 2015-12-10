@@ -22,6 +22,9 @@ from yelp_lib.decorators import memoized
 from yelp_servlib.config_util import load_default_config
 
 
+TOPOLOGY_PATH = '/nail/srv/configs/topology.yaml'
+
+
 class FullRefreshRunner(Batch, BatchDBMixin):
     notify_emails = ['bam+batch@yelp.com']
     is_readonly_batch = False
@@ -75,7 +78,9 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         opt_group.add_option(
             '--config-path',
             dest='config_path',
-            help='Required: Config file path for FullRefreshRunner'
+            help='Required: Config file path for FullRefreshRunner '
+                 '(default: %default)',
+            default='config.yaml'
         )
         opt_group.add_option(
             '--where',
@@ -98,7 +103,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
     @batch_configure
     def _init_global_state(self):
-        load_default_config('config.yaml')
+        load_default_config(self.options.config_path)
         if self.options.batch_size <= 0:
             raise ValueError("Batch size should be greater than 0")
         self.ro_replica_name = self.options.cluster
@@ -316,9 +321,13 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 def get_connection_set_from_cluster(cluster):
     """Given a cluster name, returns a connection to that cluster.
     """
-    topology = TopologyFile.new_from_file(
-        '/nail/srv/configs/topology.yaml'
-    )
+    topology = TopologyFile.new_from_file(TOPOLOGY_PATH)
+    conn_defs = _get_conn_defs(topology, cluster)
+    conn_config = ConnectionSetConfig(cluster, conn_defs, read_only=False)
+    return ConnectionSet.from_config(conn_config)
+
+
+def _get_conn_defs(topology, cluster):
     replica_level = 'master'
     connection_cluster = topology.topologies[cluster, replica_level]
     conn_def = ConnectionDef(
@@ -327,9 +336,7 @@ def get_connection_set_from_cluster(cluster):
         auto_commit=False,
         database=connection_cluster.database
     )
-    conn_defs = {cluster: (conn_def, connection_cluster)}
-    conn_config = ConnectionSetConfig(cluster, conn_defs, read_only=False)
-    return ConnectionSet.from_config(conn_config)
+    return {cluster: (conn_def, connection_cluster)}
 
 
 if __name__ == '__main__':
