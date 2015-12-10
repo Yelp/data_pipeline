@@ -22,7 +22,31 @@ from yelp_lib.decorators import memoized
 from yelp_servlib.config_util import load_default_config
 
 
-TOPOLOGY_PATH = '/nail/srv/configs/topology.yaml'
+class RefreshTransactionManager(TransactionManager):
+
+    def __init__(
+        self,
+        cluster_name,
+        topology_path,
+        connection_set_getter
+    ):
+        """Create a new RefreshTransactionManager.
+        Note: Overrides TransactionManager's __init__ so that the topology_path
+         can be passed into the connection_set_getter.
+
+        :param cluster_name: name of the cluster  as configured in topology
+                             and connection_sets.
+        :param topology_path: path to the topology.yaml file.
+        :param connection_set_getter: a callable used to return connection sets
+                                      by cluster name and topology file.
+        """
+        self.ro_conn_set = connection_set_getter(cluster_name, topology_path)
+        self.rw_conn_set = connection_set_getter(cluster_name, topology_path)
+        self.ro_engine = self.ro_conn_set.get_engine(cluster_name)
+        self.rw_engine = self.rw_conn_set.get_engine(cluster_name)
+        self.cluster_name = cluster_name
+        self.active_ro_conn = None
+        self.active_rw_conn = None
 
 
 class FullRefreshRunner(Batch, BatchDBMixin):
@@ -83,6 +107,12 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             default='config.yaml'
         )
         opt_group.add_option(
+            '--topology-path',
+            dest='topology_path',
+            help='Path to the topology.yaml file.',
+            default='/nail/srv/configs/topology.yaml'
+        )
+        opt_group.add_option(
             '--where',
             dest='where_clause',
             default=None,
@@ -121,22 +151,19 @@ class FullRefreshRunner(Batch, BatchDBMixin):
     def setup_connections(self):
         """Creates connections to the mySQL database.
 
-        Builds a connection set for each connection set specified in your
-        connection set configuration.
+        Builds a connection set to the cluster of the table that
+         you are refreshing.
 
         This is overriding BatchDBMixin because we want to get connections
-        based on the cluster.
-        TransactionManager also takes a custom connection_set_getter function
-        in order to get a connection set by cluster.
+        based on the cluster instead of by replica names.
+        RefreshTransactionManager also takes a custom connection_set_getter
+         function which gets a connection set by cluster and topology file.
         """
-        txnmgr_kwargs = {"connection_set_getter": get_connection_set_from_cluster}
-
-        if self.ro_replica_name:
-            txnmgr_kwargs.update({"ro_replica_name": self.db_name})
-        if self.rw_replica_name:
-            txnmgr_kwargs.update({"rw_replica_name": self.db_name})
-
-        self._txn_mgr = TransactionManager(self.db_name, **txnmgr_kwargs)
+        self._txn_mgr = RefreshTransactionManager(
+            cluster_name=self.db_name,
+            topology_path=self.options.topology_path,
+            connection_set_getter=get_connection_set_from_cluster
+        )
 
     @cached_property
     def total_row_count(self):
@@ -318,10 +345,10 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
 
 @memoized
-def get_connection_set_from_cluster(cluster):
+def get_connection_set_from_cluster(cluster, topology_path):
     """Given a cluster name, returns a connection to that cluster.
     """
-    topology = TopologyFile.new_from_file(TOPOLOGY_PATH)
+    topology = TopologyFile.new_from_file(topology_path)
     conn_defs = _get_conn_defs(topology, cluster)
     conn_config = ConnectionSetConfig(cluster, conn_defs, read_only=False)
     return ConnectionSet.from_config(conn_config)

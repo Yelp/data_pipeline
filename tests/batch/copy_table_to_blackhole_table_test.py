@@ -7,11 +7,22 @@ import pytest
 
 from data_pipeline.batch.copy_table_to_blackhole_table import FullRefreshRunner
 from data_pipeline.batch.copy_table_to_blackhole_table import get_connection_set_from_cluster
-from data_pipeline.batch.copy_table_to_blackhole_table import TOPOLOGY_PATH
 from data_pipeline.batch.copy_table_to_blackhole_table import TopologyFile
 
 
 class TestFullRefreshRunner(object):
+
+    @pytest.fixture
+    def base_path(self):
+        return "data_pipeline.batch.copy_table_to_blackhole_table"
+
+    @pytest.fixture
+    def topology_path(self):
+        return "/nail/srv/configs/topology.yaml"
+
+    @pytest.fixture
+    def cluster(self):
+        return "test_cluster"
 
     @pytest.fixture
     def database_name(self):
@@ -58,31 +69,34 @@ class TestFullRefreshRunner(object):
         )
 
     @pytest.yield_fixture
-    def mock_load_config(self):
-        with mock.patch(
-            ('data_pipeline.batch.copy_table_to_blackhole_table.'
-             'load_default_config')
-        ):
+    def mock_load_config(self, base_path):
+        with mock.patch(base_path + '.load_default_config'):
             yield
 
     @pytest.yield_fixture
-    def refresh_batch(self, table_name, mock_load_config):
+    def refresh_batch(self, cluster, table_name, mock_load_config):
         batch = FullRefreshRunner()
         batch.process_commandline_options([
             '--dry-run',
             '--table-name={0}'.format(table_name),
-            '--primary=id'
+            '--primary=id',
+            '--cluster={0}'.format(cluster)
         ])
         batch._init_global_state()
         yield batch
 
     @pytest.yield_fixture
-    def refresh_batch_db_option(self, database_name, table_name, mock_load_config):
+    def refresh_batch_db_option(
+        self,
+        database_name,
+        table_name,
+        mock_load_config
+    ):
         batch = FullRefreshRunner()
         batch.process_commandline_options([
             '--dry-run',
-            '--table-name={0}'.format(database_name),
-            '--database={0}'.format("yelp")
+            '--table-name={0}'.format(table_name),
+            '--database={0}'.format(database_name)
         ])
         batch.setup_connections = mock.Mock()
         batch._init_global_state()
@@ -171,6 +185,25 @@ class TestFullRefreshRunner(object):
             'create_table_from_src_table'
         ) as mock_create:
             yield mock_create
+
+    def test_setup_connections(
+        self,
+        base_path,
+        refresh_batch,
+        cluster,
+        topology_path
+    ):
+        with mock.patch(
+            base_path + '.RefreshTransactionManager'
+        ) as mock_manager, mock.patch(
+            base_path + '.get_connection_set_from_cluster'
+        ) as mock_get_conn:
+            refresh_batch.setup_connections()
+            mock_manager.assert_called_once_with(
+                cluster_name=cluster,
+                topology_path=topology_path,
+                connection_set_getter=mock_get_conn
+            )
 
     def test_initial_action_no_db(
         self,
@@ -368,8 +401,12 @@ class TestFullRefreshRunner(object):
             calls = [mock.call(0), mock.call(10), mock.call(20)]
             mock_insert.assert_has_calls(calls)
 
-    def test_get_connection_set_from_cluster(self, database_name):
-        base_path = 'data_pipeline.batch.copy_table_to_blackhole_table'
+    def test_get_connection_set_from_cluster(
+        self,
+        base_path,
+        database_name,
+        topology_path
+    ):
         mock_topology = mock.Mock()
         mock_conn_defs = mock.Mock()
         mock_conn_config = mock.Mock()
@@ -386,8 +423,8 @@ class TestFullRefreshRunner(object):
         ) as mock_init_config, mock.patch(
             base_path + '.ConnectionSet'
         ) as mock_conn:
-            get_connection_set_from_cluster(database_name)
-            mock_tf.assert_called_once_with(TOPOLOGY_PATH)
+            get_connection_set_from_cluster(database_name, topology_path)
+            mock_tf.assert_called_once_with(topology_path)
             mock_get_defs.assert_called_once_with(
                 mock_topology,
                 database_name
