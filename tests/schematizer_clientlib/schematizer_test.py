@@ -89,6 +89,9 @@ class SchematizerClientTestBase(object):
         assert actual.schema_json == simplejson.loads(expected_resp.schema)
         self._assert_topic_values(actual.topic, expected_resp.topic)
         assert actual.base_schema_id == expected_resp.base_schema_id
+        assert actual.status == expected_resp.status
+        assert actual.primary_keys == expected_resp.primary_keys
+        assert actual.note == expected_resp.note
         assert actual.created_at == expected_resp.created_at
         assert actual.updated_at == expected_resp.updated_at
 
@@ -140,6 +143,52 @@ class TestGetSchemaById(SchematizerClientTestBase):
             assert schema_api_spy.call_count == 0
             assert topic_api_spy.call_count == 0
             assert source_api_spy.call_count == 0
+
+
+class TestGetSchemaBySchemaJson(SchematizerClientTestBase):
+
+    @pytest.fixture
+    def schema_json(self, yelp_namespace, biz_src_name):
+        return {
+            'type': 'record',
+            'name': biz_src_name,
+            'namespace': yelp_namespace,
+            'fields': [{'type': 'int', 'name': 'biz_id'}]
+        }
+
+    @pytest.fixture
+    def schema_str(self, schema_json):
+        return simplejson.dumps(schema_json)
+
+    def test_get_schema_by_schema_json_returns_none_if_not_cached(
+        self,
+        schematizer,
+        schema_json
+    ):
+        assert schematizer.get_schema_by_schema_json(schema_json) is None
+
+    def test_get_schema_by_schema_json_returns_cached_schema(
+        self,
+        schematizer,
+        biz_src_name,
+        schema_json,
+        yelp_namespace
+    ):
+        schema_one = schematizer.register_schema_from_schema_json(
+            namespace=yelp_namespace,
+            source=biz_src_name,
+            schema_json=schema_json,
+            source_owner_email=self.source_owner_email,
+            contains_pii=False
+        )
+
+        with self.attach_spy_on_api(
+            schematizer._client.schemas,
+            'register_schema'
+        ) as register_schema_api_spy:
+            schema_two = schematizer.get_schema_by_schema_json(schema_json)
+            assert register_schema_api_spy.called == 0
+            assert schema_one == schema_two
 
 
 class TestGetTopicByName(SchematizerClientTestBase):
@@ -621,6 +670,24 @@ class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
         assert pii_schema.topic.contains_pii
 
         assert non_pii_schema.topic.source == non_pii_schema.topic.source
+
+    def test_register_schema_with_primary_keys(
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name
+    ):
+        schema_sql = ('create table biz(id int(11) not null, name varchar(8), '
+                      'primary key (id));')
+        actual = schematizer.register_schema_from_mysql_stmts(
+            namespace=yelp_namespace,
+            source=biz_src_name,
+            source_owner_email=self.source_owner_email,
+            contains_pii=False,
+            new_create_table_stmt=schema_sql
+        )
+        expected = self._get_schema_by_id(actual.schema_id)
+        self._assert_schema_values(actual, expected)
 
 
 class TestGetTopicsByCriteria(SchematizerClientTestBase):

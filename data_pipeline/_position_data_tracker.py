@@ -36,7 +36,7 @@ class _PositionDataTracker(object):
         self._setup_position_info()
 
     def record_message_buffered(self, message):
-        logger.debug("Message buffered: %s" % message)
+        logger.debug("Message buffered: %s" % repr(message))
         if self._should_update_position_info(message):
             self._update_position_info(message)
         self._update_merged_upstream_position_info(message)

@@ -27,6 +27,7 @@ class SchematizerClient(object):
         self._schema_cache = {}
         self._topic_cache = {}
         self._source_cache = {}
+        self._avro_schema_cache = {}
 
     def get_schema_by_id(self, schema_id):
         """Get the avro schema of given schema id.
@@ -53,6 +54,33 @@ class SchematizerClient(object):
             _schema = _AvroSchema.from_response(response)
             self._update_cache_by_schema(_schema)
         return _schema
+
+    def _make_avro_schema_key(self, schema_json):
+        return simplejson.dumps(schema_json, sort_keys=True)
+
+    def get_schema_by_schema_json(self, schema_json):
+        """ Get schema object if one exists for a given avro schema.
+        If not, return None.
+
+        Args:
+            schema_json (dict or list): Python object representation of the
+                avro schema json.
+
+        Returns:
+            (data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
+                Avro Schema object.
+        """
+        cached_schema = self._avro_schema_cache.get(
+            self._make_avro_schema_key(schema_json)
+        )
+        if cached_schema:
+            _schema = _AvroSchema.from_cache_value(cached_schema)
+            _schema.topic = self._get_topic_by_name(cached_schema['topic_name'])
+            return _schema.to_result()
+        else:
+            # TODO(DATAPIPE-608|askatti): Add schematizer endpoint to return
+            # Schema object given a schema_json
+            return None
 
     def get_topic_by_name(self, topic_name):
         """Get the topic of given topic name.
@@ -339,6 +367,9 @@ class SchematizerClient(object):
     def _update_cache_by_schema(self, new_schema):
         self._schema_cache[new_schema.schema_id] = new_schema.to_cache_value()
         self._update_cache_by_topic(new_schema.topic)
+        self._avro_schema_cache[
+            self._make_avro_schema_key(new_schema.schema_json)
+        ] = new_schema.to_cache_value()
 
     def _update_cache_by_topic(self, new_topic):
         self._topic_cache[new_topic.name] = new_topic.to_cache_value()

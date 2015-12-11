@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 import time
 from collections import namedtuple
+from uuid import UUID
 
 from yelp_avro.avro_string_reader import AvroStringReader
 from yelp_avro.avro_string_writer import AvroStringWriter
@@ -421,6 +422,17 @@ class Message(object):
         self._decode_payload_if_necessary()
         self._encode_payload_data_if_necessary()
 
+    @property
+    def _str_repr(self):
+        dict_repr = self.avro_repr
+        dict_repr['uuid'] = UUID(bytes=self.uuid).hex
+        dict_repr['payload_data'] = self.payload_data
+        del dict_repr['payload']
+        return dict_repr
+
+    def __str__(self):
+        return str(self._str_repr)
+
 
 class CreateMessage(Message):
 
@@ -617,6 +629,13 @@ class UpdateMessage(Message):
             for field in self.payload_data.iterkeys()
             if self._has_field_changed(field)
         }
+
+    @property
+    def _str_repr(self):
+        dict_repr = super(UpdateMessage, self)._str_repr
+        dict_repr['previous_payload_data'] = self.previous_payload_data
+        del dict_repr['previous_payload']
+        return dict_repr
 
 _message_type_to_class_map = {
     o._message_type.name: o for o in Message.__subclasses__() if o._message_type
