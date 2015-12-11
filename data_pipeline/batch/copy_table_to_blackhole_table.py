@@ -18,35 +18,7 @@ from yelp_conn.sqlatxn import TransactionManager
 from yelp_conn.topology import ConnectionSetConfig
 from yelp_conn.topology import TopologyFile
 from yelp_lib.classutil import cached_property
-from yelp_lib.decorators import memoized
 from yelp_servlib.config_util import load_default_config
-
-
-class RefreshTransactionManager(TransactionManager):
-
-    def __init__(
-        self,
-        cluster_name,
-        topology_path,
-        connection_set_getter
-    ):
-        """Create a new RefreshTransactionManager.
-        Note: Overrides TransactionManager's __init__ so that the topology_path
-         can be passed into the connection_set_getter.
-
-        :param cluster_name: name of the cluster  as configured in topology
-                             and connection_sets.
-        :param topology_path: path to the topology.yaml file.
-        :param connection_set_getter: a callable used to return connection sets
-                                      by cluster name and topology file.
-        """
-        self.ro_conn_set = connection_set_getter(cluster_name, topology_path)
-        self.rw_conn_set = connection_set_getter(cluster_name, topology_path)
-        self.ro_engine = self.ro_conn_set.get_engine(cluster_name)
-        self.rw_engine = self.rw_conn_set.get_engine(cluster_name)
-        self.cluster_name = cluster_name
-        self.active_ro_conn = None
-        self.active_rw_conn = None
 
 
 class FullRefreshRunner(Batch, BatchDBMixin):
@@ -157,10 +129,11 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         RefreshTransactionManager also takes a custom connection_set_getter
          function which gets a connection set by cluster and topology file.
         """
-        self._txn_mgr = RefreshTransactionManager(
+        self._txn_mgr = TransactionManager(
             cluster_name=self.db_name,
-            topology_path=self.options.topology_path,
-            connection_set_getter=get_connection_set_from_cluster
+            ro_replica_name=self.db_name,
+            rw_replica_name=self.db_name,
+            connection_set_getter=self.get_connection_set_from_cluster
         )
 
     @cached_property
@@ -341,27 +314,24 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         finally:
             self.final_action()
 
+    def get_connection_set_from_cluster(self, cluster):
+        """Given a cluster name, returns a connection to that cluster.
+        """
+        topology = TopologyFile.new_from_file(self.options.topology_path)
+        conn_defs = self._get_conn_defs(topology, cluster)
+        conn_config = ConnectionSetConfig(cluster, conn_defs, read_only=False)
+        return ConnectionSet.from_config(conn_config)
 
-@memoized
-def get_connection_set_from_cluster(cluster, topology_path):
-    """Given a cluster name, returns a connection to that cluster.
-    """
-    topology = TopologyFile.new_from_file(topology_path)
-    conn_defs = _get_conn_defs(topology, cluster)
-    conn_config = ConnectionSetConfig(cluster, conn_defs, read_only=False)
-    return ConnectionSet.from_config(conn_config)
-
-
-def _get_conn_defs(topology, cluster):
-    replica_level = 'master'
-    connection_cluster = topology.topologies[cluster, replica_level]
-    conn_def = ConnectionDef(
-        cluster,
-        replica_level,
-        auto_commit=False,
-        database=connection_cluster.database
-    )
-    return {cluster: (conn_def, connection_cluster)}
+    def _get_conn_defs(self, topology, cluster):
+        replica_level = 'master'
+        connection_cluster = topology.topologies[cluster, replica_level]
+        conn_def = ConnectionDef(
+            cluster,
+            replica_level,
+            auto_commit=False,
+            database=connection_cluster.database
+        )
+        return {cluster: (conn_def, connection_cluster)}
 
 
 if __name__ == '__main__':
