@@ -182,6 +182,8 @@ class Containers(object):
         raise KafkaUnavailableError()
 
     def __init__(self, additional_compose_file=None, additional_services=None):
+        # To resolve docker client server version mismatch issue.
+        os.environ["COMPOSE_API_VERSION"] = "auto"
         dir_name = os.path.split(os.getcwd())[-1]
         self.project = "{}{}".format(
             re.sub(r'[^a-z0-9]', '', dir_name.lower()),
