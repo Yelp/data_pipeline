@@ -223,10 +223,12 @@ class Config(object):
     @property
     def encryption_type(self):
         """Algorithm and key to use when encrypting pii,
-        e.g., 'AES_MODE_CBC-1'"""
+        e.g., 'AES_MODE_CBC-1'. The default here is None,
+        but in the default data_pipeline config file,
+        it is set to AES_MODE_CBC-1 for ease of set-up."""
         return data_pipeline_conf.read_string(
             'encryption_type',
-            default='AES_MODE_CBC-1'
+            default=None
         )
 
     @property
