@@ -76,7 +76,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             dest='config_path',
             help='Required: Config file path for FullRefreshRunner '
                  '(default: %default)',
-            default='config.yaml'
+            default='/nail/srv/configs/data_pipeline.yaml'
         )
         opt_group.add_option(
             '--topology-path',
@@ -117,6 +117,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self.primary_key = self.options.primary
         self.processed_row_count = 0
         self.where_clause = self.options.where_clause
+        self._connection_set = None
 
     def setup_connections(self):
         """Creates connections to the mySQL database.
@@ -317,10 +318,13 @@ class FullRefreshRunner(Batch, BatchDBMixin):
     def get_connection_set_from_cluster(self, cluster):
         """Given a cluster name, returns a connection to that cluster.
         """
+        if self._connection_set:
+            return self._connection_set
         topology = TopologyFile.new_from_file(self.options.topology_path)
         conn_defs = self._get_conn_defs(topology, cluster)
         conn_config = ConnectionSetConfig(cluster, conn_defs, read_only=False)
-        return ConnectionSet.from_config(conn_config)
+        self._connection_set = ConnectionSet.from_config(conn_config)
+        return self._connection_set
 
     def _get_conn_defs(self, topology, cluster):
         replica_level = 'master'
