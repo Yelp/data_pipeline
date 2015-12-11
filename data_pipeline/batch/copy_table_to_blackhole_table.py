@@ -127,7 +127,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
         This is overriding BatchDBMixin because we want to get connections
         based on the cluster instead of by replica names.
-        RefreshTransactionManager also takes a custom connection_set_getter
+        TransactionManager also takes a custom connection_set_getter
          function which gets a connection set by cluster and topology file.
         """
         self._txn_mgr = TransactionManager(

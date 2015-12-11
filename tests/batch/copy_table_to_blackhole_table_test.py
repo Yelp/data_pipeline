@@ -292,9 +292,9 @@ class TestFullRefreshRunner(object):
         show_table_query
     ):
         with mock.patch.object(
-                refresh_batch,
-                'execute_sql',
-                autospec=True
+            refresh_batch,
+            'execute_sql',
+            autospec=True
         ) as mock_execute:
             mock_execute.return_value.fetchone.return_value = [
                 'test_db',
