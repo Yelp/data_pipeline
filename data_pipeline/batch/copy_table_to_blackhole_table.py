@@ -76,7 +76,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             dest='config_path',
             help='Required: Config file path for FullRefreshRunner '
                  '(default: %default)',
-            default='/nail/srv/configs/data_pipeline.yaml'
+            default='/nail/srv/configs/data_pipeline_tools.yaml'
         )
         opt_group.add_option(
             '--topology-path',
