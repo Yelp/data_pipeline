@@ -292,6 +292,30 @@ def field_fixtures(pkeys):
             'nullable': False,
             'sql_default': ' test '
         },
+        {
+            'name': 'field_x',
+            'sql_line': "field_x bool,",
+            'sql_type': 'bool',
+            'sql_width': None,
+            'avro_type': ['boolean', 'null'],
+            'avro_meta': {},
+            'nullable': True,
+            'sql_default': None
+        },
+        {
+            'name': 'field_y',
+            'sql_line': 'field_y numeric(10, 5),',
+            'sql_type': 'numeric',
+            'sql_width': [10, 5],
+            'avro_type': ['double', 'null'],
+            'avro_meta': {
+                'fixed_pt': True,
+                'precision': 10,
+                'scale': 5
+            },
+            'nullable': True,
+            'sql_default': None
+        },
     ]
     fixtures = fixtures
     for index, name in enumerate(pkeys):
