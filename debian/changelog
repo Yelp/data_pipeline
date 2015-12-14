@@ -1,3 +1,16 @@
+data-pipeline-tools (0.1.41) lucid; urgency=low
+
+  * Commit: resolve version mismatch
+
+ -- Cheng Chen <cheng@yelp.com>  Fri, 11 Dec 2015 16:39:51 -0800
+
+data-pipeline-tools (0.1.40) lucid; urgency=low
+
+  * Commit: Merge branch 'DATAPIPE-577-Cache-avros-schema-to-schema-id-
+    mapping'
+
+ -- Justin Cunningham <justinc@yelp.com>  Wed, 02 Dec 2015 13:48:37 -0800
+
 data-pipeline-tools (0.1.39) lucid; urgency=low
 
   * Commit: added status, primary keys, and note into avro schema object
