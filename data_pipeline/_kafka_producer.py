@@ -14,7 +14,6 @@ from data_pipeline._position_data_tracker import PositionDataTracker
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
 
-
 _EnvelopeAndMessage = namedtuple("_EnvelopeAndMessage", ["envelope", "message"])
 logger = get_config().logger
 
@@ -28,7 +27,6 @@ def _prepare(envelope_and_message):
             kwargs['key'] = envelope_and_message.envelope.pack_keys(
                 envelope_and_message.message.keys
             )
-
         return create_message(
             envelope_and_message.envelope.pack(envelope_and_message.message),
             **kwargs
@@ -68,7 +66,7 @@ class KafkaProducer(object):
         self._flush_if_necessary()
 
     def publish(self, message):
-        if self.skip_messages_with_pii and message.contains_pii:
+        if message.contains_pii and self.skip_messages_with_pii:
             return
         self._add_message_to_buffer(message)
         self.position_data_tracker.record_message_buffered(message)

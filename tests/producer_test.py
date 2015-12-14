@@ -24,6 +24,7 @@ from data_pipeline.producer import PublicationUnensurableError
 from data_pipeline.testing_helpers.kafka_docker import capture_new_data_pipeline_messages
 from data_pipeline.testing_helpers.kafka_docker import capture_new_messages
 from data_pipeline.testing_helpers.kafka_docker import setup_capture_new_messages_consumer
+from tests.helpers.config import reconfigure
 
 
 class RandomException(Exception):
@@ -142,6 +143,7 @@ class TestProducer(TestProducerBase):
     def test_messages_published_without_flush(self, topic, message, producer_instance):
         with capture_new_messages(topic) as get_messages, producer_instance as producer:
             producer.publish(message)
+
         assert len(multiprocessing.active_children()) == 0
         assert len(get_messages()) == 1
 
@@ -213,18 +215,19 @@ class TestProducer(TestProducerBase):
         producer,
         registered_schema
     ):
-        messages = self._publish_message(
-            topic,
-            self.create_message(
+        with reconfigure(encryption_type='AES_MODE_CBC-1'):
+            messages = self._publish_message(
                 topic,
-                payload,
-                registered_schema,
-                contains_pii=True
-            ),
-            producer
-        )
+                self.create_message(
+                    topic,
+                    payload,
+                    registered_schema,
+                    contains_pii=True
+                ),
+                producer
+            )
 
-        assert len(messages) == 0
+            assert len(messages) == 0
 
     def test_basic_publish_message_with_payload_data(
         self,
@@ -239,6 +242,46 @@ class TestProducer(TestProducerBase):
             producer,
             envelope
         )
+
+    def test_encrypt_message_with_pii(
+        self,
+        topic,
+        registered_schema
+    ):
+        payload = b'hello world!'
+
+        with reconfigure(encryption_type='AES_MODE_CBC-1'):
+            test_message = self.create_message(
+                topic,
+                payload,
+                registered_schema,
+                contains_pii=True
+            )
+            assert test_message.payload != payload
+
+    def test_publish_encrypted_message_from_payload_data_with_pii(
+        self,
+        topic,
+        producer_instance,
+        registered_schema,
+    ):
+        payload_data = {'good_field': 20}
+        with reconfigure(encryption_type='AES_MODE_CBC-1'), reconfigure(skip_messages_with_pii=False):
+            with producer_instance as producer:
+                test_message = CreateMessage(
+                    topic=topic,
+                    payload_data=payload_data,
+                    schema_id=registered_schema.schema_id,
+                    timestamp=1500,
+                    contains_pii=True
+                )
+                messages = self._publish_message(
+                    topic,
+                    test_message,
+                    producer
+                )
+                assert len(messages) == 1
+                assert messages[0].payload_data == test_message.payload_data
 
     def test_basic_publish_message_with_primary_keys(
         self,
@@ -260,7 +303,7 @@ class TestProducer(TestProducerBase):
                 )
             )
             producer.flush()
-        assert get_messages()[0].message.key == '\'key1=\\\'\'\x1f\'key2=\\\\\'\x1f\'key3=哎ù\x1f\''.encode('utf-8')
+            assert get_messages()[0].message.key == '\'key1=\\\'\'\x1f\'key2=\\\\\'\x1f\'key3=哎ù\x1f\''.encode('utf-8')
 
 
 class TestPublishMonitorMessage(TestProducerBase):

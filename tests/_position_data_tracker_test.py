@@ -17,7 +17,8 @@ class BasePositionDataTrackerTest(object):
         return {
             'topic': self.topic,
             'schema_id': 123,
-            'payload': bytes(10)
+            'payload': bytes(10),
+            'contains_pii': False,
         }
 
     @property
