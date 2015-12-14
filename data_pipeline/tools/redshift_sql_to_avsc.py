@@ -32,12 +32,14 @@ STOP_FIELDS_REGEX = re.compile('^\)')
 
 REDSHIFT_SQL_TO_AVRO_TYPE_MAPPING = {
     'bigint': 'long',
+    'bool': 'boolean',
     'boolean': 'boolean',
     'bpchar': 'string',
     'char': 'string',
     'character': 'string',
     'date': 'string',
     'decimal': 'double',
+    'numeric': 'double',
     'double': 'double',
     'float': 'double',
     'float4': 'float',
@@ -143,7 +145,7 @@ class RedshiftFieldLineToAvroFieldConverter(object):
             meta['fixlen'] = self.sql_type_width
         if self.sql_type in ['date', 'timestamp']:
             meta[self.sql_type] = True
-        if self.sql_type == 'decimal':
+        if self.sql_type in ['decimal', 'numeric']:
             meta['fixed_pt'] = True
             meta['precision'] = self.sql_type_width[0]
             meta['scale'] = self.sql_type_width[1]
