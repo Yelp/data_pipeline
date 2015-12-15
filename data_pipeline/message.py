@@ -8,7 +8,9 @@ from uuid import UUID
 
 from yelp_avro.avro_string_reader import AvroStringReader
 from yelp_avro.avro_string_writer import AvroStringWriter
+from yelp_lib.containers.lists import unlist
 
+from data_pipeline._encryption_helper import EncryptionHelper
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
@@ -16,7 +18,6 @@ from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
 from data_pipeline.meta_attribute import MetaAttribute
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
-
 
 logger = get_config().logger
 
@@ -177,6 +178,24 @@ class Message(object):
     @contains_pii.setter
     def contains_pii(self, contains_pii):
         self._contains_pii = contains_pii
+        self._encryption_type = None  # force encryption_type to be rechecked
+
+    @property
+    def encryption_type(self):
+        if self._encryption_type is None and self.contains_pii:
+            self._encryption_type = get_config().encryption_type
+            if self._encryption_type is None:
+                raise ValueError(
+                    "Encryption type must be set when message contains PII."
+                )
+        return self._encryption_type
+
+    def _encryption_type_setter(self, encryption_type):
+        self._encryption_type = encryption_type
+
+    @property
+    def encryption_helper(self):
+        return EncryptionHelper(message=self)
 
     @property
     def dry_run(self):
@@ -202,6 +221,11 @@ class Message(object):
                 "Meta must be None or list of MetaAttribute objects."
             )
         self._meta = meta
+
+    def get_meta_attr_by_type(self, meta, meta_type):
+        if meta is not None:
+            attributes_with_type = [m for m in meta if m.source == meta_type]
+            return unlist(attributes_with_type)
 
     def _get_meta_attr_avro_repr(self):
         if self.meta is not None:
@@ -278,6 +302,7 @@ class Message(object):
     def payload(self, payload):
         if not isinstance(payload, bytes):
             raise TypeError("Payload must be bytes")
+        payload = self._encrypt_payload_if_necessary(payload)
         self._payload = payload
         self._payload_data = None  # force payload_data to be re-decoded
 
@@ -320,7 +345,7 @@ class Message(object):
         dry_run=False,
         meta=None
     ):
-        # The decision not to just pack the message to validate it is
+        # The decision not to just pack the message, but to validate it, is
         # intentional here.  We want to perform more sanity checks than avro
         # does, and in addition, this check is quite a bit faster than
         # serialization.  Finally, if we do it this way, we can lazily
@@ -334,12 +359,11 @@ class Message(object):
         self.kafka_position_info = kafka_position_info
         self.keys = keys
         self.dry_run = dry_run
-        self.meta = meta
-        self._set_payload_or_payload_data(payload, payload_data)
         # TODO(DATAPIPE-416|psuben):
         # Make it so contains_pii is no longer overrideable.
         self.contains_pii = contains_pii
-
+        self.meta = meta
+        self._set_payload_or_payload_data(payload, payload_data)
         if topic:
             logger.debug("Overriding message topic: {0} for schema {1}."
                          .format(topic, schema_id))
@@ -386,7 +410,8 @@ class Message(object):
             self.timestamp,
             self.upstream_position_info,
             self.kafka_position_info,
-            self.dry_run
+            self.dry_run,
+            self.encryption_type
         )
 
     @property
@@ -394,10 +419,11 @@ class Message(object):
         return {
             'uuid': self.uuid,
             'message_type': self.message_type.name,
-            'schema_id': self.schema_id,
             'payload': self.payload,
+            'schema_id': self.schema_id,
             'timestamp': self.timestamp,
             'meta': self._get_meta_attr_avro_repr(),
+            'encryption_type': self.encryption_type,
         }
 
     def _encode_payload_data_if_necessary(self):
@@ -408,19 +434,32 @@ class Message(object):
         """Encodes data, returning a repr in dry_run mode"""
         if self.dry_run:
             return repr(data)
-        return self._avro_string_writer.encode(message_avro_representation=data)
+        encoded_payload = self._avro_string_writer.encode(message_avro_representation=data)
+        return self._encrypt_payload_if_necessary(encoded_payload)
+
+    def _encrypt_payload_if_necessary(self, payload):
+        """Uses EncryptionHelper to encrypt pii payload."""
+        if self.encryption_type is not None:
+            return self.encryption_helper.encrypt_message_with_pii(payload)
+        return payload
 
     def _decode_payload_if_necessary(self):
         if self._payload_data is None:
+            encoded_message = self._decrypt_payload_if_necessary(self._payload)
             self._payload_data = self._avro_string_reader.decode(
-                encoded_message=self._payload
+                encoded_message=encoded_message
             )
+
+    def _decrypt_payload_if_necessary(self, payload):
+        if self.encryption_type is not None:
+            return self.encryption_helper.decrypt_message_with_pii(payload)
+        return payload
 
     def reload_data(self):
         """Encode the payload data or decode the payload if it hasn't done so.
         """
-        self._decode_payload_if_necessary()
         self._encode_payload_data_if_necessary()
+        self._decode_payload_if_necessary()
 
     @property
     def _str_repr(self):
@@ -491,7 +530,7 @@ class UpdateMessage(Message):
         kafka_position_info=None,
         keys=None,
         dry_run=False,
-        meta=None
+        meta=None,
     ):
         super(UpdateMessage, self).__init__(
             schema_id,
@@ -505,7 +544,7 @@ class UpdateMessage(Message):
             kafka_position_info=kafka_position_info,
             keys=keys,
             dry_run=dry_run,
-            meta=meta
+            meta=meta,
         )
         self._set_previous_payload_or_payload_data(
             previous_payload,
@@ -585,6 +624,7 @@ class UpdateMessage(Message):
             'previous_payload': self.previous_payload,
             'timestamp': self.timestamp,
             'meta': self._get_meta_attr_avro_repr(),
+            'encryption_type': self.encryption_type
         }
 
     def _encode_previous_payload_data_if_necessary(self):
@@ -739,13 +779,14 @@ def _create_message_from_packed_message(
             MetaAttribute(schema_id=o['schema_id'], encoded_payload=o['payload'])
             for o in unpacked_message['meta']
         ] if unpacked_message['meta'] else None,
-        'kafka_position_info': kafka_position_info
+        'kafka_position_info': kafka_position_info,
     }
     if message_class is UpdateMessage:
         message_params.update(
             {'previous_payload': unpacked_message['previous_payload']}
         )
     message = message_class(**message_params)
+    message._encryption_type_setter(unpacked_message['encryption_type'])
     if force_payload_decoding:
         # Access the cached, but lazily-calculated, properties
         message.reload_data()

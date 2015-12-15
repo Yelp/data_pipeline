@@ -11,7 +11,6 @@ from data_pipeline.base_consumer import BaseConsumer
 from data_pipeline.config import get_config
 from data_pipeline.message import create_from_kafka_message
 
-
 logger = get_config().logger
 
 

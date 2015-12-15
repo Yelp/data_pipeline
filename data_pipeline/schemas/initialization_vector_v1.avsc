@@ -1,0 +1,7 @@
+{
+  "type": "fixed",
+  "size": 16,
+  "namespace": "yelp.data_pipeline",
+  "name": "initialization_vector",
+  "doc": "Serializes an initalization vector for encrypting PII."
+}

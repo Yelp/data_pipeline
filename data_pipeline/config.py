@@ -221,6 +221,25 @@ class Config(object):
         )
 
     @property
+    def encryption_type(self):
+        """Algorithm and key to use when encrypting pii,
+        e.g., 'AES_MODE_CBC-1'. The default here is None,
+        but in the default data_pipeline config file,
+        it is set to AES_MODE_CBC-1 for ease of set-up."""
+        return data_pipeline_conf.read_string(
+            'encryption_type',
+            default=None
+        )
+
+    @property
+    def key_location(self):
+        """Directory in which to look for key to encrypt pii."""
+        return data_pipeline_conf.read_string(
+            'key_location',
+            default='/nail/srv/configs/data_pipeline/'
+        )
+
+    @property
     def data_pipeline_teams_config_file_path(self):
         """Returns the path to the config file which specifies valid teams for
         the data pipeline.
