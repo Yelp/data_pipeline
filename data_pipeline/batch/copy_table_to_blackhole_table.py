@@ -7,14 +7,18 @@ import time
 from datetime import datetime
 from optparse import OptionGroup
 
-import yelp_conn
 from yelp_batch import Batch
 from yelp_batch import batch_command_line_options
 from yelp_batch import batch_configure
 from yelp_batch import batch_context
 from yelp_batch._db import BatchDBMixin
+from yelp_conn.connection_set import ConnectionDef
+from yelp_conn.connection_set import ConnectionSet
+from yelp_conn.sqlatxn import TransactionManager
+from yelp_conn.topology import ConnectionSetConfig
+from yelp_conn.topology import TopologyFile
 from yelp_lib.classutil import cached_property
-from yelp_servlib import config_util
+from yelp_servlib.config_util import load_default_config
 
 
 class FullRefreshRunner(Batch, BatchDBMixin):
@@ -32,21 +36,9 @@ class FullRefreshRunner(Batch, BatchDBMixin):
     def define_options(self, option_parser):
         opt_group = OptionGroup(option_parser, 'Full Refresh Runner Options')
         opt_group.add_option(
-            '--ro-replica',
-            dest='ro_replica',
-            default=str('batch_ro'),
-            help='Required: Read-only replica name.'
-        )
-        opt_group.add_option(
-            '--rw-replica',
-            dest='rw_replica',
-            default=str('batch_rw'),
-            help='Required: Read-write replica name.'
-        )
-        opt_group.add_option(
             '--cluster',
             dest='cluster',
-            default='primary',
+            default='refresh_primary',
             help='Required: Specifies table cluster (default: %default).'
         )
         opt_group.add_option(
@@ -82,7 +74,16 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         opt_group.add_option(
             '--config-path',
             dest='config_path',
-            help='Required: Config file path for FullRefreshRunner'
+            help='Required: Config file path for FullRefreshRunner '
+                 '(default: %default)',
+            default='/nail/srv/configs/data_pipeline_tools.yaml'
+        )
+        opt_group.add_option(
+            '--topology-path',
+            dest='topology_path',
+            help='Path to the topology.yaml file.'
+                 '(default: %default)',
+            default='/nail/srv/configs/topology.yaml'
         )
         opt_group.add_option(
             '--where',
@@ -104,20 +105,10 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         return opt_group
 
     @batch_configure
-    def configure(self):
-        config_util.load_package_config(
-            self.options.config_path,
-            field='module_config'
-        )
-        yelp_conn.initialize()
-
-    @batch_configure
     def _init_global_state(self):
+        load_default_config(self.options.config_path)
         if self.options.batch_size <= 0:
             raise ValueError("Batch size should be greater than 0")
-
-        self.ro_replica_name = self.options.ro_replica
-        self.rw_replica_name = self.options.rw_replica
         self.db_name = self.options.cluster
         self.database = self.options.database
         self.table_name = self.options.table_name
@@ -127,6 +118,25 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self.primary_key = self.options.primary
         self.processed_row_count = 0
         self.where_clause = self.options.where_clause
+        self._connection_set = None
+
+    def setup_connections(self):
+        """Creates connections to the mySQL database.
+
+        Builds a connection set to the cluster of the table that
+         you are refreshing.
+
+        This is overriding BatchDBMixin because we want to get connections
+        based on the cluster instead of by replica names.
+        TransactionManager also takes a custom connection_set_getter
+         function which gets a connection set by cluster and topology file.
+        """
+        self._txn_mgr = TransactionManager(
+            cluster_name=self.db_name,
+            ro_replica_name=self.db_name,
+            rw_replica_name=self.db_name,
+            connection_set_getter=self.get_connection_set_from_cluster
+        )
 
     @cached_property
     def total_row_count(self):
@@ -213,11 +223,13 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.throttle_to_replication(rw_conn)
 
     def _commit_changes(self):
-        self._read_session.rollback()
         if not self.options.dry_run:
             self._write_session.commit()
         else:
             self.log.info("Dry run: Writes would be committed here.")
+        # Commit the write session before rolling back the read session
+        # in case the same connection is used for both reading and writing.
+        self._read_session.rollback()
 
     def initial_action(self):
         if self.database:
@@ -303,6 +315,28 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.log_info()
         finally:
             self.final_action()
+
+    def get_connection_set_from_cluster(self, cluster):
+        """Given a cluster name, returns a connection to that cluster.
+        """
+        if self._connection_set:
+            return self._connection_set
+        topology = TopologyFile.new_from_file(self.options.topology_path)
+        conn_defs = self._get_conn_defs(topology, cluster)
+        conn_config = ConnectionSetConfig(cluster, conn_defs, read_only=False)
+        self._connection_set = ConnectionSet.from_config(conn_config)
+        return self._connection_set
+
+    def _get_conn_defs(self, topology, cluster):
+        replica_level = 'master'
+        connection_cluster = topology.topologies[cluster, replica_level]
+        conn_def = ConnectionDef(
+            cluster,
+            replica_level,
+            auto_commit=False,
+            database=connection_cluster.database
+        )
+        return {cluster: (conn_def, connection_cluster)}
 
 
 if __name__ == '__main__':

@@ -46,6 +46,7 @@ setup(
             # implicit dependency of yelp_batch
             'thriftpy<0.2.0',
             'yelp_batch>=0.19.4',
+            'yelp_conn>=7.0.0'
         ],
         'testing_helpers': [
             'docker-compose==1.5.0',
