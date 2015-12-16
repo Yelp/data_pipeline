@@ -81,7 +81,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         opt_group.add_option(
             '--topology-path',
             dest='topology_path',
-            help='Path to the topology.yaml file.',
+            help='Path to the topology.yaml file.'
+                 '(default: %default)',
             default='/nail/srv/configs/topology.yaml'
         )
         opt_group.add_option(
