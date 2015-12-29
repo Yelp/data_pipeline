@@ -1,3 +1,9 @@
+data-pipeline-tools (0.1.43) lucid; urgency=low
+
+  * Commit: bump docker-py to 1.6.0
+
+ -- Cheng Chen <cheng@yelp.com>  Tue, 29 Dec 2015 12:14:04 -0800
+
 data-pipeline-tools (0.1.42) lucid; urgency=low
 
   * Commit: Merge branch 'master' of
