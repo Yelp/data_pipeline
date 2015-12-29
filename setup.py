@@ -50,7 +50,7 @@ setup(
         ],
         'testing_helpers': [
             'docker-compose==1.5.0',
-            'docker-py==1.5.0',
+            'docker-py==1.6.0',
             # requests is locked at <2.7 to satisfy a docker-compose requirement
             'requests<2.7'
         ]
