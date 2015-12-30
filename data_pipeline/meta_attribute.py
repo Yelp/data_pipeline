@@ -118,7 +118,4 @@ class MetaAttribute(object):
         }
 
     def __repr__(self):
-        return '{}'.format({
-            'schema_id': self.schema_id,
-            'payload': self.payload
-        })
+        return '{}'.format(self._asdict())
