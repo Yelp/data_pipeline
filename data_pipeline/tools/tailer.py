@@ -291,7 +291,13 @@ class Tailer(Batch):
             return simplejson.dumps(
                 obj=result_dict,
                 sort_keys=True,
+
+                # Objects can use _asdict() to be encoded as JSON objects
                 namedtuple_as_object=True,
+
+                # Use an object's __repr__() to return a serializable version
+                # of an object, rather than raising a TypeError, if the object
+                # does not define an _asdict() method
                 default=lambda x: repr(x)
             )
         else:
