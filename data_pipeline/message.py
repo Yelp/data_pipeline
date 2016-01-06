@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import base64
 import time
 from collections import namedtuple
 from uuid import UUID
@@ -148,6 +149,10 @@ class Message(object):
         return self._message_type
 
     @property
+    def uuid_base64(self):
+        return base64.b64encode(self.uuid)
+
+    @property
     def uuid(self):
         return self._uuid
 
@@ -194,7 +199,7 @@ class Message(object):
         self._encryption_type = encryption_type
 
     @property
-    def encryption_helper(self):
+    def _encryption_helper(self):
         return EncryptionHelper(message=self)
 
     @property
@@ -440,7 +445,7 @@ class Message(object):
     def _encrypt_payload_if_necessary(self, payload):
         """Uses EncryptionHelper to encrypt pii payload."""
         if self.encryption_type is not None:
-            return self.encryption_helper.encrypt_message_with_pii(payload)
+            return self._encryption_helper.encrypt_message_with_pii(payload)
         return payload
 
     def _decode_payload_if_necessary(self):
@@ -452,7 +457,7 @@ class Message(object):
 
     def _decrypt_payload_if_necessary(self, payload):
         if self.encryption_type is not None:
-            return self.encryption_helper.decrypt_message_with_pii(payload)
+            return self._encryption_helper.decrypt_message_with_pii(payload)
         return payload
 
     def reload_data(self):

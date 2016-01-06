@@ -4,9 +4,12 @@ from __future__ import unicode_literals
 
 import re
 import signal
+import time
+from inspect import getmembers
 from optparse import OptionGroup
 from uuid import UUID
 
+import simplejson
 from yelp_batch.batch import Batch
 from yelp_batch.batch import batch_command_line_options
 from yelp_batch.batch import batch_configure
@@ -18,6 +21,7 @@ from data_pipeline.base_consumer import ConsumerTopicState
 from data_pipeline.config import get_config
 from data_pipeline.consumer import Consumer
 from data_pipeline.expected_frequency import ExpectedFrequency
+from data_pipeline.message import Message
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 
@@ -109,16 +113,79 @@ class Tailer(Batch):
             )
         )
         opt_group.add_option(
-            '--include-envelope-data',
+            '-f', '--field',
+            type='string',
+            action='append',
+            dest='fields',
+            default=['payload_data'],
+            help=(
+                'The fields of the message to output (default: %default). '
+                'The following fields '
+                'are available: {}'.format(
+                    ', '.join(self._public_message_field_names)
+                )
+            ),
+        )
+        opt_group.add_option(
+            '--all-fields',
             default=False,
             action='store_true',
             help=(
-                'If set, envelope info will be output along with the message '
-                'contents.'
+                'If set, all fields of the message will be output. This is a '
+                'shortcut to doing --field for every field name.'
             )
         )
-
+        opt_group.add_option(
+            '--json',
+            default=False,
+            action='store_true',
+            help=(
+                'If set, the output is converted from into json.'
+            )
+        )
+        opt_group.add_option(
+            '--iso-time',
+            default=False,
+            action='store_true',
+            help=(
+                'If set, the output for time fields will be in ISO 8601 '
+                'format rather than epoch timestamp.'
+            )
+        )
         return opt_group
+
+    @property
+    def _all_message_field_names(self):
+        return [
+            name for name, value in getmembers(
+                Message,
+                lambda v: isinstance(v, property)
+            )
+        ]
+
+    @property
+    def _public_message_field_names(self):
+        return [
+            name for name in self._all_message_field_names
+            if not name.startswith('_') and name not in [
+                # these fields contain redundant information and as byte-fields
+                # can result in UnicodeDecodeError from the simplejson encoder
+                'payload',
+                'previous_payload',
+                'uuid',
+
+                # avro_repr contains redundant information
+                'avro_repr',
+
+                # upstream_position_info is for internal use, should always
+                # be 'None' to the messages the Tailer will see
+                'upstream_position_info',
+
+                # dry_run is always going to be 'False' to messages the Tailer
+                # would see
+                'dry_run'
+            ]
+        ]
 
     @batch_configure
     def _configure_tools(self):
@@ -130,6 +197,9 @@ class Tailer(Batch):
         self._setup_topics()
         if len(self.topic_to_offsets_map) == 0:
             self.option_parser.error("At least one topic must be specified.")
+
+        if self.options.all_fields:
+            self.options.fields = self._public_message_field_names
 
     def _setup_topics(self):
         self.topic_to_offsets_map = {}
@@ -191,11 +261,47 @@ class Tailer(Batch):
                     print self._format_message(message)
                     message_count += 1
 
-    def _format_message(self, message):
-        if self.options.include_envelope_data:
-            return message
+    def _get_message_result_dict(self, message):
+        return {
+            field: getattr(message, field) for field in self.options.fields
+        }
 
-        return message.payload_data
+    def _walk_dict(self, node, transform_item):
+        for key, item in node.items():
+            if isinstance(item, dict):
+                self._walk_dict(item, transform_item)
+            else:
+                node[key] = transform_item(key, item)
+
+    def _iso_time(self, result_dict):
+        def _transform_item_iso_time(key, item):
+            if key.startswith('time') and isinstance(item, int):
+                return time.strftime(
+                    '%Y-%m-%dT%H:%M:%S',
+                    time.gmtime(item)
+                )
+            return item
+        self._walk_dict(result_dict, _transform_item_iso_time)
+
+    def _format_message(self, message):
+        result_dict = self._get_message_result_dict(message)
+        if self.options.iso_time:
+            self._iso_time(result_dict)
+        if self.options.json:
+            return simplejson.dumps(
+                obj=result_dict,
+                sort_keys=True,
+
+                # Objects can use _asdict() to be encoded as JSON objects
+                namedtuple_as_object=True,
+
+                # Use an object's __repr__() to return a serializable version
+                # of an object, rather than raising a TypeError, if the object
+                # does not define an _asdict() method
+                default=lambda x: repr(x)
+            )
+        else:
+            return result_dict
 
     def keep_running(self, message_count):
         return self._running and (

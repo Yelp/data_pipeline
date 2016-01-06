@@ -47,12 +47,12 @@ class MetaAttribute(object):
         self.payload = self._get_decoded_payload(encoded_payload)
 
     @cached_property
-    def schematizer(self):
+    def _schematizer(self):
         return get_schematizer()
 
     @cached_property
     def _avro_schema_obj(self):
-        return self.schematizer.get_schema_by_id(self.schema_id)
+        return self._schematizer.get_schema_by_id(self.schema_id)
 
     @cached_property
     def owner_email(self):
@@ -76,7 +76,7 @@ class MetaAttribute(object):
 
     @cached_property
     def schema_id(self):
-        avro_schema_obj = self.schematizer.get_schema_by_schema_json(
+        avro_schema_obj = self._schematizer.get_schema_by_schema_json(
             self.avro_schema
         )
         if avro_schema_obj:
@@ -84,7 +84,7 @@ class MetaAttribute(object):
         return self._register_schema()
 
     def _register_schema(self):
-        schema_info = self.schematizer.register_schema_from_schema_json(
+        schema_info = self._schematizer.register_schema_from_schema_json(
             namespace=self.namespace,
             source=self.source,
             schema_json=self.avro_schema,
@@ -94,7 +94,9 @@ class MetaAttribute(object):
         return schema_info.schema_id
 
     def _get_decoded_payload(self, encoded_payload):
-        return AvroStringReader(self.avro_schema, self.avro_schema).decode(encoded_payload)
+        return AvroStringReader(self.avro_schema, self.avro_schema).decode(
+            encoded_message=encoded_payload
+        )
 
     @cached_property
     def encoded_payload(self):
@@ -106,3 +108,14 @@ class MetaAttribute(object):
             'schema_id': self.schema_id,
             'payload': self.encoded_payload
         }
+
+    def _asdict(self):
+        """ Helper method for simplejson encoding in the Tailer
+        """
+        return {
+            'schema_id': self.schema_id,
+            'payload': self.payload
+        }
+
+    def __repr__(self):
+        return '{}'.format(self._asdict())
