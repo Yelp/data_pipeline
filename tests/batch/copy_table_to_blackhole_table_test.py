@@ -78,7 +78,8 @@ class TestFullRefreshRunner(object):
         cluster,
         table_name,
         topology_path,
-        mock_load_config
+        mock_load_config,
+        database_name
     ):
         batch = FullRefreshRunner()
         batch.process_commandline_options([
@@ -86,36 +87,21 @@ class TestFullRefreshRunner(object):
             '--table-name={0}'.format(table_name),
             '--primary=id',
             '--cluster={0}'.format(cluster),
-            '--topology-path={0}'.format(topology_path)
-        ])
-        batch._init_global_state()
-        yield batch
-
-    @pytest.yield_fixture
-    def refresh_batch_db_option(
-        self,
-        database_name,
-        table_name,
-        mock_load_config
-    ):
-        batch = FullRefreshRunner()
-        batch.process_commandline_options([
-            '--dry-run',
-            '--table-name={0}'.format(table_name),
+            '--topology-path={0}'.format(topology_path),
             '--database={0}'.format(database_name)
         ])
-        batch.setup_connections = mock.Mock()
         batch._init_global_state()
         yield batch
 
     @pytest.yield_fixture
-    def refresh_batch_custom_where(self, table_name, mock_load_config):
+    def refresh_batch_custom_where(self, table_name, mock_load_config, database_name):
         batch = FullRefreshRunner()
         batch.process_commandline_options([
             '--dry-run',
             '--table-name={0}'.format(table_name),
             '--primary=id',
-            '--where={0}'.format("country='CA'")
+            '--where={0}'.format("country='CA'"),
+            '--database={0}'.format(database_name)
         ])
         batch._init_global_state()
         yield batch
@@ -139,14 +125,40 @@ class TestFullRefreshRunner(object):
             yield mock_write_session
 
     @pytest.yield_fixture
-    def _read_session(self, refresh_batch):
-        with refresh_batch.read_session() as refresh_batch._read_session:
-            yield
+    def read_session(self, refresh_batch, _read):
+        with refresh_batch.read_session() as read_session:
+            yield read_session
 
     @pytest.yield_fixture
-    def _write_session(self, refresh_batch):
-        with refresh_batch.write_session() as refresh_batch._write_session:
-            yield
+    def write_session(self, refresh_batch, _write):
+        with refresh_batch.write_session() as write_session:
+            yield write_session
+
+    @pytest.yield_fixture
+    def _rw_conn(self, refresh_batch):
+        with mock.patch.object(
+            refresh_batch,
+            'rw_conn'
+        ) as mock_rw_conn:
+            yield mock_rw_conn
+
+    @pytest.yield_fixture
+    def rw_conn(self, _rw_conn):
+        with _rw_conn() as conn:
+            yield conn
+
+    @pytest.yield_fixture
+    def _ro_conn(self, refresh_batch):
+        with mock.patch.object(
+            refresh_batch,
+            'ro_conn'
+        ) as mock_ro_conn:
+            yield mock_ro_conn
+
+    @pytest.yield_fixture
+    def ro_conn(self, _ro_conn):
+        with _ro_conn() as conn:
+            yield conn
 
     @pytest.yield_fixture
     def sessions(
@@ -154,16 +166,16 @@ class TestFullRefreshRunner(object):
         refresh_batch,
         _read,
         _write,
-        _read_session,
-        _write_session
+        read_session,
+        write_session
     ):
         yield
 
     @pytest.yield_fixture
     def mock_process_rows(self):
         with mock.patch.object(
-                FullRefreshRunner,
-                '_after_processing_rows'
+            FullRefreshRunner,
+            '_after_processing_rows'
         ) as mock_process_rows:
             yield mock_process_rows
 
@@ -180,7 +192,7 @@ class TestFullRefreshRunner(object):
     def mock_execute(self):
         with mock.patch.object(
             FullRefreshRunner,
-            'execute_sql'
+            '_execute_query'
         ) as mock_execute:
             yield mock_execute
 
@@ -212,47 +224,58 @@ class TestFullRefreshRunner(object):
                 connection_set_getter=mock_get_conn
             )
 
-    def test_initial_action_no_db(
-        self,
-        refresh_batch,
-        mock_execute,
-        mock_process_rows,
-        mock_create_table_src
-    ):
-        refresh_batch.initial_action()
-        assert mock_execute.call_count == 0
-        self.assert_initial_action(mock_create_table_src, mock_process_rows)
-
     def test_initial_action_with_db(
         self,
         database_name,
-        refresh_batch_db_option,
+        refresh_batch,
         mock_execute,
         mock_process_rows,
-        mock_create_table_src
+        mock_create_table_src,
+        sessions,
+        write_session
     ):
-        refresh_batch_db_option.initial_action()
+        with mock.patch.object(
+            refresh_batch,
+            '_wait_for_replication'
+        ) as wait_for_replication_mock:
+            refresh_batch.initial_action()
+        assert wait_for_replication_mock.call_count == 1
         mock_execute.assert_called_once_with(
+            write_session,
             "USE {0}".format(database_name),
-            is_write_session=True
         )
-        self.assert_initial_action(mock_create_table_src, mock_process_rows)
+        mock_create_table_src.assert_called_once_with(write_session)
+        assert write_session.rollback.call_count == 1
 
-    def assert_initial_action(self, mock_create, mock_process):
-        mock_create.assert_called_once_with()
-        mock_process.assert_called_once_with()
-
-    def test_final_action(self, refresh_batch, temp_name, mock_execute):
+    def test_final_action(
+        self,
+        refresh_batch,
+        temp_name,
+        write_session,
+        mock_execute,
+        database_name
+    ):
         refresh_batch.final_action()
-        mock_execute.assert_called_once_with(
-            'DROP TABLE IF EXISTS {0}'.format(temp_name),
-            is_write_session=True
-        )
+        calls = [
+            mock.call(write_session, 'USE {0}'.format(database_name)),
+            mock.call(
+                write_session,
+                'DROP TABLE IF EXISTS {0}'.format(temp_name),
+            ),
+        ]
+        mock_execute.assert_has_calls(calls)
 
-    def test_after_row_processing(self, refresh_batch, sessions):
-        refresh_batch._commit_changes()
-        refresh_batch._read_session.rollback.assert_called_once_with()
-        assert refresh_batch._write_session.commit.call_count == 0
+    def test_after_row_processing(self, refresh_batch, write_session, rw_conn):
+        with mock.patch.object(
+            refresh_batch,
+            'throttle_to_replication'
+        ) as throttle_mock:
+            refresh_batch._after_processing_rows(write_session)
+
+        assert write_session.rollback.call_count == 1
+        write_session.execute.assert_called_once_with('UNLOCK TABLES')
+        assert write_session.commit.call_count == 1
+        throttle_mock.assert_called_once_with(rw_conn)
 
     def test_build_select(
         self,
@@ -289,46 +312,40 @@ class TestFullRefreshRunner(object):
         refresh_batch,
         fake_original_table,
         fake_new_table,
-        show_table_query
+        show_table_query,
+        write_session
     ):
         with mock.patch.object(
             refresh_batch,
-            'execute_sql',
+            '_execute_query',
             autospec=True
         ) as mock_execute:
             mock_execute.return_value.fetchone.return_value = [
                 'test_db',
                 fake_original_table
             ]
-            refresh_batch.create_table_from_src_table()
+            refresh_batch.create_table_from_src_table(write_session)
             calls = [
-                mock.call(show_table_query, is_write_session=False),
-                mock.call(fake_new_table, is_write_session=True)
+                mock.call(write_session, show_table_query),
+                mock.call(write_session, fake_new_table)
             ]
             mock_execute.assert_has_calls(calls, any_order=True)
 
-    def test_execute_sql_read(self, refresh_batch, sessions, fake_query):
-        refresh_batch.execute_sql(fake_query, is_write_session=False)
-        refresh_batch._read_session.execute.assert_called_once_with(
-            fake_query
-        )
-        assert refresh_batch._write_session.execute.call_count == 0
-
-    def test_execute_sql_write(self, refresh_batch, sessions, fake_query):
-        refresh_batch.execute_sql(fake_query, is_write_session=True)
-        assert refresh_batch._read_session.execute.call_count == 0
-        assert refresh_batch._write_session.execute.call_count == 0
+    def test_execute_query(self, refresh_batch, write_session, fake_query):
+        refresh_batch._execute_query(write_session, fake_query)
+        write_session.execute.assert_called_once_with(fake_query)
 
     def insert_batch_test_helper(
         self,
         batch,
+        session,
         temp_name,
         table_name,
         mock_execute,
         clause
     ):
         offset = 0
-        batch.insert_batch(offset)
+        batch.insert_batch(session, offset)
         if clause is not None:
             query = (
                 'INSERT INTO {0} SELECT * FROM {1} WHERE {2} '
@@ -350,18 +367,20 @@ class TestFullRefreshRunner(object):
                 offset,
                 batch.options.batch_size
             )
-        mock_execute.assert_called_once_with(query, is_write_session=True)
+        mock_execute.assert_called_once_with(session, query)
 
     def test_insert_batch_default_where(
         self,
         refresh_batch,
         mock_execute,
         table_name,
-        temp_name
+        temp_name,
+        write_session
     ):
         clause = None
         self.insert_batch_test_helper(
             refresh_batch,
+            write_session,
             temp_name,
             table_name,
             mock_execute,
@@ -374,10 +393,12 @@ class TestFullRefreshRunner(object):
         temp_name,
         table_name,
         mock_execute,
+        write_session,
     ):
         clause = "country='CA'"
         self.insert_batch_test_helper(
             refresh_batch_custom_where,
+            write_session,
             temp_name,
             table_name,
             mock_execute,
@@ -388,7 +409,9 @@ class TestFullRefreshRunner(object):
         self,
         refresh_batch,
         mock_row_count,
-        mock_process_rows
+        mock_process_rows,
+        sessions,
+        write_session
     ):
         with mock.patch.object(
             refresh_batch,
@@ -405,7 +428,11 @@ class TestFullRefreshRunner(object):
             mock_options.batch_size = 10
             mock_row_count.return_value = 25
             refresh_batch.process_table()
-            calls = [mock.call(0), mock.call(10), mock.call(20)]
+            calls = [
+                mock.call(write_session, 0),
+                mock.call(write_session, 10),
+                mock.call(write_session, 20)
+            ]
             mock_insert.assert_has_calls(calls)
 
     def test_get_connection_set_from_cluster(
