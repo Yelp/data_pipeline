@@ -103,8 +103,8 @@ def field_fixtures(pkeys):
             'sql_line': 'field_h bigint,',
             'sql_type': 'bigint',
             'sql_width': None,
-            'avro_type': ['long', 'null'],
-            'avro_meta': {},
+            'avro_type': ['null', 'long'],
+            'avro_meta': {'default': None},
             'nullable': True,
             'sql_default': None
         },
@@ -113,8 +113,8 @@ def field_fixtures(pkeys):
             'sql_line': 'field_i INT8,',
             'sql_type': 'int8',
             'sql_width': None,
-            'avro_type': ['long', 'null'],
-            'avro_meta': {},
+            'avro_type': ['null', 'long'],
+            'avro_meta': {'default': None},
             'nullable': True,
             'sql_default': None
         },
@@ -123,8 +123,8 @@ def field_fixtures(pkeys):
             'sql_line': 'field_j real NULL,',
             'sql_type': 'real',
             'sql_width': None,
-            'avro_type': ['float', 'null'],
-            'avro_meta': {},
+            'avro_type': ['null', 'float'],
+            'avro_meta': {'default': None},
             'nullable': True,
             'sql_default': None
         },
@@ -257,8 +257,8 @@ def field_fixtures(pkeys):
             'sql_line': 'field_t character(12),',
             'sql_type': 'character',
             'sql_width': 12,
-            'avro_type': ['string', 'null'],
-            'avro_meta': {'fixlen': 12},
+            'avro_type': ['null', 'string'],
+            'avro_meta': {'default': None, 'fixlen': 12},
             'nullable': True,
             'sql_default': None
         },
@@ -267,8 +267,8 @@ def field_fixtures(pkeys):
             'sql_line': 'field_u bpchar,',
             'sql_type': 'bpchar',
             'sql_width': 256,
-            'avro_type': ['string', 'null'],
-            'avro_meta': {'fixlen': 256},
+            'avro_type': ['null', 'string'],
+            'avro_meta': {'default': None, 'fixlen': 256},
             'nullable': True,
             'sql_default': None
         },
@@ -297,8 +297,8 @@ def field_fixtures(pkeys):
             'sql_line': "field_x bool,",
             'sql_type': 'bool',
             'sql_width': None,
-            'avro_type': ['boolean', 'null'],
-            'avro_meta': {},
+            'avro_type': ['null', 'boolean'],
+            'avro_meta': {'default': None},
             'nullable': True,
             'sql_default': None
         },
@@ -307,8 +307,9 @@ def field_fixtures(pkeys):
             'sql_line': 'field_y numeric(10, 5),',
             'sql_type': 'numeric',
             'sql_width': [10, 5],
-            'avro_type': ['double', 'null'],
+            'avro_type': ['null', 'double'],
             'avro_meta': {
+                'default': None,
                 'fixed_pt': True,
                 'precision': 10,
                 'scale': 5

@@ -103,7 +103,7 @@ class RedshiftFieldLineToAvroFieldConverter(object):
     def avro_type(self):
         avro_type = self.avro_core_type
         if self.nullable:
-            if self.sql_default == 'null':
+            if self.default_null:
                 return ['null', avro_type]
             else:
                 return [avro_type, 'null']
@@ -132,6 +132,10 @@ class RedshiftFieldLineToAvroFieldConverter(object):
         return not(nullable_str and re.search('^(not\s+null)', nullable_str))
 
     @cached_property
+    def default_null(self):
+        return self.nullable and self.sql_default in ['null', None]
+
+    @cached_property
     def avro_meta_attributes(self):
         meta = {}
         field_name = self.name
@@ -149,10 +153,10 @@ class RedshiftFieldLineToAvroFieldConverter(object):
             meta['fixed_pt'] = True
             meta['precision'] = self.sql_type_width[0]
             meta['scale'] = self.sql_type_width[1]
-        if self.sql_default is not None:
-            if self.sql_default == 'null':
-                meta['default'] = None
-            elif self.avro_core_type == 'boolean':
+        if self.default_null:
+            meta['default'] = None
+        elif self.sql_default is not None:
+            if self.avro_core_type == 'boolean':
                 if self.sql_default == 'true':
                     meta['default'] = True
                 elif self.sql_default == 'false':
