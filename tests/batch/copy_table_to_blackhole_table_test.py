@@ -9,6 +9,10 @@ from data_pipeline.batch.copy_table_to_blackhole_table import FullRefreshRunner
 from data_pipeline.batch.copy_table_to_blackhole_table import TopologyFile
 
 
+# TODO(justinc|DATAPIPE-710): These tests are a little overly complicated and
+# should be refactored.  In particular - it would be nice to simplify this so
+# that only public methods are tested.  Mocking just enough to see what SQL
+# queries are executed with fixed data should be enough.
 class TestFullRefreshRunner(object):
 
     @pytest.fixture
