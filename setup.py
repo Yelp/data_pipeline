@@ -63,7 +63,10 @@ setup(
             'testing_helpers/docker-compose.yml'
         ],
     },
-    scripts=['bin/data_pipeline_tailer'],
+    scripts=[
+        'bin/data_pipeline_tailer',
+        'bin/data_pipeline_refresh_runner'
+    ],
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',
