@@ -11,6 +11,8 @@
 # Develoopment Environment
 virtualenv_run
 venv
+refresh_config.yaml
+redshift_binlog_config.yaml
 
 # Packages
 *.egg

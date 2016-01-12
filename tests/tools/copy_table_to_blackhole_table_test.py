@@ -5,8 +5,8 @@ from __future__ import unicode_literals
 import mock
 import pytest
 
-from data_pipeline.batch.copy_table_to_blackhole_table import FullRefreshRunner
-from data_pipeline.batch.copy_table_to_blackhole_table import TopologyFile
+from data_pipeline.tools.copy_table_to_blackhole_table import FullRefreshRunner
+from data_pipeline.tools.copy_table_to_blackhole_table import TopologyFile
 
 
 # TODO(justinc|DATAPIPE-710): These tests are a little overly complicated and
