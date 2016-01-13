@@ -17,7 +17,7 @@ class TestFullRefreshRunner(object):
 
     @pytest.fixture
     def base_path(self):
-        return "data_pipeline.batch.copy_table_to_blackhole_table"
+        return "data_pipeline.tools.copy_table_to_blackhole_table"
 
     @pytest.fixture
     def topology_path(self):
