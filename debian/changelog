@@ -1,3 +1,10 @@
+data-pipeline-tools (0.1.47) lucid; urgency=low
+
+  * Commit: Checked in missing testing fix, and reverted gitignore
+    change
+
+ -- Justin Cunningham <justinc@yelp.com>  Tue, 12 Jan 2016 17:41:36 -0800
+
 data-pipeline-tools (0.1.46) lucid; urgency=low
 
   * Commit: Merge branch 'master' of
