@@ -7,7 +7,8 @@ MAINTAINER Justin Cunningham <justinc@yelp.com>
 # Which at this time is in this package
 RUN apt-get update && apt-get -y install dpkg-dev python-tox python-setuptools \
   python-dev debhelper dh-virtualenv=0.6-yelp2 python-yaml python-pytest \
-  pyflakes python2.7 python2.7-dev help2man libffi-dev uuid-dev libuuid1
+  pyflakes python2.7 python2.7-dev help2man libffi-dev uuid-dev libuuid1 \
+  libssl0.9.8
 
 ENV HOME /work
 ENV PWD /work

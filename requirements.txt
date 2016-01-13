@@ -15,15 +15,17 @@
 # pip freeze > requirements.tmp
 # deactivate
 # rm -rf tools
+#
+# Note that the data_pipeline package should not appear here, and that cffi
+# should be at least 1.2.1 for trusty compatibility.
 
 argparse==1.4.0
 avro==1.7.7
 boto==2.38.0
 cached-property==1.2.0
-cffi==1.1.2
+cffi==1.2.1
 contextdecorator==0.10.0
 crochet==1.4.0
-data-pipeline==0.1.46
 dateglob==0.1
 enum34==1.0.4
 future==0.14.3
