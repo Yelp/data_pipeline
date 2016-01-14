@@ -191,6 +191,28 @@ class TestTailer(object):
         out, _ = capsys.readouterr()
         assert out == "{u'payload_data': {u'good_field': 42}}\n"
 
+    def test_with_offset_out_of_range(
+        self,
+        batch,
+        producer,
+        mock_exit,
+        message_with_payload_data,
+        topic,
+        capsys
+    ):
+        topic_with_offset = self._publish_and_set_topic_offset(
+            message_with_payload_data,
+            producer,
+            topic,
+            offset_out_of_range=True
+        )
+
+        self._init_batch(batch, [
+            '--topic', topic_with_offset,
+        ])
+
+        self._assert_offset_out_of_range_error(mock_exit)
+
     def test_with_json(
         self,
         batch,
@@ -287,6 +309,11 @@ class TestTailer(object):
         assert exit_code == 2
         assert 'At least one topic must be specified.' in error_message
 
+    def _assert_offset_out_of_range_error(self, mock_exit):
+        (exit_code, error_message), _ = mock_exit.call_args
+        assert exit_code == 2
+        assert "Offset" in error_message and "is out of range" in error_message
+
     def _assert_get_topics_called(
         self,
         mock_get_topics_by_criteria,
@@ -299,10 +326,10 @@ class TestTailer(object):
     def _assert_topics(self, batch, topics):
         assert batch.topic_to_offsets_map == {topic: None for topic in topics}
 
-    def _publish_and_set_topic_offset(self, message, producer, topic):
+    def _publish_and_set_topic_offset(self, message, producer, topic, offset_out_of_range=False):
         producer.publish(message)
         producer.flush()
         position_data = producer.get_checkpoint_position_data()
         offset = position_data.topic_to_kafka_offset_map[topic]
-        topic_with_offset = "{}|{}".format(topic, offset - 1)
+        topic_with_offset = "{}|{}".format(topic, (offset - 1) if not offset_out_of_range else (offset + 1))
         return topic_with_offset
