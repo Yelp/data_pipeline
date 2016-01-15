@@ -2,6 +2,8 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import time
+
 import mock
 import pytest
 
@@ -274,7 +276,8 @@ class TestFullRefreshRunner(object):
             refresh_batch,
             'throttle_to_replication'
         ) as throttle_mock:
-            refresh_batch._after_processing_rows(write_session)
+            # count can be anything since self.avg_throughput_cap is set to None
+            refresh_batch._after_processing_rows(write_session, count=0)
 
         assert write_session.rollback.call_count == 1
         write_session.execute.assert_called_once_with('UNLOCK TABLES')
@@ -475,3 +478,33 @@ class TestFullRefreshRunner(object):
                 read_only=False
             )
             mock_conn.from_config.assert_called_once_with(mock_conn_config)
+
+    def test_throughput_wait(
+        self,
+        refresh_batch
+    ):
+        with mock.patch.object(
+            refresh_batch,
+            'avg_throughput_cap',
+            1000
+        ), mock.patch.object(
+            refresh_batch,
+            'process_row_start_timestamp',
+            0
+        ), mock.patch.object(
+            time,
+            'time',
+            return_value=0.1  # Simulating that it took 100 milliseconds to run the actual row processing
+        ), mock.patch.object(
+            time,
+            'sleep',
+            return_value=None
+        ) as mock_sleep:
+            refresh_batch._wait_for_throughput(count=100)
+            mock_sleep.assert_called_with(0.0)
+            refresh_batch._wait_for_throughput(count=1)
+            mock_sleep.assert_called_with(0.0)
+            refresh_batch._wait_for_throughput(count=1000)
+            mock_sleep.assert_called_with(0.9)
+            refresh_batch._wait_for_throughput(count=500)
+            mock_sleep.assert_called_with(0.4)

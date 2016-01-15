@@ -94,6 +94,14 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             help='On startup, do not wait for replication to catch up to the '
                  'time batch was started (default: %default).'
         )
+        opt_group.add_option(
+            '--cap-avg-throughput-per-second',
+            dest='avg_throughput_cap',
+            help='Caps the throughput per second. Important since without any control for this '
+                 'the batch can cause signifigant pipeline delays',
+            type='int',
+            default=None
+        )
         return opt_group
 
     @batch_configure
@@ -105,10 +113,14 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self.database = self.options.database
         if not self.database:
             raise ValueError("--database must be specified")
+        self.avg_throughput_cap = self.options.avg_throughput_cap
+        if self.avg_throughput_cap is not None and self.avg_throughput_cap <= 0:
+            raise ValueError("--cap-avg-throughput-per-second should be greater than 0")
         self.table_name = self.options.table_name
         self.temp_table = '{table}_data_pipeline_refresh'.format(
             table=self.table_name
         )
+        self.process_row_start_timestamp = int(round(time.time() * 1000))
         self.primary_key = self.options.primary
         self.processed_row_count = 0
         self.where_clause = self.options.where_clause
@@ -202,9 +214,9 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         ))
         self._execute_query(session, refresh_table_create_query)
 
-    def _after_processing_rows(self, session):
-        """Commits changes and makes sure replication catches up
-        before moving on.
+    def _after_processing_rows(self, session, count):
+        """Commits changes and makes sure replication and throughput cap
+        catches up before moving on.
         """
         self._commit(session)
 
@@ -222,6 +234,21 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
         with self.rw_conn() as rw_conn:
             self.throttle_to_replication(rw_conn)
+
+        if self.options.avg_throughput_cap is not None:
+            self._wait_for_throughput(count)
+
+    def _wait_for_throughput(self, count):
+        process_row_end_timestamp = int(round(time.time() * 1000))
+        elapsed_time = process_row_end_timestamp - self.process_row_start_timestamp
+        time_to_wait = self._time_to_wait_for_throughput(elapsed_time, count)
+        self.log.info("Waiting for {} seconds to enforce avg throughput cap".format(time_to_wait))
+        time.sleep(time_to_wait)
+
+    def _time_to_wait_for_throughput(self, elapsed_time, count):
+        desired_elapsed_time = 1000.0 / self.avg_throughput_cap * count
+        time_to_wait = desired_elapsed_time - elapsed_time
+        return time_to_wait / 1000.0 if time_to_wait >= 0 else 0.0
 
     def initial_action(self):
         self._wait_for_replication()
@@ -297,11 +324,12 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         offset = 0
         count = self.options.batch_size
         while count >= self.options.batch_size:
+            self.process_row_start_timestamp = int(round(time.time() * 1000))
             with self.write_session() as session:
                 self.setup_transaction(session)
                 count = self.count_inserted(session, offset)
                 self.insert_batch(session, offset)
-                self._after_processing_rows(session)
+                self._after_processing_rows(session, count)
             offset += count
             self.processed_row_count += count
 
