@@ -275,7 +275,11 @@ class TestFullRefreshRunner(object):
         with mock.patch.object(
             refresh_batch,
             'throttle_to_replication'
-        ) as throttle_mock:
+        ) as throttle_mock, mock.patch.object(
+            refresh_batch,
+            '_wait_for_throughput',
+            return_value=None
+        ) as mock_wait:
             # count can be anything since self.avg_throughput_cap is set to None
             refresh_batch._after_processing_rows(write_session, count=0)
 
@@ -283,6 +287,7 @@ class TestFullRefreshRunner(object):
         write_session.execute.assert_called_once_with('UNLOCK TABLES')
         assert write_session.commit.call_count == 1
         throttle_mock.assert_called_once_with(rw_conn)
+        assert mock_wait.call_count == 0
 
     def test_build_select(
         self,

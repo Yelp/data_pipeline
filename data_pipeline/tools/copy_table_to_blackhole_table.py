@@ -239,16 +239,15 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self._wait_for_throughput(count)
 
     def _wait_for_throughput(self, count):
+        """Used to cap throughput when given the --cap-avg-throughput-per-second flag.
+        Sleeps for a certain amount of time based on elapsed time to process row, the number of rows processed (count)
+        and the given cap so that the flag is enforced"""
         process_row_end_timestamp = int(round(time.time() * 1000))
         elapsed_time = process_row_end_timestamp - self.process_row_start_timestamp
-        time_to_wait = self._time_to_wait_for_throughput(elapsed_time, count)
-        self.log.info("Waiting for {} seconds to enforce avg throughput cap".format(time_to_wait))
-        time.sleep(time_to_wait)
-
-    def _time_to_wait_for_throughput(self, elapsed_time, count):
         desired_elapsed_time = 1000.0 / self.avg_throughput_cap * count
         time_to_wait = desired_elapsed_time - elapsed_time
-        return time_to_wait / 1000.0 if time_to_wait >= 0 else 0.0
+        self.log.info("Waiting for {} seconds to enforce avg throughput cap".format(time_to_wait))
+        time.sleep(time_to_wait / 1000.0 if time_to_wait >= 0 else 0.0)
 
     def initial_action(self):
         self._wait_for_replication()
