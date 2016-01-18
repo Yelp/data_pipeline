@@ -7,46 +7,30 @@ import time
 from datetime import datetime
 from optparse import OptionGroup
 
-import yelp_conn
 from yelp_batch import Batch
 from yelp_batch import batch_command_line_options
 from yelp_batch import batch_configure
-from yelp_batch import batch_context
 from yelp_batch._db import BatchDBMixin
+from yelp_conn.connection_set import ConnectionDef
+from yelp_conn.connection_set import ConnectionSet
+from yelp_conn.sqlatxn import TransactionManager
+from yelp_conn.topology import ConnectionSetConfig
+from yelp_conn.topology import TopologyFile
 from yelp_lib.classutil import cached_property
-from yelp_servlib import config_util
+from yelp_servlib.config_util import load_default_config
 
 
 class FullRefreshRunner(Batch, BatchDBMixin):
     notify_emails = ['bam+batch@yelp.com']
     is_readonly_batch = False
 
-    @batch_context
-    def _session_manager(self):
-        self._wait_for_replication()
-        with self.read_session() as self._read_session, \
-                self.write_session() as self._write_session:
-            yield
-
     @batch_command_line_options
     def define_options(self, option_parser):
         opt_group = OptionGroup(option_parser, 'Full Refresh Runner Options')
         opt_group.add_option(
-            '--ro-replica',
-            dest='ro_replica',
-            default=str('batch_ro'),
-            help='Required: Read-only replica name.'
-        )
-        opt_group.add_option(
-            '--rw-replica',
-            dest='rw_replica',
-            default=str('batch_rw'),
-            help='Required: Read-write replica name.'
-        )
-        opt_group.add_option(
             '--cluster',
             dest='cluster',
-            default='primary',
+            default='refresh_primary',
             help='Required: Specifies table cluster (default: %default).'
         )
         opt_group.add_option(
@@ -82,7 +66,16 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         opt_group.add_option(
             '--config-path',
             dest='config_path',
-            help='Required: Config file path for FullRefreshRunner'
+            help='Required: Config file path for FullRefreshRunner '
+                 '(default: %default)',
+            default='/nail/srv/configs/data_pipeline_tools.yaml'
+        )
+        opt_group.add_option(
+            '--topology-path',
+            dest='topology_path',
+            help='Path to the topology.yaml file.'
+                 '(default: %default)',
+            default='/nail/srv/configs/topology.yaml'
         )
         opt_group.add_option(
             '--where',
@@ -104,22 +97,14 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         return opt_group
 
     @batch_configure
-    def configure(self):
-        config_util.load_package_config(
-            self.options.config_path,
-            field='module_config'
-        )
-        yelp_conn.initialize()
-
-    @batch_configure
     def _init_global_state(self):
+        load_default_config(self.options.config_path)
         if self.options.batch_size <= 0:
             raise ValueError("Batch size should be greater than 0")
-
-        self.ro_replica_name = self.options.ro_replica
-        self.rw_replica_name = self.options.rw_replica
         self.db_name = self.options.cluster
         self.database = self.options.database
+        if not self.database:
+            raise ValueError("--database must be specified")
         self.table_name = self.options.table_name
         self.temp_table = '{table}_data_pipeline_refresh'.format(
             table=self.table_name
@@ -127,12 +112,34 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self.primary_key = self.options.primary
         self.processed_row_count = 0
         self.where_clause = self.options.where_clause
+        self._connection_set = None
+
+    def setup_connections(self):
+        """Creates connections to the mySQL database.
+
+        Builds a connection set to the cluster of the table that
+         you are refreshing.
+
+        This is overriding BatchDBMixin because we want to get connections
+        based on the cluster instead of by replica names.
+        TransactionManager also takes a custom connection_set_getter
+         function which gets a connection set by cluster and topology file.
+        """
+        self._txn_mgr = TransactionManager(
+            cluster_name=self.db_name,
+            ro_replica_name=self.db_name,
+            rw_replica_name=self.db_name,
+            connection_set_getter=self.get_connection_set_from_cluster
+        )
 
     @cached_property
     def total_row_count(self):
-        query = self.build_select('COUNT(*)')
-        value = self.execute_sql(query, is_write_session=False).scalar()
-        return value if value is not None else 0
+        with self.read_session() as session:
+            self._use_db(session)
+            query = self.build_select('COUNT(*)')
+            value = self._execute_query(session, query).scalar()
+            session.rollback()
+            return value if value is not None else 0
 
     def build_select(
             self,
@@ -170,22 +177,13 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             with self.ro_conn() as ro_conn:
                 self.wait_for_replication_until(self.starttime, ro_conn)
 
-    def execute_sql(self, query, is_write_session):
-        if is_write_session:
-            if not self.options.dry_run:
-                return self._write_session.execute(query)
-            else:
-                self.log.info("Dry run: Query: {query}".format(query=query))
-        else:
-            return self._read_session.execute(query)
-
-    def create_table_from_src_table(self):
+    def create_table_from_src_table(self, session):
         show_create_statement = 'SHOW CREATE TABLE {table_name}'.format(
             table_name=self.table_name
         )
-        original_query = self.execute_sql(
-            show_create_statement,
-            is_write_session=False
+        original_query = self._execute_query(
+            session,
+            show_create_statement
         ).fetchone()[1]
         max_replacements = 1
         refresh_table_create_query = original_query.replace(
@@ -202,52 +200,71 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self.log.info("New blackhole table query: {query}".format(
             query=refresh_table_create_query
         ))
-        self.execute_sql(refresh_table_create_query, is_write_session=True)
+        self._execute_query(session, refresh_table_create_query)
 
-    def _after_processing_rows(self):
+    def _after_processing_rows(self, session):
         """Commits changes and makes sure replication catches up
         before moving on.
         """
-        self._commit_changes()
+        self._commit(session)
+
+        # This code may seem counter-intuitive, but it's actually correct.
+        # Tables shouldn't be unlocked until after the data changes have either
+        # been committed or rolled back.  Committing or rolling back, does not,
+        # however, unlock the locked tables.  The tables must be unlocked before
+        # throttling to replication because failing to unlock them won't allow
+        # replication to proceed, preventing replication from ever catching up.
+        # session.commit() is called instead of _commit, since unlock tables
+        # should be issued regardless of dry_run mode - it's necessary here
+        # because sqlalchemy won't send the statement to MySQL without it.
+        self._execute_query(session, 'UNLOCK TABLES')
+        session.commit()
+
         with self.rw_conn() as rw_conn:
             self.throttle_to_replication(rw_conn)
 
-    def _commit_changes(self):
-        self._read_session.rollback()
-        if not self.options.dry_run:
-            self._write_session.commit()
-        else:
-            self.log.info("Dry run: Writes would be committed here.")
-
     def initial_action(self):
-        if self.database:
-            self.execute_sql(
-                "USE {database}".format(
-                    database=self.database
-                ),
-                is_write_session=True
-            )
-        self.create_table_from_src_table()
-        self._after_processing_rows()
+        self._wait_for_replication()
+        with self.write_session() as session:
+            self._use_db(session)
+            self.create_table_from_src_table(session)
+            self._commit(session)
+
+    def _use_db(self, session):
+        self._execute_query(
+            session,
+            "USE {database}".format(database=self.database)
+        )
+
+    def _commit(self, session):
+        """Commits unless in dry_run mode, otherwise rolls back"""
+        if self.options.dry_run:
+            self.log.info("Executing rollback in dry-run mode")
+            session.rollback()
+        else:
+            session.commit()
 
     def final_action(self):
-        query = 'DROP TABLE IF EXISTS {temp_table}'.format(
-            temp_table=self.temp_table
-        )
-        self.execute_sql(query, is_write_session=True)
-        self.log.info("Dropped table: {table}".format(table=self.temp_table))
+        with self.write_session() as session:
+            self._use_db(session)
+            query = 'DROP TABLE IF EXISTS {temp_table}'.format(
+                temp_table=self.temp_table
+            )
+            self._execute_query(session, query)
+            self.log.info("Dropped table: {table}".format(table=self.temp_table))
+            self._commit(session)
 
-    def setup_transaction(self):
-        self.execute_sql('BEGIN', is_write_session=True)
-        self.execute_sql(
+    def setup_transaction(self, session):
+        self._use_db(session)
+        self._execute_query(
+            session,
             'LOCK TABLES {table} WRITE, {temp} WRITE'.format(
                 table=self.table_name,
                 temp=self.temp_table
-            ),
-            is_write_session=True
+            )
         )
 
-    def count_inserted(self, offset):
+    def count_inserted(self, session, offset):
         select_query = self.build_select(
             '*',
             self.primary_key,
@@ -257,10 +274,10 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         query = 'SELECT COUNT(*) FROM ({query}) AS T'.format(
             query=select_query
         )
-        inserted_rows = self.execute_sql(query, is_write_session=False)
+        inserted_rows = self._execute_query(session, query)
         return inserted_rows.scalar()
 
-    def insert_batch(self, offset):
+    def insert_batch(self, session, offset):
         insert_query = 'INSERT INTO {temp} '.format(temp=self.temp_table)
         select_query = self.build_select(
             '*',
@@ -269,7 +286,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.options.batch_size
         )
         insert_query += select_query
-        self.execute_sql(insert_query, is_write_session=True)
+        self._execute_query(session, insert_query)
 
     def process_table(self):
         self.log.info(
@@ -280,10 +297,11 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         offset = 0
         count = self.options.batch_size
         while count >= self.options.batch_size:
-            self.setup_transaction()
-            count = self.count_inserted(offset)
-            self.insert_batch(offset)
-            self._after_processing_rows()
+            with self.write_session() as session:
+                self.setup_transaction(session)
+                count = self.count_inserted(session, offset)
+                self.insert_batch(session, offset)
+                self._after_processing_rows(session)
             offset += count
             self.processed_row_count += count
 
@@ -303,6 +321,32 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.log_info()
         finally:
             self.final_action()
+
+    def get_connection_set_from_cluster(self, cluster):
+        """Given a cluster name, returns a connection to that cluster.
+        """
+        if self._connection_set:
+            return self._connection_set
+        topology = TopologyFile.new_from_file(self.options.topology_path)
+        conn_defs = self._get_conn_defs(topology, cluster)
+        conn_config = ConnectionSetConfig(cluster, conn_defs, read_only=False)
+        self._connection_set = ConnectionSet.from_config(conn_config)
+        return self._connection_set
+
+    def _get_conn_defs(self, topology, cluster):
+        replica_level = 'master'
+        connection_cluster = topology.topologies[cluster, replica_level]
+        conn_def = ConnectionDef(
+            cluster,
+            replica_level,
+            auto_commit=False,
+            database=connection_cluster.database
+        )
+        return {cluster: (conn_def, connection_cluster)}
+
+    def _execute_query(self, session, query):
+        self.log.debug("Executing query: {query}".format(query=query))
+        return session.execute(query)
 
 
 if __name__ == '__main__':

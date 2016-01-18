@@ -1,1 +1,2 @@
 usr/share/python/data-pipeline-tools/bin/data_pipeline_tailer usr/bin/data_pipeline_tailer
+usr/share/python/data-pipeline-tools/bin/data_pipeline_refresh_runner usr/bin/data_pipeline_refresh_runner

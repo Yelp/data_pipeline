@@ -5,7 +5,16 @@ from __future__ import unicode_literals
 from enum import Enum
 
 
-class MessageType(Enum):
+class _EnumRepr(Enum):
+    def __repr__(self):
+        return '{}.{}({})'.format(
+            self.__class__.__name__,
+            self.name,
+            self.value
+        )
+
+
+class MessageType(_EnumRepr):
     """Messages should be published primarily using the create, update, and
     delete types.  Refresh messages should only be produced if you know what
     you're doing, if in doubt, ask please.
@@ -27,7 +36,7 @@ class MessageType(Enum):
     refresh = 4
 
 
-class _ProtectedMessageType(Enum):
+class _ProtectedMessageType(_EnumRepr):
     """Protected message types should generally be avoided.  The clientlib
     won't expose these messages to users, they're used internally only.
 

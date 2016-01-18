@@ -1,8 +1,9 @@
 #!/bin/bash
 set -e
 
-# To add addtional scripts, just add lines here
-SCRIPTS="data_pipeline_tailer"
+# To add additional scripts, just add lines here
+SCRIPTS="data_pipeline_tailer
+data_pipeline_refresh_runner"
 
 if dpkg -i /work/dist/*.deb; then
   echo "Looks like it installed correctly"

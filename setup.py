@@ -46,10 +46,11 @@ setup(
             # implicit dependency of yelp_batch
             'thriftpy<0.2.0',
             'yelp_batch>=0.19.4',
+            'yelp_conn>=7.0.0'
         ],
         'testing_helpers': [
-            'docker-compose==1.3.3',
-            'docker-py==1.3.1',
+            'docker-compose==1.5.2',
+            'docker-py==1.6.0',
             # requests is locked at <2.7 to satisfy a docker-compose requirement
             'requests<2.7'
         ]
@@ -62,7 +63,10 @@ setup(
             'testing_helpers/docker-compose.yml'
         ],
     },
-    scripts=['bin/data_pipeline_tailer'],
+    scripts=[
+        'bin/data_pipeline_tailer',
+        'bin/data_pipeline_refresh_runner'
+    ],
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',
