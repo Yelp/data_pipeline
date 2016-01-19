@@ -490,12 +490,12 @@ class TestFullRefreshRunner(object):
     ):
         with mock.patch.object(
             refresh_batch,
-            'avg_throughput_cap',
+            'avg_rows_per_second_cap',
             1000
         ), mock.patch.object(
             refresh_batch,
-            'process_row_start_timestamp',
-            0
+            'process_row_start_time',
+            0.0
         ), mock.patch.object(
             time,
             'time',
@@ -511,5 +511,7 @@ class TestFullRefreshRunner(object):
             mock_sleep.assert_called_with(0.0)
             refresh_batch._wait_for_throughput(count=1000)
             mock_sleep.assert_called_with(0.9)
+            refresh_batch._wait_for_throughput(count=10000)
+            mock_sleep.assert_called_with(9.9)
             refresh_batch._wait_for_throughput(count=500)
             mock_sleep.assert_called_with(0.4)
