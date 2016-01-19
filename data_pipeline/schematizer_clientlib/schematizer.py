@@ -7,6 +7,10 @@ import simplejson
 from data_pipeline.config import get_config
 from data_pipeline.helpers.singleton import Singleton
 from data_pipeline.schematizer_clientlib.models.avro_schema import _AvroSchema
+from data_pipeline.schematizer_clientlib.models.consumer_group import _ConsumerGroup
+from data_pipeline.schematizer_clientlib.models.consumer_group_data_source \
+    import _ConsumerGroupDataSource
+from data_pipeline.schematizer_clientlib.models.data_target import _DataTarget
 from data_pipeline.schematizer_clientlib.models.source import _Source
 from data_pipeline.schematizer_clientlib.models.topic import _Topic
 
@@ -18,6 +22,14 @@ class SchematizerClient(object):
 
     It caches schemas, topics, and sources separately instead of caching nested
     objects to avoid storing duplicate data repeatedly.
+
+    This class potentially could grow relatively huge.  There may be a need to
+    split them in some way later if it's too huge.  One idea is to split related
+    functions into its own mix-in class, optionally in its own file, and have main
+    `SchematizerClient` class inherit this mix-in class.  The benefit of this
+    approach is the size of each mix-in class is manageable and easier to read.
+    The down side is it becomes harder to know if a function has been defined
+    since they're now in multiple classes/files.
     """
 
     __metaclass__ = Singleton
@@ -27,6 +39,8 @@ class SchematizerClient(object):
         self._schema_cache = {}
         self._topic_cache = {}
         self._source_cache = {}
+        self._data_target_cache = {}
+        self._consumer_group_cache = {}
         self._avro_schema_cache = {}
 
     def get_schema_by_id(self, schema_id):
@@ -357,6 +371,242 @@ class SchematizerClient(object):
             self._update_cache_by_topic(_topic)
         return result
 
+    def create_data_target(self, target_type, destination):
+        """ Create and return newly created data target.
+
+        Args:
+            target_type (str): The type of the data target, such as Redshift.
+            destination (str): The actual location of the data target, such as
+                Url of the Redshift cluster.
+
+        Returns:
+            (data_pipeline.schematizer_clientlib.models.data_target.DataTarget):
+                The newly created data target.
+        """
+        post_body = {
+            'target_type': target_type,
+            'destination': destination
+        }
+        response = self._call_api(
+            api=self._client.data_targets.create_data_target,
+            post_body=post_body
+        )
+
+        _data_target = _DataTarget.from_response(response)
+        self._update_cache_by_data_target(_data_target)
+        return _data_target.to_result()
+
+    def get_data_target_by_id(self, data_target_id):
+        """Get the data target of specified id.
+
+        Args:
+            data_target_id (int): The id of requested data target.
+
+        Returns:
+            (data_pipeline.data_targettizer_clientlib.models.data_target.DataTarget):
+                The requested data target.
+        """
+        return self._get_data_target_by_id(data_target_id).to_result()
+
+    def _get_data_target_by_id(self, data_target_id):
+        cached_data_target = self._data_target_cache.get(data_target_id)
+        if cached_data_target:
+            _data_target = _DataTarget.from_cache_value(cached_data_target)
+        else:
+            response = self._call_api(
+                api=self._client.data_targets.get_data_target_by_id,
+                params={'data_target_id': data_target_id}
+            )
+            _data_target = _DataTarget.from_response(response)
+            self._update_cache_by_data_target(_data_target)
+        return _data_target
+
+    def get_data_targets(self):
+        """Get the list of data targets.
+
+        Args:
+            None
+
+        Returns:
+            (List[data_pipeline.schematizer_clientlib.models.data_target.DataTarget]):
+                The list of data targets.
+        """
+        response = self._call_api(
+            api=self._client.data_targets.get_data_targets
+        )
+        result = []
+        for resp_item in response:
+            _data_target = _DataTarget.from_response(resp_item)
+            result.append(_data_target.to_result())
+            self._update_cache_by_data_target(_data_target)
+        return result
+
+    def get_topics_by_data_target_id(self, data_target_id):
+        """Get the list of topics of specified data target id.
+
+        Args:
+            data_target_id (int): The id of the data target to look up
+
+        Returns:
+            (List[data_pipeline.schematizer_clientlib.models.topic.Topic]):
+                The list of topics of given data target.
+        """
+        response = self._call_api(
+            api=self._client.data_targets.get_topics_by_data_target_id,
+            params={'data_target_id': data_target_id}
+        )
+        result = []
+        for resp_item in response:
+            _topic = _Topic.from_response(resp_item)
+            result.append(_topic.to_result())
+            self._update_cache_by_topic(_topic)
+        return result
+
+    def create_consumer_group(self, group_name, data_target_id):
+        """ Create and return newly created consumer group.
+
+        Args:
+            group_name (str): The name of the new consumer group.
+            data_target_id (int): The id of the data target which the new consumer
+                group associates to.
+
+        Returns:
+            (data_pipeline.schematizer_clientlib.models.consumer_group.ConsumerGroup):
+                The newly created consumer group.
+        """
+        post_body = {
+            'group_name': group_name,
+            'data_target_id': data_target_id
+        }
+        response = self._call_api(
+            api=self._client.consumer_groups.create_consumer_group,
+            post_body=post_body
+        )
+
+        _consumer_group = _ConsumerGroup.from_response(response)
+        self._update_cache_by_consumer_group(_consumer_group)
+        return _consumer_group.to_result()
+
+    def get_consumer_group_by_id(self, consumer_group_id):
+        """Get the consumer group of specified id.
+
+        Args:
+            consumer_group_id (int): The id of requested consumer group.
+
+        Returns:
+            (data_pipeline.consumer_grouptizer_clientlib.models.consumer_group.ConsumerGroup):
+                The requested consumer group.
+        """
+        return self._get_consumer_group_by_id(consumer_group_id).to_result()
+
+    def _get_consumer_group_by_id(self, consumer_group_id):
+        cached_consumer_group = self._consumer_group_cache.get(consumer_group_id)
+        if cached_consumer_group:
+            _consumer_group = _ConsumerGroup.from_cache_value(cached_consumer_group)
+        else:
+            response = self._call_api(
+                api=self._client.consumer_groups.get_consumer_group_by_id,
+                params={'consumer_group_id': consumer_group_id}
+            )
+            _consumer_group = _ConsumerGroup.from_response(response)
+            self._update_cache_by_consumer_group(_consumer_group)
+        return _consumer_group
+
+    def get_consumer_groups(self):
+        """Get the list of consumer groups.
+
+        Args:
+            None
+
+        Returns:
+            (List[data_pipeline.schematizer_clientlib.models.consumer_group.ConsumerGroup]):
+                The list of consumer groups.
+        """
+        response = self._call_api(
+            api=self._client.consumer_groups.get_consumer_groups
+        )
+        result = []
+        for resp_item in response:
+            _consumer_group = _ConsumerGroup.from_response(resp_item)
+            result.append(_consumer_group.to_result())
+            self._update_cache_by_consumer_group(_consumer_group)
+        return result
+
+    def get_consumer_groups_by_data_target_id(self, data_target_id):
+        """Get the list of consumer groups of specified data target id.
+
+        Args:
+            data_target_id (int): The id of the data target to look up
+
+        Returns:
+            (List[data_pipeline.schematizer_clientlib.models.consumer_group.ConsumerGroup]):
+                The list of consumer groups of given data target.
+        """
+        response = self._call_api(
+            api=self._client.data_targets.get_consumer_groups_by_data_target_id,
+            params={'data_target_id': data_target_id}
+        )
+        result = []
+        for resp_item in response:
+            _consumer_group = _ConsumerGroup.from_response(resp_item)
+            result.append(_consumer_group.to_result())
+            self._update_cache_by_consumer_group(_consumer_group)
+        return result
+
+    def create_consumer_group_data_source(
+        self,
+        consumer_group_id,
+        data_source_type,
+        data_source_id
+    ):
+        """ Create and return newly created mapping between specified data
+        source and consumer group.
+
+        Args:
+            consumer_group_id (int): The id of the consumer group.
+            data_source_type
+            (data_pipeline.schematizer_client.models.data_source_type_enum.DataSourceTypEnum):
+                Type of the data source.
+            data_source_id (int): The id of the data source, which could be a
+                namespace id or source id.
+
+        Returns:
+            (data_pipeline.schematizer_clientlib.models.consumer_group_data_source.ConsumerGroupDataSource):
+            The newly created mapping between specified consumer group and
+            data source.
+        """
+        post_body = {
+            'consumer_group_id': consumer_group_id,
+            'data_source_type': data_source_type,
+            'data_source_id': data_source_id
+        }
+        response = self._call_api(
+            api=self._client.consumer_groups.create_consumer_group_data_source,
+            post_body=post_body
+        )
+
+        _consumer_group_data_src = _ConsumerGroupDataSource.from_response(response)
+        return _consumer_group_data_src.to_result()
+
+    def get_data_sources_by_consumer_group_id(self, consumer_group_id):
+        """Get the list of consumer group - data source mappings of specified
+        consumer group id.
+
+        Args:
+            consumer_group_id (int): The id of the consumer group to look up
+
+        Returns:
+            (List[data_pipeline.schematizer_clientlib.models.consumer_group_data_source.ConsumerGroupDataSource]):
+            The list of consumer group - data source mappings of given consumer
+            group.
+        """
+        response = self._call_api(
+            api=self._client.consumer_groups.get_data_sources_by_consumer_group_id,
+            params={'consumer_group_id': consumer_group_id}
+        )
+        return [_ConsumerGroupDataSource.from_response(resp_item).to_result()
+                for resp_item in response]
+
     def _call_api(self, api, params=None, post_body=None):
         # TODO(DATAPIPE-207|joshszep): Include retry strategy support
         request_params = {'body': post_body} if post_body else params or {}
@@ -377,6 +627,14 @@ class SchematizerClient(object):
 
     def _update_cache_by_source(self, new_source):
         self._source_cache[new_source.source_id] = new_source.to_cache_value()
+
+    def _update_cache_by_data_target(self, new_data_target):
+        key = new_data_target.data_target_id
+        self._data_target_cache[key] = new_data_target.to_cache_value()
+
+    def _update_cache_by_consumer_group(self, new_consumer_group):
+        key = new_consumer_group.consumer_group_id
+        self._consumer_group_cache[key] = new_consumer_group.to_cache_value()
 
 
 def get_schematizer():
