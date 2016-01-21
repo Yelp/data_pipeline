@@ -95,8 +95,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
                  'time batch was started (default: %default).'
         )
         opt_group.add_option(
-            '--cap-avg-throughput-per-second',
-            dest='avg_rows_per_second_cap',
+            '--avg-rows-per-second-cap',
             help='Caps the throughput per second. Important since without any control for this '
                  'the batch can cause signifigant pipeline delays',
             type='int',
