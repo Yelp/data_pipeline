@@ -187,7 +187,7 @@ class Message(object):
 
     @property
     def encryption_type(self):
-        if self._encryption_type is None and self.contains_pii:
+        if self._encryption_type is None and self._contains_pii:
             self._encryption_type = get_config().encryption_type
             if self._encryption_type is None:
                 raise ValueError(
