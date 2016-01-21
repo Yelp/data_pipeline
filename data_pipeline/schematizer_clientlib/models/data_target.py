@@ -15,14 +15,10 @@ Args:
     target_type (str): The target type, such as Redshift, etc.
     destination (str): The actual location of the data target, such as the Url
         of the Redshift cluster.
-    created_at (str): The timestamp when the data target is created in ISO-8601
-        format.
-    updated_at (str): The timestamp when the data target is last updated in ISO-8601
-        format.
 """
 DataTarget = namedtuple(
     'DataTarget',
-    ['data_target_id', 'target_type', 'destination', 'created_at', 'updated_at']
+    ['data_target_id', 'target_type', 'destination']
 )
 
 
@@ -31,31 +27,24 @@ class _DataTarget(BaseModel):
     facilitate constructing the return value of schematizer functions.
     """
 
-    def __init__(self, data_target_id, target_type, destination,
-                 created_at, updated_at):
+    def __init__(self, data_target_id, target_type, destination):
         self.data_target_id = data_target_id
         self.target_type = target_type
         self.destination = destination
-        self.created_at = created_at
-        self.updated_at = updated_at
 
     @classmethod
     def from_response(cls, response):
         return cls(
             data_target_id=response.data_target_id,
             target_type=response.target_type,
-            destination=response.destination,
-            created_at=response.created_at,
-            updated_at=response.updated_at
+            destination=response.destination
         )
 
     def to_cache_value(self):
         return {
             'data_target_id': self.data_target_id,
             'target_type': self.target_type,
-            'destination': self.destination,
-            'created_at': self.created_at,
-            'updated_at': self.updated_at
+            'destination': self.destination
         }
 
     @classmethod
@@ -63,16 +52,12 @@ class _DataTarget(BaseModel):
         return cls(
             data_target_id=cache_value['data_target_id'],
             target_type=cache_value['target_type'],
-            destination=cache_value['destination'],
-            created_at=cache_value['created_at'],
-            updated_at=cache_value['updated_at']
+            destination=cache_value['destination']
         )
 
     def to_result(self):
         return DataTarget(
             data_target_id=self.data_target_id,
             target_type=self.target_type,
-            destination=self.destination,
-            created_at=self.created_at,
-            updated_at=self.updated_at
+            destination=self.destination
         )

@@ -16,14 +16,10 @@ Args:
     group_name (str): The name of the consumer group.
     data_target (data_pipeline.schematizer_clientlib.models.data_target.DataTarget):
         The data_target this consumer group associates to.
-    created_at (str): The timestamp when the consumer group is created in ISO-8601
-        format.
-    updated_at (str): The timestamp when the consumer group is last updated in ISO-8601
-        format.
 """
 ConsumerGroup = namedtuple(
     'ConsumerGroup',
-    ['consumer_group_id', 'group_name', 'data_target', 'created_at', 'updated_at']
+    ['consumer_group_id', 'group_name', 'data_target']
 )
 
 
@@ -32,31 +28,24 @@ class _ConsumerGroup(BaseModel):
     facilitate constructing the return value of schematizer functions.
     """
 
-    def __init__(self, consumer_group_id, group_name, data_target,
-                 created_at, updated_at):
+    def __init__(self, consumer_group_id, group_name, data_target):
         self.consumer_group_id = consumer_group_id
         self.group_name = group_name
         self.data_target = data_target
-        self.created_at = created_at
-        self.updated_at = updated_at
 
     @classmethod
     def from_response(cls, response):
         return cls(
             consumer_group_id=response.consumer_group_id,
             group_name=response.group_name,
-            data_target=_DataTarget.from_response(response.data_target),
-            created_at=response.created_at,
-            updated_at=response.updated_at
+            data_target=_DataTarget.from_response(response.data_target)
         )
 
     def to_cache_value(self):
         return {
             'consumer_group_id': self.consumer_group_id,
             'group_name': self.group_name,
-            'data_target': self.data_target,
-            'created_at': self.created_at,
-            'updated_at': self.updated_at
+            'data_target_id': self.data_target.data_target_id
         }
 
     @classmethod
@@ -64,23 +53,17 @@ class _ConsumerGroup(BaseModel):
         id_only_data_target = _DataTarget(
             data_target_id=cache_value['data_target_id'],
             target_type=None,
-            destination=None,
-            created_at=None,
-            updated_at=None
+            destination=None
         )
         return cls(
             consumer_group_id=cache_value['consumer_group_id'],
             group_name=cache_value['group_name'],
-            data_target=id_only_data_target,
-            created_at=cache_value['created_at'],
-            updated_at=cache_value['updated_at']
+            data_target=id_only_data_target
         )
 
     def to_result(self):
         return ConsumerGroup(
             consumer_group_id=self.consumer_group_id,
             group_name=self.group_name,
-            data_target=self.data_target.to_result(),
-            created_at=self.created_at,
-            updated_at=self.updated_at
+            data_target=self.data_target.to_result()
         )
