@@ -73,6 +73,8 @@ class FullRefreshManager(BatchDaemon):
     def _begin_refresh_job(self, refresh):
         primary_key = 'id'
         refresh_batch = FullRefreshRunner(
+            # TODO: Replace the 'id' string with a call to schematizer which
+            # gets the primary key of the table being refreshed.
             self.active_refresh['id'],
             self.cluster,
             self.database,
