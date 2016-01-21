@@ -114,7 +114,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             raise ValueError("--database must be specified")
         self.avg_rows_per_second_cap = self.options.avg_rows_per_second_cap
         if self.avg_rows_per_second_cap is not None and self.avg_rows_per_second_cap <= 0:
-            raise ValueError("--cap-avg-throughput-per-second should be greater than 0")
+            raise ValueError("--avg-rows-per-second-cap should be greater than 0")
         self.table_name = self.options.table_name
         self.temp_table = '{table}_data_pipeline_refresh'.format(
             table=self.table_name
@@ -238,7 +238,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self._wait_for_throughput(count)
 
     def _wait_for_throughput(self, count):
-        """Used to cap throughput when given the --cap-avg-throughput-per-second flag.
+        """Used to cap throughput when given the --avg-rows-per-second-cap flag.
         Sleeps for a certain amount of time based on elapsed time to process row, the number of rows processed (count)
         and the given cap so that the flag is enforced"""
         process_row_end_time = time.time()
