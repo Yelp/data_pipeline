@@ -382,7 +382,7 @@ class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
     def test_latest_schema_of_bad_topic(self, schematizer):
         with pytest.raises(swaggerpy_exc.HTTPError) as e:
             schematizer.get_latest_schema_by_topic_name('bad_topic')
-        assert e.value.response.status_code == 500
+        assert e.value.response.status_code == 404
 
     def test_latest_schema_should_be_cached(self, schematizer, biz_topic):
         latest_schema = schematizer.get_latest_schema_by_topic_name(biz_topic.name)
