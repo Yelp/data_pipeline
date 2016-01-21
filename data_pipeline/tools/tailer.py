@@ -13,6 +13,7 @@ import simplejson
 from yelp_batch.batch import Batch
 from yelp_batch.batch import batch_command_line_options
 from yelp_batch.batch import batch_configure
+from yelp_kafka import offsets
 from yelp_servlib.config_util import load_default_config
 
 import data_pipeline
@@ -26,6 +27,8 @@ from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 
 class Tailer(Batch):
+    """Tailer subscribes to (a) Kafka topic(s) and logs any messages pushed to these,
+    applying a transformation on the Avro binary data such that it is readable."""
     enable_error_emails = False
 
     @property
@@ -200,6 +203,40 @@ class Tailer(Batch):
 
         if self.options.all_fields:
             self.options.fields = self._public_message_field_names
+
+        self._verify_offset_ranges()
+
+    def _verify_offset_ranges(self):
+        """This is to clarify and enforce only using offsets inside of our actual offset range to avoid
+        confusing errors such as those found in DATAPIPE-628"""
+        topic_to_partition_offset_map = {
+            topic: None if consumer_topic_state is None
+            else consumer_topic_state.partition_offset_map
+            for topic, consumer_topic_state in self.topic_to_offsets_map.items()
+        }
+        # If we import get_topics_watermarks directly from offsets, then mock will not properly patch it in testing.
+        watermarks = offsets.get_topics_watermarks(
+            get_config().kafka_client,
+            topic_to_partition_offset_map,
+            # We do not raise on error as we do this verification later on and we
+            # want to keep the error message clear
+            raise_on_error=False
+        )
+        for topic, partition_offset_map in topic_to_partition_offset_map.iteritems():
+            if partition_offset_map is not None:
+                for partition, offset in partition_offset_map.iteritems():
+                    highmark = watermarks[topic][partition].highmark
+                    lowmark = watermarks[topic][partition].lowmark
+                    if offset < lowmark or offset > highmark:
+                        self.option_parser.error(
+                            "Offset ({}) for topic: {} (partition: {}) is out of range ({}-{})".format(
+                                offset,
+                                topic,
+                                partition,
+                                lowmark,
+                                highmark
+                            )
+                        )
 
     def _setup_topics(self):
         self.topic_to_offsets_map = {}
