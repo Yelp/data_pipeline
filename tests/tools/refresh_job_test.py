@@ -5,8 +5,8 @@ from __future__ import unicode_literals
 import mock
 import pytest
 
-from data_pipeline.batch.refresh_job import FullRefreshJob
-from data_pipeline.batch.refresh_job import UndefinedPriorityException
+from data_pipeline.tools.refresh_job import FullRefreshJob
+from data_pipeline.tools.refresh_job import UndefinedPriorityException
 
 
 class TestFullRefreshJob(object):
@@ -14,9 +14,9 @@ class TestFullRefreshJob(object):
     @pytest.yield_fixture
     def mock_config(self):
         with mock.patch(
-            'data_pipeline.batch.refresh_job.load_default_config'
+            'data_pipeline.tools.refresh_job.load_default_config'
         ), mock.patch(
-            'data_pipeline.batch.refresh_job.get_schematizer'
+            'data_pipeline.tools.refresh_job.get_schematizer'
         ):
             yield
 

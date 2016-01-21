@@ -72,11 +72,11 @@ class TestFullRefreshRunner(object):
         )
 
     @pytest.fixture
-    def refresh_params(self, cluster, table_name):
+    def refresh_params(self, cluster, table_name, database_name):
         return {
             'refresh_id': 1,
             'cluster': cluster,
-            'database': None,
+            'database': database_name,
             'config_path': 'test_config.yaml',
             'table_name': table_name,
             'offset': 0,
@@ -138,19 +138,6 @@ class TestFullRefreshRunner(object):
         refresh_params
     ):
         # Initialize the batch the same way the refresh manager would.
-        batch = FullRefreshRunner(**refresh_params)
-        yield batch
-
-    @pytest.yield_fixture
-    def managed_refresh_batch_db_option(
-        self,
-        mock_get_schematizer,
-        mock_load_config,
-        database_name,
-        refresh_params
-    ):
-        # Initialize the batch the same way the refresh manager would.
-        refresh_params['database'] = database_name
         batch = FullRefreshRunner(**refresh_params)
         yield batch
 
@@ -306,32 +293,6 @@ class TestFullRefreshRunner(object):
         assert write_session.rollback.call_count == 1
 
     def test_initial_action_managed_refresh(
-        self,
-        database_name,
-        managed_refresh_batch,
-        mock_execute,
-        mock_process_rows,
-        mock_create_table_src,
-        sessions,
-        write_session
-    ):
-        with mock.patch.object(
-            managed_refresh_batch,
-            '_wait_for_replication'
-        ) as wait_for_replication_mock:
-            managed_refresh_batch.initial_action()
-        assert wait_for_replication_mock.call_count == 1
-        update_refresh = managed_refresh_batch.schematizer.update_refresh
-        update_refresh.assert_called_once_with(
-            1,
-            'IN_PROGRESS',
-            0
-        )
-        mock_execute.call_count == 0
-        mock_create_table_src.assert_called_once_with(write_session)
-        assert write_session.rollback.call_count == 1
-
-    def test_initial_action_with_db_managed_refresh(
         self,
         database_name,
         managed_refresh_batch,

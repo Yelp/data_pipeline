@@ -8,10 +8,10 @@ import mock
 import psutil
 import pytest
 
-from data_pipeline.batch.refresh_manager import FullRefreshManager
 from data_pipeline.schematizer_clientlib.models import namespace
 from data_pipeline.schematizer_clientlib.models import refresh
 from data_pipeline.schematizer_clientlib.models import source
+from data_pipeline.tools.refresh_manager import FullRefreshManager
 
 
 class TestFullRefreshManager(object):
@@ -88,9 +88,9 @@ class TestFullRefreshManager(object):
     @pytest.yield_fixture
     def mock_config(self):
         with mock.patch(
-            'data_pipeline.batch.refresh_manager.load_default_config'
+            'data_pipeline.tools.refresh_manager.load_default_config'
         ), mock.patch(
-            'data_pipeline.batch.refresh_manager.get_schematizer'
+            'data_pipeline.tools.refresh_manager.get_schematizer'
         ):
             yield
 
@@ -213,7 +213,7 @@ class TestFullRefreshManager(object):
         refresh_manager.active_refresh['id'] = 1
         refresh_manager.active_refresh['pid'] = 1
         with mock.patch(
-            'data_pipeline.batch.refresh_manager.psutil.Process',
+            'data_pipeline.tools.refresh_manager.psutil.Process',
         ) as mock_ps:
             mock_ps.return_value.status.return_value = psutil.STATUS_ZOMBIE
             mock_sch = refresh_manager.schematizer

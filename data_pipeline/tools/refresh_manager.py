@@ -16,8 +16,8 @@ from yelp_batch.batch import batch_command_line_options
 from yelp_batch.batch import batch_configure
 from yelp_servlib.config_util import load_default_config
 
-from data_pipeline.batch.copy_table_to_blackhole_table import FullRefreshRunner
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+from data_pipeline.tools.copy_table_to_blackhole_table import FullRefreshRunner
 
 
 SCHEMATIZER_POLL_FREQUENCY_SECONDS = 5
