@@ -13,7 +13,7 @@ import simplejson
 from yelp_batch.batch import Batch
 from yelp_batch.batch import batch_command_line_options
 from yelp_batch.batch import batch_configure
-from yelp_kafka.offsets import get_topics_watermarks
+from yelp_kafka import offsets
 from yelp_servlib.config_util import load_default_config
 
 import data_pipeline
@@ -214,7 +214,8 @@ class Tailer(Batch):
             else consumer_topic_state.partition_offset_map
             for topic, consumer_topic_state in self.topic_to_offsets_map.items()
         }
-        watermarks = get_topics_watermarks(
+        # If we import get_topics_watermarks directly from offsets, then mock will not properly patch it in testing.
+        watermarks = offsets.get_topics_watermarks(
             get_config().kafka_client,
             topic_to_partition_offset_map,
             # We do not raise on error as we do this verification later on and we

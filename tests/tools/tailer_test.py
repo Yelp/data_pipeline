@@ -3,9 +3,11 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import time
+from collections import namedtuple
 
 import mock
 import pytest
+import yelp_kafka
 from yelp_batch.batch import BatchOptionParser
 
 import data_pipeline.tools.tailer
@@ -191,7 +193,7 @@ class TestTailer(object):
         out, _ = capsys.readouterr()
         assert out == "{u'payload_data': {u'good_field': 42}}\n"
 
-    def test_with_offset_out_of_range(
+    def test_with_offset_out_of_range_too_high(
         self,
         batch,
         producer,
@@ -210,6 +212,41 @@ class TestTailer(object):
         self._init_batch(batch, [
             '--topic', topic_with_offset,
         ])
+
+        self._assert_offset_out_of_range_error(mock_exit)
+
+    def test_with_offset_out_of_range_too_low(
+        self,
+        batch,
+        mock_exit,
+        producer,
+        message_with_payload_data,
+        topic,
+        topic_name
+    ):
+        PartitionOffsets = namedtuple(
+            'PartitionOffsets',
+            ['topic', 'partition', 'highmark', 'lowmark']
+        )
+
+        topic_with_offset = self._publish_and_set_topic_offset(
+            message_with_payload_data,
+            producer,
+            topic
+        )
+
+        with mock.patch.object(
+            yelp_kafka.offsets,
+            'get_topics_watermarks',
+            return_value={
+                topic_name: {
+                    0: PartitionOffsets(topic_name, 0, 13, 12)
+                }
+            }
+        ):
+            self._init_batch(batch, [
+                '--topic', topic_with_offset,
+            ])
 
         self._assert_offset_out_of_range_error(mock_exit)
 
