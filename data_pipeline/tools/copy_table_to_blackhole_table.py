@@ -2,7 +2,9 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import os
 import re
+import signal
 import time
 from datetime import datetime
 from optparse import OptionGroup
@@ -19,10 +21,69 @@ from yelp_conn.topology import TopologyFile
 from yelp_lib.classutil import cached_property
 from yelp_servlib.config_util import load_default_config
 
+from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+
 
 class FullRefreshRunner(Batch, BatchDBMixin):
+    """The FullRefreshManager spawns off a child process which executes this
+    batch to copy rows from the source table into a black hole table.
+
+    Args:
+        refresh_id (int): Identifies the refresh to be executed.
+        cluster (str): The cluster name of the table to be refreshed.
+        database (str): The database name that the table belongs to.
+        ro_replica (str): The ro replica connection name for this cluster.
+        rw_replica (str): The rw replica connection name for this cluster.
+        config_path (str): Path to the config file containing information
+            to initialize yelp_conn.
+        table_name (str): Name of the table to be refreshed.
+        offset (int): The row number to start the refresh from.
+        batch_size (int): The number of rows to refresh per batch.
+        primary (str): The column name for the primary column of the table.
+        where_clause (str): The where clause that must be satisfied by the
+            rows being refreshed.
+        dry_run (bool): Set to True to execute a dry refresh run.
+    """
     notify_emails = ['bam+batch@yelp.com']
     is_readonly_batch = False
+
+    def __init__(
+        self,
+        refresh_id=None,
+        cluster=None,
+        database=None,
+        config_path=None,
+        table_name=None,
+        offset=None,
+        batch_size=None,
+        primary=None,
+        where_clause=None,
+        dry_run=False
+    ):
+        super(FullRefreshRunner, self).__init__()
+        self.refresh_id = refresh_id
+        self.config_path = config_path
+        # Case where the RefreshManager is running the refresh.
+        if self.refresh_id is not None:
+            signal.signal(signal.SIGTERM, self.handle_terminate)
+            signal.signal(signal.SIGINT, self.handle_interupt)
+            self.db_name = cluster
+            self.database = database
+            if not self.database:
+                raise ValueError("--database must be specified")
+            self.table_name = table_name
+            self.temp_table = '{table}_data_pipeline_refresh'.format(
+                table=self.table_name
+            )
+            self.processed_row_count = offset
+            self.batch_size = batch_size
+            if self.batch_size <= 0:
+                raise ValueError("Batch size should be greater than 0")
+            self.primary_key = primary
+            self.where_clause = where_clause
+            self.dry_run = dry_run
+            self.config_path = config_path
+            self.schematizer = get_schematizer()
 
     @batch_command_line_options
     def define_options(self, option_parser):
@@ -48,7 +109,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             '--batch-size',
             dest='batch_size',
             type='int',
-            default=100,
+            default=200,
             help='Number of rows to process between commits '
                  '(default: %default).'
         )
@@ -98,21 +159,27 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
     @batch_configure
     def _init_global_state(self):
-        load_default_config(self.options.config_path)
-        if self.options.batch_size <= 0:
-            raise ValueError("Batch size should be greater than 0")
-        self.db_name = self.options.cluster
-        self.database = self.options.database
-        if not self.database:
-            raise ValueError("--database must be specified")
-        self.table_name = self.options.table_name
-        self.temp_table = '{table}_data_pipeline_refresh'.format(
-            table=self.table_name
-        )
-        self.primary_key = self.options.primary
-        self.processed_row_count = 0
-        self.where_clause = self.options.where_clause
+        if not self.config_path:
+            self.config_path = self.options.config_path
+        load_default_config(self.config_path)
         self._connection_set = None
+        # Case where refresh batch is run independently.
+        if self.refresh_id is None:
+            self.db_name = self.options.cluster
+            self.database = self.options.database
+            if not self.database:
+                raise ValueError("--database must be specified")
+            self.table_name = self.options.table_name
+            self.temp_table = '{table}_data_pipeline_refresh'.format(
+                table=self.table_name
+            )
+            self.processed_row_count = 0
+            self.batch_size = self.options.batch_size
+            if self.batch_size <= 0:
+                raise ValueError("Batch size should be greater than 0")
+            self.primary_key = self.options.primary
+            self.where_clause = self.options.where_clause
+            self.dry_run = self.options.dry_run
 
     def setup_connections(self):
         """Creates connections to the mySQL database.
@@ -142,11 +209,11 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             return value if value is not None else 0
 
     def build_select(
-            self,
-            select_item,
-            order_col=None,
-            offset=None,
-            size=None
+        self,
+        select_item,
+        order_col=None,
+        offset=None,
+        size=None
     ):
         base_query = 'SELECT {col} FROM {origin}'.format(
             col=select_item,
@@ -167,15 +234,14 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         """Lets first wait for ro_conn replication to catch up with the
         batch start time.
         """
-        if self.options.wait_for_replication_on_startup:
-            self.log.info(
-                "Waiting for ro_conn replication to catch up with start time "
-                "{start_time}".format(
-                    start_time=datetime.fromtimestamp(self.starttime)
-                )
+        self.log.info(
+            "Waiting for ro_conn replication to catch up with start time "
+            "{start_time}".format(
+                start_time=datetime.fromtimestamp(self.starttime)
             )
-            with self.ro_conn() as ro_conn:
-                self.wait_for_replication_until(self.starttime, ro_conn)
+        )
+        with self.ro_conn() as ro_conn:
+            self.wait_for_replication_until(self.starttime, ro_conn)
 
     def create_table_from_src_table(self, session):
         show_create_statement = 'SHOW CREATE TABLE {table_name}'.format(
@@ -226,6 +292,12 @@ class FullRefreshRunner(Batch, BatchDBMixin):
     def initial_action(self):
         self._wait_for_replication()
         with self.write_session() as session:
+            if self.refresh_id:
+                self.schematizer.update_refresh(
+                    self.refresh_id,
+                    "IN_PROGRESS",
+                    self.processed_row_count
+                )
             self._use_db(session)
             self.create_table_from_src_table(session)
             self._commit(session)
@@ -269,7 +341,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             '*',
             self.primary_key,
             offset,
-            self.options.batch_size
+            self.batch_size
         )
         query = 'SELECT COUNT(*) FROM ({query}) AS T'.format(
             query=select_query
@@ -283,7 +355,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             '*',
             self.primary_key,
             offset,
-            self.options.batch_size
+            self.batch_size
         )
         insert_query += select_query
         self._execute_query(session, insert_query)
@@ -295,8 +367,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             )
         )
         offset = 0
-        count = self.options.batch_size
-        while count >= self.options.batch_size:
+        count = self.batch_size
+        while count >= self.batch_size:
             with self.write_session() as session:
                 self.setup_transaction(session)
                 count = self.count_inserted(session, offset)
@@ -304,6 +376,9 @@ class FullRefreshRunner(Batch, BatchDBMixin):
                 self._after_processing_rows(session)
             offset += count
             self.processed_row_count += count
+
+        if self.refresh_id:
+            self.schematizer.update_refresh(self.refresh_id, 'SUCCESS', 0)
 
     def log_info(self):
         elapsed_time = time.time() - self.starttime
@@ -314,11 +389,39 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             )
         )
 
+    def handle_interupt(self, signal, frame):
+        self.schematizer.update_refresh(
+            self.refresh_id,
+            'FAILED',
+            self.processed_row_count
+        )
+        os._exit(1)
+
+    def handle_terminate(self, signal, frame):
+        self.schematizer.update_refresh(
+            self.refresh_id,
+            'PAUSED',
+            self.processed_row_count
+        )
+        os._exit(1)
+
     def run(self):
         try:
             self.initial_action()
             self.process_table()
             self.log_info()
+        except SystemExit:
+            pass
+        except Exception:
+            if self.refresh_id:
+                self.schematizer.update_refresh(
+                    self.refresh_id,
+                    'FAILED',
+                    self.processed_row_count
+                )
+            # Sends an email containing the exception encountered.
+            self._email_exception_in_exception_context()
+            os._exit(1)
         finally:
             self.final_action()
 

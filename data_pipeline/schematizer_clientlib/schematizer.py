@@ -7,6 +7,7 @@ import simplejson
 from data_pipeline.config import get_config
 from data_pipeline.helpers.singleton import Singleton
 from data_pipeline.schematizer_clientlib.models.avro_schema import _AvroSchema
+from data_pipeline.schematizer_clientlib.models.refresh import _Refresh
 from data_pipeline.schematizer_clientlib.models.source import _Source
 from data_pipeline.schematizer_clientlib.models.topic import _Topic
 
@@ -357,6 +358,125 @@ class SchematizerClient(object):
             self._update_cache_by_topic(_topic)
         return result
 
+    def get_refreshes_by_criteria(
+        self,
+        namespace_name=None,
+        status=None,
+        created_after=None
+    ):
+        """Get all the refreshes that match the specified criteria. If no
+        criterion is specified, it returns all refreshes.
+
+        Args:
+            namespace_name (Optional[str]): namespace the topics belong to.
+            status (Optional[str]): The status associated with the refresh.
+            created_after (Optional[int]): Epoch timestamp the refreshes should
+                be created after. The refreshes created at the same timestamp
+                are also included.
+
+        Returns:
+            (List[data_pipeline.schematizer_clientlib.models.refresh.Refresh]):
+                list of refreshes that match the given criteria.
+        """
+        response = self._call_api(
+            api=self._client.refreshes.get_refreshes_by_criteria,
+            params={
+                'namespace': namespace_name,
+                'status': status,
+                'created_after': created_after
+            }
+        )
+        return [get_refresh_result_from_response(resp) for resp in response]
+
+    def create_refresh(
+        self,
+        source_id,
+        offset,
+        batch_size,
+        priority,
+        filter_condition=None
+    ):
+        """Register a refresh and returns the newly created refresh object.
+
+        Args:
+            source_id (int): The id of the source of the refresh.
+            offset (int): The last known offset that has been refreshed.
+            batch_size (int): The number of rows to be refreshed per batch.
+            priority (int): The priority of the refresh (1-100)
+            filter_condition (str): The filter condition associated with
+             the refresh.
+
+        Returns:
+            (data_pipeline.schematizer_clientlib.models.refresh.Refresh):
+                The newly created Refresh.
+        """
+        post_body = {
+            'offset': offset,
+            'batch_size': batch_size,
+            'priority': priority,
+        }
+        if filter_condition:
+            post_body['filter_condition'] = filter_condition
+        response = self._call_api(
+            api=self._client.sources.create_refresh,
+            params={'source_id': source_id, 'body': post_body}
+        )
+        return get_refresh_result_from_response(response)
+
+    def update_refresh(self, refresh_id, status, offset):
+        """Update the status of the refresh with specified refresh_id.
+
+        Args:
+            refresh_id (int): The id of the refresh being updated.
+            status (str): New status of the refresh.
+            offset (int): Last known offset that has been refreshed.
+
+        Returns:
+            (data_pipeline.schematizer_clientlib.models.refresh.Refresh):
+                The updated Refresh.
+        """
+        post_body = {
+            'status': status,
+            'offset': offset
+        }
+        response = self._call_api(
+            api=self._client.refreshes.update_refresh,
+            params={'refresh_id': refresh_id, 'body': post_body}
+        )
+        return get_refresh_result_from_response(response)
+
+    def get_refreshes_by_namespace(self, namespace_name):
+        """"Get the list of refreshes in the specified namespace.
+
+        Args:
+            namespace_name (str): namespace name to look up.
+
+        Returns:
+            (List[data_pipeline.schematizer_clientlib.models.refresh.Refresh]):
+                The list of refreshes in the given namespace.
+        """
+        response = self._call_api(
+            api=self._client.namespaces.list_refreshes_by_namespace,
+            params={'namespace': namespace_name}
+        )
+        return [get_refresh_result_from_response(resp) for resp in response]
+
+    def get_refresh_by_id(self, refresh_id):
+        """Get the refresh associated with specified refresh_id.
+
+        Args:
+            refresh_id (int): The id of the refresh.
+
+        Returns:
+            (data_pipeline.schematizer_clientlib.models.refresh.Refresh):
+                The refresh with the given refresh_id.
+        """
+        response = self._call_api(
+            api=self._client.refreshes.get_refresh_by_id,
+            params={'refresh_id': str(refresh_id)}
+        )
+        return get_refresh_result_from_response(response)
+
     def _call_api(self, api, params=None, post_body=None):
         # TODO(DATAPIPE-207|joshszep): Include retry strategy support
         request_params = {'body': post_body} if post_body else params or {}
@@ -377,6 +497,11 @@ class SchematizerClient(object):
 
     def _update_cache_by_source(self, new_source):
         self._source_cache[new_source.source_id] = new_source.to_cache_value()
+
+
+def get_refresh_result_from_response(response):
+    _refresh = _Refresh.from_response(response)
+    return _refresh.to_result()
 
 
 def get_schematizer():
