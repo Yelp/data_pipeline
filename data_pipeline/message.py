@@ -603,6 +603,7 @@ class UpdateMessage(Message):
     def previous_payload(self, previous_payload):
         if not isinstance(previous_payload, bytes):
             raise TypeError("Previous payload must be bytes")
+        previous_payload = self._encrypt_payload_if_necessary(previous_payload)
         self._previous_payload = previous_payload
         self._previous_payload_data = None  # force previous_payload_data to be re-decoded
 
@@ -638,8 +639,9 @@ class UpdateMessage(Message):
 
     def _decode_previous_payload_if_necessary(self):
         if self._previous_payload_data is None:
+            encoded_message = self._decrypt_payload_if_necessary(self._previous_payload)
             self._previous_payload_data = self._avro_string_reader.decode(
-                encoded_message=self._previous_payload
+                encoded_message=encoded_message
             )
 
     def reload_data(self):
