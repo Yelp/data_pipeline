@@ -11,6 +11,8 @@ import simplejson
 from swaggerpy import exception as swaggerpy_exc
 
 from data_pipeline.config import get_config
+from data_pipeline.schematizer_clientlib.models.data_source_type_enum import \
+    DataSourceTypEnum
 from data_pipeline.schematizer_clientlib.schematizer import SchematizerClient
 
 
@@ -42,12 +44,23 @@ class SchematizerClientTestBase(object):
         return 'biz_{0}'.format(random.random())
 
     @pytest.fixture(scope='class')
+    def biz_src_resp(self, yelp_namespace, biz_src_name):
+        return self._register_avro_schema(
+            yelp_namespace,
+            biz_src_name
+        ).topic.source
+
+    @pytest.fixture(scope='class')
     def usr_src_name(self):
         return 'user_{0}'.format(random.random())
 
     @pytest.fixture(scope='class')
     def cta_src_name(self):
         return 'cta_{0}'.format(random.random())
+
+    @pytest.fixture(scope='class')
+    def biz_topic_resp(self, yelp_namespace, biz_src_name):
+        return self._register_avro_schema(yelp_namespace, biz_src_name).topic
 
     @property
     def source_owner_email(self):
@@ -85,29 +98,25 @@ class SchematizerClientTestBase(object):
         ).result()
 
     def _assert_schema_values(self, actual, expected_resp):
-        assert actual.schema_id == expected_resp.schema_id
+        attrs = ('schema_id', 'base_schema_id', 'status', 'primary_keys', 'note',
+                 'created_at', 'updated_at')
+        self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
         assert actual.schema_json == simplejson.loads(expected_resp.schema)
         self._assert_topic_values(actual.topic, expected_resp.topic)
-        assert actual.base_schema_id == expected_resp.base_schema_id
-        assert actual.status == expected_resp.status
-        assert actual.primary_keys == expected_resp.primary_keys
-        assert actual.note == expected_resp.note
-        assert actual.created_at == expected_resp.created_at
-        assert actual.updated_at == expected_resp.updated_at
 
     def _assert_topic_values(self, actual, expected_resp):
-        assert actual.topic_id == expected_resp.topic_id
-        assert actual.name == expected_resp.name
+        attrs = ('topic_id', 'name', 'contains_pii', 'created_at', 'updated_at')
+        self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
         self._assert_source_values(actual.source, expected_resp.source)
-        assert actual.contains_pii == expected_resp.contains_pii
-        assert actual.created_at == expected_resp.created_at
-        assert actual.updated_at == expected_resp.updated_at
 
     def _assert_source_values(self, actual, expected_resp):
-        assert actual.source_id == expected_resp.source_id
-        assert actual.name == expected_resp.name
-        assert actual.owner_email == expected_resp.owner_email
+        attrs = ('source_id', 'name', 'owner_email')
+        self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
         assert actual.namespace.namespace_id == expected_resp.namespace.namespace_id
+
+    def _assert_equal_multi_attrs(self, actual, expected, *attrs):
+        for attr in attrs:
+            assert getattr(actual, attr) == getattr(expected, attr)
 
 
 class TestGetSchemaById(SchematizerClientTestBase):
@@ -382,7 +391,7 @@ class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
     def test_latest_schema_of_bad_topic(self, schematizer):
         with pytest.raises(swaggerpy_exc.HTTPError) as e:
             schematizer.get_latest_schema_by_topic_name('bad_topic')
-        assert e.value.response.status_code == 500
+        assert e.value.response.status_code == 404
 
     def test_latest_schema_should_be_cached(self, schematizer, biz_topic):
         latest_schema = schematizer.get_latest_schema_by_topic_name(biz_topic.name)
@@ -767,3 +776,300 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
             assert actual == topics[0]
             assert topic_api_spy.call_count == 0
             assert source_api_spy.call_count == 0
+
+
+class RegistrationTestBase(SchematizerClientTestBase):
+
+    @pytest.fixture(scope="class")
+    def dw_data_target_resp(self):
+        return self._create_data_target()
+
+    def _create_data_target(self):
+        post_body = {
+            'target_type': 'redshift_{}'.format(random.random()),
+            'destination': 'dwv1.yelpcorp.com.{}'.format(random.random())
+        }
+        return self._get_client().data_targets.create_data_target(
+            body=post_body
+        ).result()
+
+    @pytest.fixture(scope="class")
+    def dw_con_group_resp(self, dw_data_target_resp):
+        return self._create_consumer_group(dw_data_target_resp.data_target_id)
+
+    def _create_consumer_group(self, data_target_id):
+        return self._get_client().data_targets.create_consumer_group(
+            data_target_id=data_target_id,
+            body={'group_name': 'dw_{}'.format(random.random())}
+        ).result()
+
+    @pytest.fixture(scope="class")
+    def dw_con_group_data_src_resp(self, dw_con_group_resp, biz_src_resp):
+        return self._create_consumer_group_data_src(
+            consumer_group_id=dw_con_group_resp.consumer_group_id,
+            data_src_type='Source',
+            data_src_id=biz_src_resp.source_id
+        )
+
+    def _create_consumer_group_data_src(
+        self,
+        consumer_group_id,
+        data_src_type,
+        data_src_id
+    ):
+        return self._get_client().consumer_groups.create_consumer_group_data_source(
+            consumer_group_id=consumer_group_id,
+            body={
+                'data_source_type': data_src_type,
+                'data_source_id': data_src_id
+            }
+        ).result()
+
+    def _assert_data_target_values(self, actual, expected_resp):
+        attrs = ('data_target_id', 'target_type', 'destination')
+        self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
+
+    def _assert_consumer_group_values(self, actual, expected_resp):
+        attrs = ('consumer_group_id', 'group_name')
+        self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
+        self._assert_data_target_values(
+            actual.data_target,
+            expected_resp.data_target
+        )
+
+
+class TestCreateDataTarget(RegistrationTestBase):
+
+    @property
+    def random_target_type(self):
+        return 'random_type'
+
+    @property
+    def random_destination(self):
+        return 'random.destination'
+
+    def test_create_data_target(self, schematizer):
+        actual = schematizer.create_data_target(
+            target_type=self.random_target_type,
+            destination=self.random_destination
+        )
+        expected_resp = self._get_data_target_resp(actual.data_target_id)
+        self._assert_data_target_values(actual, expected_resp)
+        assert actual.target_type == self.random_target_type
+        assert actual.destination == self.random_destination
+
+    def test_invalid_empty_target_type(self, schematizer):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.create_data_target(
+                target_type='',
+                destination=self.random_destination
+            )
+        assert e.value.response.status_code == 400
+
+    def test_invalid_empty_destination(self, schematizer):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.create_data_target(
+                target_type=self.random_target_type,
+                destination=''
+            )
+        assert e.value.response.status_code == 400
+
+    def _get_data_target_resp(self, data_target_id):
+        return self._get_client().data_targets.get_data_target_by_id(
+            data_target_id=data_target_id
+        ).result()
+
+
+class TestGetDataTargetById(RegistrationTestBase):
+
+    def test_get_non_cached_data_target(self, schematizer, dw_data_target_resp):
+        with self.attach_spy_on_api(
+            schematizer._client.data_targets,
+            'get_data_target_by_id'
+        ) as api_spy:
+            actual = schematizer.get_data_target_by_id(
+                dw_data_target_resp.data_target_id
+            )
+            self._assert_data_target_values(actual, dw_data_target_resp)
+            assert api_spy.call_count == 1
+
+    def test_get_cached_data_target(self, schematizer, dw_data_target_resp):
+        schematizer.get_data_target_by_id(dw_data_target_resp.data_target_id)
+
+        with self.attach_spy_on_api(
+            schematizer._client.data_targets,
+            'get_data_target_by_id'
+        ) as data_target_api_spy:
+            actual = schematizer.get_data_target_by_id(
+                dw_data_target_resp.data_target_id
+            )
+            self._assert_data_target_values(actual, dw_data_target_resp)
+            assert data_target_api_spy.call_count == 0
+
+    def test_non_existing_data_target_id(self, schematizer):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.get_data_target_by_id(data_target_id=0)
+        assert e.value.response.status_code == 404
+
+
+class TestCreateConsumerGroup(RegistrationTestBase):
+
+    @pytest.fixture
+    def random_group_name(self):
+        return 'group_{}'.format(random.random())
+
+    def test_create_consumer_group(
+        self,
+        schematizer,
+        dw_data_target_resp,
+        random_group_name
+    ):
+        actual = schematizer.create_consumer_group(
+            group_name=random_group_name,
+            data_target_id=dw_data_target_resp.data_target_id
+        )
+        expected_resp = self._get_consumer_group_resp(
+            actual.consumer_group_id
+        )
+        self._assert_consumer_group_values(actual, expected_resp)
+        assert actual.group_name == random_group_name
+
+    def test_invalid_empty_group_name(self, schematizer, dw_data_target_resp):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.create_consumer_group(
+                group_name='',
+                data_target_id=dw_data_target_resp.data_target_id
+            )
+        assert e.value.response.status_code == 400
+
+    def test_duplicate_group_name(
+        self,
+        schematizer,
+        dw_data_target_resp,
+        random_group_name
+    ):
+        schematizer.create_consumer_group(
+            group_name=random_group_name,
+            data_target_id=dw_data_target_resp.data_target_id
+        )
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.create_consumer_group(
+                group_name=random_group_name,
+                data_target_id=dw_data_target_resp.data_target_id
+            )
+        assert e.value.response.status_code == 400
+
+    def test_non_existing_data_target(self, schematizer, random_group_name):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.create_consumer_group(
+                group_name=random_group_name,
+                data_target_id=0
+            )
+        assert e.value.response.status_code == 404
+
+    def _get_consumer_group_resp(self, consumer_group_id):
+        return self._get_client().consumer_groups.get_consumer_group_by_id(
+            consumer_group_id=consumer_group_id
+        ).result()
+
+
+class TestGetConsumerGroupById(RegistrationTestBase):
+
+    def test_get_non_cached_consumer_group(self, schematizer, dw_con_group_resp):
+        with self.attach_spy_on_api(
+            schematizer._client.consumer_groups,
+            'get_consumer_group_by_id'
+        ) as api_spy:
+            actual = schematizer.get_consumer_group_by_id(
+                dw_con_group_resp.consumer_group_id
+            )
+            self._assert_consumer_group_values(actual, dw_con_group_resp)
+            assert api_spy.call_count == 1
+
+    def test_get_cached_consumer_group(self, schematizer, dw_con_group_resp):
+        schematizer.get_consumer_group_by_id(
+            dw_con_group_resp.consumer_group_id
+        )
+
+        with self.attach_spy_on_api(
+            schematizer._client.consumer_groups,
+            'get_consumer_group_by_id'
+        ) as consumer_group_api_spy:
+            actual = schematizer.get_consumer_group_by_id(
+                dw_con_group_resp.consumer_group_id
+            )
+            self._assert_consumer_group_values(actual, dw_con_group_resp)
+            assert consumer_group_api_spy.call_count == 0
+
+    def test_non_existing_consumer_group_id(self, schematizer):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.get_consumer_group_by_id(consumer_group_id=0)
+        assert e.value.response.status_code == 404
+
+
+class TestCreateConsumerGroupDataSource(RegistrationTestBase):
+
+    def test_create_consumer_group_data_source(
+        self,
+        schematizer,
+        dw_con_group_resp,
+        biz_src_resp
+    ):
+        actual = schematizer.create_consumer_group_data_source(
+            consumer_group_id=dw_con_group_resp.consumer_group_id,
+            data_source_type=DataSourceTypEnum.Source,
+            data_source_id=biz_src_resp.source_id
+        )
+        assert actual.consumer_group_id == dw_con_group_resp.consumer_group_id
+        assert actual.data_source_type == DataSourceTypEnum.Source
+        assert actual.data_source_id == biz_src_resp.source_id
+
+    def test_non_existing_consumer_group(self, schematizer, biz_src_resp):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.create_consumer_group_data_source(
+                consumer_group_id=0,
+                data_source_type=DataSourceTypEnum.Source,
+                data_source_id=biz_src_resp.source_id
+            )
+        assert e.value.response.status_code == 404
+
+    def test_non_existing_data_source(self, schematizer, dw_con_group_resp):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.create_consumer_group_data_source(
+                consumer_group_id=dw_con_group_resp.consumer_group_id,
+                data_source_type=DataSourceTypEnum.Source,
+                data_source_id=0
+            )
+        assert e.value.response.status_code == 404
+
+
+class TestGetTopicsByDataTargetId(RegistrationTestBase):
+
+    def test_data_target_with_topics(
+        self,
+        schematizer,
+        dw_data_target_resp,
+        dw_con_group_data_src_resp,
+        biz_src_resp,
+        biz_topic_resp
+    ):
+        actual = schematizer.get_topics_by_data_target_id(
+            dw_data_target_resp.data_target_id
+        )
+        for actual_topic, expected_resp in zip(actual, [biz_topic_resp]):
+            self._assert_topic_values(actual_topic, expected_resp)
+
+    def test_data_target_with_no_topic(self, schematizer):
+        # no data source associated to the consumer group
+        random_data_target = self._create_data_target()
+        self._create_consumer_group(random_data_target.data_target_id)
+
+        actual = schematizer.get_topics_by_data_target_id(
+            random_data_target.data_target_id
+        )
+        assert actual == []
+
+    def test_non_existing_data_target(self, schematizer):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.get_topics_by_data_target_id(data_target_id=0)
+        assert e.value.response.status_code == 404
