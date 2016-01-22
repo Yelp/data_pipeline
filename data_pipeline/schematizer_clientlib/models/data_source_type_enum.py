@@ -6,7 +6,7 @@ from enum import Enum
 
 
 class DataSourceTypEnum(Enum):
-    """Enum representing eligible data source types."""
+    """Eligible data source types."""
 
     Namespace = 1
     Source = 2

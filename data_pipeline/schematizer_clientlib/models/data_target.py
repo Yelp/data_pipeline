@@ -8,13 +8,14 @@ from data_pipeline.schematizer_clientlib.models.model_base import BaseModel
 
 
 """
-Represent the data of a data target.
+Represent the data of a data target.  A data target represents a destination
+where the data(messages) are eventually sent to, such as a Redshift cluster.
 
 Args:
     data_target_id (int): The id of the data target.
     target_type (str): The target type, such as Redshift, etc.
     destination (str): The actual location of the data target, such as the Url
-        of the Redshift cluster.
+        of a Redshift cluster.
 """
 DataTarget = namedtuple(
     'DataTarget',

@@ -19,8 +19,8 @@ Args:
     data_source_type
     (data_pipeline.schematizer_clientlib.models.data_source_type_enum.DataSourceTypeEnum):
         The type of the data_source.
-    data_source_id: The id of the data target. It could be a namespace id or
-        source id.
+    data_source_id: The id of the data target.  Depending on the data source
+        type, it may be a namespace id or source id.
 """
 ConsumerGroupDataSource = namedtuple(
     'ConsumerGroupDataSource',
