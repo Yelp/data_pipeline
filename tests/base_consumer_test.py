@@ -257,16 +257,16 @@ class RefreshTopicsTest(object):
         return 'biz_{0}'.format(random.random())
 
     @pytest.fixture
-    def biz_schema(self, yelp_namespace, biz_src):
-        return self._register_schema(yelp_namespace, biz_src)
+    def biz_schema(self, yelp_namespace, biz_src, containers):
+        return self._register_schema(yelp_namespace, biz_src, containers)
 
     @pytest.fixture
     def usr_src(self):
         return 'user_{0}'.format(random.random())
 
     @pytest.fixture
-    def usr_schema(self, yelp_namespace, usr_src):
-        return self._register_schema(yelp_namespace, usr_src)
+    def usr_schema(self, yelp_namespace, usr_src, containers):
+        return self._register_schema(yelp_namespace, usr_src, containers)
 
     @pytest.fixture
     def aux_namespace(self):
@@ -277,27 +277,37 @@ class RefreshTopicsTest(object):
         return 'cta_{0}'.format(random.random())
 
     @pytest.fixture(autouse=True)
-    def cta_schema(self, aux_namespace, cta_src):
-        return self._register_schema(aux_namespace, cta_src)
+    def cta_schema(self, aux_namespace, cta_src, containers):
+        return self._register_schema(aux_namespace, cta_src, containers)
 
-    def _register_schema(self, namespace, source):
+    @pytest.fixture
+    def pre_rebalance_callback(self):
+        return mock.Mock()
+
+    @pytest.fixture
+    def post_rebalance_callback(self):
+        return mock.Mock()
+
+    def _register_schema(self, namespace, source, containers):
         avro_schema = {
             'type': 'record',
             'name': source,
             'namespace': namespace,
             'fields': [{'type': 'int', 'name': 'id'}]
         }
-        return get_schematizer().register_schema_from_schema_json(
+        reg_schema = get_schematizer().register_schema_from_schema_json(
             namespace=namespace,
             source=source,
             schema_json=avro_schema,
             source_owner_email='bam+test@yelp.com',
             contains_pii=False
         )
+        containers.create_kafka_topic(str(reg_schema.topic.name))
+        return reg_schema
 
     @pytest.fixture(scope='class')
-    def test_schema(self):
-        return self._register_schema('test_namespace', 'test_src')
+    def test_schema(self, containers):
+        return self._register_schema('test_namespace', 'test_src', containers)
 
     @pytest.fixture(scope='class')
     def topic(self, containers, test_schema):
@@ -329,7 +339,7 @@ class RefreshTopicsTest(object):
         consumer,
         yelp_namespace,
         biz_schema,
-        usr_schema,
+        usr_schema
     ):
         biz_topic = biz_schema.topic
         usr_topic = usr_schema.topic

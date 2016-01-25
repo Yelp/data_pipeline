@@ -289,7 +289,7 @@ class Tailer(Batch):
             'bam',
             ExpectedFrequency.constantly,
             self.topic_to_offsets_map,
-            auto_offset_reset=self.options.offset_reset_location
+            auto_offset_reset=self.options.offset_reset_location,
         ) as consumer:
             message_count = 0
             while self.keep_running(message_count):

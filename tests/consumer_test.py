@@ -155,10 +155,12 @@ class TestConsumer(BaseConsumerTest):
 class TestRefreshTopics(RefreshTopicsTest):
 
     @pytest.fixture
-    def consumer_instance(self, topic, team_name):
+    def consumer_instance(self, topic, team_name, pre_rebalance_callback, post_rebalance_callback):
         return Consumer(
             consumer_name='test_consumer',
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
-            topic_to_consumer_topic_state_map={topic: None}
+            topic_to_consumer_topic_state_map={topic: None},
+            pre_rebalance_callback=pre_rebalance_callback,
+            post_rebalance_callback=post_rebalance_callback
         )
