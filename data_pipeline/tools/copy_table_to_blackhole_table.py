@@ -43,6 +43,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         where_clause (str): The where clause that must be satisfied by the
             rows being refreshed.
         dry_run (bool): Set to True to execute a dry refresh run.
+        topology_path (str): Path to the topology file
     """
     notify_emails = ['bam+batch@yelp.com']
     is_readonly_batch = False
@@ -58,11 +59,13 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         batch_size=None,
         primary=None,
         where_clause=None,
-        dry_run=False
+        dry_run=False,
+        topology_path="/nail/srv/configs/topology.yaml"
     ):
         super(FullRefreshRunner, self).__init__()
         self.refresh_id = refresh_id
         self.config_path = config_path
+        self._connection_set = None
         # Case where the RefreshManager is running the refresh.
         if self.refresh_id is not None:
             signal.signal(signal.SIGTERM, self.handle_terminate)
@@ -84,6 +87,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.dry_run = dry_run
             self.config_path = config_path
             self.schematizer = get_schematizer()
+            self.topology_path = topology_path
+            self.avg_rows_per_second_cap = None
 
     @batch_command_line_options
     def define_options(self, option_parser):
@@ -193,6 +198,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.primary_key = self.options.primary
             self.where_clause = self.options.where_clause
             self.dry_run = self.options.dry_run
+            self.topology_path = self.options.topology_path
 
     def setup_connections(self):
         """Creates connections to the mySQL database.
@@ -337,7 +343,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
     def _commit(self, session):
         """Commits unless in dry_run mode, otherwise rolls back"""
-        if self.options.dry_run:
+        if self.dry_run:
             self.log.info("Executing rollback in dry-run mode")
             session.rollback()
         else:
@@ -458,7 +464,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         """
         if self._connection_set:
             return self._connection_set
-        topology = TopologyFile.new_from_file(self.options.topology_path)
+        topology = TopologyFile.new_from_file(self.topology_path)
         conn_defs = self._get_conn_defs(topology, cluster)
         conn_config = ConnectionSetConfig(cluster, conn_defs, read_only=False)
         self._connection_set = ConnectionSet.from_config(conn_config)
