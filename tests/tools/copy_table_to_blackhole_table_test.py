@@ -287,7 +287,8 @@ class TestFullRefreshRunner(object):
         write_session.execute.assert_called_once_with('UNLOCK TABLES')
         assert write_session.commit.call_count == 1
         throttle_mock.assert_called_once_with(rw_conn)
-        assert mock_wait.call_count == 0
+        assert mock_wait.call_count == 1
+        assert refresh_batch.avg_rows_per_second_cap == 50
 
     def test_build_select(
         self,
