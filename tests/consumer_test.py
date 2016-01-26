@@ -2,7 +2,6 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import time
 from multiprocessing import Event
 from multiprocessing import Process
 
@@ -96,6 +95,7 @@ class TestConsumer(BaseConsumerTest):
         """
 
         event = Event()
+        event_two = Event()
 
         # publishing messages on two topics
         self._publish_message(topic, message, producer, 10)
@@ -113,7 +113,8 @@ class TestConsumer(BaseConsumerTest):
                 force_payload_decode,
                 pre_rebalance_callback,
                 post_rebalance_callback,
-                event
+                event,
+                event_two
             )
         )
         second_consumer_process.start()
@@ -122,7 +123,8 @@ class TestConsumer(BaseConsumerTest):
         # starts so that when consumer two starts the topics are distributed.
         for _ in range(2):
             consumer.get_message(blocking=True, timeout=TIMEOUT)
-            time.sleep(2)
+
+        event_two.wait()
 
         assert len(consumer.topic_to_consumer_topic_state_map) == 1
 
@@ -144,7 +146,8 @@ class TestConsumer(BaseConsumerTest):
         force_payload_decode,
         pre_rebalance_callback,
         post_rebalance_callback,
-        event
+        event,
+        event_two
     ):
         """
         The consumer names should be the same for the partitioner to
@@ -161,6 +164,7 @@ class TestConsumer(BaseConsumerTest):
         ) as consumer_two:
             assert len(consumer_two.topic_to_consumer_topic_state_map) == 1
             consumer_two.get_message(blocking=True, timeout=TIMEOUT)
+            event_two.set()
             event.wait()
 
             for _ in range(8):
