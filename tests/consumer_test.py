@@ -60,7 +60,7 @@ class TestConsumer(BaseConsumerTest):
         )
 
     def _publish_message(self, topic, message, producer, n_times=1):
-        for x in range(n_times):
+        for _ in range(n_times):
             producer.publish(message)
             producer.flush()
 
@@ -103,19 +103,24 @@ class TestConsumer(BaseConsumerTest):
         message.topic = topic_two
         self._publish_message(topic_two, message, producer, 10)
 
-        second_consumer_process = Process(target=self._second_consumer,
-                                          args=(team_name,
-                                                topic,
-                                                topic_two,
-                                                ExpectedFrequency.constantly,
-                                                force_payload_decode,
-                                                pre_rebalance_callback,
-                                                post_rebalance_callback,
-                                                event)
-                                          )
+        second_consumer_process = Process(
+            target=self._second_consumer,
+            args=(
+                team_name,
+                topic,
+                topic_two,
+                ExpectedFrequency.constantly,
+                force_payload_decode,
+                pre_rebalance_callback,
+                post_rebalance_callback,
+                event
+            )
+        )
         second_consumer_process.start()
 
-        for x in range(1, 3):
+        # Consumer one needs to continue to receive messages while consumer two
+        # starts so that when consumer two starts the topics are distributed.
+        for _ in range(2):
             consumer.get_message(blocking=True, timeout=TIMEOUT)
             time.sleep(2)
 
@@ -125,7 +130,7 @@ class TestConsumer(BaseConsumerTest):
 
         second_consumer_process.join()
 
-        for x in range(1, 7):
+        for _ in range(6):
             consumer.get_message(blocking=True, timeout=TIMEOUT)
 
         assert len(consumer.topic_to_consumer_topic_state_map) == 2
@@ -158,7 +163,7 @@ class TestConsumer(BaseConsumerTest):
             consumer_two.get_message(blocking=True, timeout=TIMEOUT)
             event.wait()
 
-            for x in range(1, 9):
+            for _ in range(8):
                 consumer_two.get_message(blocking=True, timeout=TIMEOUT)
 
 
@@ -170,7 +175,5 @@ class TestRefreshTopics(RefreshTopicsTest):
             consumer_name='test_consumer',
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
-            topic_to_consumer_topic_state_map={topic: None},
-            pre_rebalance_callback=pre_rebalance_callback,
-            post_rebalance_callback=post_rebalance_callback
+            topic_to_consumer_topic_state_map={topic: None}
         )
