@@ -2,6 +2,8 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import time
+
 import mock
 import pytest
 
@@ -273,13 +275,19 @@ class TestFullRefreshRunner(object):
         with mock.patch.object(
             refresh_batch,
             'throttle_to_replication'
-        ) as throttle_mock:
-            refresh_batch._after_processing_rows(write_session)
+        ) as throttle_mock, mock.patch.object(
+            refresh_batch,
+            '_wait_for_throughput',
+            return_value=None
+        ) as mock_wait:
+            # count can be anything since self.avg_throughput_cap is set to None
+            refresh_batch._after_processing_rows(write_session, count=0)
 
         assert write_session.rollback.call_count == 1
         write_session.execute.assert_called_once_with('UNLOCK TABLES')
         assert write_session.commit.call_count == 1
         throttle_mock.assert_called_once_with(rw_conn)
+        assert mock_wait.call_count == 0
 
     def test_build_select(
         self,
@@ -475,3 +483,35 @@ class TestFullRefreshRunner(object):
                 read_only=False
             )
             mock_conn.from_config.assert_called_once_with(mock_conn_config)
+
+    def test_throughput_wait(
+        self,
+        refresh_batch
+    ):
+        with mock.patch.object(
+            refresh_batch,
+            'avg_rows_per_second_cap',
+            1000
+        ), mock.patch.object(
+            refresh_batch,
+            'process_row_start_time',
+            0.0
+        ), mock.patch.object(
+            time,
+            'time',
+            return_value=0.1  # Simulating that it took 100 milliseconds to run the actual row processing
+        ), mock.patch.object(
+            time,
+            'sleep',
+            return_value=None
+        ) as mock_sleep:
+            refresh_batch._wait_for_throughput(count=100)
+            mock_sleep.assert_called_with(0.0)
+            refresh_batch._wait_for_throughput(count=1)
+            mock_sleep.assert_called_with(0.0)
+            refresh_batch._wait_for_throughput(count=1000)
+            mock_sleep.assert_called_with(0.9)
+            refresh_batch._wait_for_throughput(count=10000)
+            mock_sleep.assert_called_with(9.9)
+            refresh_batch._wait_for_throughput(count=500)
+            mock_sleep.assert_called_with(0.4)
