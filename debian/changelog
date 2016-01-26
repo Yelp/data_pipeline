@@ -1,3 +1,9 @@
+data-pipeline-tools (0.1.48) lucid; urgency=low
+
+  * Commit: Merge branch 'DATAPIPE-731-krane-fix_double_encryption'
+
+ -- Justin Cunningham <justinc@yelp.com>  Mon, 25 Jan 2016 13:55:47 -0800
+
 data-pipeline-tools (0.1.47) lucid; urgency=low
 
   * Commit: Checked in missing testing fix, and reverted gitignore
