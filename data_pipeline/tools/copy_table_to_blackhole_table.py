@@ -244,9 +244,9 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         process_row_end_time = time.time()
         elapsed_time = process_row_end_time - self.process_row_start_time
         desired_elapsed_time = 1.0 / self.avg_rows_per_second_cap * count
-        time_to_wait = desired_elapsed_time - elapsed_time
+        time_to_wait = (desired_elapsed_time - elapsed_time) if desired_elapsed_time > elapsed_time else 0.0
         self.log.info("Waiting for {} seconds to enforce avg throughput cap".format(time_to_wait))
-        time.sleep(time_to_wait if time_to_wait >= 0 else 0.0)
+        time.sleep(time_to_wait)
 
     def initial_action(self):
         self._wait_for_replication()
