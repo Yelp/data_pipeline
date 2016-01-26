@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import time
+from multiprocessing import Event
 from multiprocessing import Process
 
 import mock
@@ -94,6 +95,8 @@ class TestConsumer(BaseConsumerTest):
         with only one of the two topics
         """
 
+        event = Event()
+
         # publishing messages on two topics
         self._publish_message(topic, message, producer, 10)
 
@@ -107,7 +110,8 @@ class TestConsumer(BaseConsumerTest):
                                                 ExpectedFrequency.constantly,
                                                 force_payload_decode,
                                                 pre_rebalance_callback,
-                                                post_rebalance_callback)
+                                                post_rebalance_callback,
+                                                event)
                                           )
         second_consumer_process.start()
 
@@ -117,9 +121,12 @@ class TestConsumer(BaseConsumerTest):
 
         assert len(consumer.topic_to_consumer_topic_state_map) == 1
 
+        event.set()
+
+        second_consumer_process.join()
+
         for x in range(1, 7):
             consumer.get_message(blocking=True, timeout=TIMEOUT)
-            time.sleep(2)
 
         assert len(consumer.topic_to_consumer_topic_state_map) == 2
 
@@ -131,7 +138,8 @@ class TestConsumer(BaseConsumerTest):
         expected_frequency_seconds,
         force_payload_decode,
         pre_rebalance_callback,
-        post_rebalance_callback
+        post_rebalance_callback,
+        event
     ):
         """
         The consumer names should be the same for the partitioner to
@@ -147,9 +155,11 @@ class TestConsumer(BaseConsumerTest):
             post_rebalance_callback=post_rebalance_callback
         ) as consumer_two:
             assert len(consumer_two.topic_to_consumer_topic_state_map) == 1
-            for x in range(1, 10):
+            consumer_two.get_message(blocking=True, timeout=TIMEOUT)
+            event.wait()
+
+            for x in range(1, 9):
                 consumer_two.get_message(blocking=True, timeout=TIMEOUT)
-                time.sleep(1)
 
 
 class TestRefreshTopics(RefreshTopicsTest):

@@ -426,42 +426,15 @@ class BaseConsumer(Client):
             ``auto_commit`` is set to False to ensure clients can determine when
             they want their topic offsets committed via commit_messages(..)
         """
-        if self.pre_rebalance_callback is None and self.post_rebalance_callback is None:
-            return KafkaConsumerConfig(
-                group_id=self.client_name,
-                cluster=get_config().cluster_config,
-                auto_offset_reset=self.auto_offset_reset,
-                auto_commit=False,
-                partitioner_cooldown=self.partitioner_cooldown
-            )
-        elif self.pre_rebalance_callback is not None and self.post_rebalance_callback is None:
-            return KafkaConsumerConfig(
-                group_id=self.client_name,
-                cluster=get_config().cluster_config,
-                auto_offset_reset=self.auto_offset_reset,
-                auto_commit=False,
-                partitioner_cooldown=self.partitioner_cooldown,
-                pre_rebalance_callback=self.pre_rebalance_callback
-            )
-        elif self.pre_rebalance_callback is None and self.post_rebalance_callback is not None:
-            return KafkaConsumerConfig(
-                group_id=self.client_name,
-                cluster=get_config().cluster_config,
-                auto_offset_reset=self.auto_offset_reset,
-                auto_commit=False,
-                partitioner_cooldown=self.partitioner_cooldown,
-                post_rebalance_callback=self.apply_post_rebalance_callback_to_partition
-            )
-        else:
-            return KafkaConsumerConfig(
-                group_id=self.client_name,
-                cluster=get_config().cluster_config,
-                auto_offset_reset=self.auto_offset_reset,
-                auto_commit=False,
-                partitioner_cooldown=self.partitioner_cooldown,
-                pre_rebalance_callback=self.pre_rebalance_callback,
-                post_rebalance_callback=self.apply_post_rebalance_callback_to_partition
-            )
+        return KafkaConsumerConfig(
+            group_id=self.client_name,
+            cluster=get_config().cluster_config,
+            auto_offset_reset=self.auto_offset_reset,
+            auto_commit=False,
+            partitioner_cooldown=self.partitioner_cooldown,
+            pre_rebalance_callback=self.pre_rebalance_callback,
+            post_rebalance_callback=self.apply_post_rebalance_callback_to_partition
+        )
 
     def apply_post_rebalance_callback_to_partition(self, partitions):
         """
@@ -476,7 +449,11 @@ class BaseConsumer(Client):
             key: self.topic_to_consumer_topic_state_map.get(key)
             for key in partitions
         }
-        return self.post_rebalance_callback(partitions)
+
+        if self.post_rebalance_callback:
+            return self.post_rebalance_callback(partitions)
+
+        return None
 
     def refresh_new_topics(
         self,
