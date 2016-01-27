@@ -174,7 +174,7 @@ class TestConsumer(BaseConsumerTest):
 class TestRefreshTopics(RefreshTopicsTest):
 
     @pytest.fixture
-    def consumer_instance(self, topic, team_name, pre_rebalance_callback, post_rebalance_callback):
+    def consumer_instance(self, topic, team_name):
         return Consumer(
             consumer_name='test_consumer',
             team_name=team_name,
