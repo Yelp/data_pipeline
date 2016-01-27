@@ -7,9 +7,9 @@ from collections import defaultdict
 
 import simplejson as json
 from cached_property import cached_property
-from yelp_kafka.offsets import get_topics_watermarks
 
 from data_pipeline._kafka_producer import LoggingKafkaProducer
+from data_pipeline._kafka_util import get_actual_published_messages_count
 from data_pipeline._pooled_kafka_producer import PooledKafkaProducer
 from data_pipeline.client import Client
 from data_pipeline.config import get_config
@@ -213,19 +213,30 @@ class Producer(Client):
                 published.
         """
         topic_messages_map = self._generate_topic_messages_map(messages)
-        topic_watermarks_map = self._get_high_water_mark_for_messages(
-            topic_messages_map.keys()
+        # raise_on_error must be set to False, otherwise this call will raise
+        # an exception when any topic doesn't exist, preventing the topic from
+        # ever being created in the context of ensure_messages_published
+        topic_actual_published_count_map = (
+            get_actual_published_messages_count(
+                topics=topic_messages_map.keys(),
+                topic_tracked_offset_map=topic_offsets,
+                raise_on_error=False
+            )
         )
 
         for topic, messages in topic_messages_map.iteritems():
+            # `get_actual_published_messages_count` only returns the message
+            # count for topics that exist, so for non-existent topics, here it
+            # sets the actual published message count to 0, i.e. high watermark
+            # is 0.
+            already_published_count = topic_actual_published_count_map.get(topic, 0)
             saved_offset = topic_offsets.get(topic, 0)
-            already_published_count = topic_watermarks_map[topic] - saved_offset
 
             info_to_log = dict(
                 message="Attempting to ensure messages published",
                 topic=topic,
                 saved_offset=saved_offset,
-                high_watermark=topic_watermarks_map[topic],
+                high_watermark=already_published_count + saved_offset,
                 message_count=len(messages),
                 already_published_count=already_published_count
             )
@@ -315,29 +326,3 @@ class Producer(Client):
         for message in messages:
             topic_messages_map[message.topic].append(message)
         return topic_messages_map
-
-    def _get_high_water_mark_for_messages(self, topic_list):
-        kafka_client = get_config().kafka_client
-        # raise_on_error must be set to False, otherwise this call will raise
-        # an exception when any topic doesn't exist, preventing the topic from
-        # ever being created in the context of ensure_messages_published
-        #
-        # get_topics_watermarks only returns information for topics that exist,
-        # so we have to manually set a highmark of 0 for topics that don't
-        # exist.
-        topic_watermarks = get_topics_watermarks(
-            kafka_client,
-            topic_list,
-            raise_on_error=False
-        )
-
-        topic_to_highmark_map = {
-            topic: partition_offsets[0].highmark
-            for topic, partition_offsets in topic_watermarks.iteritems()
-        }
-
-        for topic in topic_list:
-            if topic not in topic_to_highmark_map:
-                topic_to_highmark_map[topic] = 0
-
-        return topic_to_highmark_map
