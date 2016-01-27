@@ -43,10 +43,11 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         where_clause (str): The where clause that must be satisfied by the
             rows being refreshed.
         dry_run (bool): Set to True to execute a dry refresh run.
-        topology_path (str): Path to the topology file
+        avg_rows_per_second_cap (int): Number of rows we want to complete per second (sleeps in between batches to enforce)
     """
     notify_emails = ['bam+batch@yelp.com']
     is_readonly_batch = False
+    DEFAULT_TOPOLOGY_PATH = "/nail/srv/configs/topology.yaml"
 
     def __init__(
         self,
@@ -60,7 +61,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         primary=None,
         where_clause=None,
         dry_run=False,
-        topology_path="/nail/srv/configs/topology.yaml"
+        avg_rows_per_second_cap=None
     ):
         super(FullRefreshRunner, self).__init__()
         self.refresh_id = refresh_id
@@ -68,6 +69,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self._connection_set = None
         # Case where the RefreshManager is running the refresh.
         if self.refresh_id is not None:
+            self.topology_path = self.DEFAULT_TOPOLOGY_PATH
             signal.signal(signal.SIGTERM, self.handle_terminate)
             signal.signal(signal.SIGINT, self.handle_interupt)
             self.db_name = cluster
@@ -87,8 +89,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.dry_run = dry_run
             self.config_path = config_path
             self.schematizer = get_schematizer()
-            self.topology_path = topology_path
-            self.avg_rows_per_second_cap = None
+            self.avg_rows_per_second_cap = avg_rows_per_second_cap
 
     @batch_command_line_options
     def define_options(self, option_parser):
@@ -141,7 +142,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             dest='topology_path',
             help='Path to the topology.yaml file.'
                  '(default: %default)',
-            default='/nail/srv/configs/topology.yaml'
+            default=self.DEFAULT_TOPOLOGY_PATH
         )
         opt_group.add_option(
             '--where',

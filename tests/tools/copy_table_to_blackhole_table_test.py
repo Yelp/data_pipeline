@@ -2,7 +2,6 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from contextlib import nested
 import time
 
 import mock
@@ -75,7 +74,7 @@ class TestFullRefreshRunner(object):
         )
 
     @pytest.fixture
-    def refresh_params(self, cluster, table_name, database_name, topology_path):
+    def refresh_params(self, cluster, table_name, database_name):
         return {
             'refresh_id': 1,
             'cluster': cluster,
@@ -200,7 +199,6 @@ class TestFullRefreshRunner(object):
     def managed_write_session(self, managed_refresh_batch, _managed_write):
         with managed_refresh_batch.write_session() as write_session:
             yield write_session
-
 
     @pytest.yield_fixture
     def _rw_conn(self, refresh_batch):
@@ -526,7 +524,7 @@ class TestFullRefreshRunner(object):
             refresh_batch,
             'batch_size',
             10
-        ) as mock_options:
+        ):
             mock_rows.side_effect = [10, 10, 5]
             mock_row_count.return_value = 25
             refresh_batch.process_table()

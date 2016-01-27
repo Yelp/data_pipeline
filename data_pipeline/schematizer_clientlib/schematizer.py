@@ -394,7 +394,8 @@ class SchematizerClient(object):
         offset,
         batch_size,
         priority,
-        filter_condition=None
+        filter_condition=None,
+        avg_rows_per_second_cap=None
     ):
         """Register a refresh and returns the newly created refresh object.
 
@@ -405,6 +406,7 @@ class SchematizerClient(object):
             priority (int): The priority of the refresh (1-100)
             filter_condition (str): The filter condition associated with
              the refresh.
+            avg_rows_per_second_cap (int): Throughput throttle of the refresh.
 
         Returns:
             (data_pipeline.schematizer_clientlib.models.refresh.Refresh):
@@ -417,6 +419,8 @@ class SchematizerClient(object):
         }
         if filter_condition:
             post_body['filter_condition'] = filter_condition
+        if avg_rows_per_second_cap is not None:
+            post_body['avg_rows_per_second_cap'] = avg_rows_per_second_cap
         response = self._call_api(
             api=self._client.sources.create_refresh,
             params={'source_id': source_id, 'body': post_body}

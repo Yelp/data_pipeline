@@ -63,6 +63,7 @@ class TestFullRefreshJob(object):
         )
         refresh_job.run()
         refresh_job.schematizer.create_refresh.assert_called_once_with(
+            avg_rows_per_second_cap=None,
             source_id=0,
             batch_size=250,
             filter_condition=None,

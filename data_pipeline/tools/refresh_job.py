@@ -71,6 +71,13 @@ class FullRefreshJob(Batch):
                  'after the WHERE in a sql statement. '
                  'e.g: --where="country=\'CA\' AND city=\'Waterloo\'"'
         )
+        opt_group.add_option(
+            '--avg-rows-per-second-cap',
+            help='Caps the throughput per second. Important since without any control for this '
+                 'the batch can cause signifigant pipeline delays',
+            type='int',
+            default=None
+        )
         return opt_group
 
     def validate_priority(self):
@@ -87,7 +94,8 @@ class FullRefreshJob(Batch):
             offset=self.options.offset,
             batch_size=self.options.batch_size,
             priority=self.options.priority,
-            filter_condition=self.options.filter_condition
+            filter_condition=self.options.filter_condition,
+            avg_rows_per_second_cap=self.options.avg_rows_per_second_cap
         )
         self.log.info(
             "Refresh registered with refresh id: {rid} "
