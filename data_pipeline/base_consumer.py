@@ -453,8 +453,6 @@ class BaseConsumer(Client):
         if self.post_rebalance_callback:
             return self.post_rebalance_callback(partitions)
 
-        return None
-
     def refresh_new_topics(
         self,
         topic_filter=None,

@@ -86,16 +86,18 @@ class TestConsumer(BaseConsumerTest):
             message
     ):
         """
-        This test starts a consumer with two topics and retrieves a message
-        and starts another consumer with the same name in a separate thread
-        and while the second consumer is retrieving messages
-        asserts that the topic redistribution occurs and the
-        topic_to_consumer_topic_state_map for the second consumer is
-        with only one of the two topics
+        This test starts a consumer (consumer_one) with two topics and
+        retrieves a message and starts another consumer (consumer_two)
+        with the same name in a separate process and while the
+        consumer_two is retrieving messages asserts that the topic
+        redistribution occurs and the topic_to_consumer_topic_state_map
+        for consumer_two is with only one of the two topics. Then it
+        stops consumer_two process first and again asserts that all
+        the original topics have been reassigned to consumer one.
         """
 
-        event = Event()
-        event_two = Event()
+        first_consumer_rebalanced_event = Event()
+        second_consumer_ready_event = Event()
 
         # publishing messages on two topics
         self._publish_message(topic, message, producer, 10)
@@ -113,8 +115,8 @@ class TestConsumer(BaseConsumerTest):
                 force_payload_decode,
                 pre_rebalance_callback,
                 post_rebalance_callback,
-                event,
-                event_two
+                first_consumer_rebalanced_event,
+                second_consumer_ready_event
             )
         )
         second_consumer_process.start()
@@ -124,11 +126,11 @@ class TestConsumer(BaseConsumerTest):
         for _ in range(2):
             consumer.get_message(blocking=True, timeout=TIMEOUT)
 
-        event_two.wait()
+        second_consumer_ready_event.wait()
 
         assert len(consumer.topic_to_consumer_topic_state_map) == 1
 
-        event.set()
+        first_consumer_rebalanced_event.set()
 
         second_consumer_process.join()
 
@@ -146,8 +148,8 @@ class TestConsumer(BaseConsumerTest):
         force_payload_decode,
         pre_rebalance_callback,
         post_rebalance_callback,
-        event,
-        event_two
+        first_consumer_rebalanced_event,
+        second_consumer_ready_event
     ):
         """
         The consumer names should be the same for the partitioner to
@@ -164,8 +166,8 @@ class TestConsumer(BaseConsumerTest):
         ) as consumer_two:
             assert len(consumer_two.topic_to_consumer_topic_state_map) == 1
             consumer_two.get_message(blocking=True, timeout=TIMEOUT)
-            event_two.set()
-            event.wait()
+            second_consumer_ready_event.set()
+            first_consumer_rebalanced_event.wait()
 
             for _ in range(8):
                 consumer_two.get_message(blocking=True, timeout=TIMEOUT)
