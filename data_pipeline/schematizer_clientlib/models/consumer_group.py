@@ -10,8 +10,8 @@ from data_pipeline.schematizer_clientlib.models.model_base import BaseModel
 
 """
 Represent the data of a consumer group.  A consumer group represents a group of
-the consumers the messages which consume will be sent to the same destination.
-Such destination is defined as a "data target".
+the consumers that send all the messages to the same destination, defined as a
+"data target".
 
 Args:
     consumer_group_id (int): The id of the consumer group.

@@ -12,7 +12,7 @@ from swaggerpy import exception as swaggerpy_exc
 
 from data_pipeline.config import get_config
 from data_pipeline.schematizer_clientlib.models.data_source_type_enum import \
-    DataSourceTypEnum
+    DataSourceTypeEnum
 from data_pipeline.schematizer_clientlib.schematizer import SchematizerClient
 
 
@@ -1017,18 +1017,18 @@ class TestCreateConsumerGroupDataSource(RegistrationTestBase):
     ):
         actual = schematizer.create_consumer_group_data_source(
             consumer_group_id=dw_con_group_resp.consumer_group_id,
-            data_source_type=DataSourceTypEnum.Source,
+            data_source_type=DataSourceTypeEnum.Source,
             data_source_id=biz_src_resp.source_id
         )
         assert actual.consumer_group_id == dw_con_group_resp.consumer_group_id
-        assert actual.data_source_type == DataSourceTypEnum.Source
+        assert actual.data_source_type == DataSourceTypeEnum.Source
         assert actual.data_source_id == biz_src_resp.source_id
 
     def test_non_existing_consumer_group(self, schematizer, biz_src_resp):
         with pytest.raises(swaggerpy_exc.HTTPError) as e:
             schematizer.create_consumer_group_data_source(
                 consumer_group_id=0,
-                data_source_type=DataSourceTypEnum.Source,
+                data_source_type=DataSourceTypeEnum.Source,
                 data_source_id=biz_src_resp.source_id
             )
         assert e.value.response.status_code == 404
@@ -1037,7 +1037,7 @@ class TestCreateConsumerGroupDataSource(RegistrationTestBase):
         with pytest.raises(swaggerpy_exc.HTTPError) as e:
             schematizer.create_consumer_group_data_source(
                 consumer_group_id=dw_con_group_resp.consumer_group_id,
-                data_source_type=DataSourceTypEnum.Source,
+                data_source_type=DataSourceTypeEnum.Source,
                 data_source_id=0
             )
         assert e.value.response.status_code == 404

@@ -4,7 +4,7 @@ from __future__ import unicode_literals
 
 from collections import namedtuple
 
-from data_pipeline.schematizer_clientlib.models.data_source_type_enum import DataSourceTypEnum
+from data_pipeline.schematizer_clientlib.models.data_source_type_enum import DataSourceTypeEnum
 from data_pipeline.schematizer_clientlib.models.model_base import BaseModel
 
 
@@ -46,7 +46,7 @@ class _ConsumerGroupDataSource(BaseModel):
         return cls(
             consumer_group_data_source_id=response.consumer_group_data_source_id,
             consumer_group_id=response.consumer_group_id,
-            data_source_type=cls._get_enum_from_string(response.data_source_type),
+            data_source_type=DataSourceTypeEnum[response.data_source_type],
             data_source_id=response.data_source_id
         )
 
@@ -57,7 +57,3 @@ class _ConsumerGroupDataSource(BaseModel):
             data_source_type=self.data_source_type,
             data_source_id=self.data_source_id
         )
-
-    @classmethod
-    def _get_enum_from_string(cls, enum_str):
-        return DataSourceTypEnum._member_map_[enum_str]

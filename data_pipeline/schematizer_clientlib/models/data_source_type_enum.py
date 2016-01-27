@@ -5,7 +5,7 @@ from __future__ import unicode_literals
 from enum import Enum
 
 
-class DataSourceTypEnum(Enum):
+class DataSourceTypeEnum(Enum):
     """Eligible data source types."""
 
     Namespace = 1
