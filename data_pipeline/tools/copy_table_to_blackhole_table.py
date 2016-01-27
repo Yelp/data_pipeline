@@ -23,6 +23,7 @@ from yelp_servlib.config_util import load_default_config
 class FullRefreshRunner(Batch, BatchDBMixin):
     notify_emails = ['bam+batch@yelp.com']
     is_readonly_batch = False
+    DEFAULT_AVG_ROWS_PER_SECOND_CAP = 50
 
     @batch_command_line_options
     def define_options(self, option_parser):
@@ -100,7 +101,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
                  'the batch can cause signifigant pipeline delays'
                  '(default: %default)',
             type='int',
-            default=50
+            default=DEFAULT_AVG_ROWS_PER_SECOND_CAP
         )
         return opt_group
 
