@@ -2,12 +2,15 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import os
+from collections import namedtuple
 from datetime import datetime
 
 import mock
 import psutil
 import pytest
 
+import data_pipeline.tools.refresh_manager
 from data_pipeline.schematizer_clientlib.models import namespace
 from data_pipeline.schematizer_clientlib.models import refresh
 from data_pipeline.schematizer_clientlib.models import source
@@ -25,12 +28,24 @@ class TestFullRefreshManager(object):
         return 'fake_source'
 
     @pytest.fixture
+    def fake_config_path(self):
+        return '/nail/srv/configs/data_pipeline_tools.yaml'
+
+    @pytest.fixture
     def fake_created_at(self):
         return datetime(2015, 1, 1, 17, 0, 0)
 
     @pytest.fixture
     def fake_updated_at(self):
         return datetime(2015, 1, 1, 17, 0, 1)
+
+    @pytest.fixture
+    def fake_schema(self):
+        return namedtuple('Schema', ['primary_keys'])(['id'])
+
+    @pytest.fixture
+    def fake_worker(self):
+        return namedtuple('Worker', ['start', 'pid'])(mock.Mock(), 0)
 
     @pytest.fixture
     def refresh_params(
@@ -95,9 +110,13 @@ class TestFullRefreshManager(object):
             yield
 
     @pytest.fixture
-    def refresh_manager(self, mock_config, fake_namespace):
+    def refresh_manager(self, fake_config_path, fake_namespace, mock_config):
         refresh_manager = FullRefreshManager()
-        refresh_manager.namespace_name = fake_namespace
+        refresh_manager.options = namedtuple('Options', ['namespace', 'config_path'])(
+            fake_namespace,
+            fake_config_path
+        )
+        refresh_manager._init_global_state()
         return refresh_manager
 
     @pytest.yield_fixture
@@ -236,3 +255,56 @@ class TestFullRefreshManager(object):
             ]
             refresh_manager.get_next_refresh()
             mock_determine.assert_called_once_with(not_started, paused)
+
+    def test_begin_refresh_job(
+        self,
+        refresh_manager,
+        refresh_result,
+        fake_source,
+        fake_namespace,
+        fake_config_path,
+        fake_schema
+    ):
+        with mock.patch.object(
+            data_pipeline.tools.refresh_manager,
+            'FullRefreshRunner'
+        ) as mock_refresh_runner, mock.patch.object(
+            refresh_manager.schematizer,
+            'get_latest_schema_by_topic_name',
+            return_value=fake_schema
+        ):
+            refresh_manager._begin_refresh_job(refresh_result)
+            mock_refresh_runner.assert_called_once_with(
+                refresh_id=None,
+                cluster=fake_namespace,
+                database=None,
+                config_path=fake_config_path,
+                table_name=fake_source,
+                offset=0,
+                batch_size=200,
+                primary='id',
+                where_clause=None,
+                dry_run=False,
+                avg_rows_per_second_cap=None
+            )
+
+    def test_setup_new_refresh(
+        self,
+        refresh_manager,
+        refresh_result,
+        fake_source,
+        fake_namespace,
+        fake_config_path,
+        fake_worker
+    ):
+        with mock.patch.object(
+            data_pipeline.tools.refresh_manager,
+            'Process',
+            return_value=fake_worker
+        ), mock.patch.object(
+            os,
+            'kill'
+        ) as mock_kill:
+            refresh_manager.setup_new_refresh(refresh_result)
+            assert fake_worker.start.call_count == 1
+            assert mock_kill.call_count == 0

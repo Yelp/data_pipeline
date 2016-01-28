@@ -70,3 +70,23 @@ class TestFullRefreshJob(object):
             priority='MAX',
             offset=0
         )
+
+    def test_valid_with_avg_rows_per_second_cap(self, refresh_job):
+        refresh_job.process_commandline_options(
+            [
+                '--source-id=0',
+                '--batch-size=250',
+                '--priority=MAX',
+                '--offset=0',
+                '--avg-rows-per-second-cap=100'
+            ]
+        )
+        refresh_job.run()
+        refresh_job.schematizer.create_refresh.assert_called_once_with(
+            avg_rows_per_second_cap=100,
+            source_id=0,
+            batch_size=250,
+            filter_condition=None,
+            priority='MAX',
+            offset=0
+        )

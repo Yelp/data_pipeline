@@ -87,9 +87,9 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.primary_key = primary
             self.where_clause = where_clause
             self.dry_run = dry_run
+            self.avg_rows_per_second_cap = avg_rows_per_second_cap
             self.config_path = config_path
             self.schematizer = get_schematizer()
-            self.avg_rows_per_second_cap = avg_rows_per_second_cap
 
     @batch_command_line_options
     def define_options(self, option_parser):

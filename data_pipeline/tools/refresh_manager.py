@@ -19,7 +19,6 @@ from yelp_servlib.config_util import load_default_config
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.tools.copy_table_to_blackhole_table import FullRefreshRunner
 
-
 SCHEMATIZER_POLL_FREQUENCY_SECONDS = 5
 
 
@@ -73,19 +72,20 @@ class FullRefreshManager(BatchDaemon):
     def _begin_refresh_job(self, refresh):
         # We need to make 2 schematizer requests to get the primary_keys, but this happens infrequently enough
         # where it's not paricularly vital to make a new end point for it
-        topic = self.schematizer.get_latest_topic_by_source_id(refresh.source_id)
-        primary_keys = self.schematizer.get_latest_schema_by_topic_name(topic.name).primary_keys
+        topic = self.schematizer.get_latest_topic_by_source_id(refresh.source.source_id)
+        primary_key = self.schematizer.get_latest_schema_by_topic_name(topic.name).primary_keys[0]
         refresh_batch = FullRefreshRunner(
-            self.active_refresh['id'],
-            self.cluster,
-            self.database,
-            self.config_path,
-            refresh.source.name,
-            refresh.offset,
-            refresh.batch_size,
-            primary_keys[0],
-            refresh.filter_condition,
-            refresh.avg_rows_per_second_cap
+            refresh_id=self.active_refresh['id'],
+            cluster=self.cluster,
+            database=self.database,
+            config_path=self.config_path,
+            table_name=refresh.source.name,
+            offset=refresh.offset,
+            batch_size=refresh.batch_size,
+            primary=primary_key,
+            where_clause=refresh.filter_condition,
+            dry_run=False,
+            avg_rows_per_second_cap=getattr(refresh, 'avg_rows_per_second_cap', None)
         )
         refresh_batch.start()
 
