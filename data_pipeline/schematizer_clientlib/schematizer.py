@@ -176,6 +176,24 @@ class SchematizerClient(object):
             self._update_cache_by_topic(_topic)
         return result
 
+    def get_latest_topic_by_source_id(self, source_id):
+        """Get the lastest topic of specified source id
+
+        Args:
+            source_id (int): The id of the source to look up
+
+        Returns:
+            (data_pipeline.schematizer_clientlib.models.topic.Topic):
+                The latest topic of given source
+        """
+        response = self._call_api(
+            api=self._client.sources.get_latest_topic_by_source_id,
+            params={'source_id': source_id}
+        )
+        _topic = _Topic.from_response(response)
+        self._update_cache_by_topic(_topic)
+        return _topic.to_result()
+
     def get_latest_schema_by_topic_name(self, topic_name):
         """Get the latest enabled schema of given topic.
 

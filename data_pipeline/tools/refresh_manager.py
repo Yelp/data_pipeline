@@ -71,10 +71,11 @@ class FullRefreshManager(BatchDaemon):
         sys.argv = sys.argv[:1]
 
     def _begin_refresh_job(self, refresh):
-        primary_key = 'id'
+        # We need to make 2 schematizer requests to get the primary_keys, but this happens infrequently enough
+        # where it's not paricularly vital to make a new end point for it
+        topic = self.schematizer.get_latest_topic_by_source_id(refresh.source_id)
+        primary_keys = self.schematizer.get_latest_schema_by_topic_name(topic.name).primary_keys
         refresh_batch = FullRefreshRunner(
-            # TODO: Replace the 'id' string with a call to schematizer which
-            # gets the primary key of the table being refreshed.
             self.active_refresh['id'],
             self.cluster,
             self.database,
@@ -82,8 +83,9 @@ class FullRefreshManager(BatchDaemon):
             refresh.source.name,
             refresh.offset,
             refresh.batch_size,
-            primary_key,
+            primary_keys[0],
             refresh.filter_condition,
+            refresh.avg_rows_per_second_cap
         )
         refresh_batch.start()
 

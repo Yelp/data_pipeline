@@ -350,6 +350,26 @@ class TestGetTopicsBySourceId(SchematizerClientTestBase):
             assert source_api_spy.call_count == 0
 
 
+class TestGetLatestTopicBySourceId(SchematizerClientTestBase):
+
+    @pytest.fixture(autouse=True, scope='class')
+    def biz_topic(self, yelp_namespace, biz_src_name):
+        return self._register_avro_schema(
+            yelp_namespace,
+            biz_src_name
+        ).topic
+
+    def test_get_latest_topic_of_biz_source(self, schematizer, biz_topic):
+        actual = schematizer.get_latest_topic_by_source_id(biz_topic.source.source_id)
+        expected = biz_topic
+        self._assert_topic_values(actual, expected)
+
+    def test_get_latest_topic_of_bad_source(self, schematizer):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.get_latest_topic_by_source_id(0)
+        assert e.value.response.status_code == 404
+
+
 class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
