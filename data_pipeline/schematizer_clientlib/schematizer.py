@@ -15,6 +15,28 @@ from data_pipeline.schematizer_clientlib.models.source import _Source
 from data_pipeline.schematizer_clientlib.models.topic import _Topic
 
 
+class _Cache(object):
+    """Cache used by Schematizer client.  This cache stores the schematizer
+    entities, such as avro schemas, topics, sources, etc.
+    """
+
+    def __init__(self):
+        self._cache = {}
+
+    def get_value(self, entity_type, entity_key):
+        cache_key = self._get_cache_key(entity_type.__name__, entity_key)
+        cache_value = self._cache.get(cache_key)
+        return entity_type.from_cache_value(cache_value) if cache_value else None
+
+    def set_value(self, entity_key, new_value):
+        value_type_name = new_value.__class__.__name__
+        cache_key = self._get_cache_key(value_type_name, entity_key)
+        self._cache[cache_key] = new_value.to_cache_value()
+
+    def _get_cache_key(self, entity_type_name, entity_key):
+        return entity_type_name, entity_key
+
+
 class SchematizerClient(object):
     """A client that interacts with Schematizer APIs.  It has built-in caching
     feature which caches avro schemas, topics, and etc.  Right now the cache is
@@ -40,11 +62,7 @@ class SchematizerClient(object):
 
     def __init__(self):
         self._client = get_config().schematizer_client  # swaggerpy client
-        self._schema_cache = {}
-        self._topic_cache = {}
-        self._source_cache = {}
-        self._data_target_cache = {}
-        self._consumer_group_cache = {}
+        self._cache = _Cache()
         self._avro_schema_cache = {}
 
     def get_schema_by_id(self, schema_id):
@@ -60,17 +78,16 @@ class SchematizerClient(object):
         return self._get_schema_by_id(schema_id).to_result()
 
     def _get_schema_by_id(self, schema_id):
-        cached_schema = self._schema_cache.get(schema_id)
-        if cached_schema:
-            _schema = _AvroSchema.from_cache_value(cached_schema)
-            _schema.topic = self._get_topic_by_name(cached_schema['topic_name'])
-        else:
-            response = self._call_api(
-                api=self._client.schemas.get_schema_by_id,
-                params={'schema_id': schema_id}
-            )
-            _schema = _AvroSchema.from_response(response)
-            self._update_cache_by_schema(_schema)
+        _schema = self._get_cached_schema(schema_id)
+        if _schema:
+            return _schema
+
+        response = self._call_api(
+            api=self._client.schemas.get_schema_by_id,
+            params={'schema_id': schema_id}
+        )
+        _schema = _AvroSchema.from_response(response)
+        self._set_cache_by_schema(_schema)
         return _schema
 
     def _make_avro_schema_key(self, schema_json):
@@ -113,17 +130,16 @@ class SchematizerClient(object):
         return self._get_topic_by_name(topic_name).to_result()
 
     def _get_topic_by_name(self, topic_name):
-        cached_topic = self._topic_cache.get(topic_name)
-        if cached_topic:
-            _topic = _Topic.from_cache_value(cached_topic)
-            _topic.source = self._get_source_by_id(cached_topic['source_id'])
-        else:
-            response = self._call_api(
-                api=self._client.topics.get_topic_by_topic_name,
-                params={'topic_name': topic_name}
-            )
-            _topic = _Topic.from_response(response)
-            self._update_cache_by_topic(_topic)
+        _topic = self._get_cached_topic(topic_name)
+        if _topic:
+            return _topic
+
+        response = self._call_api(
+            api=self._client.topics.get_topic_by_topic_name,
+            params={'topic_name': topic_name}
+        )
+        _topic = _Topic.from_response(response)
+        self._set_cache_by_topic(_topic)
         return _topic
 
     def get_source_by_id(self, source_id):
@@ -139,16 +155,16 @@ class SchematizerClient(object):
         return self._get_source_by_id(source_id).to_result()
 
     def _get_source_by_id(self, source_id):
-        cached_source = self._source_cache.get(source_id)
-        if cached_source:
-            _source = _Source.from_cache_value(cached_source)
-        else:
-            response = self._call_api(
-                api=self._client.sources.get_source_by_id,
-                params={'source_id': source_id}
-            )
-            _source = _Source.from_response(response)
-            self._update_cache_by_source(_source)
+        _source = self._cache.get_value(_Source, source_id)
+        if _source:
+            return _source
+
+        response = self._call_api(
+            api=self._client.sources.get_source_by_id,
+            params={'source_id': source_id}
+        )
+        _source = _Source.from_response(response)
+        self._set_cache_by_source(_source)
         return _source
 
     def get_sources_by_namespace(self, namespace_name):
@@ -169,7 +185,7 @@ class SchematizerClient(object):
         for resp_item in response:
             _source = _Source.from_response(resp_item)
             result.append(_source.to_result())
-            self._update_cache_by_source(_source)
+            self._set_cache_by_source(_source)
         return result
 
     def get_topics_by_source_id(self, source_id):
@@ -190,7 +206,7 @@ class SchematizerClient(object):
         for resp_item in response:
             _topic = _Topic.from_response(resp_item)
             result.append(_topic.to_result())
-            self._update_cache_by_topic(_topic)
+            self._set_cache_by_topic(_topic)
         return result
 
     def get_latest_schema_by_topic_name(self, topic_name):
@@ -209,7 +225,7 @@ class SchematizerClient(object):
             params={'topic_name': topic_name}
         )
         _schema = _AvroSchema.from_response(response)
-        self._update_cache_by_schema(_schema)
+        self._set_cache_by_schema(_schema)
         return _schema.to_result()
 
     def register_schema(
@@ -253,7 +269,7 @@ class SchematizerClient(object):
         )
 
         _schema = _AvroSchema.from_response(response)
-        self._update_cache_by_schema(_schema)
+        self._set_cache_by_schema(_schema)
         return _schema.to_result()
 
     def register_schema_from_schema_json(
@@ -337,7 +353,7 @@ class SchematizerClient(object):
         )
 
         _schema = _AvroSchema.from_response(response)
-        self._update_cache_by_schema(_schema)
+        self._set_cache_by_schema(_schema)
         return _schema.to_result()
 
     def get_topics_by_criteria(
@@ -372,7 +388,7 @@ class SchematizerClient(object):
         for resp_item in response:
             _topic = _Topic.from_response(resp_item)
             result.append(_topic.to_result())
-            self._update_cache_by_topic(_topic)
+            self._set_cache_by_topic(_topic)
         return result
 
     def create_data_target(self, target_type, destination):
@@ -395,7 +411,7 @@ class SchematizerClient(object):
             }
         )
         _data_target = _DataTarget.from_response(response)
-        self._update_cache_by_data_target(_data_target)
+        self._set_cache_by_data_target(_data_target)
         return _data_target.to_result()
 
     def get_data_target_by_id(self, data_target_id):
@@ -411,16 +427,16 @@ class SchematizerClient(object):
         return self._get_data_target_by_id(data_target_id).to_result()
 
     def _get_data_target_by_id(self, data_target_id):
-        cached_data_target = self._data_target_cache.get(data_target_id)
-        if cached_data_target:
-            _data_target = _DataTarget.from_cache_value(cached_data_target)
-        else:
-            response = self._call_api(
-                api=self._client.data_targets.get_data_target_by_id,
-                params={'data_target_id': data_target_id}
-            )
-            _data_target = _DataTarget.from_response(response)
-            self._update_cache_by_data_target(_data_target)
+        _data_target = self._cache.get_value(_DataTarget, data_target_id)
+        if _data_target:
+            return _data_target
+
+        response = self._call_api(
+            api=self._client.data_targets.get_data_target_by_id,
+            params={'data_target_id': data_target_id}
+        )
+        _data_target = _DataTarget.from_response(response)
+        self._set_cache_by_data_target(_data_target)
         return _data_target
 
     def get_topics_by_data_target_id(self, data_target_id):
@@ -441,7 +457,7 @@ class SchematizerClient(object):
         for resp_item in response:
             _topic = _Topic.from_response(resp_item)
             result.append(_topic.to_result())
-            self._update_cache_by_topic(_topic)
+            self._set_cache_by_topic(_topic)
         return result
 
     def create_consumer_group(self, group_name, data_target_id):
@@ -462,7 +478,7 @@ class SchematizerClient(object):
             post_body={'group_name': group_name}
         )
         _consumer_group = _ConsumerGroup.from_response(response)
-        self._update_cache_by_consumer_group(_consumer_group)
+        self._set_cache_by_consumer_group(_consumer_group)
         return _consumer_group.to_result()
 
     def get_consumer_group_by_id(self, consumer_group_id):
@@ -478,19 +494,16 @@ class SchematizerClient(object):
         return self._get_consumer_group_by_id(consumer_group_id).to_result()
 
     def _get_consumer_group_by_id(self, consumer_group_id):
-        cached_consumer_group = self._consumer_group_cache.get(consumer_group_id)
-        if cached_consumer_group:
-            _consumer_group = _ConsumerGroup.from_cache_value(cached_consumer_group)
-            _consumer_group.data_target = self._get_data_target_by_id(
-                cached_consumer_group['data_target_id']
-            )
-        else:
-            response = self._call_api(
-                api=self._client.consumer_groups.get_consumer_group_by_id,
-                params={'consumer_group_id': consumer_group_id}
-            )
-            _consumer_group = _ConsumerGroup.from_response(response)
-            self._update_cache_by_consumer_group(_consumer_group)
+        _consumer_group = self._get_cached_consumer_group(consumer_group_id)
+        if _consumer_group:
+            return _consumer_group
+
+        response = self._call_api(
+            api=self._client.consumer_groups.get_consumer_group_by_id,
+            params={'consumer_group_id': consumer_group_id}
+        )
+        _consumer_group = _ConsumerGroup.from_response(response)
+        self._set_cache_by_consumer_group(_consumer_group)
         return _consumer_group
 
     def create_consumer_group_data_source(
@@ -536,28 +549,50 @@ class SchematizerClient(object):
         response = request.result()
         return response
 
-    def _update_cache_by_schema(self, new_schema):
-        self._schema_cache[new_schema.schema_id] = new_schema.to_cache_value()
-        self._update_cache_by_topic(new_schema.topic)
+    def _get_cached_schema(self, schema_id):
+        _schema = self._cache.get_value(_AvroSchema, schema_id)
+        if _schema:
+            _schema.topic = self._get_topic_by_name(_schema.topic.name)
+        return _schema
+
+    def _set_cache_by_schema(self, new_schema):
+        self._cache.set_value(new_schema.schema_id, new_schema)
+        self._set_cache_by_topic(new_schema.topic)
+
         self._avro_schema_cache[
             self._make_avro_schema_key(new_schema.schema_json)
         ] = new_schema.to_cache_value()
 
-    def _update_cache_by_topic(self, new_topic):
-        self._topic_cache[new_topic.name] = new_topic.to_cache_value()
-        self._update_cache_by_source(new_topic.source)
+    def _get_cached_topic(self, topic_name):
+        _topic = self._cache.get_value(_Topic, topic_name)
+        if _topic:
+            _topic.source = self._get_source_by_id(_topic.source.source_id)
+        return _topic
 
-    def _update_cache_by_source(self, new_source):
-        self._source_cache[new_source.source_id] = new_source.to_cache_value()
+    def _set_cache_by_topic(self, new_topic):
+        self._cache.set_value(new_topic.name, new_topic)
+        self._set_cache_by_source(new_topic.source)
 
-    def _update_cache_by_data_target(self, new_data_target):
-        key = new_data_target.data_target_id
-        self._data_target_cache[key] = new_data_target.to_cache_value()
+    def _set_cache_by_source(self, new_source):
+        self._cache.set_value(new_source.source_id, new_source)
 
-    def _update_cache_by_consumer_group(self, new_consumer_group):
-        key = new_consumer_group.consumer_group_id
-        self._consumer_group_cache[key] = new_consumer_group.to_cache_value()
-        self._update_cache_by_data_target(new_consumer_group.data_target)
+    def _set_cache_by_data_target(self, new_data_target):
+        self._cache.set_value(new_data_target.data_target_id, new_data_target)
+
+    def _get_cached_consumer_group(self, consumer_group_id):
+        _consumer_group = self._cache.get_value(_ConsumerGroup, consumer_group_id)
+        if _consumer_group:
+            _consumer_group.data_target = self._get_data_target_by_id(
+                _consumer_group.data_target.data_target_id
+            )
+        return _consumer_group
+
+    def _set_cache_by_consumer_group(self, new_consumer_group):
+        self._cache.set_value(
+            new_consumer_group.consumer_group_id,
+            new_consumer_group
+        )
+        self._set_cache_by_data_target(new_consumer_group.data_target)
 
 
 def get_schematizer():
