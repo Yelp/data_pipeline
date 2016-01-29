@@ -2,6 +2,10 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+from multiprocessing import Event
+from multiprocessing import Process
+
+import mock
 import pytest
 
 from data_pipeline.consumer import Consumer
@@ -22,23 +26,151 @@ class TestConsumer(BaseConsumerTest):
             producer.flush()
         return _publish_messages
 
-    @pytest.fixture(params=[
-        {'force_payload_decode': False},
-        {'force_payload_decode': True},
-    ])
-    def consumer_instance(self, request, topic, team_name):
+    @pytest.fixture
+    def pre_rebalance_callback(self):
+        return mock.Mock()
+
+    @pytest.fixture
+    def post_rebalance_callback(self):
+        return mock.Mock()
+
+    @pytest.fixture(params=[False, True])
+    def force_payload_decode(self, request):
+        return request.param
+
+    @pytest.fixture
+    def consumer_instance(
+            self,
+            force_payload_decode,
+            topic,
+            topic_two,
+            team_name,
+            pre_rebalance_callback,
+            post_rebalance_callback
+    ):
         return Consumer(
             consumer_name='test_consumer',
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
-            topic_to_consumer_topic_state_map={topic: None},
-            force_payload_decode=request.param['force_payload_decode']
+            topic_to_consumer_topic_state_map={topic: None, topic_two: None},
+            force_payload_decode=force_payload_decode,
+            pre_rebalance_callback=pre_rebalance_callback,
+            post_rebalance_callback=post_rebalance_callback
         )
 
+    def _publish_message(self, topic, message, producer, n_times=1):
+        for _ in range(n_times):
+            producer.publish(message)
+            producer.flush()
+
     def test_get_messages_empty(self, consumer, topic):
-        messages = consumer.get_messages(count=10, blocking=True, timeout=TIMEOUT)
+        messages = consumer.get_messages(
+            count=10,
+            blocking=True,
+            timeout=TIMEOUT
+        )
         assert len(messages) == 0
         assert consumer.topic_to_consumer_topic_state_map[topic] is None
+
+    def test_sync_topic_consumer_map(
+            self,
+            force_payload_decode,
+            topic,
+            topic_two,
+            team_name,
+            pre_rebalance_callback,
+            post_rebalance_callback,
+            publish_messages,
+            producer,
+            consumer,
+            message
+    ):
+        """
+        This test starts a consumer (consumer_one) with two topics and
+        retrieves a message and starts another consumer (consumer_two)
+        with the same name in a separate process and while the
+        consumer_two is retrieving messages asserts that the topic
+        redistribution occurs and the topic_to_consumer_topic_state_map
+        for consumer_two is with only one of the two topics. Then it
+        stops consumer_two process first and again asserts that all
+        the original topics have been reassigned to consumer one.
+        """
+
+        first_consumer_rebalanced_event = Event()
+        second_consumer_ready_event = Event()
+
+        # publishing messages on two topics
+        self._publish_message(topic, message, producer, 10)
+
+        message.topic = topic_two
+        self._publish_message(topic_two, message, producer, 10)
+
+        second_consumer_process = Process(
+            target=self._second_consumer,
+            args=(
+                team_name,
+                topic,
+                topic_two,
+                ExpectedFrequency.constantly,
+                force_payload_decode,
+                pre_rebalance_callback,
+                post_rebalance_callback,
+                first_consumer_rebalanced_event,
+                second_consumer_ready_event
+            )
+        )
+        second_consumer_process.start()
+
+        # Consumer one needs to continue to receive messages while consumer two
+        # starts so that when consumer two starts the topics are distributed.
+        for _ in range(2):
+            consumer.get_message(blocking=True, timeout=TIMEOUT)
+
+        second_consumer_ready_event.wait()
+
+        assert len(consumer.topic_to_consumer_topic_state_map) == 1
+
+        first_consumer_rebalanced_event.set()
+
+        second_consumer_process.join()
+
+        for _ in range(6):
+            consumer.get_message(blocking=True, timeout=TIMEOUT)
+
+        assert len(consumer.topic_to_consumer_topic_state_map) == 2
+
+    def _second_consumer(
+        self,
+        team_name,
+        topic,
+        topic_two,
+        expected_frequency_seconds,
+        force_payload_decode,
+        pre_rebalance_callback,
+        post_rebalance_callback,
+        first_consumer_rebalanced_event,
+        second_consumer_ready_event
+    ):
+        """
+        The consumer names should be the same for the partitioner to
+        redistribute the topics among them
+        """
+        with Consumer(
+            consumer_name='test_consumer',
+            team_name=team_name,
+            expected_frequency_seconds=ExpectedFrequency.constantly,
+            topic_to_consumer_topic_state_map={topic: None, topic_two: None},
+            force_payload_decode=force_payload_decode,
+            pre_rebalance_callback=pre_rebalance_callback,
+            post_rebalance_callback=post_rebalance_callback
+        ) as consumer_two:
+            assert len(consumer_two.topic_to_consumer_topic_state_map) == 1
+            consumer_two.get_message(blocking=True, timeout=TIMEOUT)
+            second_consumer_ready_event.set()
+            first_consumer_rebalanced_event.wait()
+
+            for _ in range(8):
+                consumer_two.get_message(blocking=True, timeout=TIMEOUT)
 
 
 class TestRefreshTopics(RefreshTopicsTest):
