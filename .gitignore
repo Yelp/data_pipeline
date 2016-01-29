@@ -60,6 +60,9 @@ docs/code
 *.sw[nop]
 .ropeproject
 
+# idea
+.idea/
+
 # Cache
 __pycache__
 

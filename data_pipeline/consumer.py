@@ -56,7 +56,8 @@ class Consumer(BaseConsumer):
         while len(messages) < count:
             try:
                 default_iter_timeout = self.consumer_group.iter_timeout
-                self.consumer_group.iter_timeout = timeout
+                # Converting seconds to milliseconds
+                self.consumer_group.iter_timeout = timeout * 1000
                 message = self.consumer_group.next()
             except ConsumerTimeout:
                 break
