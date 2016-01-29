@@ -48,6 +48,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
     notify_emails = ['bam+batch@yelp.com']
     is_readonly_batch = False
     DEFAULT_TOPOLOGY_PATH = "/nail/srv/configs/topology.yaml"
+    DEFAULT_AVG_ROWS_PER_SECOND_CAP = 50
 
     def __init__(
         self,
@@ -88,6 +89,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.where_clause = where_clause
             self.dry_run = dry_run
             self.avg_rows_per_second_cap = avg_rows_per_second_cap
+            if self.avg_rows_per_second_cap is None:
+                self.avg_rows_per_second_cap = self.DEFAULT_AVG_ROWS_PER_SECOND_CAP
             self.config_path = config_path
             self.schematizer = get_schematizer()
 
@@ -164,9 +167,10 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         opt_group.add_option(
             '--avg-rows-per-second-cap',
             help='Caps the throughput per second. Important since without any control for this '
-                 'the batch can cause signifigant pipeline delays',
+                 'the batch can cause signifigant pipeline delays'
+                 '(default: %default)',
             type='int',
-            default=None
+            default=self.DEFAULT_AVG_ROWS_PER_SECOND_CAP
         )
         return opt_group
 
@@ -175,6 +179,23 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         if not self.config_path:
             self.config_path = self.options.config_path
         load_default_config(self.config_path)
+        if self.options.batch_size <= 0:
+            raise ValueError("Batch size should be greater than 0")
+        self.db_name = self.options.cluster
+        self.database = self.options.database
+        if not self.database:
+            raise ValueError("--database must be specified")
+        self.avg_rows_per_second_cap = self.options.avg_rows_per_second_cap
+        if self.avg_rows_per_second_cap <= 0:
+            raise ValueError("--avg-rows-per-second-cap should be greater than 0")
+        self.table_name = self.options.table_name
+        self.temp_table = '{table}_data_pipeline_refresh'.format(
+            table=self.table_name
+        )
+        self.process_row_start_time = time.time()
+        self.primary_key = self.options.primary
+        self.processed_row_count = 0
+        self.where_clause = self.options.where_clause
         self._connection_set = None
         # Case where refresh batch is run independently.
         if self.refresh_id is None:
@@ -309,8 +330,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         with self.rw_conn() as rw_conn:
             self.throttle_to_replication(rw_conn)
 
-        if self.avg_rows_per_second_cap is not None:
-            self._wait_for_throughput(count)
+        self._wait_for_throughput(count)
 
     def _wait_for_throughput(self, count):
         """Used to cap throughput when given the --avg-rows-per-second-cap flag.
@@ -319,9 +339,9 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         process_row_end_time = time.time()
         elapsed_time = process_row_end_time - self.process_row_start_time
         desired_elapsed_time = 1.0 / self.avg_rows_per_second_cap * count
-        time_to_wait = desired_elapsed_time - elapsed_time
+        time_to_wait = max(desired_elapsed_time - elapsed_time, 0.0)
         self.log.info("Waiting for {} seconds to enforce avg throughput cap".format(time_to_wait))
-        time.sleep(time_to_wait if time_to_wait >= 0 else 0.0)
+        time.sleep(time_to_wait)
 
     def initial_action(self):
         self._wait_for_replication()
