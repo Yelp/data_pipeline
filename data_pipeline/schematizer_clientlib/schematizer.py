@@ -18,6 +18,10 @@ from data_pipeline.schematizer_clientlib.models.topic import _Topic
 class _Cache(object):
     """Cache used by Schematizer client.  This cache stores the schematizer
     entities, such as avro schemas, topics, sources, etc.
+
+    This cache is currently limited to used by SchematizerClient only.  The
+    cached value is expected to have `to_cache_value` and `from_cache_value`
+    functions.  This limitation could be relaxed later if necessary.
     """
 
     def __init__(self):
