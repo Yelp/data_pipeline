@@ -65,6 +65,7 @@ class Config(object):
     def schematizer_host_and_port(self):
         """Host and port for the schematizer, in the format `host:port`.
 
+
         If :meth:`load_schematizer_host_and_port_from_smartstack` is True, this
         value will be loaded from smartstack instead of read directly.
         """
@@ -247,6 +248,25 @@ class Config(object):
         return data_pipeline_conf.read_string(
             'data_pipeline_teams_config_file_path',
             default='/nail/etc/services/data_pipeline/teams.yaml'
+        )
+
+    @property
+    def kafka_client_ack_count(self):
+        """ack setting of the kafka client for publishing messages.  Default to
+        -1, which indicates that the server will wait until the message is
+        committed by all in-sync replicas before sending a response.  See
+        https://github.com/mumrah/kafka-python/blob/master/kafka/client.py#L445
+        for detail information.
+        """
+        return data_pipeline_conf.read_int('kafka_client_ack_count', default=-1)
+
+    @property
+    def producer_max_publish_retry_count(self):
+        """Number of times the producer will retry to publish messages.
+        """
+        return data_pipeline_conf.read_int(
+            'producer_max_publish_retry_count',
+            default=5
         )
 
     @property
