@@ -124,6 +124,7 @@ class TestConsumer(BaseConsumerTest):
         # starts so that when consumer two starts the topics are distributed.
         for _ in range(2):
             consumer.get_message(blocking=True, timeout=TIMEOUT)
+            # TODO: https://jira.yelpcorp.com/browse/DATAPIPE-752
             time.sleep(1)
 
         assert len(consumer.topic_to_consumer_topic_state_map) == 1
