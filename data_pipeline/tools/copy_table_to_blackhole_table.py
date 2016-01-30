@@ -179,23 +179,6 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         if not self.config_path:
             self.config_path = self.options.config_path
         load_default_config(self.config_path)
-        if self.options.batch_size <= 0:
-            raise ValueError("Batch size should be greater than 0")
-        self.db_name = self.options.cluster
-        self.database = self.options.database
-        if not self.database:
-            raise ValueError("--database must be specified")
-        self.avg_rows_per_second_cap = self.options.avg_rows_per_second_cap
-        if self.avg_rows_per_second_cap <= 0:
-            raise ValueError("--avg-rows-per-second-cap should be greater than 0")
-        self.table_name = self.options.table_name
-        self.temp_table = '{table}_data_pipeline_refresh'.format(
-            table=self.table_name
-        )
-        self.process_row_start_time = time.time()
-        self.primary_key = self.options.primary
-        self.processed_row_count = 0
-        self.where_clause = self.options.where_clause
         self._connection_set = None
         # Case where refresh batch is run independently.
         if self.refresh_id is None:
@@ -461,6 +444,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         os._exit(1)
 
     def run(self):
+        is_success = True
         try:
             self.initial_action()
             self.process_table()
@@ -476,9 +460,11 @@ class FullRefreshRunner(Batch, BatchDBMixin):
                 )
             # Sends an email containing the exception encountered.
             self._email_exception_in_exception_context()
-            os._exit(1)
+            is_success = False
         finally:
             self.final_action()
+            if not is_success:
+                os._exit(1)
 
     def get_connection_set_from_cluster(self, cluster):
         """Given a cluster name, returns a connection to that cluster.

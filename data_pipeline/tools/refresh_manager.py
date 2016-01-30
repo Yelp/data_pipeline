@@ -54,6 +54,14 @@ class FullRefreshManager(BatchDaemon):
             help='Config file path for the refresh manager. '
                  '(default: %default)'
         )
+        opt_group.add_option(
+            '--dry-run',
+            action="store_true",
+            default=False,
+            dest="dry_run",
+            help="Will execute all refreshes as dry runs, will still affect "
+                 "the schematizer's records."
+        )
         return opt_group
 
     @batch_configure
@@ -66,6 +74,7 @@ class FullRefreshManager(BatchDaemon):
             if len(names) == 2:
                 self.database = names[1]
         self.config_path = self.options.config_path
+        self.dry_run = self.options.dry_run
         # Removing the cmd line arguments to prevent child process error.
         sys.argv = sys.argv[:1]
 
@@ -73,7 +82,10 @@ class FullRefreshManager(BatchDaemon):
         # We need to make 2 schematizer requests to get the primary_keys, but this happens infrequently enough
         # where it's not paricularly vital to make a new end point for it
         topic = self.schematizer.get_latest_topic_by_source_id(refresh.source.source_id)
-        primary_key = self.schematizer.get_latest_schema_by_topic_name(topic.name).primary_keys[0]
+        try:
+            primary_key = self.schematizer.get_latest_schema_by_topic_name(topic.name).primary_keys[0]
+        except:
+            primary_key = 'id'
         refresh_batch = FullRefreshRunner(
             refresh_id=self.active_refresh['id'],
             cluster=self.cluster,
@@ -84,8 +96,15 @@ class FullRefreshManager(BatchDaemon):
             batch_size=refresh.batch_size,
             primary=primary_key,
             where_clause=refresh.filter_condition,
-            dry_run=False,
+            dry_run=self.dry_run,
             avg_rows_per_second_cap=getattr(refresh, 'avg_rows_per_second_cap', None)
+        )
+        self.log.info(
+            "Starting a batch table_name: {}, refresh_id: {}, worker_id: {}".format(
+                refresh.source.name,
+                self.active_refresh['id'],
+                self.active_refresh['pid']
+            )
         )
         refresh_batch.start()
 
