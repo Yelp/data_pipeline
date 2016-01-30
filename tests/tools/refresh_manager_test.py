@@ -112,9 +112,10 @@ class TestFullRefreshManager(object):
     @pytest.fixture
     def refresh_manager(self, fake_config_path, fake_namespace, mock_config):
         refresh_manager = FullRefreshManager()
-        refresh_manager.options = namedtuple('Options', ['namespace', 'config_path'])(
+        refresh_manager.options = namedtuple('Options', ['namespace', 'config_path', 'dry_run'])(
             fake_namespace,
-            fake_config_path
+            fake_config_path,
+            True
         )
         refresh_manager._init_global_state()
         return refresh_manager
@@ -284,7 +285,7 @@ class TestFullRefreshManager(object):
                 batch_size=200,
                 primary='id',
                 where_clause=None,
-                dry_run=False,
+                dry_run=True,
                 avg_rows_per_second_cap=None
             )
 
