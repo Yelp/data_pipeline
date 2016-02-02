@@ -1,3 +1,11 @@
+data-pipeline-tools (0.1.49) lucid; urgency=low
+
+  * Commit: Merge branch 'master' of
+    git.yelpcorp.com:clientlibs/data_pipeline into DATAPIPE-724-add-api-
+    functions-in-schematizer-clientlib
+
+ -- Justin Cunningham <justinc@yelp.com>  Tue, 02 Feb 2016 15:11:11 -0800
+
 data-pipeline-tools (0.1.48) lucid; urgency=low
 
   * Commit: Merge branch 'DATAPIPE-731-krane-fix_double_encryption'
