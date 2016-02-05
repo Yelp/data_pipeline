@@ -18,8 +18,10 @@ KAZOO_CLIENT_DEFAULTS = {
     'timeout': 30
 }
 
+
 class ZK(object):
     """Base class for all zookeeper interraction classes"""
+
     def __init__(self):
         retry_policy = KazooRetry(max_tries=3)
         self.zk_client = self.get_kazoo_client(command_retry=retry_policy)
@@ -55,15 +57,17 @@ class ZK(object):
         log.info("Closing zookeeper")
         self.zk_client.close()
 
+
 class ZKLock(ZK):
     """
     Sets up zookeeper lock so that only one copy of the batch is run per cluster.
     This would make sure that data integrity is maintained (See DATAPIPE-309 for an example).
 
     To use:
-        create ZKLock(name, namespace)
-        call close_zk at the end of run (remember to set up signal handlers for keyboard interuptions
+        create self.lock = ZKLock(name, namespace)
+        call self.lock.close() at the end of run (remember to set up signal handlers for keyboard interuptions
              or crashes.)"""
+
     def __init__(self, name, namespace):
         super(ZKLock, self).__init__()
         self.lock = self.zk_client.Lock("/{} - {}".format(name, namespace), namespace)

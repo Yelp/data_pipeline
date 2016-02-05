@@ -2,14 +2,16 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import mock
-import pytest
 import sys
 
+import mock
+import pytest
 from kazoo.client import KazooClient
 from kazoo.exceptions import LockTimeout
 
-from data_pipeline.zookeeper import ZK, ZKLock
+from data_pipeline.zookeeper import ZK
+from data_pipeline.zookeeper import ZKLock
+
 
 class TestZK(object):
     @property
@@ -115,6 +117,16 @@ class TestZKLock(TestZK):
     ):
         assert patch_exit.call_count == 1
         self._check_zk(locked_zk_client)
+
+    def test_double_lock(
+        self,
+        patch_exit
+    ):
+        zk1 = ZKLock(self.fake_name, self.fake_namespace)
+        assert patch_exit.call_count == 0
+        zk2 = ZKLock(self.fake_name, self.fake_namespace)
+        assert patch_exit.call_count == 1
+        zk1.close()
 
     def _check_zk(self, zk_client):
         super(TestZKLock, self)._check_zk(zk_client)
