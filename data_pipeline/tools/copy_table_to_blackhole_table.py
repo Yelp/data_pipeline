@@ -21,6 +21,7 @@ from yelp_conn.topology import TopologyFile
 from yelp_lib.classutil import cached_property
 from yelp_servlib.config_util import load_default_config
 
+from data_pipeline.schematizer_clientlib.models.refresh import RefreshStatus
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 
@@ -65,11 +66,12 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         avg_rows_per_second_cap=None
     ):
         super(FullRefreshRunner, self).__init__()
-        self.refresh_id = refresh_id
         self.config_path = config_path
         self._connection_set = None
+        self.refresh_id = None
         # Case where the RefreshManager is running the refresh.
-        if self.refresh_id is not None:
+        if refresh_id is not None:
+            self.refresh_id = int(refresh_id)
             self.topology_path = self.DEFAULT_TOPOLOGY_PATH
             signal.signal(signal.SIGTERM, self.handle_terminate)
             signal.signal(signal.SIGINT, self.handle_interupt)
@@ -118,7 +120,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             '--batch-size',
             dest='batch_size',
             type='int',
-            default=200,
+            default=100,
             help='Number of rows to process between commits '
                  '(default: %default).'
         )
@@ -332,7 +334,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             if self.refresh_id:
                 self.schematizer.update_refresh(
                     self.refresh_id,
-                    "IN_PROGRESS",
+                    RefreshStatus.IN_PROGRESS,
                     self.processed_row_count
                 )
             self._use_db(session)
@@ -416,7 +418,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.processed_row_count += count
 
         if self.refresh_id:
-            self.schematizer.update_refresh(self.refresh_id, 'SUCCESS', 0)
+            self.schematizer.update_refresh(self.refresh_id, RefreshStatus.SUCCESS, 0)
 
     def log_info(self):
         elapsed_time = time.time() - self.starttime
@@ -430,7 +432,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
     def handle_interupt(self, signal, frame):
         self.schematizer.update_refresh(
             self.refresh_id,
-            'FAILED',
+            RefreshStatus.FAILED,
             self.processed_row_count
         )
         os._exit(1)
@@ -438,7 +440,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
     def handle_terminate(self, signal, frame):
         self.schematizer.update_refresh(
             self.refresh_id,
-            'PAUSED',
+            RefreshStatus.PAUSED,
             self.processed_row_count
         )
         os._exit(1)
@@ -455,7 +457,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             if self.refresh_id:
                 self.schematizer.update_refresh(
                     self.refresh_id,
-                    'FAILED',
+                    RefreshStatus.FAILED,
                     self.processed_row_count
                 )
             # Sends an email containing the exception encountered.

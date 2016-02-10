@@ -7,6 +7,7 @@ import time
 import mock
 import pytest
 
+from data_pipeline.schematizer_clientlib.models.refresh import RefreshStatus
 from data_pipeline.tools.copy_table_to_blackhole_table import FullRefreshRunner
 from data_pipeline.tools.copy_table_to_blackhole_table import TopologyFile
 
@@ -332,7 +333,7 @@ class TestFullRefreshRunner(object):
         update_refresh = managed_refresh_batch.schematizer.update_refresh
         update_refresh.assert_called_once_with(
             1,
-            'IN_PROGRESS',
+            RefreshStatus.IN_PROGRESS,
             0
         )
         mock_execute.assert_called_once_with(
@@ -566,7 +567,7 @@ class TestFullRefreshRunner(object):
             mock_insert.assert_has_calls(calls)
             managed_refresh_batch.schematizer.update_refresh.assert_called_once_with(
                 1,
-                'SUCCESS',
+                RefreshStatus.SUCCESS,
                 0
             )
 

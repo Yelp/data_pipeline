@@ -128,17 +128,16 @@ class TestFullRefreshManager(object):
         ) as mock_setup:
             yield mock_setup
 
-    def test_process_next_refresh(
+    def test_should_run_next_refresh(
         self,
         refresh_manager,
         mock_setup,
         refresh_result
     ):
-        refresh_manager.process_next_refresh(refresh_result)
-        mock_setup.assert_called_once_with(refresh_result)
+        assert refresh_manager._should_run_next_refresh(refresh_result)
         assert refresh_manager.schematizer.get_refresh_by_id.call_count == 0
 
-    def test_process_refresh_replace_active_refresh(
+    def test_should_run_next_refresh_replace_active_refresh(
         self,
         refresh_manager,
         mock_setup,
@@ -148,11 +147,10 @@ class TestFullRefreshManager(object):
         refresh_manager.active_refresh['id'] = 1
         mock_schematizer = refresh_manager.schematizer
         mock_schematizer.get_refresh_by_id.return_value = refresh_result
-        refresh_manager.process_next_refresh(high_refresh_result)
+        assert refresh_manager._should_run_next_refresh(high_refresh_result)
         mock_schematizer.get_refresh_by_id.assert_called_once_with(1)
-        mock_setup.assert_called_once_with(high_refresh_result)
 
-    def test_process_refresh_no_replace(
+    def test_should_run_next_refresh_no_replace(
         self,
         refresh_manager,
         mock_setup,
@@ -162,11 +160,10 @@ class TestFullRefreshManager(object):
         refresh_manager.active_refresh['id'] = 2
         mock_schematizer = refresh_manager.schematizer
         mock_schematizer.get_refresh_by_id.return_value = high_refresh_result
-        refresh_manager.process_next_refresh(refresh_result)
+        assert not refresh_manager._should_run_next_refresh(refresh_result)
         mock_schematizer.get_refresh_by_id.assert_called_once_with(2)
-        assert mock_setup.call_count == 0
 
-    def test_process_refresh_completed_refresh(
+    def test_should_run_next_refresh_completed_refresh(
         self,
         refresh_manager,
         mock_setup,
@@ -176,9 +173,8 @@ class TestFullRefreshManager(object):
         refresh_manager.active_refresh['id'] = 3
         schematizer = refresh_manager.schematizer
         schematizer.get_refresh_by_id.return_value = complete_refresh_result
-        refresh_manager.process_next_refresh(refresh_result)
+        assert refresh_manager._should_run_next_refresh(refresh_result)
         schematizer.get_refresh_by_id.assert_called_once_with(3)
-        mock_setup.assert_called_once_with(refresh_result)
 
     def test_determine_best_refresh(
         self,
@@ -229,7 +225,7 @@ class TestFullRefreshManager(object):
         )
         assert best_refresh == refresh_result
 
-    def test_handle_zombie_refreshes(self, refresh_manager):
+    def test_set_zombie_refresh_to_fail(self, refresh_manager):
         refresh_manager.active_refresh['id'] = 1
         refresh_manager.active_refresh['pid'] = 1
         with mock.patch(
@@ -237,10 +233,10 @@ class TestFullRefreshManager(object):
         ) as mock_ps:
             mock_ps.return_value.status.return_value = psutil.STATUS_ZOMBIE
             mock_sch = refresh_manager.schematizer
-            mock_sch.get_refresh_by_id.return_value.status = 'IN_PROGRESS'
-            refresh_manager.handle_zombie_refreshes()
+            mock_sch.get_refresh_by_id.return_value.status = refresh.RefreshStatus.IN_PROGRESS
+            refresh_manager.set_zombie_refresh_to_fail()
             mock_sch.get_refresh_by_id.assert_called_once_with(1)
-            mock_sch.update_refresh.assert_called_once_with(1, 'FAILED', 0)
+            mock_sch.update_refresh.assert_called_once_with(1, refresh.RefreshStatus.FAILED, 0)
 
     def test_get_next_refresh(self, refresh_manager, refresh_result):
         with mock.patch.object(

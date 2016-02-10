@@ -10,23 +10,17 @@ from multiprocessing import Process
 from optparse import OptionGroup
 
 import psutil
-from enum import Enum
 from yelp_batch import BatchDaemon
 from yelp_batch.batch import batch_command_line_options
 from yelp_batch.batch import batch_configure
 from yelp_servlib.config_util import load_default_config
 
+from data_pipeline.schematizer_clientlib.models.refresh import RefreshStatus
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.tools.copy_table_to_blackhole_table import FullRefreshRunner
+from data_pipeline.zookeeper import ZKLock
 
 SCHEMATIZER_POLL_FREQUENCY_SECONDS = 5
-
-
-class Priority(Enum):
-    LOW = 25
-    MEDIUM = 50
-    HIGH = 75
-    MAX = 100
 
 
 class FullRefreshManager(BatchDaemon):
@@ -60,7 +54,7 @@ class FullRefreshManager(BatchDaemon):
             default=False,
             dest="dry_run",
             help="Will execute all refreshes as dry runs, will still affect "
-                 "the schematizer's records."
+            "the schematizer's records. (default: %default)"
         )
         return opt_group
 
@@ -82,10 +76,12 @@ class FullRefreshManager(BatchDaemon):
         # We need to make 2 schematizer requests to get the primary_keys, but this happens infrequently enough
         # where it's not paricularly vital to make a new end point for it
         topic = self.schematizer.get_latest_topic_by_source_id(refresh.source.source_id)
-        try:
-            primary_key = self.schematizer.get_latest_schema_by_topic_name(topic.name).primary_keys[0]
-        except:
-            primary_key = 'id'
+        primary_keys = self.schematizer.get_latest_schema_by_topic_name(topic.name).primary_keys
+        if len(primary_keys):
+            primary_keys = ','.join(primary_keys)
+        else:
+            # Fallback in case we get bad data from the schematizer (command line default is 'id')
+            primary_keys = 'id'
         refresh_batch = FullRefreshRunner(
             refresh_id=self.active_refresh['id'],
             cluster=self.cluster,
@@ -94,7 +90,7 @@ class FullRefreshManager(BatchDaemon):
             table_name=refresh.source.name,
             offset=refresh.offset,
             batch_size=refresh.batch_size,
-            primary=primary_key,
+            primary=primary_keys,
             where_clause=refresh.filter_condition,
             dry_run=self.dry_run,
             avg_rows_per_second_cap=getattr(refresh, 'avg_rows_per_second_cap', None)
@@ -111,6 +107,8 @@ class FullRefreshManager(BatchDaemon):
     def setup_new_refresh(self, refresh):
         active_pid = self.active_refresh['pid']
         if active_pid is not None:
+            # If we somehow have an active worker but not an active refresh (refresh died somehow),
+            # then we want to kill that worker.
             os.kill(active_pid, signal.SIGTERM)
         new_worker = Process(
             target=self._begin_refresh_job,
@@ -120,77 +118,83 @@ class FullRefreshManager(BatchDaemon):
         new_worker.start()
         self.active_refresh['pid'] = new_worker.pid
 
-    def process_next_refresh(self, next_refresh):
+    def _should_run_next_refresh(self, next_refresh):
         if not self.active_refresh['id']:
-            self.setup_new_refresh(next_refresh)
-        else:
-            current_refresh = self.schematizer.get_refresh_by_id(
-                self.active_refresh['id']
-            )
-            next_priority = Priority[next_refresh.priority].value
-            current_priority = Priority[current_refresh.priority].value
-            complete_statuses = set(['SUCCESS', 'FAILED'])
-            if next_priority > current_priority:
-                self.setup_new_refresh(next_refresh)
-            elif current_refresh.status in complete_statuses:
-                self.setup_new_refresh(next_refresh)
+            return True
+        current_refresh = self.schematizer.get_refresh_by_id(
+            self.active_refresh['id']
+        )
+        next_priority = next_refresh.priority.value
+        current_priority = current_refresh.priority.value
+        complete_statuses = {RefreshStatus.SUCCESS, RefreshStatus.FAILED}
+        return (next_priority > current_priority or
+                current_refresh.status in complete_statuses)
 
-    def determine_best_refresh(self, refresh_list_a, refresh_list_b):
-        if refresh_list_a and refresh_list_b:
-            a_priority = Priority[refresh_list_a[0].priority].value
-            b_priority = Priority[refresh_list_b[0].priority].value
-            if a_priority > b_priority:
-                return refresh_list_a[0]
+    def determine_best_refresh(self, not_started_jobs, paused_jobs):
+        if not_started_jobs and paused_jobs:
+            not_started_job_priority = not_started_jobs[0].priority.value
+            paused_job_priority = paused_jobs[0].priority.value
+            if not_started_job_priority > paused_job_priority:
+                return not_started_jobs[0]
             else:
-                return refresh_list_b[0]
-        if refresh_list_a:
-            return refresh_list_a[0]
-        if refresh_list_b:
-            return refresh_list_b[0]
+                return paused_jobs[0]
+        if not_started_jobs:
+            return not_started_jobs[0]
+        if paused_jobs:
+            return paused_jobs[0]
         return None
 
-    def handle_zombie_refreshes(self):
+    def set_zombie_refresh_to_fail(self):
+        """The manager sometimes get in to sometimes get in to situations where
+        the worker becomes a zombie but the refresh stays 'IN_PROGRESS'.
+        For these situations we want to correct the refresh status to failed.
+        """
         current_pid = self.active_refresh['pid']
-        if current_pid is not None:
-            p = psutil.Process(current_pid)
-            if p.status() == psutil.STATUS_ZOMBIE:
-                refresh = self.schematizer.get_refresh_by_id(
-                    self.active_refresh['id']
-                )
-                if refresh.status == 'IN_PROGRESS':
-                    self.schematizer.update_refresh(
-                        self.active_refresh['id'],
-                        'FAILED',
-                        0
-                    )
-                    self.active_refresh['id'] = None
-                    self.active_refresh['pid'] = None
+        if current_pid is None:
+            return
+
+        p = psutil.Process(current_pid)
+        if p.status() != psutil.STATUS_ZOMBIE:
+            return
+
+        refresh = self.schematizer.get_refresh_by_id(
+            self.active_refresh['id']
+        )
+        if refresh.status.value == RefreshStatus.IN_PROGRESS.value:
+            self.schematizer.update_refresh(
+                self.active_refresh['id'],
+                RefreshStatus.FAILED,
+                0
+            )
+            self.active_refresh['id'] = None
+            self.active_refresh['pid'] = None
 
     def get_next_refresh(self):
         not_started_jobs = self.schematizer.get_refreshes_by_criteria(
             self.namespace_name,
-            'NOT_STARTED'
+            RefreshStatus.NOT_STARTED
         )
         paused_jobs = self.schematizer.get_refreshes_by_criteria(
             self.namespace_name,
-            'PAUSED'
+            RefreshStatus.PAUSED
         )
         return self.determine_best_refresh(not_started_jobs, paused_jobs)
 
     def run(self):
-        try:
-            while True:
-                self.handle_zombie_refreshes()
-                next_refresh = self.get_next_refresh()
-                if next_refresh:
-                    self.process_next_refresh(next_refresh)
-                if self._stopping:
-                    break
-                time.sleep(SCHEMATIZER_POLL_FREQUENCY_SECONDS)
-        finally:
-            if self.active_refresh['pid'] is not None:
-                # When the manager goes down, the active refresh is paused.
-                os.kill(self.active_refresh['pid'], signal.SIGTERM)
+        with ZKLock().lock("refresh_manager", self.namespace_name):
+            try:
+                while True:
+                    self.set_zombie_refresh_to_fail()
+                    next_refresh = self.get_next_refresh()
+                    if next_refresh and self._should_run_next_refresh(next_refresh):
+                        self.setup_new_refresh(next_refresh)
+                    if self._stopping:
+                        break
+                    time.sleep(SCHEMATIZER_POLL_FREQUENCY_SECONDS)
+            finally:
+                if self.active_refresh['pid'] is not None:
+                    # When the manager goes down, the active refresh is paused.
+                    os.kill(self.active_refresh['pid'], signal.SIGTERM)
 
 
 if __name__ == '__main__':

@@ -10,6 +10,7 @@ from kazoo.client import KazooClient
 from kazoo.exceptions import LockTimeout
 
 from data_pipeline.zookeeper import ZK
+from data_pipeline.zookeeper import ZKLock
 
 
 class TestZK(object):
@@ -69,7 +70,7 @@ class TestZKLock(TestZK):
     @pytest.yield_fixture
     def locked_patch_zk(self, locked_zk_client):
         with mock.patch.object(
-            ZK,
+            ZKLock,
             'get_kazoo_client',
             return_value=locked_zk_client
         ) as mock_get_kazoo:
@@ -88,7 +89,7 @@ class TestZKLock(TestZK):
         zk_client,
         patch_zk
     ):
-        with ZK().lock(self.fake_name, self.fake_namespace):
+        with ZKLock().lock(self.fake_name, self.fake_namespace):
             self._check_mid_lock(zk_client)
         self._check_zk_lock(zk_client)
 
@@ -98,7 +99,7 @@ class TestZKLock(TestZK):
         locked_patch_zk,
         patch_exit
     ):
-        with ZK().lock(self.fake_name, self.fake_namespace):
+        with ZKLock().lock(self.fake_name, self.fake_namespace):
             pass
         assert patch_exit.call_count == 1
         self._check_zk_lock(locked_zk_client)
@@ -107,9 +108,9 @@ class TestZKLock(TestZK):
         self,
         patch_exit
     ):
-        with ZK().lock(self.fake_name, self.fake_namespace):
+        with ZKLock().lock(self.fake_name, self.fake_namespace):
             assert patch_exit.call_count == 0
-            with ZK().lock(self.fake_name, self.fake_namespace):
+            with ZKLock().lock(self.fake_name, self.fake_namespace):
                 pass
             assert patch_exit.call_count == 1
 

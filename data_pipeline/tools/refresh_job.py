@@ -8,14 +8,8 @@ from yelp_batch import Batch
 from yelp_batch.batch import batch_command_line_options
 from yelp_servlib.config_util import load_default_config
 
+from data_pipeline.schematizer_clientlib.models.refresh import Priority
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
-
-
-class UndefinedPriorityException(Exception):
-    """Raised when user specifies a priority that isn't
-    defined by RefreshPriority.
-    """
-    pass
 
 
 class FullRefreshJob(Batch):
@@ -74,34 +68,34 @@ class FullRefreshJob(Batch):
         opt_group.add_option(
             '--avg-rows-per-second-cap',
             help='Caps the throughput per second. Important since without any control for this '
-                 'the batch can cause signifigant pipeline delays',
+            'the batch can cause signifigant pipeline delays. (default: %default)',
             type='int',
             default=None
         )
         return opt_group
 
-    def validate_priority(self):
-        valid_priorities = set(['LOW', 'MEDIUM', 'HIGH', 'MAX'])
-        if self.options.priority not in valid_priorities:
-            raise UndefinedPriorityException("Priority is not one of: LOW, MEDIUM, HIGH, MAX")
-
-    def run(self):
-        self.validate_priority()
+    def process_commandline_options(self, args=None):
+        super(FullRefreshJob, self).process_commandline_options(args=args)
+        if (self.options.avg_rows_per_second_cap is not None and
+                self.options.avg_rows_per_second_cap <= 0):
+            raise ValueError("--avg-rows-per-second-cap must be greater than 0")
         if self.options.batch_size <= 0:
             raise ValueError("--batch-size option must be greater than 0.")
-        job = self.schematizer.create_refresh(
+
+    def run(self):
+        self.job = self.schematizer.create_refresh(
             source_id=self.options.source_id,
             offset=self.options.offset,
             batch_size=self.options.batch_size,
-            priority=self.options.priority,
+            priority=Priority[self.options.priority],
             filter_condition=self.options.filter_condition,
             avg_rows_per_second_cap=self.options.avg_rows_per_second_cap
         )
         self.log.info(
             "Refresh registered with refresh id: {rid} "
             "on source id: {sid}".format(
-                rid=job.refresh_id,
-                sid=job.source.source_id
+                rid=self.job.refresh_id,
+                sid=self.job.source.source_id
             )
         )
 

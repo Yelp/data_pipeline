@@ -4,6 +4,8 @@ from __future__ import unicode_literals
 
 from collections import namedtuple
 
+from enum import Enum
+
 from data_pipeline.schematizer_clientlib.models.model_base import BaseModel
 from data_pipeline.schematizer_clientlib.models.source import _Source
 
@@ -15,12 +17,14 @@ Args:
     refresh_id (int): The id of the refresh.
     source (data_pipeline.schematizer_clientlib.models.source.Source):
         The source of the refresh.
-    status (enum): The current status of the refresh.
+    status (RefreshStatus): The current status of the refresh.
         (One of: NOT_STARTED, IN_PROGRESS, PAUSED, SUCCESS, FAILED)
     offset (int): Last known offset that has been refreshed.
     batch_size (int): The number of rows to be refreshed per batch.
-    priority (int): The priority of the refresh (1-100)
+    priority (Priority): The priority of the refresh
     filter_condition (str): The filter_condition associated with the refresh.
+    avg_rows_per_second_cap (int): The throughput throttling cap to be used when
+        the refresh is run.
     created_at (str): The timestamp when the refresh is created in ISO-8601
         format.
     updated_at (str): The timestamp when the refresh is last updated in ISO-8601
@@ -36,10 +40,26 @@ Refresh = namedtuple(
         'batch_size',
         'priority',
         'filter_condition',
+        'avg_rows_per_second_cap',
         'created_at',
         'updated_at'
     ]
 )
+
+
+class Priority(Enum):
+    LOW = 25
+    MEDIUM = 50
+    HIGH = 75
+    MAX = 100
+
+
+class RefreshStatus(Enum):
+    NOT_STARTED = "NOT_STARTED"
+    IN_PROGRESS = "IN_PROGRESS"
+    PAUSED = "PAUSED"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
 
 
 class _Refresh(BaseModel):
@@ -54,15 +74,18 @@ class _Refresh(BaseModel):
         priority,
         filter_condition,
         created_at,
-        updated_at
+        updated_at,
+        # Has to go last since it's optional
+        avg_rows_per_second_cap=None
     ):
         self.refresh_id = refresh_id
         self.source = source
-        self.status = status
+        self.status = RefreshStatus[status]
         self.offset = offset
         self.batch_size = batch_size
-        self.priority = priority
+        self.priority = Priority[priority]
         self.filter_condition = filter_condition
+        self.avg_rows_per_second_cap = avg_rows_per_second_cap
         self.created_at = created_at
         self.updated_at = updated_at
 
@@ -76,6 +99,7 @@ class _Refresh(BaseModel):
             batch_size=response.batch_size,
             priority=response.priority,
             filter_condition=response.filter_condition,
+            avg_rows_per_second_cap=getattr(response, 'avg_rows_per_second_cap', None),
             created_at=response.created_at,
             updated_at=response.updated_at
         )
@@ -89,6 +113,7 @@ class _Refresh(BaseModel):
             batch_size=self.batch_size,
             priority=self.priority,
             filter_condition=self.filter_condition,
+            avg_rows_per_second_cap=self.avg_rows_per_second_cap,
             created_at=self.created_at,
             updated_at=self.updated_at
         )
