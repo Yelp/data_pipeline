@@ -21,7 +21,7 @@ class TestFullRefreshManager(object):
 
     @pytest.fixture
     def fake_namespace(self):
-        return 'fake_namespace'
+        return 'fake_namespace.yelp'
 
     @pytest.fixture
     def fake_source(self):
@@ -176,6 +176,20 @@ class TestFullRefreshManager(object):
         assert refresh_manager._should_run_next_refresh(refresh_result)
         schematizer.get_refresh_by_id.assert_called_once_with(3)
 
+    def test_determine_best_refreshes(
+        self,
+        refresh_manager,
+        refresh_result,
+        high_refresh_result
+    ):
+        medium_result_list = [refresh_result, refresh_result]
+        high_result_list = [high_refresh_result, high_refresh_result]
+        best_refresh = refresh_manager.determine_best_refresh(
+            medium_result_list,
+            high_result_list
+        )
+        assert best_refresh == high_refresh_result
+
     def test_determine_best_refresh(
         self,
         refresh_manager,
@@ -273,8 +287,8 @@ class TestFullRefreshManager(object):
             refresh_manager._begin_refresh_job(refresh_result)
             mock_refresh_runner.assert_called_once_with(
                 refresh_id=None,
-                cluster=fake_namespace,
-                database=None,
+                cluster='fake_namespace',
+                database='yelp',
                 config_path=fake_config_path,
                 table_name=fake_source,
                 offset=0,

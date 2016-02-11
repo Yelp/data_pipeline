@@ -13,6 +13,7 @@ import psutil
 from yelp_batch import BatchDaemon
 from yelp_batch.batch import batch_command_line_options
 from yelp_batch.batch import batch_configure
+from yelp_lib.classutil import cached_property
 from yelp_servlib.config_util import load_default_config
 
 from data_pipeline.schematizer_clientlib.models.refresh import RefreshStatus
@@ -21,6 +22,7 @@ from data_pipeline.tools.copy_table_to_blackhole_table import FullRefreshRunner
 from data_pipeline.zookeeper import ZKLock
 
 SCHEMATIZER_POLL_FREQUENCY_SECONDS = 5
+COMPLETE_STATUSES = {RefreshStatus.SUCCESS, RefreshStatus.FAILED}
 
 
 class FullRefreshManager(BatchDaemon):
@@ -30,15 +32,18 @@ class FullRefreshManager(BatchDaemon):
         self.notify_emails = ['bam+batch@yelp.com']
         self.active_refresh = {'id': None, 'pid': None}
         load_default_config('/nail/srv/configs/data_pipeline_tools.yaml')
-        self.schematizer = get_schematizer()
+
+    @cached_property
+    def schematizer(self):
+        return get_schematizer()
 
     @batch_command_line_options
     def define_options(self, option_parser):
         opt_group = OptionGroup(option_parser, 'Full Refresh Manager Options')
 
         opt_group.add_option(
-            '--namespace-name',
-            dest='namespace',
+            '--namespace',
+            required=True,
             help='Name of the namespace this refresh manager will handle.'
         )
         opt_group.add_option(
@@ -60,17 +65,19 @@ class FullRefreshManager(BatchDaemon):
 
     @batch_configure
     def _init_global_state(self):
-        self.namespace_name = self.options.namespace
-        if self.namespace_name:
-            names = self.namespace_name.split('.')
-            self.cluster = names[0]
-            self.database = None
-            if len(names) == 2:
-                self.database = names[1]
+        self.namespace = self.options.namespace
+        self._set_cluster_and_database()
         self.config_path = self.options.config_path
         self.dry_run = self.options.dry_run
         # Removing the cmd line arguments to prevent child process error.
         sys.argv = sys.argv[:1]
+
+    def _set_cluster_and_database(self):
+        names = self.namespace.split('.')
+        if len(names) != 2:
+            raise ValueError("Expected --namespace to be in form: cluster.database")
+        self.cluster = names[0]
+        self.database = names[1]
 
     def _begin_refresh_job(self, refresh):
         # We need to make 2 schematizer requests to get the primary_keys, but this happens infrequently enough
@@ -126,26 +133,28 @@ class FullRefreshManager(BatchDaemon):
         )
         next_priority = next_refresh.priority.value
         current_priority = current_refresh.priority.value
-        complete_statuses = {RefreshStatus.SUCCESS, RefreshStatus.FAILED}
         return (next_priority > current_priority or
-                current_refresh.status in complete_statuses)
+                current_refresh.status in COMPLETE_STATUSES)
 
     def determine_best_refresh(self, not_started_jobs, paused_jobs):
         if not_started_jobs and paused_jobs:
-            not_started_job_priority = not_started_jobs[0].priority.value
-            paused_job_priority = paused_jobs[0].priority.value
-            if not_started_job_priority > paused_job_priority:
-                return not_started_jobs[0]
+            not_started_job = not_started_jobs[0]
+            paused_job = paused_jobs[0]
+            if not_started_job.priority.value > paused_job.priority.value:
+                return not_started_job
             else:
-                return paused_jobs[0]
+                return paused_job
+
         if not_started_jobs:
             return not_started_jobs[0]
+
         if paused_jobs:
             return paused_jobs[0]
+
         return None
 
     def set_zombie_refresh_to_fail(self):
-        """The manager sometimes get in to sometimes get in to situations where
+        """The manager sometimes gets in to situations where
         the worker becomes a zombie but the refresh stays 'IN_PROGRESS'.
         For these situations we want to correct the refresh status to failed.
         """
@@ -171,17 +180,17 @@ class FullRefreshManager(BatchDaemon):
 
     def get_next_refresh(self):
         not_started_jobs = self.schematizer.get_refreshes_by_criteria(
-            self.namespace_name,
+            self.namespace,
             RefreshStatus.NOT_STARTED
         )
         paused_jobs = self.schematizer.get_refreshes_by_criteria(
-            self.namespace_name,
+            self.namespace,
             RefreshStatus.PAUSED
         )
         return self.determine_best_refresh(not_started_jobs, paused_jobs)
 
     def run(self):
-        with ZKLock().lock("refresh_manager", self.namespace_name):
+        with ZKLock().lock(name="refresh_manager", namespace=self.namespace):
             try:
                 while True:
                     self.set_zombie_refresh_to_fail()

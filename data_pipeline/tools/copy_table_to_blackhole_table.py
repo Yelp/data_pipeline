@@ -68,10 +68,9 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         super(FullRefreshRunner, self).__init__()
         self.config_path = config_path
         self._connection_set = None
-        self.refresh_id = None
+        self.refresh_id = refresh_id
         # Case where the RefreshManager is running the refresh.
-        if refresh_id is not None:
-            self.refresh_id = int(refresh_id)
+        if self.refresh_id is not None:
             self.topology_path = self.DEFAULT_TOPOLOGY_PATH
             signal.signal(signal.SIGTERM, self.handle_terminate)
             signal.signal(signal.SIGINT, self.handle_interupt)
@@ -94,7 +93,10 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             if self.avg_rows_per_second_cap is None:
                 self.avg_rows_per_second_cap = self.DEFAULT_AVG_ROWS_PER_SECOND_CAP
             self.config_path = config_path
-            self.schematizer = get_schematizer()
+
+    @cached_property
+    def schematizer(self):
+        return get_schematizer()
 
     @batch_command_line_options
     def define_options(self, option_parser):
@@ -418,7 +420,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.processed_row_count += count
 
         if self.refresh_id:
-            self.schematizer.update_refresh(self.refresh_id, RefreshStatus.SUCCESS, 0)
+            # Offset is 0 because it doesn't matter (was a success)
+            self.schematizer.update_refresh(refresh_id=self.refresh_id, status=RefreshStatus.SUCCESS, offset=0)
 
     def log_info(self):
         elapsed_time = time.time() - self.starttime

@@ -18,7 +18,6 @@ Args:
     source (data_pipeline.schematizer_clientlib.models.source.Source):
         The source of the refresh.
     status (RefreshStatus): The current status of the refresh.
-        (One of: NOT_STARTED, IN_PROGRESS, PAUSED, SUCCESS, FAILED)
     offset (int): Last known offset that has been refreshed.
     batch_size (int): The number of rows to be refreshed per batch.
     priority (Priority): The priority of the refresh

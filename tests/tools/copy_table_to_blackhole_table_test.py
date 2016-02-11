@@ -566,9 +566,9 @@ class TestFullRefreshRunner(object):
             ]
             mock_insert.assert_has_calls(calls)
             managed_refresh_batch.schematizer.update_refresh.assert_called_once_with(
-                1,
-                RefreshStatus.SUCCESS,
-                0
+                refresh_id=1,
+                status=RefreshStatus.SUCCESS,
+                offset=0
             )
 
     def test_get_connection_set_from_cluster(
