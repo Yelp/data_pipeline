@@ -291,6 +291,7 @@ class RedshiftSQLToAVSCConverter(object):
     @cached_property
     def pkeys(self):
         pkeys = []
+        # loop through field lines to extract primary keys
         for line in self.sql_lines:
             if self._get_primary_key_in_field_line(line):
                 pkeys.append(self._get_primary_key_in_field_line(line))
@@ -315,7 +316,7 @@ class RedshiftSQLToAVSCConverter(object):
 
     def _get_primary_key_in_field_line(self, line):
         if bool(FIELD_LINE_REGEX.search(line)) and \
-            FIELD_LINE_REGEX.search(line).group(5) is not None:
+                FIELD_LINE_REGEX.search(line).group(5) is not None:
             # if primary key present in sql field line return field name
             return FIELD_LINE_REGEX.search(line).group(1)
 

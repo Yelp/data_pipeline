@@ -14,7 +14,7 @@ from data_pipeline.tools.redshift_sql_to_avsc \
 
 
 @pytest.fixture(
-    # in case more primary keys are adding in future please update the 
+    # in case more primary keys are adding in future please update the
     # 'sql_line' in fixtures with {primary_key} formatter as shown in fixture field_a, field_b, field_c
     params=[
         [],
