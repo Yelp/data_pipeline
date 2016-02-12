@@ -19,9 +19,9 @@ CREATE_TABLE_REGEX = re.compile('^create(\s*table)?\s*((.+)\.)?(\w+)\s*\(?')
 # See https://regex101.com/r/zG9kV1
 PRIMARY_KEY_REGEX = re.compile('^primary\s*key\s*\((.+)?\)')
 
-# See https://regex101.com/r/kD8iN5
+# See https://regex101.com/r/kD8iN5/17
 FIELD_LINE_REGEX = re.compile(
-    '^(\w+)\s*(\w+)\s*(\(\s*(\d+|\d+\s*\,\s*\d+)\s*\))?\s*(not\s+null|null)?\s*((default)\s+(\"|\')?(null|false|true|\d+\.\d+|\d+|[\w\s]*)(\"|\')?)?(\"|\')?.*,'  # noqa
+    '^(\w+)\s*(\w+)\s*(\(\s*(\d+|\d+\s*\,\s*\d+)\s*\))?\s*(?P<pk>primary\s+key)?\s*(not\s+null|null)?\s*((default)\s+(\"|\')?(null|false|true|\d+\.\d+|\d+|[\w\s]*)(\"|\')?)?(\"|\')?.*,'  # noqa
 )
 
 # See https://regex101.com/r/bN3xL0
@@ -124,11 +124,11 @@ class RedshiftFieldLineToAvroFieldConverter(object):
                 black magic I'm willing to deal with in this regex and
                 DATAPIPE-353 should be replacing this eventually anyway. :)
         """
-        return self._regex_matcher.group(9)
+        return self._regex_matcher.group(10)
 
     @cached_property
     def nullable(self):
-        nullable_str = self._regex_matcher.group(5)
+        nullable_str = self._regex_matcher.group(6)
         return not(nullable_str and re.search('^(not\s+null)', nullable_str))
 
     @cached_property
@@ -290,15 +290,19 @@ class RedshiftSQLToAVSCConverter(object):
 
     @cached_property
     def pkeys(self):
+        pkeys = []
+        for line in self.sql_lines:
+            if self._get_primary_key_in_field_line(line):
+                pkeys.append(self._get_primary_key_in_field_line(line))
+
         if self.primary_key_line:
-            return [
+            pkeys.extend([
                 pkey.strip() for pkey in
                 PRIMARY_KEY_REGEX.search(
                     self.primary_key_line
                 ).group(1).split(',')
-            ]
-        else:
-            return []
+            ])
+        return pkeys
 
     @cached_property
     def primary_key_line(self):
@@ -308,6 +312,12 @@ class RedshiftSQLToAVSCConverter(object):
 
     def _is_primary_key_line(self, line):
         return bool(PRIMARY_KEY_REGEX.search(line))
+
+    def _get_primary_key_in_field_line(self, line):
+        if bool(FIELD_LINE_REGEX.search(line)):
+            grp_dict = FIELD_LINE_REGEX.search(line).groupdict()
+            if grp_dict['pk'] is not None:
+                return FIELD_LINE_REGEX.search(line).group(1)
 
     @cached_property
     def field_line_converters(self):
