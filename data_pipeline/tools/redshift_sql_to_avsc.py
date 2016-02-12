@@ -314,10 +314,10 @@ class RedshiftSQLToAVSCConverter(object):
         return bool(PRIMARY_KEY_REGEX.search(line))
 
     def _get_primary_key_in_field_line(self, line):
-        if bool(FIELD_LINE_REGEX.search(line)):
-            grp_dict = FIELD_LINE_REGEX.search(line).groupdict()
-            if grp_dict['pk'] is not None:
-                return FIELD_LINE_REGEX.search(line).group(1)
+        if bool(FIELD_LINE_REGEX.search(line)) and \
+            FIELD_LINE_REGEX.search(line).group(5) is not None:
+            # if primary key present in sql field line return field name
+            return FIELD_LINE_REGEX.search(line).group(1)
 
     @cached_property
     def field_line_converters(self):

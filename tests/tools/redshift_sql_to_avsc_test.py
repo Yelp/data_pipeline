@@ -14,6 +14,8 @@ from data_pipeline.tools.redshift_sql_to_avsc \
 
 
 @pytest.fixture(
+    # in case more primary keys are adding in future please update the 
+    # 'sql_line' in fixtures with {primary_key} formatter as shown in fixture field_a, field_b, field_c
     params=[
         [],
         ['field_a'],
@@ -326,6 +328,8 @@ def field_fixtures(pkeys):
             if fixture['name'] == name:
                 fixture['avro_meta']['pkey'] = pkey_num
                 if not pk_first_flag:
+                    # first pk in pkeys is mocked as coming from field line
+                    # and others are coming from primary keys lines
                     pk_first_flag = True
                     fixture['sql_line'] = fixture['sql_line'].format(
                         primary_key='primary key'
@@ -484,8 +488,8 @@ class TestRedshiftSQLToAVSCConverter(object):
     )
     def primary_keys_line(self, request, pkeys):
         template = request.param
-        # if pkeys:
-        #     return template.format(keys=', '.join(pkeys))
+        # this hack mocks the first key in pkeys as field line pk
+        # and all others keys as coming from primary keys lines
         if pkeys and len(pkeys) > 1:
             return template.format(keys=', '.join(pkeys[1:]))
         else:
