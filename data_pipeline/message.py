@@ -287,7 +287,7 @@ class Message(object):
         if not isinstance(payload, bytes):
             raise TypeError("Payload must be bytes")
         self._payload = payload
-        self._payload_data = None
+        self._payload_data = None  # force previous_payload to be re-encoded
 
     @property
     def payload_data(self):
@@ -298,7 +298,7 @@ class Message(object):
         if not isinstance(payload_data, dict):
             raise TypeError("Payload data must be a dict")
         self._payload_data = payload_data
-        self._payload = None
+        self._payload = None  # force previous_payload to be re-encoded
 
     @property
     def keys(self):
@@ -307,7 +307,7 @@ class Message(object):
     def _set_keys(self, keys):
         if not self._is_valid_optional_type(keys, tuple):
             raise TypeError("Keys must be None or a tuple.")
-        if keys and not all(isinstance(key, unicode) for key in keys):
+        if keys and self._any_invalid_type(keys, unicode):
             raise TypeError("Element of keys must be unicode.")
         self._keys = keys
 
@@ -611,7 +611,7 @@ class UpdateMessage(Message):
         if not isinstance(previous_payload, bytes):
             raise TypeError("Previous payload must be bytes")
         self._previous_payload = previous_payload
-        self._previous_payload_data = None
+        self._previous_payload_data = None  # force previous_payload to be re-encoded
 
     @property
     def previous_payload_data(self):
@@ -623,7 +623,7 @@ class UpdateMessage(Message):
             raise TypeError("Previous payload data must be a dict")
 
         self._previous_payload_data = previous_payload_data
-        self._previous_payload = None
+        self._previous_payload = None  # force previous_payload to be re-encoded
 
     @property
     def avro_repr(self):

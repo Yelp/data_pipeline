@@ -275,9 +275,9 @@ class PayloadOnlyMessageTest(SharedMessageTest):
         )
 
     def test_encrypted_message(self, pii_schema, payload, example_payload_data):
-        test_params = [(payload, None), (None, example_payload_data)]
-        for _payload, _payload_data in test_params:
-            with reconfigure(encryption_type='AES_MODE_CBC-1'):
+        with reconfigure(encryption_type='AES_MODE_CBC-1'):
+            test_params = [(payload, None), (None, example_payload_data)]
+            for _payload, _payload_data in test_params:
                 message = self.message_class(
                     schema_id=pii_schema.schema_id,
                     payload=_payload,
@@ -407,9 +407,9 @@ class TestUpdateMessage(SharedMessageTest):
         )
 
     def test_encrypted_message(self, pii_schema, payload, example_payload_data):
-        test_params = [(payload, None), (None, example_payload_data)]
-        for _payload, _payload_data in test_params:
-            with reconfigure(encryption_type='AES_MODE_CBC-1'):
+        with reconfigure(encryption_type='AES_MODE_CBC-1'):
+            test_params = [(payload, None), (None, example_payload_data)]
+            for _payload, _payload_data in test_params:
                 message = self.message_class(
                     schema_id=pii_schema.schema_id,
                     payload=_payload,
