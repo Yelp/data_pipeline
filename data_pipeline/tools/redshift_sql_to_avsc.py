@@ -13,10 +13,10 @@ from yelp_batch.batch import os
 
 from data_pipeline.tools._glob_util import get_file_paths_from_glob_patterns
 
-# See https://regex101.com/r/kC0kZ1
+# See https://regex101.com/r/kC0kZ1/2
 CREATE_TABLE_REGEX = re.compile('^create(\s*table)?\s*((.+)\.)?(\w+)\s*\(?')
 
-# See https://regex101.com/r/zG9kV1
+# See https://regex101.com/r/zG9kV1/2
 PRIMARY_KEY_REGEX = re.compile('^primary\s*key\s*\((.+)?\)')
 
 # See https://regex101.com/r/kD8iN5/17
@@ -315,10 +315,10 @@ class RedshiftSQLToAVSCConverter(object):
         return bool(PRIMARY_KEY_REGEX.search(line))
 
     def _get_primary_key_in_field_line(self, line):
-        if bool(FIELD_LINE_REGEX.search(line)) and \
-                FIELD_LINE_REGEX.search(line).group(5) is not None:
+        field_line = FIELD_LINE_REGEX.search(line)
+        if field_line and field_line.group(5) is not None:
             # if primary key present in sql field line return field name
-            return FIELD_LINE_REGEX.search(line).group(1)
+            return field_line.group(1)
 
     @cached_property
     def field_line_converters(self):
