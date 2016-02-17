@@ -19,7 +19,7 @@ from data_pipeline.config import get_config
 logger = get_config().logger
 
 
-class ContainerUnavailable(Exception):
+class ContainerUnavailableError(Exception):
     pass
 
 
@@ -125,43 +125,88 @@ class Containers(object):
     def get_container_info(cls, project, service, docker_client=None):
         """Returns container information for the first container matching project
         and service.
+        Raises ContainerUnavailableError if the container is unavailable.
+
+        Args:
+            docker_client: The docker client object
+            project: Name of the project the container is hosting
+            service: Name of the service that the container is hosting
         """
         if docker_client is None:
             docker_client = Client(version='auto')
 
-        # intentionally letting this blow up if it can't find the container
-        # - we can't do anything if the container doesn't exist
-        return next(
-            c for c in docker_client.containers() if
-            c['Labels'].get('com.docker.compose.project') == project and
-            c['Labels'].get('com.docker.compose.service') == service
-        )
+        try:
+            return next(
+                c for c in docker_client.containers() if
+                c['Labels'].get('com.docker.compose.project') == project and
+                c['Labels'].get('com.docker.compose.service') == service
+            )
+        except StopIteration:
+            raise ContainerUnavailableError
 
     @classmethod
-    def get_container_ip_address(cls, project, service):
-        """Fetches the ip address assigned to the running container."""
+    def get_container_ip_address(cls, project, service, timeout_seconds=60):
+        """Fetches the ip address assigned to the running container.
+        Throws ContainerUnavailableError if the retry limit is reached.
+
+        Args:
+            project: Name of the project the container is hosting
+            service: Name of the service that the container is hosting
+            timeout_seconds: Retry time limit to wait for containers to start
+                             Default in seconds: 60
+        """
         docker_client = Client(version='auto')
-        container_id = cls.get_container_info(
-            project,
-            service,
-            docker_client
-        )['Id']
+        retry_count = 0
+        container_id = None
+        for _ in range(0, timeout_seconds):
+            try:
+                container_info = cls.get_container_info(
+                    project,
+                    service,
+                    docker_client
+                )
+                container_id = container_info['Id']
+            except ContainerUnavailableError:
+                retry_count += 1
+                time.sleep(1)
+
+        if retry_count == timeout_seconds:
+            raise ContainerUnavailableError
 
         return docker_client.inspect_container(
             container_id
         )['NetworkSettings']['IPAddress']
 
     @classmethod
-    def exec_command(cls, command, project, service):
-        """Execs the command in the project and service container running under
+    def exec_command(cls, command, project, service, timeout_seconds=60):
+        """Executes the command in the project and service container running under
         docker-compose.
+        Throws ContainerUnavailableError if the retry limit is reached.
+
+        Args:
+            command: The command to be executed in the container
+            project: Name of the project the container is hosting
+            service: Name of the service that the container is hosting
+            timeout_seconds: Retry time limit to wait for containers to start
+                             Default in seconds: 60
         """
         docker_client = Client(version='auto')
-        container_id = cls.get_container_info(
-            project,
-            service,
-            docker_client=docker_client
-        )['Id']
+        retry_count = 0
+        container_id = None
+        for _ in range(0, timeout_seconds):
+            try:
+                container_info = cls.get_container_info(
+                    project,
+                    service,
+                    docker_client=docker_client
+                )
+                container_id = container_info['Id']
+            except ContainerUnavailableError:
+                retry_count += 1
+                time.sleep(1)
+
+        if retry_count == timeout_seconds:
+            raise ContainerUnavailableError
 
         exec_id = docker_client.exec_create(container_id, command)['Id']
         docker_client.exec_start(exec_id)
@@ -170,6 +215,9 @@ class Containers(object):
     def get_kafka_connection(cls, timeout_seconds=15):
         """Returns a kafka connection, waiting timeout_seconds for the container
         to come up.
+
+        Args:
+            timeout_seconds: Retry time (seconds) to get a kafka connection
         """
         end_time = time.time() + timeout_seconds
         logger.info("Getting connection to Kafka container on yocalhost")
@@ -330,7 +378,7 @@ class Containers(object):
                 count = 0
             finally:
                 logger.info("Schematizer not yet available, waiting...")
-        raise ContainerUnavailable()
+        raise ContainerUnavailableError()
 
     def _wait_for_kafka(self, timeout_seconds):
         # This will raise an exception after timeout_seconds, if it can't get
