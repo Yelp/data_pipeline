@@ -190,7 +190,7 @@ class FullRefreshManager(BatchDaemon):
         return self.determine_best_refresh(not_started_jobs, paused_jobs)
 
     def run(self):
-        with ZKLock().lock(name="refresh_manager", namespace=self.namespace):
+        with ZKLock(name="refresh_manager", namespace=self.namespace):
             try:
                 while True:
                     self.set_zombie_refresh_to_fail()

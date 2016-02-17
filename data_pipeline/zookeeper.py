@@ -4,7 +4,6 @@ from __future__ import unicode_literals
 
 import signal
 import sys
-from contextlib import contextmanager
 
 import kazoo.client
 import yelp_lib.config_loader
@@ -78,22 +77,29 @@ class ZK(object):
 
 
 class ZKLock(ZK):
-    @contextmanager
-    def lock(self, name, namespace, timeout=10):
-        """Sets up zookeeper lock so that only one copy of the batch is run per cluster.
-        This would make sure that data integrity is maintained (See DATAPIPE-309 for an example).
-        Use it as a context manager (with ZK().lock(name, namespace)."""
+    """Sets up zookeeper lock so that only one copy of the batch is run per cluster.
+    This would make sure that data integrity is maintained (See DATAPIPE-309 for an example).
+    Use it as a context manager (i.e. with ZKLock(name, namespace))."""
+
+    def __init__(self, name, namespace, timeout=10):
+        super(ZKLock, self).__init__()
         self.lock = self.zk_client.Lock("/{} - {}".format(name, namespace), namespace)
+        self.timeout = timeout
+        self.failed = False
+
+    def __enter__(self):
         try:
-            self.lock.acquire(timeout=timeout)
+            self.lock.acquire(timeout=self.timeout)
             self.register_signal_handlers()
-            yield
-            self.close()
         except LockTimeout:
             log.warning("Already one instance running against this source! exit. See y/oneandonly for help.")
-            self.close()
+            self.failed = True
+        return
+
+    def __exit__(self, type, value, traceback):
+        self.close()
+        if self.failed:
             sys.exit(1)
-            yield  # needed for tests where we mock sys.exit
 
     def close(self):
         if self.lock.is_acquired:

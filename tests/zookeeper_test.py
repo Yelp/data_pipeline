@@ -89,7 +89,7 @@ class TestZKLock(TestZK):
         zk_client,
         patch_zk
     ):
-        with ZKLock().lock(self.fake_name, self.fake_namespace):
+        with ZKLock(self.fake_name, self.fake_namespace):
             self._check_mid_lock(zk_client)
         self._check_zk_lock(zk_client)
 
@@ -99,7 +99,7 @@ class TestZKLock(TestZK):
         locked_patch_zk,
         patch_exit
     ):
-        with ZKLock().lock(self.fake_name, self.fake_namespace):
+        with ZKLock(self.fake_name, self.fake_namespace):
             pass
         assert patch_exit.call_count == 1
         self._check_zk_lock(locked_zk_client)
@@ -108,9 +108,9 @@ class TestZKLock(TestZK):
         self,
         patch_exit
     ):
-        with ZKLock().lock(self.fake_name, self.fake_namespace):
+        with ZKLock(self.fake_name, self.fake_namespace):
             assert patch_exit.call_count == 0
-            with ZKLock().lock(self.fake_name, self.fake_namespace):
+            with ZKLock(self.fake_name, self.fake_namespace):
                 pass
             assert patch_exit.call_count == 1
 
