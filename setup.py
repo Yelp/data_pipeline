@@ -31,7 +31,7 @@ setup(
         'cached-property>=0.1.5',
         'cffi>=1.1.2',
         'enum34>=1.0.4',
-        'kafka-python>=0.9.4.post2',
+        'kafka-python==0.9.4.post2',
         'PyStaticConfiguration>=0.9.0',
         'simplejson>=2.1.2',
         'swaggerpy>=0.7.6',

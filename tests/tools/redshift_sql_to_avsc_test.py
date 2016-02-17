@@ -14,6 +14,8 @@ from data_pipeline.tools.redshift_sql_to_avsc \
 
 
 @pytest.fixture(
+    # in case more primary keys are adding in future please update the
+    # 'sql_line' in fixtures with {primary_key} formatter as shown in fixture field_a, field_b, field_c
     params=[
         [],
         ['field_a'],
@@ -30,7 +32,7 @@ def field_fixtures(pkeys):
     fixtures = [
         {
             'name': 'field_a',
-            'sql_line': "field_a char(18) NOT NULL default '' encode lzo,",
+            'sql_line': "field_a char(18) {primary_key}  NOT NULL default '' encode lzo,",
             'sql_type': 'char',
             'sql_width': 18,
             'avro_type': 'string',
@@ -40,7 +42,7 @@ def field_fixtures(pkeys):
         },
         {
             'name': 'field_b',
-            'sql_line': ' field_b  varchar ( 320 ) default NULL encode lzo , ',
+            'sql_line': ' field_b  varchar ( 320 ) {primary_key}  default NULL encode lzo , ',
             'sql_type': 'varchar',
             'sql_width': 320,
             'avro_type': ['null', 'string'],
@@ -50,7 +52,7 @@ def field_fixtures(pkeys):
         },
         {
             'name': 'field_c',
-            'sql_line': 'field_c integer DEFAULT NULL,',
+            'sql_line': 'field_c integer {primary_key}  DEFAULT NULL,',
             'sql_type': 'integer',
             'sql_width': None,
             'avro_type': ['null', 'int'],
@@ -319,12 +321,24 @@ def field_fixtures(pkeys):
         },
     ]
     fixtures = fixtures
+    pk_first_flag = False
     for index, name in enumerate(pkeys):
         pkey_num = index + 1
         for fixture in fixtures:
             if fixture['name'] == name:
                 fixture['avro_meta']['pkey'] = pkey_num
+                if not pk_first_flag:
+                    # first pk in pkeys is mocked as coming from field line
+                    # and others are coming from primary keys lines
+                    pk_first_flag = True
+                    fixture['sql_line'] = fixture['sql_line'].format(
+                        primary_key='primary key'
+                    )
+
     for fixture in fixtures:
+        fixture['sql_line'] = fixture['sql_line'].format(
+            primary_key=''
+        )
         fixture['avro_field'] = {
             'name': fixture['name'],
             'type': fixture['avro_type'],
@@ -474,8 +488,10 @@ class TestRedshiftSQLToAVSCConverter(object):
     )
     def primary_keys_line(self, request, pkeys):
         template = request.param
-        if pkeys:
-            return template.format(keys=', '.join(pkeys))
+        # this hack mocks the first key in pkeys as field line pk
+        # and all others keys as coming from primary keys lines
+        if pkeys and len(pkeys) > 1:
+            return template.format(keys=', '.join(pkeys[1:]))
         else:
             return ''
 
