@@ -190,15 +190,12 @@ class Message(object):
             raise ValueError(
                 "Encryption type must be set when message requires to be encrypted."
             )
+        self._encryption_helper = EncryptionHelper(self.encryption_type)
 
     @property
     def _should_be_encrypted(self):
         """Whether this message should be encrypted."""
         return self.contains_pii
-
-    @property
-    def _encryption_helper(self):
-        return EncryptionHelper(message=self)
 
     @property
     def dry_run(self):
@@ -350,6 +347,11 @@ class Message(object):
             logger.debug(
                 "Overriding message topic: {} for schema {}.".format(topic, schema_id)
             )
+        if self.encryption_type:
+            if self._meta is None:
+                self._meta = []
+            if not self.get_encryption_meta(self.meta):
+                self.meta.append(self._encryption_helper.encryption_meta)
 
     def _set_payload_or_payload_data(self, payload, payload_data):
         # payload or payload_data are lazily constructed only on request
@@ -385,7 +387,7 @@ class Message(object):
 
     def _encrypt_payload_if_necessary(self, payload):
         if self.encryption_type is not None:
-            return self._encryption_helper.encrypt_message_with_pii(payload)
+            return self._encryption_helper.encrypt_payload(payload)
         return payload
 
     def _decrypt_payload_if_necessary(self, payload):
@@ -415,23 +417,52 @@ class Message(object):
 
     @classmethod
     def create_from_unpacked_message(cls, unpacked_message, kafka_position_info=None):
+        encryption_type = unpacked_message['encryption_type']
+        meta = cls._get_unpacked_meta(unpacked_message)
+        payload = cls._get_unpacked_decrypted_payload(
+            unpacked_message['payload'],
+            encryption_type=encryption_type,
+            meta=meta
+        )
+
         message_params = {
             'uuid': unpacked_message['uuid'],
             'schema_id': unpacked_message['schema_id'],
-            'payload': unpacked_message['payload'],
+            'payload': payload,
             'timestamp': unpacked_message['timestamp'],
-            'meta': [
-                MetaAttribute(schema_id=o['schema_id'], encoded_payload=o['payload'])
-                for o in unpacked_message['meta']
-            ] if unpacked_message['meta'] else None,
-            'kafka_position_info': kafka_position_info,
+            'meta': meta,
+            'kafka_position_info': kafka_position_info
         }
         message = cls(**message_params)
-        message._set_encryption_type(unpacked_message['encryption_type'])
-        message._set_payload(
-            message._decrypt_payload_if_necessary(message._payload)
-        )
+        message._set_encryption_type(encryption_type)
         return message
+
+    @classmethod
+    def _get_unpacked_meta(cls, unpacked_message):
+        return [
+            MetaAttribute(schema_id=o['schema_id'], encoded_payload=o['payload'])
+            for o in unpacked_message['meta']
+        ] if unpacked_message['meta'] else None
+
+    @classmethod
+    def _get_unpacked_decrypted_payload(cls, payload, encryption_type, meta):
+        if not encryption_type:
+            return payload
+
+        encryption_meta = cls.get_encryption_meta(meta)
+        encryption_helper = EncryptionHelper(
+            encryption_type,
+            initialization_vector=encryption_meta.payload
+        )
+        return encryption_helper.decrypt_payload(payload)
+
+    @classmethod
+    def get_encryption_meta(cls, meta):
+        meta_schema_id = EncryptionHelper.get_meta_schema_id()
+        return next(
+            (m for m in meta if m.schema_id == meta_schema_id),
+            None
+        )
 
     def reload_data(self):
         """Populate the payload data or the payload if it hasn't done so.
@@ -635,26 +666,30 @@ class UpdateMessage(Message):
 
     @classmethod
     def create_from_unpacked_message(cls, unpacked_message, kafka_position_info=None):
+        encryption_type = unpacked_message['encryption_type']
+        meta = cls._get_unpacked_meta(unpacked_message)
+        payload = cls._get_unpacked_decrypted_payload(
+            unpacked_message['payload'],
+            encryption_type=encryption_type,
+            meta=meta
+        )
+        previous_payload = cls._get_unpacked_decrypted_payload(
+            unpacked_message['previous_payload'],
+            encryption_type=encryption_type,
+            meta=meta
+        )
+
         message_params = {
             'uuid': unpacked_message['uuid'],
             'schema_id': unpacked_message['schema_id'],
-            'payload': unpacked_message['payload'],
-            'previous_payload': unpacked_message['previous_payload'],
+            'payload': payload,
+            'previous_payload': previous_payload,
             'timestamp': unpacked_message['timestamp'],
-            'meta': [
-                MetaAttribute(schema_id=o['schema_id'], encoded_payload=o['payload'])
-                for o in unpacked_message['meta']
-            ] if unpacked_message['meta'] else None,
-            'kafka_position_info': kafka_position_info,
+            'meta': meta,
+            'kafka_position_info': kafka_position_info
         }
         message = cls(**message_params)
-        message._set_encryption_type(unpacked_message['encryption_type'])
-        message._set_payload(
-            message._decrypt_payload_if_necessary(message._payload)
-        )
-        message._set_previous_payload(
-            message._decrypt_payload_if_necessary(message._previous_payload)
-        )
+        message._set_encryption_type(encryption_type)
         return message
 
     def _set_previous_payload_if_necessary(self, previous_payload_data):
@@ -734,7 +769,6 @@ def create_from_kafka_message(
         key=kafka_message.key,
     )
     return _create_message_from_packed_message(
-        topic=topic,
         packed_message=kafka_message,
         force_payload_decoding=force_payload_decoding,
         kafka_position_info=kafka_position_info
@@ -762,21 +796,18 @@ def create_from_offset_and_message(
         The message object
     """
     return _create_message_from_packed_message(
-        topic=topic,
         packed_message=offset_and_message.message,
         force_payload_decoding=force_payload_decoding
     )
 
 
 def _create_message_from_packed_message(
-    topic,
     packed_message,
     force_payload_decoding,
     kafka_position_info=None
 ):
     """ Builds a data_pipeline.message.Message from packed_message
     Args:
-        topic (str): The topic name from which the message was received.
         packed_message (yelp_kafka.consumer.Message or kafka.common.Message):
             The message info which has the payload, offset, partition,
             and key of the received message if of type yelp_kafka.consumer.message
@@ -785,7 +816,7 @@ def _create_message_from_packed_message(
             we will decode the payload/previous_payload immediately.
             Otherwise the decoding will happen whenever the lazy *_data
             properties are accessed.
-        append_kafka_position_info (boolean): If this is set to `True` then
+        kafka_position_info (boolean): If this is set to `True` then
             we will construct kafka_position_info for resulting message
             from the unpacked_message. Otherwise kafka_position_info will
             be set to None.

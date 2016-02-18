@@ -9,94 +9,71 @@ from data_pipeline.initialization_vector import InitializationVector
 
 
 class EncryptionHelper(object):
-    """The EncryptionHelper provides helper methods for encrypting PII
-    in the data pipeline, given a key and message.
+    """The EncryptionHelper provides helper methods for encrypting message
+    payload in the data pipeline.
 
     Args:
-      key (string): The key to be used in the encryption
-      message (data_pipeline.message.Message): The message with a payload to be encrypted
+        encryption_type (string): Encryption algorithm used to encrypt/decrypt
+            payload
+        initialization_vector: initialization vector used in AES algorithm
+
+    Remarks:
+        This class currently is implemented specifically for AES algorithm,
+        and plans to be refactored later to support various encryption algorithms.
     """
 
-    @property
-    def key(self):
-        return self._key
+    def __init__(self, encryption_type, initialization_vector=None):
+        key_location = get_config().key_location + 'key-{}.key'
+        self.key = self._retrieve_key(encryption_type, key_location)
+        self.initialization_vector = InitializationVector(initialization_vector)
 
-    @property
-    def message(self):
-        return self._message
+    def _retrieve_key(self, encryption_type, key_location):
+        if not encryption_type:
+            raise ValueError("Encryption type should be set.")
 
-    def __init__(self, message=None):
-        self._message = message
-        self.key_location = get_config().key_location + 'key-{}.key'
-        self._key = self._retrieve_key(self._get_key_id(self.message))
+        # Get the key number to use, allowing for key rotation. encryption_type
+        # must be of the form 'Algorithm_name-{key_id}'
+        key_id = encryption_type.split('-')[-1]
 
-    def _get_key_id(self, message):
-        """returns the key number to use when
-        encrypting/decrypting pii, allowing for
-        key rotation. encryption_type must be
-        of the form 'Algorithm_name-{key_id}'"""
-        encryption_type = message.encryption_type
-        if encryption_type is not None:
-            return encryption_type.split('-')[-1]
-        else:
-            raise ValueError(
-                "Encryption type should be set."
-            )
-
-    def _retrieve_key(self, key_id):
-        with open(self.key_location.format(key_id), 'r') as f:
+        with open(key_location.format(key_id), 'r') as f:
             return f.read(AES.block_size)
 
-    def _append_initialization_vector(self):
-        iv = self.message.get_meta_attr_by_type(self.message.meta, 'initialization_vector')
-        if iv is None:
-            if self.message.meta is None:
-                self.message._set_meta([])
-            iv = InitializationVector()
-            self.message.meta.append(iv)
+    @property
+    def encryption_meta(self):
+        return self.initialization_vector
 
-    def encrypt_message_with_pii(self, payload):
-        """Encrypt message with key on machine, using AES."""
-        self._append_initialization_vector()
-        return self._encrypt_message_using_pycrypto(self.key, payload)
+    @classmethod
+    def get_meta_schema_id(cls):
+        return InitializationVector().schema_id
 
-    def _encrypt_message_using_pycrypto(self, key, payload, encryption_algorithm=None):
-        # eventually we should allow for multiple
-        # encryption methods, but for now we assume AES
+    def encrypt_payload(self, payload):
+        """Encrypt payload with key on machine, using AES."""
         encrypter = AES.new(
-            key,
+            self.key,
             AES.MODE_CBC,
-            self.message.get_meta_attr_by_type(self.message.meta, 'initialization_vector').payload
+            self.initialization_vector.payload
         )
         payload = self._pad_payload(payload)
         return encrypter.encrypt(payload)
 
     def _pad_payload(self, payload):
-        """payloads must be have length equal to
-        a multiple of 16 in order to be encrypted
-        by AES's CBC algorithm, because it uses
-        block chaining. This method adds a chr equal to the
-        length needed in bytes, bytes times,
-        to the end of payload before encrypting it,
-        and the _unpad method removes those bytes"""
-
+        """payloads must be have length equal to a multiple of 16 in order to
+        be encrypted by AES's CBC algorithm, because it uses block chaining.
+        This method adds a chr equal to the length needed in bytes, bytes times,
+        to the end of payload before encrypting it, and the _unpad method
+        removes those bytes.
+        """
         length = 16 - (len(payload) % 16)
         return payload + chr(length) * length
 
-    def decrypt_payload(self, decoded_payload):
-        initialization_vector = self.message.get_meta_attr_by_type(
-            self.message.meta,
-            'initialization_vector'
-        )
-        if initialization_vector is None:
-            raise TypeError("InitializationVector must not be None")
+    def decrypt_payload(self, payload):
         decrypter = AES.new(
             self.key,
             AES.MODE_CBC,
-            initialization_vector.payload
+            self.initialization_vector.payload
         )
-        data = decrypter.decrypt(decoded_payload)
+        data = decrypter.decrypt(payload)
         return self._unpad(data)
 
-    def _unpad(self, s):
-        return s[:-ord(s[len(s) - 1:])]
+    def _unpad(self, payload):
+        return payload[:-ord(payload[len(payload) - 1:])]

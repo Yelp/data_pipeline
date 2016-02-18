@@ -22,6 +22,7 @@ from data_pipeline._retry_util import RetryPolicy
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
 from data_pipeline.expected_frequency import ExpectedFrequency
+from data_pipeline.message import create_from_offset_and_message
 from data_pipeline.message import CreateMessage
 from data_pipeline.message import Message
 from data_pipeline.message_type import _ProtectedMessageType
@@ -255,7 +256,7 @@ class TestProducer(TestProducerBase):
                 schema_id=pii_schema.schema_id,
                 payload=payload
             )
-            self._publish_and_assert_message(pii_message, producer)
+            self._publish_and_assert_pii_message(pii_message, producer)
         assert len(multiprocessing.active_children()) == 0
 
     def test_publish_pii_payload_data_message(
@@ -269,8 +270,30 @@ class TestProducer(TestProducerBase):
                 schema_id=pii_schema.schema_id,
                 payload_data=example_payload_data
             )
-            self._publish_and_assert_message(pii_message, producer)
+            self._publish_and_assert_pii_message(pii_message, producer)
         assert len(multiprocessing.active_children()) == 0
+
+    def _publish_and_assert_pii_message(self, message, producer):
+        with capture_new_messages(message.topic) as get_messages:
+            producer.publish(message)
+            producer.flush()
+            offsets_and_messages = get_messages()
+
+        assert len(offsets_and_messages) == 1
+
+        unpacked_message = Envelope().unpack(offsets_and_messages[0].message.value)
+        encrypted_payload = message._encryption_helper.encrypt_payload(
+            message.payload
+        )
+        assert unpacked_message['payload'] == encrypted_payload
+
+        dp_message = create_from_offset_and_message(
+            message.topic,
+            offsets_and_messages[0]
+        )
+        assert dp_message.payload == message.payload
+        assert dp_message.payload_data == message.payload_data
+        assert dp_message.schema_id == message.schema_id
 
     def test_publish_message_with_keys(self, create_message, producer):
         sample_keys = (u'key1=\'', u'key2=\\', u'key3=哎ù\x1f')
@@ -515,7 +538,7 @@ class TestEnsureMessagesPublished(TestProducerBase):
     def test_ensure_messages_published_when_unpublished(
         self, topic, messages, producer, topic_offsets
     ):
-        self._test_sucess_ensure_messages_published(
+        self._test_success_ensure_messages_published(
             topic,
             messages,
             producer,
@@ -526,7 +549,7 @@ class TestEnsureMessagesPublished(TestProducerBase):
     def test_ensure_messages_published_when_partially_published(
         self, topic, messages, producer, topic_offsets
     ):
-        self._test_sucess_ensure_messages_published(
+        self._test_success_ensure_messages_published(
             topic,
             messages,
             producer,
@@ -537,7 +560,7 @@ class TestEnsureMessagesPublished(TestProducerBase):
     def test_ensure_messages_published_when_all_published(
         self, topic, messages, producer, topic_offsets
     ):
-        self._test_sucess_ensure_messages_published(
+        self._test_success_ensure_messages_published(
             topic,
             messages,
             producer,
@@ -545,7 +568,7 @@ class TestEnsureMessagesPublished(TestProducerBase):
             unpublished_count=0
         )
 
-    def _test_sucess_ensure_messages_published(
+    def _test_success_ensure_messages_published(
         self, topic, messages, producer, topic_offsets, unpublished_count
     ):
         messages_published_first = messages[:unpublished_count]
