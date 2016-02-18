@@ -174,6 +174,13 @@ class Config(object):
         )
 
     @property
+    def zookeeper_discovery_path(self):
+        return data_pipeline_conf.read_string(
+            'zookeeper_discovery_path',
+            default='/nail/etc/zookeeper_discovery/generic/uswest2{ecosystem}.yaml'
+        )
+
+    @property
     def consumer_get_messages_timeout_default(self):
         """ Default timeout for blocking calls to ``Consumer.get_messages``
         """
