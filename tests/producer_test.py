@@ -247,6 +247,19 @@ class TestProducer(TestProducerBase):
         consumer.seek(kafka_offset, 0)  # kafka_offset from head
         assert len(consumer.get_messages(count=10)) == 1
 
+    def test_skip_publish_pii_message(self, pii_schema, payload, producer_instance):
+        with reconfigure(
+            encryption_type='AES_MODE_CBC-1',
+            skip_messages_with_pii=True
+        ), producer_instance as producer:
+            pii_message = CreateMessage(
+                schema_id=pii_schema.schema_id,
+                payload=payload
+            )
+            messages = self._publish_message(pii_message, producer)
+        assert len(messages) == 0
+        assert len(multiprocessing.active_children()) == 0
+
     def test_publish_pii_message(self, pii_schema, payload, producer_instance):
         with reconfigure(
             encryption_type='AES_MODE_CBC-1',
