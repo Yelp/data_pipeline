@@ -816,10 +816,9 @@ def _create_message_from_packed_message(
             we will decode the payload/previous_payload immediately.
             Otherwise the decoding will happen whenever the lazy *_data
             properties are accessed.
-        kafka_position_info (boolean): If this is set to `True` then
-            we will construct kafka_position_info for resulting message
-            from the unpacked_message. Otherwise kafka_position_info will
-            be set to None.
+        kafka_position_info (Optional[KafkaPositionInfo]): The specified kafka
+            position information.  The kafka_position_info may be constructed
+            from the unpacked yelp_kafka message.
 
     Returns (data_pipeline.message.Message):
         The message object
