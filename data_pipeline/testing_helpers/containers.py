@@ -128,9 +128,9 @@ class Containers(object):
         Raises ContainerUnavailableError if the container is unavailable.
 
         Args:
-            docker_client: The docker client object
             project: Name of the project the container is hosting
             service: Name of the service that the container is hosting
+            docker_client: The docker client object
         """
         if docker_client is None:
             docker_client = Client(version='auto')
@@ -156,23 +156,7 @@ class Containers(object):
                              Default in seconds: 60
         """
         docker_client = Client(version='auto')
-        retry_count = 0
-        container_id = None
-        for _ in range(0, timeout_seconds):
-            try:
-                container_info = cls.get_container_info(
-                    project,
-                    service,
-                    docker_client
-                )
-                container_id = container_info['Id']
-            except ContainerUnavailableError:
-                retry_count += 1
-                time.sleep(1)
-
-        if retry_count == timeout_seconds:
-            raise ContainerUnavailableError
-
+        container_id = cls._get_container_id(project, service, docker_client, timeout_seconds)
         return docker_client.inspect_container(
             container_id
         )['NetworkSettings']['IPAddress']
@@ -191,23 +175,7 @@ class Containers(object):
                              Default in seconds: 60
         """
         docker_client = Client(version='auto')
-        retry_count = 0
-        container_id = None
-        for _ in range(0, timeout_seconds):
-            try:
-                container_info = cls.get_container_info(
-                    project,
-                    service,
-                    docker_client=docker_client
-                )
-                container_id = container_info['Id']
-            except ContainerUnavailableError:
-                retry_count += 1
-                time.sleep(1)
-
-        if retry_count == timeout_seconds:
-            raise ContainerUnavailableError
-
+        container_id = cls._get_container_id(project, service, docker_client, timeout_seconds)
         exec_id = docker_client.exec_create(container_id, command)['Id']
         docker_client.exec_start(exec_id)
 
@@ -228,6 +196,22 @@ class Containers(object):
                 logger.info("Kafka not yet available, waiting...")
                 time.sleep(0.1)
         raise KafkaUnavailableError()
+
+    @classmethod
+    def _get_container_id(cls, project, service, docker_client, timeout_seconds=60):
+        end_time = time.time() + timeout_seconds
+        while end_time > time.time():
+            try:
+                container_info = cls.get_container_info(
+                    project,
+                    service,
+                    docker_client=docker_client
+                )
+                return container_info['Id']
+            except ContainerUnavailableError:
+                time.sleep(1)
+        else:
+            raise ContainerUnavailableError
 
     def __init__(self, additional_compose_file=None, additional_services=None):
         # To resolve docker client server version mismatch issue.
