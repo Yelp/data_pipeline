@@ -1,3 +1,11 @@
+data-pipeline-tools (0.1.50) lucid; urgency=low
+
+  * Commit: Added Refresh Manageri and Refresh Job adder, which had
+    consequences on refresh runner, schematizer_clientlib and zookeeper
+    lock utils
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Mon, 22 Feb 2016 13:46:43 -0800
+
 data-pipeline-tools (0.1.49) lucid; urgency=low
 
   * Commit: Merge branch 'master' of
