@@ -1,3 +1,9 @@
+data-pipeline-tools (0.1.51) lucid; urgency=low
+
+  * Commit: [DATAPIPE-781] Addressed comments
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Mon, 22 Feb 2016 14:22:29 -0800
+
 data-pipeline-tools (0.1.50) lucid; urgency=low
 
   * Commit: Added Refresh Manageri and Refresh Job adder, which had
