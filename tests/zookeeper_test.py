@@ -102,7 +102,10 @@ class TestZKLock(TestZK):
         with ZKLock(self.fake_name, self.fake_namespace):
             pass
         assert patch_exit.call_count == 1
-        self._check_zk_lock(locked_zk_client)
+        assert locked_zk_client.start.call_count == 1
+        # Since sys.exit is mocked, it calls close twice
+        assert locked_zk_client.stop.call_count >= 1
+        assert locked_zk_client.close.call_count >= 1
 
     def test_double_lock(
         self,
