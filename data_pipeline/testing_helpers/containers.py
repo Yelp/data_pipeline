@@ -20,7 +20,8 @@ logger = get_config().logger
 
 
 class ContainerUnavailableError(Exception):
-    pass
+    def __init__(self, project='unknown', service='unknown'):
+        Exception.__init__(self, "Container for project {0} and service {1} failed to start".format(project, service))
 
 
 class Containers(object):
@@ -142,7 +143,7 @@ class Containers(object):
                 c['Labels'].get('com.docker.compose.service') == service
             )
         except StopIteration:
-            raise ContainerUnavailableError
+            raise ContainerUnavailableError(project=project, service=service)
 
     @classmethod
     def get_container_ip_address(cls, project, service, timeout_seconds=60):
@@ -211,7 +212,7 @@ class Containers(object):
             except ContainerUnavailableError:
                 time.sleep(1)
         else:
-            raise ContainerUnavailableError
+            raise ContainerUnavailableError(project=project, service=service)
 
     def __init__(self, additional_compose_file=None, additional_services=None):
         # To resolve docker client server version mismatch issue.
@@ -362,7 +363,7 @@ class Containers(object):
                 count = 0
             finally:
                 logger.info("Schematizer not yet available, waiting...")
-        raise ContainerUnavailableError()
+        raise ContainerUnavailableError(project='schematizer', service='schematizer')
 
     def _wait_for_kafka(self, timeout_seconds):
         # This will raise an exception after timeout_seconds, if it can't get
