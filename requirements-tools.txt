@@ -1,3 +1,4 @@
+psutil==2.1.1
 sqlparse
 yelp_batch
 yelp_clog==1.1
