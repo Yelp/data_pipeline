@@ -1,3 +1,10 @@
+data-pipeline-tools (0.1.52) lucid; urgency=low
+
+  * Commit: [DATAPIPE-784] Added description for container unavailable
+    exception
+
+ -- Chia-Chi Lin <clin@yelp.com>  Mon, 22 Feb 2016 17:42:02 -0800
+
 data-pipeline-tools (0.1.51) lucid; urgency=low
 
   * Commit: [DATAPIPE-781] Addressed comments
