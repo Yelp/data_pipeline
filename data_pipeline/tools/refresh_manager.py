@@ -44,7 +44,8 @@ class FullRefreshManager(BatchDaemon):
         opt_group.add_option(
             '--namespace',
             required=True,
-            help='Name of the namespace this refresh manager will handle.'
+            help='Name of the namespace this refresh manager will handle. Expected format: '
+            '"cluster.database"'
         )
         opt_group.add_option(
             '--config-path',

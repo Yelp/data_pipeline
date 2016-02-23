@@ -35,6 +35,7 @@ class ZK(object):
         retry_policy = KazooRetry(max_tries=self.max_tries)
         self.zk_client = self.get_kazoo_client(command_retry=retry_policy)
         self.zk_client.start()
+        self.register_signal_handlers()
 
     def _get_local_zk(self):
         path = get_config().zookeeper_discovery_path.format(ecosystem=self.ecosystem)
@@ -90,16 +91,13 @@ class ZKLock(ZK):
     def __enter__(self):
         try:
             self.lock.acquire(timeout=self.timeout)
-            self.register_signal_handlers()
         except LockTimeout:
             log.warning("Already one instance running against this source! exit. See y/oneandonly for help.")
-            self.failed = True
-        return
+            self.close()
+            sys.exit(1)
 
     def __exit__(self, type, value, traceback):
         self.close()
-        if self.failed:
-            sys.exit(1)
 
     def close(self):
         if self.lock.is_acquired:
