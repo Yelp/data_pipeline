@@ -1,3 +1,10 @@
+data-pipeline-tools (0.1.53) lucid; urgency=low
+
+  * Commit: Merge branch 'DATAPIPE-426-Merge-Refresh-Manager-with-
+    latest-full-refresh-runner'
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Thu, 25 Feb 2016 13:44:33 -0800
+
 data-pipeline-tools (0.1.52) lucid; urgency=low
 
   * Commit: [DATAPIPE-784] Added description for container unavailable
