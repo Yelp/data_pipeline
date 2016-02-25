@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import simplejson
+from swaggerpy.exception import HTTPError
 
 from data_pipeline.config import get_config
 from data_pipeline.helpers.singleton import Singleton
@@ -687,6 +688,28 @@ class SchematizerClient(object):
         )
         _consumer_group_data_src = _ConsumerGroupDataSource.from_response(response)
         return _consumer_group_data_src.to_result()
+
+    def filter_topics_by_pkeys(self, topics):
+        """ Create and return a new list of topic names built from topics,
+        filtered by whether a topic's most recent schema has a primary_key
+
+        Args:
+            topics (list[str]): List of topic names
+
+        Returns:
+            Newly created list of topic names filtered by if the corresponding
+            topics have primary_keys in their most recent schemas
+        """
+        pkey_topics = []
+        for topic in topics:
+            try:
+                schema = self.get_latest_schema_by_topic_name(topic)
+                if schema.primary_keys:
+                    pkey_topics.append(topic)
+            except HTTPError:
+                # List of topics may include topics not in schematizer
+                pass
+        return pkey_topics
 
     def _call_api(self, api, params=None, post_body=None):
         # TODO(DATAPIPE-207|joshszep): Include retry strategy support
