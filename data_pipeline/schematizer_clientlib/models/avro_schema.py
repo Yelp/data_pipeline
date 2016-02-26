@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 from collections import namedtuple
+import copy
 
 import simplejson
 
@@ -72,7 +73,7 @@ class _AvroSchema(BaseModel):
     def to_cache_value(self):
         return {
             'schema_id': self.schema_id,
-            'schema_json': self.schema_json,
+            'schema_json': copy.deepcopy(self.schema_json),
             'topic_name': self.topic.name,
             'base_schema_id': self.base_schema_id,
             'status': self.status,
@@ -94,7 +95,7 @@ class _AvroSchema(BaseModel):
         )
         return cls(
             schema_id=cache_value['schema_id'],
-            schema_json=cache_value['schema_json'],
+            schema_json=copy.deepcopy(cache_value['schema_json']),
             topic=name_only_topic,
             base_schema_id=cache_value['base_schema_id'],
             status=cache_value['status'],
