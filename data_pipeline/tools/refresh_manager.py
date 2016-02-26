@@ -43,7 +43,8 @@ class FullRefreshManager(BatchDaemon):
 
         opt_group.add_option(
             '--namespace',
-            required=True,
+            type=str,
+            default=None,
             help='Name of the namespace this refresh manager will handle. Expected format: '
             '"cluster.database"'
         )
@@ -66,6 +67,8 @@ class FullRefreshManager(BatchDaemon):
 
     @batch_configure
     def _init_global_state(self):
+        if self.options.namespace is None:
+            raise ValueError("--namespace is required to be defined")
         self.namespace = self.options.namespace
         self._set_cluster_and_database()
         self.config_path = self.options.config_path
