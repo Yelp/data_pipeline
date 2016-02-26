@@ -1,3 +1,9 @@
+data-pipeline-tools (0.1.54) lucid; urgency=low
+
+  * Commit: deepcopy acro schema response before returning
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Thu, 25 Feb 2016 18:26:31 -0800
+
 data-pipeline-tools (0.1.53) lucid; urgency=low
 
   * Commit: Merge branch 'DATAPIPE-426-Merge-Refresh-Manager-with-
