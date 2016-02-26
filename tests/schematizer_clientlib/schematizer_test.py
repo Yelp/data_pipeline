@@ -717,7 +717,6 @@ class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
         )
         expected = self._get_schema_by_id(actual.schema_id)
         self._assert_schema_values(actual, expected)
-        assert actual.primary_keys
 
 
 class TestGetTopicsByCriteria(SchematizerClientTestBase):
