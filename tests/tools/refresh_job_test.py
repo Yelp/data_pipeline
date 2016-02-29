@@ -19,7 +19,7 @@ class TestFullRefreshJob(object):
 
     def test_invalid_priority(self, refresh_job):
         with pytest.raises(KeyError):
-            refresh_job.process_commandline_options(['--priority=INVALID'])
+            refresh_job.process_commandline_options(['--priority=INVALID', "--source-id=0"])
             refresh_job.run()
 
     def test_run_invalid_batch(self, refresh_job):
@@ -27,10 +27,21 @@ class TestFullRefreshJob(object):
             refresh_job.process_commandline_options(
                 [
                     '--priority=MEDIUM',
-                    '--batch-size=0'
+                    '--batch-size=0',
+                    "--source-id=0"
                 ]
             )
         assert e.value.message == "--batch-size option must be greater than 0."
+
+    def test_run_no_source_id(self, refresh_job):
+        with pytest.raises(ValueError) as e:
+            refresh_job.process_commandline_options(
+                [
+                    '--priority=MEDIUM',
+                    '--batch-size=50',
+                ]
+            )
+        assert e.value.message == "--source-id must be defined"
 
     def test_valid_run(self, refresh_job, source):
         refresh_job.process_commandline_options(

@@ -81,6 +81,8 @@ class FullRefreshJob(Batch):
             raise ValueError("--avg-rows-per-second-cap must be greater than 0")
         if self.options.batch_size <= 0:
             raise ValueError("--batch-size option must be greater than 0.")
+        if self.options.source_id is None:
+            raise ValueError("--source-id must be defined")
 
     def run(self):
         self.job = self.schematizer.create_refresh(
