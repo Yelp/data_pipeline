@@ -1,3 +1,12 @@
+data-pipeline-tools (0.1.56) lucid; urgency=low
+
+  * Commit: fixed deployment of data_pipeline_refresh_job and
+    data_pipeline_refresh_manager, modified refresh_job and
+    refresh_manager tests to load configuration after parsing
+    commandline options
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Tue, 01 Mar 2016 13:56:34 -0800
+
 data-pipeline-tools (0.1.55) lucid; urgency=low
 
   * Commit: Added FilterTopicsByPkeys to schematizer_clientlib
