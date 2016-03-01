@@ -14,7 +14,7 @@ from yelp_batch import BatchDaemon
 from yelp_batch.batch import batch_command_line_options
 from yelp_batch.batch import batch_configure
 from yelp_lib.classutil import cached_property
-from yelp_servlib.config_util import load_default_config
+from yelp_servlib.config_util import load_package_config
 
 from data_pipeline.schematizer_clientlib.models.refresh import RefreshStatus
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
@@ -31,7 +31,6 @@ class FullRefreshManager(BatchDaemon):
         super(FullRefreshManager, self).__init__()
         self.notify_emails = ['bam+batch@yelp.com']
         self.active_refresh = {'id': None, 'pid': None}
-        load_default_config('/nail/srv/configs/data_pipeline_tools.yaml')
 
     @cached_property
     def schematizer(self):
@@ -73,6 +72,7 @@ class FullRefreshManager(BatchDaemon):
         self._set_cluster_and_database()
         self.config_path = self.options.config_path
         self.dry_run = self.options.dry_run
+        load_package_config(self.config_path)
         # Removing the cmd line arguments to prevent child process error.
         sys.argv = sys.argv[:1]
 

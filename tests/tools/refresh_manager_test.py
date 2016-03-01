@@ -103,7 +103,7 @@ class TestFullRefreshManager(object):
     @pytest.yield_fixture
     def mock_config(self):
         with mock.patch(
-            'data_pipeline.tools.refresh_manager.load_default_config'
+            'data_pipeline.tools.refresh_manager.load_package_config'
         ), mock.patch(
             'data_pipeline.tools.refresh_manager.get_schematizer'
         ):

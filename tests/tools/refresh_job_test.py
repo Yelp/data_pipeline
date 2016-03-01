@@ -10,8 +10,8 @@ from data_pipeline.tools.refresh_job import FullRefreshJob
 class TestFullRefreshJob(object):
 
     @pytest.fixture
-    def source(self, namespace, refresh_job):
-        return refresh_job.schematizer.get_sources_by_namespace(namespace)[0]
+    def source(self, namespace, registered_schema):
+        return registered_schema.topic.source
 
     @pytest.fixture
     def refresh_job(self, containers):

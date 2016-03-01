@@ -6,7 +6,7 @@ from optparse import OptionGroup
 
 from yelp_batch import Batch
 from yelp_batch.batch import batch_command_line_options
-from yelp_servlib.config_util import load_default_config
+from yelp_servlib.config_util import load_package_config
 
 from data_pipeline.schematizer_clientlib.models.refresh import Priority
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
@@ -21,8 +21,6 @@ class FullRefreshJob(Batch):
     def __init__(self):
         super(FullRefreshJob, self).__init__()
         self.notify_emails = ['bam+batch@yelp.com']
-        load_default_config('/nail/srv/configs/data_pipeline_tools.yaml')
-        self.schematizer = get_schematizer()
 
     @batch_command_line_options
     def define_options(self, option_parser):
@@ -72,6 +70,13 @@ class FullRefreshJob(Batch):
             type='int',
             default=None
         )
+        opt_group.add_option(
+            '--config-path',
+            dest='config_path',
+            type='str',
+            default='/nail/srv/configs/data_pipeline_tools.yaml',
+            help='Config path for Refresh Job (default: %default)'
+        )
         return opt_group
 
     def process_commandline_options(self, args=None):
@@ -83,6 +88,9 @@ class FullRefreshJob(Batch):
             raise ValueError("--batch-size option must be greater than 0.")
         if self.options.source_id is None:
             raise ValueError("--source-id must be defined")
+
+        load_package_config(self.options.config_path)
+        self.schematizer = get_schematizer()
 
     def run(self):
         self.job = self.schematizer.create_refresh(

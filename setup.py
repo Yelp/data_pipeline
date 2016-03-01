@@ -66,7 +66,9 @@ setup(
     },
     scripts=[
         'bin/data_pipeline_tailer',
-        'bin/data_pipeline_refresh_runner'
+        'bin/data_pipeline_refresh_runner',
+        'bin/data_pipeline_refresh_manager',
+        'bin/data_pipeline_refresh_job'
     ],
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
