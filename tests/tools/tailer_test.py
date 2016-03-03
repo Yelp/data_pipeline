@@ -77,6 +77,7 @@ class TestTailer(object):
 
     def test_without_topics(self, batch, mock_exit):
         self._init_batch(batch, [])
+
         self._assert_no_topics_error(mock_exit)
 
     def test_with_explicit_topics(self, batch):
@@ -154,7 +155,7 @@ class TestTailer(object):
 
         # Only run for one iteration - and publish a message before starting
         # that iteration.
-        def run_once_publishing_message(message_count):
+        def run_once_publishing_message(message_count, last_message_time_created):
             if message_count > 0:
                 return False
 
@@ -336,6 +337,7 @@ class TestTailer(object):
         ) as load_default_config_mock:
             batch.process_commandline_options(batch_args)
             batch._call_configure_functions()
+            batch._pre_start()
 
         (config_file, env_config_file), _ = load_default_config_mock.call_args
         assert config_file == '/nail/srv/configs/data_pipeline_tools.yaml'

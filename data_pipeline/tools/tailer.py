@@ -25,6 +25,8 @@ from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import Message
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
+logger = get_config().logger
+
 
 class Tailer(Batch):
     """Tailer subscribes to (a) Kafka topic(s) and logs any messages pushed to these,
@@ -155,6 +157,26 @@ class Tailer(Batch):
                 'format rather than epoch timestamp.'
             )
         )
+        opt_group.add_option(
+            '--end-date',
+            default=None,
+            type=int,
+            help=(
+                'If set, we will only output messages up to the given end date. '
+                'Formatted using epoch timestamp.'
+            )
+        )
+        opt_group.add_option(
+            '--start-date',
+            default=None,
+            type=int,
+            help=(
+                'If set, will set starting offset to be the offset of the first available'
+                ' message that comes after the given start-date. If a starting offset is'
+                ' manually set using the --topic option, then this will not override it.'
+                ' Formatted using epoch timestamp'
+            )
+        )
         return opt_group
 
     @property
@@ -197,9 +219,17 @@ class Tailer(Batch):
             self.options.env_config_file
         )
 
+    def _pre_start(self):
+        super(Tailer, self)._pre_start()
         self._setup_topics()
         if len(self.topic_to_offsets_map) == 0:
             self.option_parser.error("At least one topic must be specified.")
+
+        if self.options.start_date and self.options.start_date >= int(time.time()):
+            self.option_parser.error("--start-date should not be later than current time")
+
+        if self.options.start_date and self.options.end_date and self.options.start_date > self.options.end_date:
+            self.option_parser.error("--end-date must not be smaller than --start-date")
 
         if self.options.all_fields:
             self.options.fields = self._public_message_field_names
@@ -242,6 +272,8 @@ class Tailer(Batch):
         self.topic_to_offsets_map = {}
         self._setup_manual_topics()
         self._setup_schematizer_topics()
+        if self.options.start_date:
+            self._setup_start_date_topics()
 
     def _setup_manual_topics(self):
         for topic in self.options.topics:
@@ -254,6 +286,89 @@ class Tailer(Batch):
                 offset = ConsumerTopicState({0: int(match.group(2))}, None)
 
             self.topic_to_offsets_map[str(topic)] = offset
+
+    def _setup_start_date_topics(self):
+        no_offset_topics = [
+            topic
+            for topic, offset in self.topic_to_offsets_map.iteritems()
+            if offset is None
+        ]
+        logger.info(
+            "Getting starting offsets for {} based on --start-date".format(no_offset_topics)
+        )
+        start_date_topic_to_offset_map = self._get_first_offsets_after_start_date(no_offset_topics)
+        for topic, consumer_topic_state in start_date_topic_to_offset_map.iteritems():
+            self.topic_to_offsets_map[topic] = start_date_topic_to_offset_map[topic]
+
+    def _get_first_offsets_after_start_date(self, topics):
+        watermarks = offsets.get_topics_watermarks(
+            get_config().kafka_client,
+            topics,
+            raise_on_error=False
+        )
+
+        topic_to_consumer_topic_state_map = {
+            topic: ConsumerTopicState({
+                0: int((watermarks[topic][0].highmark + watermarks[topic][0].lowmark) / 2)
+            }, None)
+            for topic in topics
+        }
+
+        topic_to_range_map = {
+            topic: {
+                'low': watermarks[topic][0].lowmark,
+                'high': watermarks[topic][0].highmark
+            }
+            for topic in topics
+        }
+
+        result_topic_to_consumer_topic_state_map = {}
+
+        def _move_finished_topics_to_result_map():
+            topics_to_remove = []
+            for topic, consumer_topic_state_map in topic_to_consumer_topic_state_map.iteritems():
+                topic_range = topic_to_range_map[topic]
+                if topic_range['high'] == topic_range['low']:
+                    result_topic_to_consumer_topic_state_map[topic] = topic_to_consumer_topic_state_map[topic]
+                    # Can't remove while iterating over it
+                    topics_to_remove.append(topic)
+            for topic in topics_to_remove:
+                del topic_to_consumer_topic_state_map[topic]
+
+        _move_finished_topics_to_result_map()
+        while topic_to_consumer_topic_state_map:
+            with Consumer(
+                'data_pipeline_tailer_starting_offset_getter-{}'.format(
+                    str(UUID(bytes=FastUUID().uuid4()).hex)
+                ),
+                'bam',
+                ExpectedFrequency.constantly,
+                topic_to_consumer_topic_state_map
+            ) as consumer:
+                message = consumer.get_message(timeout=0.1, blocking=True)
+                if message is not None:
+                    topic = message.topic
+                    offset = message.kafka_position_info.offset
+                    timestamp = message.timestamp
+                    if timestamp < self.options.start_date:
+                        topic_to_range_map[topic]['low'] = offset + 1
+                    else:
+                        topic_to_range_map[topic]['high'] = offset
+                    new_mid = int(
+                        (topic_to_range_map[topic]['high'] + topic_to_range_map[topic]['low']) / 2
+                    )
+                    logger.debug(
+                        "During start-date offset search got message from topic|offset: {}|{}, new range: {}".format(
+                            topic, offset, topic_to_range_map[topic]
+                        )
+                    )
+                    topic_to_consumer_topic_state_map[topic].partition_offset_map[0] = new_mid
+            _move_finished_topics_to_result_map()
+
+        logger.info(
+            "Got topic offsets based on start-date: {}".format(result_topic_to_consumer_topic_state_map)
+        )
+        return result_topic_to_consumer_topic_state_map
 
     def _setup_schematizer_topics(self):
         if self.options.namespace or self.options.source:
@@ -276,7 +391,7 @@ class Tailer(Batch):
         signal.signal(signal.SIGINT, handle_signal)
 
     def run(self):
-        get_config().logger.info(
+        logger.info(
             "Starting to consume from {}".format(self.topic_to_offsets_map)
         )
 
@@ -292,11 +407,14 @@ class Tailer(Batch):
             auto_offset_reset=self.options.offset_reset_location
         ) as consumer:
             message_count = 0
-            while self.keep_running(message_count):
+            last_message_time_created = 0
+            while self.keep_running(message_count, last_message_time_created):
                 message = consumer.get_message(blocking=True, timeout=0.1)
                 if message is not None:
-                    print self._format_message(message)
-                    message_count += 1
+                    last_message_time_created = getattr(message, 'timestamp')
+                    if self.options.end_date is None or last_message_time_created < self.options.end_date:
+                        print self._format_message(message)
+                        message_count += 1
 
     def _get_message_result_dict(self, message):
         return {
@@ -340,10 +458,13 @@ class Tailer(Batch):
         else:
             return result_dict
 
-    def keep_running(self, message_count):
+    def keep_running(self, message_count, last_message_time_created):
         return self._running and (
             self.options.message_limit is None or
             message_count < self.options.message_limit
+        ) and (
+            self.options.end_date is None or
+            last_message_time_created < self.options.end_date
         )
 
 
