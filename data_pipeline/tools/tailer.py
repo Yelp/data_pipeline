@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 import re
 import signal
 import time
+from collections import namedtuple
 from inspect import getmembers
 from optparse import OptionGroup
 from uuid import UUID
@@ -158,7 +159,7 @@ class Tailer(Batch):
             )
         )
         opt_group.add_option(
-            '--end-date',
+            '--end-timestamp',
             default=None,
             type=int,
             help=(
@@ -167,7 +168,7 @@ class Tailer(Batch):
             )
         )
         opt_group.add_option(
-            '--start-date',
+            '--start-timestamp',
             default=None,
             type=int,
             help=(
@@ -219,16 +220,19 @@ class Tailer(Batch):
             self.options.env_config_file
         )
 
-    def _pre_start(self):
-        super(Tailer, self)._pre_start()
+        # We setup logging 'early' since we want it available for setup_topics
+        self._setup_logging()
+
         self._setup_topics()
         if len(self.topic_to_offsets_map) == 0:
             self.option_parser.error("At least one topic must be specified.")
 
-        if self.options.start_date and self.options.start_date >= int(time.time()):
+        if self.options.start_timestamp and self.options.start_timestamp >= int(time.time()):
             self.option_parser.error("--start-date should not be later than current time")
 
-        if self.options.start_date and self.options.end_date and self.options.start_date > self.options.end_date:
+        if self.options.start_timestamp and self.options.end_timestamp and (
+            self.options.start_timestamp > self.options.end_timestamp
+        ):
             self.option_parser.error("--end-date must not be smaller than --start-date")
 
         if self.options.all_fields:
@@ -272,8 +276,8 @@ class Tailer(Batch):
         self.topic_to_offsets_map = {}
         self._setup_manual_topics()
         self._setup_schematizer_topics()
-        if self.options.start_date:
-            self._setup_start_date_topics()
+        if self.options.start_timestamp:
+            self._setup_start_timestamp_topics()
 
     def _setup_manual_topics(self):
         for topic in self.options.topics:
@@ -287,7 +291,7 @@ class Tailer(Batch):
 
             self.topic_to_offsets_map[str(topic)] = offset
 
-    def _setup_start_date_topics(self):
+    def _setup_start_timestamp_topics(self):
         no_offset_topics = [
             topic
             for topic, offset in self.topic_to_offsets_map.iteritems()
@@ -296,11 +300,11 @@ class Tailer(Batch):
         logger.info(
             "Getting starting offsets for {} based on --start-date".format(no_offset_topics)
         )
-        start_date_topic_to_offset_map = self._get_first_offsets_after_start_date(no_offset_topics)
-        for topic, consumer_topic_state in start_date_topic_to_offset_map.iteritems():
-            self.topic_to_offsets_map[topic] = start_date_topic_to_offset_map[topic]
+        start_timestamp_topic_to_offset_map = self._get_first_offsets_after_start_timestamp(no_offset_topics)
+        for topic, consumer_topic_state in start_timestamp_topic_to_offset_map.iteritems():
+            self.topic_to_offsets_map[topic] = start_timestamp_topic_to_offset_map[topic]
 
-    def _get_first_offsets_after_start_date(self, topics):
+    def _get_first_offsets_after_start_timestamp(self, topics):
         watermarks = offsets.get_topics_watermarks(
             get_config().kafka_client,
             topics,
@@ -309,29 +313,57 @@ class Tailer(Batch):
 
         topic_to_consumer_topic_state_map = {
             topic: ConsumerTopicState({
-                0: int((watermarks[topic][0].highmark + watermarks[topic][0].lowmark) / 2)
+                partition: int((marks.highmark + marks.lowmark) / 2)
+                for partition, marks in watermarks[topic].iteritems()
             }, None)
             for topic in topics
         }
 
         topic_to_range_map = {
             topic: {
-                'low': watermarks[topic][0].lowmark,
-                'high': watermarks[topic][0].highmark
+                partition: {
+                    'high': marks.highmark,
+                    'low': marks.lowmark
+                }
+                for partition, marks in watermarks[topic].iteritems()
             }
             for topic in topics
         }
 
-        result_topic_to_consumer_topic_state_map = {}
+        result_topic_to_consumer_topic_state_map = {
+            topic: ConsumerTopicState({}, None)
+            for topic in topics
+        }
 
         def _move_finished_topics_to_result_map():
+            TopicPartitionPair = namedtuple(
+                'TopicPartitionPair',
+                ['topic', 'partition'],
+            )
+            topic_partition_pairs_to_remove = []
+            for topic, consumer_topic_state_map in topic_to_consumer_topic_state_map.iteritems():
+                for partition, offset in consumer_topic_state_map.partition_offset_map.iteritems():
+                    topic_range = topic_to_range_map[topic][partition]
+                    if topic_range['high'] == topic_range['low']:
+                        result_topic_to_consumer_topic_state_map[
+                            topic
+                        ].partition_offset_map[partition] = offset
+                        # Can't remove from the map while iterating over it
+                        topic_partition_pairs_to_remove.append(
+                            TopicPartitionPair(
+                                topic=topic,
+                                partition=partition
+                            )
+                        )
+
+            for pair in topic_partition_pairs_to_remove:
+                del topic_to_consumer_topic_state_map[pair.topic].partition_offset_map[pair.partition]
+
             topics_to_remove = []
             for topic, consumer_topic_state_map in topic_to_consumer_topic_state_map.iteritems():
-                topic_range = topic_to_range_map[topic]
-                if topic_range['high'] == topic_range['low']:
-                    result_topic_to_consumer_topic_state_map[topic] = topic_to_consumer_topic_state_map[topic]
-                    # Can't remove while iterating over it
+                if not consumer_topic_state_map.partition_offset_map:
                     topics_to_remove.append(topic)
+
             for topic in topics_to_remove:
                 del topic_to_consumer_topic_state_map[topic]
 
@@ -349,20 +381,25 @@ class Tailer(Batch):
                 if message is not None:
                     topic = message.topic
                     offset = message.kafka_position_info.offset
+                    partition = message.kafka_position_info.partition
                     timestamp = message.timestamp
-                    if timestamp < self.options.start_date:
-                        topic_to_range_map[topic]['low'] = offset + 1
+                    if timestamp < self.options.start_timestamp:
+                        topic_to_range_map[topic][partition]['low'] = offset + 1
                     else:
-                        topic_to_range_map[topic]['high'] = offset
+                        topic_to_range_map[topic][partition]['high'] = offset
                     new_mid = int(
-                        (topic_to_range_map[topic]['high'] + topic_to_range_map[topic]['low']) / 2
+                        (
+                            topic_to_range_map[topic][partition]['high'] +
+                            topic_to_range_map[topic][partition]['low']
+                        ) / 2
                     )
                     logger.debug(
-                        "During start-date offset search got message from topic|offset: {}|{}, new range: {}".format(
-                            topic, offset, topic_to_range_map[topic]
+                        "During start-date offset search got message from "
+                        "topic|offset|part: {}|{}|{}, new range: {}".format(
+                            topic, offset, partition, topic_to_range_map[topic]
                         )
                     )
-                    topic_to_consumer_topic_state_map[topic].partition_offset_map[0] = new_mid
+                    topic_to_consumer_topic_state_map[topic].partition_offset_map[partition] = new_mid
             _move_finished_topics_to_result_map()
 
         logger.info(
@@ -412,9 +449,13 @@ class Tailer(Batch):
                 message = consumer.get_message(blocking=True, timeout=0.1)
                 if message is not None:
                     last_message_time_created = getattr(message, 'timestamp')
-                    if self.options.end_date is None or last_message_time_created < self.options.end_date:
+                    if self.options.end_timestamp is None or last_message_time_created < self.options.end_timestamp:
                         print self._format_message(message)
                         message_count += 1
+                    else:
+                        logger.info(
+                            "Latest message surpasses --end-timestamp. Stopping tailer..."
+                        )
 
     def _get_message_result_dict(self, message):
         return {
@@ -463,8 +504,8 @@ class Tailer(Batch):
             self.options.message_limit is None or
             message_count < self.options.message_limit
         ) and (
-            self.options.end_date is None or
-            last_message_time_created < self.options.end_date
+            self.options.end_timestamp is None or
+            last_message_time_created < self.options.end_timestamp
         )
 
 
