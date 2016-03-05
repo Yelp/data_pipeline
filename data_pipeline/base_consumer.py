@@ -409,7 +409,7 @@ class BaseConsumer(Client):
 
     def _send_offset_commit_requests(self, offset_commit_request_list):
         if len(offset_commit_request_list) > 0:
-            return get_config().kafka_client.send_offset_commit_request(
+            get_config().kafka_client.send_offset_commit_request(
                 group=kafka_bytestring(self.client_name),
                 payloads=offset_commit_request_list
             )
