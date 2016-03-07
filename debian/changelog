@@ -1,3 +1,52 @@
+data-pipeline-tools (0.1.56) lucid; urgency=low
+
+  * Commit: fixed deployment of data_pipeline_refresh_job and
+    data_pipeline_refresh_manager, modified refresh_job and
+    refresh_manager tests to load configuration after parsing
+    commandline options
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Tue, 01 Mar 2016 13:56:34 -0800
+
+data-pipeline-tools (0.1.55) lucid; urgency=low
+
+  * Commit: Added FilterTopicsByPkeys to schematizer_clientlib
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Fri, 26 Feb 2016 13:15:39 -0800
+
+data-pipeline-tools (0.1.54) lucid; urgency=low
+
+  * Commit: deepcopy acro schema response before returning
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Thu, 25 Feb 2016 18:26:31 -0800
+
+data-pipeline-tools (0.1.53) lucid; urgency=low
+
+  * Commit: Merge branch 'DATAPIPE-426-Merge-Refresh-Manager-with-
+    latest-full-refresh-runner'
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Thu, 25 Feb 2016 13:44:33 -0800
+
+data-pipeline-tools (0.1.52) lucid; urgency=low
+
+  * Commit: [DATAPIPE-784] Added description for container unavailable
+    exception
+
+ -- Chia-Chi Lin <clin@yelp.com>  Mon, 22 Feb 2016 17:42:02 -0800
+
+data-pipeline-tools (0.1.51) lucid; urgency=low
+
+  * Commit: [DATAPIPE-781] Addressed comments
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Mon, 22 Feb 2016 14:22:29 -0800
+
+data-pipeline-tools (0.1.50) lucid; urgency=low
+
+  * Commit: Added Refresh Manageri and Refresh Job adder, which had
+    consequences on refresh runner, schematizer_clientlib and zookeeper
+    lock utils
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Mon, 22 Feb 2016 13:46:43 -0800
+
 data-pipeline-tools (0.1.49) lucid; urgency=low
 
   * Commit: Merge branch 'master' of

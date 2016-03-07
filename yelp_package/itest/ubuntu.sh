@@ -3,7 +3,9 @@ set -e
 
 # To add additional scripts, just add lines here
 SCRIPTS="data_pipeline_tailer
-data_pipeline_refresh_runner"
+data_pipeline_refresh_runner
+data_pipeline_refresh_manager
+data_pipeline_refresh_job"
 
 if dpkg -i /work/dist/*.deb; then
   echo "Looks like it installed correctly"

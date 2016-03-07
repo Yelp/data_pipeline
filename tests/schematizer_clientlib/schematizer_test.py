@@ -359,6 +359,26 @@ class TestGetTopicsBySourceId(SchematizerClientTestBase):
             assert source_api_spy.call_count == 0
 
 
+class TestGetLatestTopicBySourceId(SchematizerClientTestBase):
+
+    @pytest.fixture(autouse=True, scope='class')
+    def biz_topic(self, yelp_namespace, biz_src_name):
+        return self._register_avro_schema(
+            yelp_namespace,
+            biz_src_name
+        ).topic
+
+    def test_get_latest_topic_of_biz_source(self, schematizer, biz_topic):
+        actual = schematizer.get_latest_topic_by_source_id(biz_topic.source.source_id)
+        expected = biz_topic
+        self._assert_topic_values(actual, expected)
+
+    def test_get_latest_topic_of_bad_source(self, schematizer):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.get_latest_topic_by_source_id(0)
+        assert e.value.response.status_code == 404
+
+
 class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
@@ -776,6 +796,39 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
             assert actual == topics[0]
             assert topic_api_spy.call_count == 0
             assert source_api_spy.call_count == 0
+
+
+class TestFilterTopicsByPkeys(SchematizerClientTestBase):
+
+    @pytest.fixture(autouse=True, scope='class')
+    def pk_topic_resp(self, yelp_namespace, usr_src_name):
+        pk_schema_json = {
+            'type': 'record',
+            'name': usr_src_name,
+            'namespace': yelp_namespace,
+            'fields': [
+                {'type': 'int', 'name': 'id', 'pkey': 1},
+                {'type': 'int', 'name': 'data'}
+            ],
+            'pkey': ['id']
+        }
+        return self._register_avro_schema(
+            yelp_namespace,
+            usr_src_name,
+            schema=simplejson.dumps(pk_schema_json)
+        ).topic
+
+    def test_filter_topics_by_pkeys(
+        self,
+        schematizer,
+        biz_topic_resp,
+        pk_topic_resp
+    ):
+        topics = [
+            biz_topic_resp.name,
+            pk_topic_resp.name
+        ]
+        assert schematizer.filter_topics_by_pkeys(topics) == [pk_topic_resp.name]
 
 
 class RegistrationTestBase(SchematizerClientTestBase):

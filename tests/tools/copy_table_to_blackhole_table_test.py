@@ -7,6 +7,7 @@ import time
 import mock
 import pytest
 
+from data_pipeline.schematizer_clientlib.models.refresh import RefreshStatus
 from data_pipeline.tools.copy_table_to_blackhole_table import FullRefreshRunner
 from data_pipeline.tools.copy_table_to_blackhole_table import TopologyFile
 
@@ -73,6 +74,26 @@ class TestFullRefreshRunner(object):
             'ENGINE=BLACKHOLE'
         )
 
+    @pytest.fixture
+    def refresh_params(self, cluster, table_name, database_name):
+        return {
+            'refresh_id': 1,
+            'cluster': cluster,
+            'database': database_name,
+            'config_path': 'test_config.yaml',
+            'table_name': table_name,
+            'offset': 0,
+            'batch_size': 200,
+            'primary': 'id',
+            'where_clause': None,
+            'dry_run': True,
+        }
+
+    @pytest.yield_fixture
+    def mock_get_schematizer(self, base_path):
+        with mock.patch(base_path + '.get_schematizer'):
+            yield
+
     @pytest.yield_fixture
     def mock_load_config(self, base_path):
         with mock.patch(base_path + '.load_default_config'):
@@ -113,6 +134,32 @@ class TestFullRefreshRunner(object):
         yield batch
 
     @pytest.yield_fixture
+    def managed_refresh_batch(
+        self,
+        mock_get_schematizer,
+        mock_load_config,
+        refresh_params
+    ):
+        # Initialize the batch the same way the refresh manager would.
+        batch = FullRefreshRunner(**refresh_params)
+        with mock.patch.object(
+            batch,
+            'get_connection_set_from_cluster'
+        ):
+            batch.setup_connections()
+            yield batch
+
+    @pytest.yield_fixture
+    def managed_refresh_batch_custom_where(
+        self,
+        mock_load_config,
+        refresh_params
+    ):
+        refresh_params['where_clause'] = "country='CA'"
+        batch = FullRefreshRunner(**refresh_params)
+        yield batch
+
+    @pytest.yield_fixture
     def _read(self, refresh_batch):
         with mock.patch.object(
             refresh_batch,
@@ -138,6 +185,20 @@ class TestFullRefreshRunner(object):
     @pytest.yield_fixture
     def write_session(self, refresh_batch, _write):
         with refresh_batch.write_session() as write_session:
+            yield write_session
+
+    @pytest.yield_fixture
+    def _managed_write(self, managed_refresh_batch):
+        with mock.patch.object(
+            managed_refresh_batch,
+            'write_session',
+            autospec=True
+        ) as mock_write_session:
+            yield mock_write_session
+
+    @pytest.yield_fixture
+    def managed_write_session(self, managed_refresh_batch, _managed_write):
+        with managed_refresh_batch.write_session() as write_session:
             yield write_session
 
     @pytest.yield_fixture
@@ -252,6 +313,35 @@ class TestFullRefreshRunner(object):
         )
         mock_create_table_src.assert_called_once_with(write_session)
         assert write_session.rollback.call_count == 1
+
+    def test_initial_action_managed_refresh(
+        self,
+        database_name,
+        managed_refresh_batch,
+        mock_execute,
+        mock_process_rows,
+        mock_create_table_src,
+        sessions,
+        managed_write_session
+    ):
+        with mock.patch.object(
+            managed_refresh_batch,
+            '_wait_for_replication'
+        ) as wait_for_replication_mock:
+            managed_refresh_batch.initial_action()
+        assert wait_for_replication_mock.call_count == 1
+        update_refresh = managed_refresh_batch.schematizer.update_refresh
+        update_refresh.assert_called_once_with(
+            1,
+            RefreshStatus.IN_PROGRESS,
+            0
+        )
+        mock_execute.assert_called_once_with(
+            managed_write_session,
+            "USE {0}".format(database_name),
+        )
+        mock_create_table_src.assert_called_once_with(managed_write_session)
+        assert managed_write_session.rollback.call_count == 1
 
     def test_final_action(
         self,
@@ -434,11 +524,10 @@ class TestFullRefreshRunner(object):
             'count_inserted'
         ) as mock_rows, mock.patch.object(
             refresh_batch,
-            'options',
-            autospec=True
-        ) as mock_options:
+            'batch_size',
+            10
+        ):
             mock_rows.side_effect = [10, 10, 5]
-            mock_options.batch_size = 10
             mock_row_count.return_value = 25
             refresh_batch.process_table()
             calls = [
@@ -447,6 +536,40 @@ class TestFullRefreshRunner(object):
                 mock.call(write_session, 20)
             ]
             mock_insert.assert_has_calls(calls)
+
+    def test_process_table_managed_refresh(
+        self,
+        managed_refresh_batch,
+        mock_row_count,
+        mock_process_rows,
+        sessions,
+        managed_write_session
+    ):
+        with mock.patch.object(
+            managed_refresh_batch,
+            'insert_batch'
+        ) as mock_insert, mock.patch.object(
+            managed_refresh_batch,
+            'count_inserted'
+        ) as mock_rows, mock.patch.object(
+            managed_refresh_batch,
+            'batch_size',
+            10
+        ):
+            mock_rows.side_effect = [10, 10, 5]
+            mock_row_count.return_value = 25
+            managed_refresh_batch.process_table()
+            calls = [
+                mock.call(managed_write_session, 0),
+                mock.call(managed_write_session, 10),
+                mock.call(managed_write_session, 20)
+            ]
+            mock_insert.assert_has_calls(calls)
+            managed_refresh_batch.schematizer.update_refresh.assert_called_once_with(
+                refresh_id=1,
+                status=RefreshStatus.SUCCESS,
+                offset=0
+            )
 
     def test_get_connection_set_from_cluster(
         self,

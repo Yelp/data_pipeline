@@ -32,6 +32,7 @@ setup(
         'cffi>=1.1.2',
         'enum34>=1.0.4',
         'kafka-python==0.9.4.post2',
+        'psutil==2.1.1',
         'PyStaticConfiguration>=0.9.0',
         'simplejson>=2.1.2',
         'swaggerpy>=0.7.6',
@@ -65,7 +66,9 @@ setup(
     },
     scripts=[
         'bin/data_pipeline_tailer',
-        'bin/data_pipeline_refresh_runner'
+        'bin/data_pipeline_refresh_runner',
+        'bin/data_pipeline_refresh_manager',
+        'bin/data_pipeline_refresh_job'
     ],
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
