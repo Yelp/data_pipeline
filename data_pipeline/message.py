@@ -180,22 +180,32 @@ class Message(object):
     def encryption_type(self):
         return self._encryption_type
 
-    def _set_encryption_type(self, encryption_type=None):
+    def _set_encryption_type(self):
         self._encryption_type = None
         if not self._should_be_encrypted:
             return
 
-        self._encryption_type = encryption_type or get_config().encryption_type
-        if self._encryption_type is None:
+        config_encryption_type = get_config().encryption_type
+        if config_encryption_type is None:
             raise ValueError(
                 "Encryption type must be set when message requires to be encrypted."
             )
-        self._encryption_helper = EncryptionHelper(self.encryption_type)
+        self._manual_set_encryption_type(config_encryption_type)
 
     @property
     def _should_be_encrypted(self):
         """Whether this message should be encrypted."""
         return self.contains_pii
+
+    def _manual_set_encryption_type(self, encryption_type):
+        """Manually set the encryption type of the message.  It is for the case
+        when not all the criteria used to determine if this message should be
+        encryption is available, such as when constructing the message from a
+        published kafka message.
+        """
+        self._encryption_type = encryption_type
+        if encryption_type:
+            self._encryption_helper = EncryptionHelper(encryption_type)
 
     @property
     def dry_run(self):
@@ -210,7 +220,7 @@ class Message(object):
 
     def _set_meta(self, meta):
         if (not self._is_valid_optional_type(meta, list) or
-                meta and self._any_invalid_type(meta, MetaAttribute)):
+                self._any_invalid_type(meta, MetaAttribute)):
             raise TypeError("Meta must be None or list of MetaAttribute objects.")
         self._meta = meta
 
@@ -304,7 +314,7 @@ class Message(object):
     def _set_keys(self, keys):
         if not self._is_valid_optional_type(keys, tuple):
             raise TypeError("Keys must be None or a tuple.")
-        if keys and self._any_invalid_type(keys, unicode):
+        if self._any_invalid_type(keys, unicode):
             raise TypeError("Element of keys must be unicode.")
         self._keys = keys
 
@@ -371,6 +381,8 @@ class Message(object):
         return value is None or isinstance(value, typ)
 
     def _any_invalid_type(self, value_list, typ):
+        if not value_list:
+            return False
         return any(not isinstance(value, typ) for value in value_list)
 
     def _encode_payload_data(self, payload_data):
@@ -434,7 +446,7 @@ class Message(object):
             'kafka_position_info': kafka_position_info
         }
         message = cls(**message_params)
-        message._set_encryption_type(encryption_type)
+        message._manual_set_encryption_type(encryption_type)
         return message
 
     @classmethod
@@ -689,7 +701,7 @@ class UpdateMessage(Message):
             'kafka_position_info': kafka_position_info
         }
         message = cls(**message_params)
-        message._set_encryption_type(encryption_type)
+        message._manual_set_encryption_type(encryption_type)
         return message
 
     def _set_previous_payload_if_necessary(self, previous_payload_data):

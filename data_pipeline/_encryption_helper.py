@@ -19,7 +19,7 @@ class EncryptionHelper(object):
 
     Remarks:
         This class currently is implemented specifically for AES algorithm,
-        and plans to be refactored later to support various encryption algorithms.
+        although the original design is to support multiple encryption algorithms.
     """
 
     def __init__(self, encryption_type, initialization_vector=None):
@@ -57,7 +57,7 @@ class EncryptionHelper(object):
         return encrypter.encrypt(payload)
 
     def _pad_payload(self, payload):
-        """payloads must be have length equal to a multiple of 16 in order to
+        """payloads must have length equal to a multiple of 16 in order to
         be encrypted by AES's CBC algorithm, because it uses block chaining.
         This method adds a chr equal to the length needed in bytes, bytes times,
         to the end of payload before encrypting it, and the _unpad method
