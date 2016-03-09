@@ -38,7 +38,7 @@ setup(
         'swaggerpy>=0.7.6',
         'yelp-avro>=0.1.1',
         'yelp-kafka>=4.2.0',
-        'yelp-kafka-tool==0.8.2',
+        'yelp-kafka-tool>=0.8.2',
         'yelp-lib>=10.0.5',
         'yelp-servlib>=4.3.0',
     ],

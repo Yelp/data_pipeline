@@ -28,9 +28,9 @@ class CompactionSetter(Batch):
         opt_group = OptionGroup(option_parser, 'Compaction Setter Options')
 
         opt_group.add_option(
-           '--dry-run',
-           action="store_true",
-           help="If set, will not set any topic configs, but will still run as if it is"
+            '--dry-run',
+            action="store_true",
+            help="If set, will not set any topic configs, but will still run as if it is"
         )
         opt_group.add_option(
             '--config-path',

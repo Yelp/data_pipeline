@@ -6,19 +6,18 @@ from collections import namedtuple
 
 import mock
 import pytest
-
-from yelp_kafka.config import ClusterConfig
-
-from data_pipeline.tools.compaction_setter import CompactionSetter
 from kazoo.exceptions import NoNodeError
 from yelp_kafka_tool.util.zookeeper import ZK
+
+from data_pipeline.tools.compaction_setter import CompactionSetter
+
 
 class TestCompactionSetter(object):
 
     @pytest.fixture
     def batch(self):
-       batch = CompactionSetter()
-       return batch
+        batch = CompactionSetter()
+        return batch
 
     @pytest.fixture
     def namespace(self):
@@ -118,7 +117,6 @@ class TestCompactionSetter(object):
         ) as mock_set_topic_config:
             yield mock_set_topic_config
 
-
     def test_compact(
         self,
         batch,
@@ -136,7 +134,6 @@ class TestCompactionSetter(object):
             topic=topic_name,
             value=fake_topic_config_with_cleanup_policy
         )
-
 
     def test_filtered(
         self,
