@@ -33,6 +33,17 @@ class FullRefreshJob(Batch):
             help='Source id of table to be refreshed.'
         )
         opt_group.add_option(
+            '--source-name',
+            type=str,
+            help="Name of source within --namespace of table to be refreshed"
+        )
+        opt_group.add_option(
+            '--namespace',
+            type=str,
+            help="Name of namespace to narrow down sources to be refreshed "
+                 "(--source-name also required)"
+        )
+        opt_group.add_option(
             '--offset',
             dest='offset',
             type='int',
@@ -86,15 +97,46 @@ class FullRefreshJob(Batch):
             raise ValueError("--avg-rows-per-second-cap must be greater than 0")
         if self.options.batch_size <= 0:
             raise ValueError("--batch-size option must be greater than 0.")
-        if self.options.source_id is None:
-            raise ValueError("--source-id must be defined")
+        if self.options.source_id is None and (
+            self.options.source_name is None or
+            self.options.namespace is None
+        ):
+            raise ValueError("--source-id or --source-name and --namespace must be defined")
+        if self.options.source_id and (
+            self.options.source_name or
+            self.options.namespace
+        ):
+            raise ValueError("Cannot use both --source-id and either of --namespace and --source-name")
 
         load_package_config(self.options.config_path)
         self.schematizer = get_schematizer()
 
+    def get_source_id(self):
+        if self.options.source_id is not None:
+            return self.options.source_id
+        source_ids = [
+            source.source_id
+            for source in self.schematizer.get_sources_by_namespace(
+                self.options.namespace
+            ) if source.name == self.options.source_name
+        ]
+        if len(source_ids) == 1:
+            return source_ids[0]
+        elif len(source_ids) == 0:
+            raise ValueError("Found no sources with namespace_name {} and source_name {}".format(
+                self.options.namespace, self.options.source_name
+            ))
+        raise ValueError(
+            "Pair of namespace_name {} and source_name {} somehow received more than one source. "
+            "Investigation as to how is recommended.".format(
+                self.options.namespace, self.options.source_name
+            )
+        )
+
     def run(self):
+        source_id = self.get_source_id()
         self.job = self.schematizer.create_refresh(
-            source_id=self.options.source_id,
+            source_id=source_id,
             offset=self.options.offset,
             batch_size=self.options.batch_size,
             priority=Priority[self.options.priority],
