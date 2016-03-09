@@ -16,7 +16,7 @@ from yelp_batch.batch import batch_configure
 from yelp_lib.classutil import cached_property
 from yelp_servlib.config_util import load_package_config
 
-from data_pipeline._namespace_util import Namespace
+from data_pipeline._namespace_util import DBSourcedNamespace
 from data_pipeline.schematizer_clientlib.models.refresh import RefreshStatus
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.tools.copy_table_to_blackhole_table import FullRefreshRunner
@@ -78,7 +78,7 @@ class FullRefreshManager(BatchDaemon):
         sys.argv = sys.argv[:1]
 
     def _set_cluster_and_database(self):
-        namespace_info = Namespace(self.namespace)
+        namespace_info = DBSourcedNamespace(self.namespace)
         self.cluster = namespace_info.cluster
         self.database = namespace_info.database
 

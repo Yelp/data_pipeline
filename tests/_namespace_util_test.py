@@ -4,14 +4,14 @@ from __future__ import unicode_literals
 
 import pytest
 
-from data_pipeline._namespace_util import Namespace
+from data_pipeline._namespace_util import DBSourcedNamespace
 
 
-class TestNamespace(object):
+class TestDBSourcedtNamespace(object):
     def test_simple(self):
         name = "refresh_primary.yelp"
         self._verify_success(
-            namespace=Namespace(name),
+            namespace=DBSourcedNamespace(name),
             name=name,
             cluster="refresh_primary",
             database="yelp"
@@ -20,7 +20,7 @@ class TestNamespace(object):
     def test_main_cluster(self):
         name = "main.database"
         self._verify_success(
-            namespace=Namespace(name),
+            namespace=DBSourcedNamespace(name),
             name=name,
             cluster="main",
             database="database"
@@ -29,7 +29,7 @@ class TestNamespace(object):
     def test_environment(self):
         name = "main.refresh_primary.yelp"
         self._verify_success(
-            namespace=Namespace(name),
+            namespace=DBSourcedNamespace(name),
             name=name,
             cluster="refresh_primary",
             database="yelp",
@@ -39,7 +39,7 @@ class TestNamespace(object):
     def test_tranformers(self):
         name = "dev.refresh_primary.yelp.heartbeat.yelp-main_transformed"
         self._verify_success(
-            namespace=Namespace(name),
+            namespace=DBSourcedNamespace(name),
             name=name,
             cluster="refresh_primary",
             database="yelp",
@@ -55,76 +55,44 @@ class TestNamespace(object):
         self._verify_failure("^refresh_primary.yelp", error_substr="must contain only")
         self._verify_failure("fadjskl;.fjd", error_substr="must contain only")
 
-    def test_optional_params(self):
+    def test_guarantees(self):
         name = "main.database.transformer"
         self._verify_success(
-            namespace=Namespace(name, cluster="main"),
+            namespace=DBSourcedNamespace(name).apply_guarantees(cluster="main"),
             name=name,
             cluster="main",
             database="database",
             transformers=["transformer"]
         )
 
-    def test_optional_params_db(self):
+    def test_guarantees_db(self):
         name = "main.database.transformer"
         self._verify_success(
-            namespace=Namespace(name, database="database"),
+            namespace=DBSourcedNamespace(name).apply_guarantees(database="database"),
             name=name,
             cluster="main",
             database="database",
             transformers=["transformer"]
         )
 
-    def test_optional_params_transformer(self):
+    def test_guarantees_transformer(self):
         name = "main.database.transformer"
         self._verify_success(
-            namespace=Namespace(name, transformers=["transformer"]),
+            namespace=DBSourcedNamespace(name).apply_guarantees(transformers=["transformer"]),
             name=name,
             cluster="main",
             database="database",
             transformers=["transformer"]
         )
 
-    def test_double_main(self):
-        name = "main.main.database.transformer"
+    def test_guarantees_environment(self):
+        name = "env.cluster.database"
         self._verify_success(
-            namespace=Namespace(name, cluster="main"),
+            namespace=DBSourcedNamespace(name).apply_guarantees(environment="env"),
             name=name,
-            environment="main",
-            cluster="main",
-            database="database",
-            transformers=["transformer"]
-        )
-
-    def test_double_main_auto(self):
-        name = "main.main.database.transformer"
-        self._verify_success(
-            namespace=Namespace(name),
-            name=name,
-            environment="main",
-            cluster="main",
-            database="database",
-            transformers=["transformer"]
-        )
-
-    def test_double_main_no_env(self):
-        name = "main.main.transformer"
-        self._verify_success(
-            namespace=Namespace(name, database="main"),
-            name=name,
-            cluster="main",
-            database="main",
-            transformers=["transformer"]
-        )
-
-    def test_double_main_no_env_transformer(self):
-        name = "main.main.transformer"
-        self._verify_success(
-            namespace=Namespace(name, transformers=["transformer"]),
-            name=name,
-            cluster="main",
-            database="main",
-            transformers=["transformer"]
+            environment="env",
+            cluster="cluster",
+            database="database"
         )
 
     def test_fail_impossible(self):
@@ -163,7 +131,7 @@ class TestNamespace(object):
 
     def test_no_name(self):
         self._verify_success(
-            namespace=Namespace(
+            namespace=DBSourcedNamespace(
                 environment="main",
                 cluster="refresh_primary",
                 database="yelp"
@@ -176,7 +144,7 @@ class TestNamespace(object):
 
     def test_no_name_no_env(self):
         self._verify_success(
-            namespace=Namespace(
+            namespace=DBSourcedNamespace(
                 cluster="refresh_primary",
                 database="yelp",
                 transformers=["heartbeat"]
@@ -197,13 +165,19 @@ class TestNamespace(object):
         error_substr=None
     ):
         with pytest.raises(ValueError) as e:
-            Namespace(
-                name,
-                environment=environment,
-                cluster=cluster,
-                database=database,
-                transformers=transformers
-            )
+            namespace = DBSourcedNamespace(name)
+            if (
+                environment or
+                cluster or
+                database or
+                transformers
+            ):
+                namespace.apply_guarantees(
+                    environment=environment,
+                    cluster=cluster,
+                    database=database,
+                    transformers=transformers
+                )
             if error_substr is not None:
                 assert error_substr in e
 
