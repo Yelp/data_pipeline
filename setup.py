@@ -38,6 +38,7 @@ setup(
         'swaggerpy>=0.7.6',
         'yelp-avro>=0.1.1',
         'yelp-kafka>=4.2.0',
+        'yelp-kafka-tool==0.8.2',
         'yelp-lib>=10.0.5',
         'yelp-servlib>=4.3.0',
     ],
@@ -68,7 +69,8 @@ setup(
         'bin/data_pipeline_tailer',
         'bin/data_pipeline_refresh_runner',
         'bin/data_pipeline_refresh_manager',
-        'bin/data_pipeline_refresh_job'
+        'bin/data_pipeline_refresh_job',
+        'bin/data_pipeline_compaction_setter'
     ],
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
