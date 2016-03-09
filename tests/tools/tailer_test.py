@@ -77,6 +77,7 @@ class TestTailer(object):
 
     def test_without_topics(self, batch, mock_exit):
         self._init_batch(batch, [])
+
         self._assert_no_topics_error(mock_exit)
 
     def test_with_explicit_topics(self, batch):
@@ -327,6 +328,100 @@ class TestTailer(object):
         out, _ = capsys.readouterr()
         assert "u'timestamp': '1970-01-01T00:25:00'" in out
         assert "u'payload_data': {u'good_field': 100}" in out
+
+    def test_with_end_timestamp_bad(
+        self,
+        batch,
+        producer,
+        message_with_payload_data,
+        topic,
+        capsys
+    ):
+        topic_with_offset = self._publish_and_set_topic_offset(
+            message_with_payload_data,
+            producer,
+            topic
+        )
+        self._init_batch(batch, [
+            '--topic', topic_with_offset,
+            '--end-timestamp', str(message_with_payload_data.timestamp)
+        ])
+
+        batch.run()
+
+        out, _ = capsys.readouterr()
+        assert "good_field" not in out  # No message should be printed
+
+    def test_with_end_timestamp_good(
+        self,
+        batch,
+        producer,
+        message_with_payload_data,
+        topic,
+        capsys
+    ):
+        topic_with_offset = self._publish_and_set_topic_offset(
+            message_with_payload_data,
+            producer,
+            topic
+        )
+        self._init_batch(batch, [
+            '--topic', topic_with_offset,
+            '--end-timestamp', str(message_with_payload_data.timestamp + 1),
+            '--message-limit', '1'
+        ])
+
+        batch.run()
+
+        out, _ = capsys.readouterr()
+        assert "u'payload_data': {u'good_field': 100}" in out
+
+    def test_with_start_timestamp_good(
+        self,
+        batch,
+        producer,
+        message_with_payload_data,
+        topic,
+        capsys
+    ):
+        self._publish_and_set_topic_offset(
+            message_with_payload_data,
+            producer,
+            topic
+        )
+        self._init_batch(batch, [
+            '--topic', topic,
+            '--start-timestamp', str(message_with_payload_data.timestamp),
+            '--message-limit', '1'
+        ])
+
+        batch.run()
+
+        out, _ = capsys.readouterr()
+        assert "u'payload_data': {u'good_field': 100}" in out
+
+    def test_with_start_timestamp_bad(
+        self,
+        batch,
+        producer,
+        message_with_payload_data,
+        topic,
+        capsys
+    ):
+        self._publish_and_set_topic_offset(
+            message_with_payload_data,
+            producer,
+            topic
+        )
+        position_data = producer.get_checkpoint_position_data()
+        offset = position_data.topic_to_kafka_offset_map[topic]
+        partition = 0
+        self._init_batch(batch, [
+            '--topic', topic,
+            '--start-timestamp', str(message_with_payload_data.timestamp + 1)
+        ])
+
+        assert batch.topic_to_offsets_map[topic].partition_offset_map[partition] == offset
 
     def _init_batch(self, batch, batch_args):
         # Prevent loading the env config
