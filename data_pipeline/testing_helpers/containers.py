@@ -10,6 +10,7 @@ import time
 
 import requests
 from docker import Client
+from kafka import KafkaClient
 from kafka.common import KafkaUnavailableError
 
 from data_pipeline.config import configure_from_dict
@@ -192,7 +193,7 @@ class Containers(object):
         logger.info("Getting connection to Kafka container on yocalhost")
         while end_time > time.time():
             try:
-                return get_config().kafka_client
+                return KafkaClient(get_config().cluster_config.broker_list)
             except KafkaUnavailableError:
                 logger.info("Kafka not yet available, waiting...")
                 time.sleep(0.1)
@@ -284,6 +285,7 @@ class Containers(object):
             topic,
             timeout=get_config().topic_creation_wait_timeout
         )
+        conn.close()
         logger.info("Topic Exists")
         assert conn.has_metadata_for_topic(topic)
 

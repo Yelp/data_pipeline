@@ -8,6 +8,7 @@ from collections import namedtuple
 
 from cached_property import cached_property
 from kafka import create_message
+from kafka import KafkaClient
 from kafka.common import ProduceRequest
 
 from data_pipeline._position_data_tracker import PositionDataTracker
@@ -61,7 +62,7 @@ class KafkaProducer(object):
     def __init__(self, producer_position_callback, dry_run=False):
         self.producer_position_callback = producer_position_callback
         self.dry_run = dry_run
-        self.kafka_client = get_config().kafka_client
+        self.kafka_client = KafkaClient(get_config().cluster_config.broker_list)
         self.position_data_tracker = PositionDataTracker()
         self._reset_message_buffer()
         self.skip_messages_with_pii = get_config().skip_messages_with_pii
@@ -104,7 +105,7 @@ class KafkaProducer(object):
         round will be removed from the requests and won't be published again.
         """
         unpublished_requests = list(requests)
-        retry_handler = RetryHandler(unpublished_requests)
+        retry_handler = RetryHandler(self.kafka_client, unpublished_requests)
 
         def has_requests_to_be_sent():
             return bool(retry_handler.requests_to_be_sent)

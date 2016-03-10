@@ -35,16 +35,16 @@ class RetryHandler(object):
 
     def __init__(
         self,
+        kafka_client,
         requests,
         publish_guarantee=PublishGuaranteeEnum.exact_once,
-        kafka_client=None
     ):
+        self.kafka_client = kafka_client
         self.initial_requests = requests
         self.requests_to_be_sent = requests
         self.publish_guarantee = publish_guarantee
         self.success_topic_stats_map = {}
         self.success_topic_accum_stats_map = {}
-        self.kafka_client = kafka_client or get_config().kafka_client
 
     def update_requests_to_be_sent(self, responses, topic_offsets=None):
         """Update stats from the responses of the publishing requests and
@@ -171,6 +171,7 @@ class RetryHandler(object):
 
     def _get_published_msg_count(self, topic, topic_offsets):
         published_msgs_count_map = get_actual_published_messages_count(
+            self.kafka_client,
             [topic],
             topic_tracked_offset_map=topic_offsets
         )
