@@ -218,6 +218,7 @@ class Producer(Client):
         # ever being created in the context of ensure_messages_published
         topic_actual_published_count_map = (
             get_actual_published_messages_count(
+                self._kafka_producer.kafka_client,
                 topics=topic_messages_map.keys(),
                 topic_tracked_offset_map=topic_offsets,
                 raise_on_error=False

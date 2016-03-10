@@ -10,6 +10,7 @@ from optparse import OptionGroup
 from uuid import UUID
 
 import simplejson
+from kafka import KafkaClient
 from yelp_batch.batch import Batch
 from yelp_batch.batch import batch_command_line_options
 from yelp_batch.batch import batch_configure
@@ -230,6 +231,8 @@ class Tailer(Batch):
         # We setup logging 'early' since we want it available for setup_topics
         self._setup_logging()
 
+        self.kafka_client = KafkaClient(get_config().cluster_config.broker_list)
+
         self._setup_topics()
         if len(self.topic_to_offsets_map) == 0:
             self.option_parser.error("At least one topic must be specified.")
@@ -257,7 +260,7 @@ class Tailer(Batch):
         }
         # If we import get_topics_watermarks directly from offsets, then mock will not properly patch it in testing.
         watermarks = offsets.get_topics_watermarks(
-            get_config().kafka_client,
+            self.kafka_client,
             topic_to_partition_offset_map,
             # We do not raise on error as we do this verification later on and we
             # want to keep the error message clear
@@ -344,7 +347,7 @@ class Tailer(Batch):
         """Uses binary search to find the first offset that comes after --start-timestamp for each
         topic in topics. Outputs a result_topic_to_consumer_topic_state_map which can be used to set offsets"""
         watermarks = offsets.get_topics_watermarks(
-            get_config().kafka_client,
+            self.kafka_client,
             topics,
             raise_on_error=False
         )

@@ -4,6 +4,8 @@ from __future__ import unicode_literals
 
 from contextlib import contextmanager
 
+from cached_property import cached_property
+from kafka import KafkaClient
 from kafka.common import OffsetCommitRequest
 from kafka.util import kafka_bytestring
 from yelp_kafka.config import KafkaConsumerConfig
@@ -98,6 +100,10 @@ class BaseConsumer(Client):
         self.consumer_group = None
         self.pre_rebalance_callback = pre_rebalance_callback
         self.post_rebalance_callback = post_rebalance_callback
+
+    @cached_property
+    def kafka_client(self):
+        return KafkaClient(get_config().cluster_config.broker_list)
 
     @property
     def client_type(self):
@@ -409,7 +415,7 @@ class BaseConsumer(Client):
 
     def _send_offset_commit_requests(self, offset_commit_request_list):
         if len(offset_commit_request_list) > 0:
-            get_config().kafka_client.send_offset_commit_request(
+            self.kafka_client.send_offset_commit_request(
                 group=kafka_bytestring(self.client_name),
                 payloads=offset_commit_request_list
             )
