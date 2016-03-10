@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 from optparse import OptionGroup
 
+from cached_property import cached_property
 from yelp_batch import Batch
 from yelp_batch.batch import batch_command_line_options
 from yelp_servlib.config_util import load_package_config
@@ -35,7 +36,8 @@ class FullRefreshJob(Batch):
         opt_group.add_option(
             '--source-name',
             type=str,
-            help="Name of source within --namespace of table to be refreshed"
+            help="Name of source within --namespace of table to be refreshed "
+                 "(--namespace also required)"
         )
         opt_group.add_option(
             '--namespace',
@@ -111,7 +113,8 @@ class FullRefreshJob(Batch):
         load_package_config(self.options.config_path)
         self.schematizer = get_schematizer()
 
-    def get_source_id(self):
+    @cached_property
+    def source_id(self):
         if self.options.source_id is not None:
             return self.options.source_id
         source_ids = [
@@ -134,9 +137,8 @@ class FullRefreshJob(Batch):
         )
 
     def run(self):
-        source_id = self.get_source_id()
         self.job = self.schematizer.create_refresh(
-            source_id=source_id,
+            source_id=self.source_id,
             offset=self.options.offset,
             batch_size=self.options.batch_size,
             priority=Priority[self.options.priority],
