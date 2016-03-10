@@ -4,7 +4,6 @@ from __future__ import unicode_literals
 
 from optparse import OptionGroup
 
-from cached_property import cached_property
 from yelp_batch import Batch
 from yelp_batch.batch import batch_command_line_options
 from yelp_servlib.config_util import load_package_config
@@ -99,12 +98,12 @@ class FullRefreshJob(Batch):
             raise ValueError("--avg-rows-per-second-cap must be greater than 0")
         if self.options.batch_size <= 0:
             raise ValueError("--batch-size option must be greater than 0.")
-        if self.options.source_id is None and (
-            self.options.source_name is None or
-            self.options.namespace is None
+        if self.options.source_id is None and not (
+            self.options.source_name and
+            self.options.namespace
         ):
-            raise ValueError("--source-id or --source-name and --namespace must be defined")
-        if self.options.source_id and (
+            raise ValueError("--source-id or both of--source-name and --namespace must be defined")
+        if self.options.source_id is not None and (
             self.options.source_name or
             self.options.namespace
         ):
@@ -113,7 +112,7 @@ class FullRefreshJob(Batch):
         load_package_config(self.options.config_path)
         self.schematizer = get_schematizer()
 
-    @cached_property
+    @property
     def source_id(self):
         if self.options.source_id is not None:
             return self.options.source_id

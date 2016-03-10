@@ -41,7 +41,7 @@ class TestFullRefreshJob(object):
                     '--batch-size=50',
                 ]
             )
-        assert e.value.message == "--source-id or --source-name and --namespace must be defined"
+        assert e.value.message == "--source-id or both of--source-name and --namespace must be defined"
 
     def test_run_only_source_name(self, refresh_job):
         with pytest.raises(ValueError) as e:
@@ -52,7 +52,7 @@ class TestFullRefreshJob(object):
                     '--source-name=test'
                 ]
             )
-        assert e.value.message == "--source-id or --source-name and --namespace must be defined"
+        assert e.value.message == "--source-id or both of--source-name and --namespace must be defined"
 
     def test_run_only_namespace(self, refresh_job):
         with pytest.raises(ValueError) as e:
@@ -63,7 +63,7 @@ class TestFullRefreshJob(object):
                     '--namespace=test'
                 ]
             )
-        assert e.value.message == "--source-id or --source-name and --namespace must be defined"
+        assert e.value.message == "--source-id or both of--source-name and --namespace must be defined"
 
     def test_valid_run(self, refresh_job, source):
         refresh_job.process_commandline_options(
