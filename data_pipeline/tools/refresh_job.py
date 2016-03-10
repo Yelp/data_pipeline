@@ -98,12 +98,12 @@ class FullRefreshJob(Batch):
             raise ValueError("--avg-rows-per-second-cap must be greater than 0")
         if self.options.batch_size <= 0:
             raise ValueError("--batch-size option must be greater than 0.")
-        if self.options.source_id is None and not (
+        if not self.options.source_id and not (
             self.options.source_name and
             self.options.namespace
         ):
             raise ValueError("--source-id or both of--source-name and --namespace must be defined")
-        if self.options.source_id is not None and (
+        if self.options.source_id and (
             self.options.source_name or
             self.options.namespace
         ):
@@ -114,7 +114,7 @@ class FullRefreshJob(Batch):
 
     @property
     def source_id(self):
-        if self.options.source_id is not None:
+        if self.options.source_id:
             return self.options.source_id
         source_ids = [
             source.source_id
