@@ -98,6 +98,14 @@ class Tailer(Batch):
             )
         )
         opt_group.add_option(
+            '--only-newest',
+            action="store_true",
+            help=(
+                "If given, will limit the topics retrieved from namespace and source to the "
+                "topic that has been most recently updated"
+            )
+        )
+        opt_group.add_option(
             '--offset-reset-location',
             type='string',
             default='largest',
@@ -297,9 +305,22 @@ class Tailer(Batch):
                 namespace_name=self.options.namespace,
                 source_name=self.options.source
             )
+            if self.options.only_newest:
+                additional_topics = self._filter_by_most_recently_updated(additional_topics)
+            logger.info(
+                "Received {} new topics from --source and --namespace options".format(
+                    len(additional_topics)
+                )
+            )
             for topic in additional_topics:
                 if str(topic.name) not in self.topic_to_offsets_map:
                     self.topic_to_offsets_map[str(topic.name)] = None
+
+    def _filter_by_most_recently_updated(self, topics):
+        if not topics:
+            return []
+        sorted_topics = sorted(topics, key=lambda topic: topic.updated_at)
+        return [sorted_topics[-1]]
 
     def _setup_start_timestamp_topics(self, start_timestamp):
         """Sets the offsets of all topics with no offset to be that topic's first offset
