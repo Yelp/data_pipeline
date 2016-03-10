@@ -159,6 +159,7 @@ class BaseConsumer(Client):
         logger.info("Stopping Consumer '{0}'...".format(self.client_name))
         if self.running:
             self._stop()
+        self.kafka_client.close()
         self.running = False
         logger.info("Consumer '{0}' stopped".format(self.client_name))
 
