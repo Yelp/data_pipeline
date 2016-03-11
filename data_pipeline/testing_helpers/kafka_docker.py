@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 from contextlib import contextmanager
 
+from kafka import KafkaClient
 from kafka import SimpleConsumer
 
 from data_pipeline.config import get_config
@@ -54,9 +55,11 @@ def setup_capture_new_messages_consumer(topic):
     """Seeks to the tail of the topic then returns a function that can
     consume messages from that point.
     """
-    kafka = get_config().kafka_client
+    kafka = KafkaClient(get_config().cluster_config.broker_list)
     group = str('data_pipeline_clientlib_test')
     consumer = SimpleConsumer(kafka, group, topic, max_buffer_size=_ONE_MEGABYTE)
     consumer.seek(0, 2)  # seek to tail, 0 is the offset, and 2 is the tail
 
     yield consumer
+
+    kafka.close()
