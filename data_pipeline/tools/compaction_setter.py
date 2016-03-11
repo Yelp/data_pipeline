@@ -50,11 +50,19 @@ class CompactionSetter(Batch):
 
     def get_all_topics(self):
         namespaces = self.schematizer.get_namespaces()
-        topics = []
-        for namespace in namespaces:
-            topics += self.schematizer.get_topics_by_criteria(
-                namespace_name=namespace.name
+        namespace_to_source_map = {
+            namespace.name: self.schematizer.get_sources_by_namespace(
+                namespace.name
             )
+            for namespace in namespaces
+        }
+        topics = []
+        for namespace, sources in namespace_to_source_map.iteritems():
+            for source in sources:
+                topics += self.schematizer.get_topics_by_criteria(
+                    namespace_name=namespace,
+                    source_name=source.name
+                )
         return topics
 
     def get_all_topics_to_compact(self):
@@ -66,9 +74,9 @@ class CompactionSetter(Batch):
     def apply_log_compaction(self, topics):
         self.log.info("Applying compaction settings on {} topics".format(len(topics)))
 
-        self.compacted_topics = []
-        self.skipped_topics = []
-        self.missed_topics = []
+        compacted_topics = []
+        skipped_topics = []
+        missed_topics = []
 
         cluster = get_config().cluster_config
 
@@ -82,32 +90,41 @@ class CompactionSetter(Batch):
                         current_config['config']['cleanup.policy'] = 'compact'
                         if not self.dry_run:
                             zk.set_topic_config(topic=topic, value=current_config)
-                        self.compacted_topics.append(topic)
+                        compacted_topics.append(topic)
                     else:
-                        self.skipped_topics.append(topic)
+                        skipped_topics.append(topic)
                 except NoNodeError:
-                    self.missed_topics.append(topic)
+                    missed_topics.append(topic)
 
-        self.log_results()
+        self.log_results(
+            compacted_topics=compacted_topics,
+            skipped_topics=skipped_topics,
+            missed_topics=missed_topics
+        )
 
-    def log_results(self):
-        if self.compacted_topics:
+    def log_results(
+        self,
+        compacted_topics,
+        skipped_topics,
+        missed_topics
+    ):
+        if compacted_topics:
             self.log.info(
                 "Applied compaction policy to topics: {compacted_topics}".format(
-                    compacted_topics=self.compacted_topics
+                    compacted_topics=compacted_topics
                 )
             )
-        if self.skipped_topics:
+        if skipped_topics:
             self.log.info(
                 "Skipped topics (already modified cleanup policy): {skipped_topics}".format(
-                    skipped_topics=self.skipped_topics
+                    skipped_topics=skipped_topics
                 )
             )
-        if self.missed_topics:
+        if missed_topics:
             self.log.info(
                 "Topics not found (most likely from the topics not having any recent messages):"
                 "{missed_topics}".format(
-                    missed_topics=self.missed_topics
+                    missed_topics=missed_topics
                 )
             )
 

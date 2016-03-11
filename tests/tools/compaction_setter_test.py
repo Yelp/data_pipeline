@@ -15,14 +15,18 @@ from data_pipeline.tools.compaction_setter import CompactionSetter
 class TestCompactionSetter(object):
 
     @pytest.fixture
-    def batch(self):
-        batch = CompactionSetter()
-        return batch
+    def compaction_setter(self):
+        return CompactionSetter()
 
     @pytest.fixture
     def namespace(self):
         Namespace = namedtuple("Namespace", ["name"])
         return Namespace("some_namespace")
+
+    @pytest.fixture
+    def source(self):
+        Source = namedtuple("Source", ["name"])
+        return Source("some_source")
 
     @pytest.fixture
     def topic_name(self):
@@ -72,10 +76,22 @@ class TestCompactionSetter(object):
         ) as mock_get_topic_config:
             yield mock_get_topic_config
 
-    def _create_mock_schematizer(self, namespaces, topics, filter_topics):
+    @pytest.yield_fixture
+    def mock_log_results(self):
+        with mock.patch.object(
+            CompactionSetter,
+            'log_results',
+            mock.Mock()
+        ) as mock_log_results:
+            yield mock_log_results
+
+    def _create_mock_schematizer(self, namespaces, sources, topics, filter_topics):
         mock_schematizer = mock.Mock()
         mock_schematizer.get_namespaces = mock.Mock(
             return_value=namespaces
+        )
+        mock_schematizer.get_sources_by_namespace = mock.Mock(
+            return_value=sources
         )
         mock_schematizer.get_topics_by_criteria = mock.Mock(
             return_value=topics
@@ -86,24 +102,26 @@ class TestCompactionSetter(object):
         return mock_schematizer
 
     @pytest.yield_fixture
-    def mock_get_schematizer(self, topic, topic_name, namespace):
+    def mock_get_schematizer(self, topic, topic_name, namespace, source):
         with mock.patch(
             'data_pipeline.tools.compaction_setter.get_schematizer'
         ) as mock_get_schematizer:
             mock_get_schematizer.return_value = self._create_mock_schematizer(
                 [namespace],
+                [source],
                 [topic],
                 [topic_name]
             )
             yield mock_get_schematizer
 
     @pytest.yield_fixture
-    def mock_get_schematizer_filtered_out(self, topic, namespace):
+    def mock_get_schematizer_filtered_out(self, topic, namespace, source):
         with mock.patch(
             'data_pipeline.tools.compaction_setter.get_schematizer'
         ) as mock_get_schematizer:
             mock_get_schematizer.return_value = self._create_mock_schematizer(
                 [namespace],
+                [source],
                 [topic],
                 []
             )
@@ -119,17 +137,20 @@ class TestCompactionSetter(object):
 
     def test_compact(
         self,
-        batch,
+        compaction_setter,
         topic_name,
         fake_topic_config_with_cleanup_policy,
         mock_get_topic_config,
         mock_get_schematizer,
-        mock_set_topic_config
+        mock_set_topic_config,
+        mock_log_results
     ):
-        self._run_batch(batch)
-        assert batch.compacted_topics == [topic_name]
-        assert batch.skipped_topics == []
-        assert batch.missed_topics == []
+        self._run_compaction_setter(compaction_setter)
+        assert mock_log_results.called_once_with(
+            compacted_topics=[topic_name],
+            skipped_topics=[],
+            missed_topics=[]
+        )
         mock_set_topic_config.assert_called_once_with(
             topic=topic_name,
             value=fake_topic_config_with_cleanup_policy
@@ -137,45 +158,54 @@ class TestCompactionSetter(object):
 
     def test_filtered(
         self,
-        batch,
+        compaction_setter,
         topic_name,
         mock_get_schematizer_filtered_out,
-        mock_set_topic_config
+        mock_set_topic_config,
+        mock_log_results
     ):
-        self._run_batch(batch)
-        assert batch.compacted_topics == []
-        assert batch.skipped_topics == []
-        assert batch.missed_topics == []
+        self._run_compaction_setter(compaction_setter)
+        assert mock_log_results.called_once_with(
+            compacted_topics=[],
+            skipped_topics=[],
+            missed_topics=[]
+        )
         assert mock_set_topic_config.call_count == 0
 
     def test_skip(
         self,
-        batch,
+        compaction_setter,
         topic_name,
         mock_get_topic_config_with_cleanup_policy,
         mock_get_schematizer,
-        mock_set_topic_config
+        mock_set_topic_config,
+        mock_log_results
     ):
-        self._run_batch(batch)
-        assert batch.compacted_topics == []
-        assert batch.skipped_topics == [topic_name]
-        assert batch.missed_topics == []
+        self._run_compaction_setter(compaction_setter)
+        assert mock_log_results.called_once_with(
+            compacted_topics=[],
+            skipped_topics=[topic_name],
+            missed_topics=[]
+        )
         assert mock_set_topic_config.call_count == 0
 
     def test_miss(
         self,
-        batch,
+        compaction_setter,
         topic_name,
         mock_get_topic_config_with_nonode,
         mock_get_schematizer,
-        mock_set_topic_config
+        mock_set_topic_config,
+        mock_log_results
     ):
-        self._run_batch(batch)
-        assert batch.compacted_topics == []
-        assert batch.skipped_topics == []
-        assert batch.missed_topics == [topic_name]
+        self._run_compaction_setter(compaction_setter)
+        assert mock_log_results.called_once_with(
+            compacted_topics=[],
+            skipped_topics=[],
+            missed_topics=[topic_name]
+        )
         assert mock_set_topic_config.call_count == 0
 
-    def _run_batch(self, batch):
-        batch.process_commandline_options([])
-        batch.run()
+    def _run_compaction_setter(self, compaction_setter):
+        compaction_setter.process_commandline_options([])
+        compaction_setter.run()
