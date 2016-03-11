@@ -10,6 +10,7 @@ from optparse import OptionGroup
 from uuid import UUID
 
 import simplejson
+from kafka import KafkaClient
 from yelp_batch.batch import Batch
 from yelp_batch.batch import batch_command_line_options
 from yelp_batch.batch import batch_configure
@@ -95,6 +96,14 @@ class Tailer(Batch):
                 'If given, the namespace and source will be used to lookup '
                 'topics, which will be added to any topics otherwise provided. '
                 '(Example: business)'
+            )
+        )
+        opt_group.add_option(
+            '--only-newest',
+            action="store_true",
+            help=(
+                "If given, will limit the topics retrieved from namespace and source to the "
+                "topic that has been most recently updated"
             )
         )
         opt_group.add_option(
@@ -222,6 +231,8 @@ class Tailer(Batch):
         # We setup logging 'early' since we want it available for setup_topics
         self._setup_logging()
 
+        self.kafka_client = KafkaClient(get_config().cluster_config.broker_list)
+
         self._setup_topics()
         if len(self.topic_to_offsets_map) == 0:
             self.option_parser.error("At least one topic must be specified.")
@@ -249,7 +260,7 @@ class Tailer(Batch):
         }
         # If we import get_topics_watermarks directly from offsets, then mock will not properly patch it in testing.
         watermarks = offsets.get_topics_watermarks(
-            get_config().kafka_client,
+            self.kafka_client,
             topic_to_partition_offset_map,
             # We do not raise on error as we do this verification later on and we
             # want to keep the error message clear
@@ -297,9 +308,22 @@ class Tailer(Batch):
                 namespace_name=self.options.namespace,
                 source_name=self.options.source
             )
+            if self.options.only_newest:
+                additional_topics = self._filter_by_most_recently_updated(additional_topics)
+            logger.info(
+                "Received {} new topics from --source and --namespace options".format(
+                    len(additional_topics)
+                )
+            )
             for topic in additional_topics:
                 if str(topic.name) not in self.topic_to_offsets_map:
                     self.topic_to_offsets_map[str(topic.name)] = None
+
+    def _filter_by_most_recently_updated(self, topics):
+        if not topics:
+            return []
+        sorted_topics = sorted(topics, key=lambda topic: topic.updated_at)
+        return [sorted_topics[-1]]
 
     def _setup_start_timestamp_topics(self, start_timestamp):
         """Sets the offsets of all topics with no offset to be that topic's first offset
@@ -323,7 +347,7 @@ class Tailer(Batch):
         """Uses binary search to find the first offset that comes after --start-timestamp for each
         topic in topics. Outputs a result_topic_to_consumer_topic_state_map which can be used to set offsets"""
         watermarks = offsets.get_topics_watermarks(
-            get_config().kafka_client,
+            self.kafka_client,
             topics,
             raise_on_error=False
         )
