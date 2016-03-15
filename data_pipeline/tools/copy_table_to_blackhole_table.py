@@ -5,9 +5,7 @@ from __future__ import unicode_literals
 import os
 import re
 import signal
-import sys
 import time
-from contextlib import contextmanager
 from datetime import datetime
 from optparse import OptionGroup
 
@@ -230,36 +228,13 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         )
 
     @cached_property
-    def rw_conn_engine(self):
-        # We use similar code to the get_connection_set_from_cluster method,
-        # but we want a seperate connection set
-        topology = TopologyFile.new_from_file(self.topology_path)
-        conn_defs = self._get_conn_defs(topology, self.db_name)
-        conn_config = ConnectionSetConfig(self.db_name, conn_defs, read_only=False)
-        return ConnectionSet.from_config(conn_config).get_engine(self.db_name)
-
-    @cached_property
     def total_row_count(self):
         with self.read_session() as session:
             self._use_db(session)
             query = self.build_select('COUNT(*)')
             value = self._execute_query(session, query).scalar()
             session.rollback()
-        return value if value is not None else 0
-
-    @contextmanager
-    def rw_conn_connection(self):
-        connection = self.rw_conn_engine.raw_connection()
-        try:
-            yield connection
-        finally:
-            connection.close()
-
-    @contextmanager
-    def rw_conn_cursor(self, connection):
-        cursor = connection.cursor()
-        yield cursor
-        cursor.close()
+            return value if value is not None else 0
 
     def build_select(
         self,
@@ -321,11 +296,11 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         ))
         self._execute_query(session, refresh_table_create_query)
 
-    def _after_processing_rows(self, cursor, connection, count):
+    def _after_processing_rows(self, session, count):
         """Commits changes and makes sure replication and throughput cap
         catches up before moving on.
         """
-        self._commit(connection)
+        self._commit(session)
 
         # This code may seem counter-intuitive, but it's actually correct.
         # Tables shouldn't be unlocked until after the data changes have either
@@ -336,8 +311,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         # session.commit() is called instead of _commit, since unlock tables
         # should be issued regardless of dry_run mode - it's necessary here
         # because sqlalchemy won't send the statement to MySQL without it.
-        self._execute_query(cursor, 'UNLOCK TABLES')
-        connection.commit()
+        self._execute_query(session, 'UNLOCK TABLES')
+        session.commit()
 
         with self.rw_conn() as rw_conn:
             self.throttle_to_replication(rw_conn)
@@ -368,19 +343,19 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.create_table_from_src_table(session)
             self._commit(session)
 
-    def _use_db(self, session_or_cursor):
+    def _use_db(self, session):
         self._execute_query(
-            session_or_cursor,
+            session,
             "USE {database}".format(database=self.database)
         )
 
-    def _commit(self, session_or_conn):
+    def _commit(self, session):
         """Commits unless in dry_run mode, otherwise rolls back"""
         if self.dry_run:
             self.log.info("Executing rollback in dry-run mode")
-            session_or_conn.rollback()
+            session.rollback()
         else:
-            session_or_conn.commit()
+            session.commit()
 
     def final_action(self):
         with self.write_session() as session:
@@ -392,17 +367,17 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.log.info("Dropped table: {table}".format(table=self.temp_table))
             self._commit(session)
 
-    def setup_transaction(self, session_or_cursor):
-        self._use_db(session_or_cursor)
+    def setup_transaction(self, session):
+        self._use_db(session)
         self._execute_query(
-            session_or_cursor,
+            session,
             'LOCK TABLES {table} WRITE, {temp} WRITE'.format(
                 table=self.table_name,
                 temp=self.temp_table
             )
         )
 
-    def count_inserted(self, session_or_cursor, offset):
+    def count_inserted(self, session, offset):
         select_query = self.build_select(
             '*',
             self.primary_key,
@@ -412,10 +387,10 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         query = 'SELECT COUNT(*) FROM ({query}) AS T'.format(
             query=select_query
         )
-        inserted_rows = self._execute_query(session_or_cursor, query)
-        return inserted_rows
+        inserted_rows = self._execute_query(session, query)
+        return inserted_rows.scalar()
 
-    def insert_batch(self, session_or_cursor, offset):
+    def insert_batch(self, session, offset):
         insert_query = 'INSERT INTO {temp} '.format(temp=self.temp_table)
         select_query = self.build_select(
             '*',
@@ -424,7 +399,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.batch_size
         )
         insert_query += select_query
-        self._execute_query(session_or_cursor, insert_query)
+        self._execute_query(session, insert_query)
 
     def process_table(self):
         self.log.info(
@@ -436,11 +411,11 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         count = self.batch_size
         while count >= self.batch_size:
             self.process_row_start_time = time.time()
-            with self.rw_conn_connection() as connection, self.rw_conn_cursor(connection) as cursor:
-                self.setup_transaction(cursor)
-                count = self.count_inserted(cursor, offset)
-                self.insert_batch(cursor, offset)
-                self._after_processing_rows(cursor, connection, count)
+            with self.write_session() as session:
+                self.setup_transaction(session)
+                count = self.count_inserted(session, offset)
+                self.insert_batch(session, offset)
+                self._after_processing_rows(session, count)
             offset += count
             self.processed_row_count += count
 
@@ -518,9 +493,9 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         )
         return {cluster: (conn_def, connection_cluster)}
 
-    def _execute_query(self, session_or_cursor, query):
+    def _execute_query(self, session, query):
         self.log.debug("Executing query: {query}".format(query=query))
-        return session_or_cursor.execute(query)
+        return session.execute(query)
 
 
 if __name__ == '__main__':
