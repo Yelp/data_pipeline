@@ -78,7 +78,7 @@ class FullRefreshManager(BatchDaemon):
         sys.argv = sys.argv[:1]
 
     def _set_cluster_and_database(self):
-        namespace_info = DBSourcedNamespace(self.namespace)
+        namespace_info = DBSourcedNamespace.create_from_namespace_name(self.namespace)
         self.cluster = namespace_info.cluster
         self.database = namespace_info.database
 

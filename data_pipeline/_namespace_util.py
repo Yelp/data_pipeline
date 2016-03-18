@@ -13,150 +13,135 @@ class DBSourcedNamespace(object):
 
     def __init__(
         self,
-        namespace_name=None,
+        cluster,
+        database,
         environment=None,
-        cluster=None,
-        database=None,
-        transformers=[]
+        transformers=None
     ):
-        """Creates object, if given a namespace_name, will parse to create the object.
-        Otherwise, will use raw field assignment.
-
-        Params:
-            namespace_name (str): If given, will automatically choose the namespace fields by parsing the name.
-                            Rough format: ENVIRONMENT?.CLUSTER.DATABASE(.TRANSFORMER)*
-
-            environment (str): The namespace's environment
+        """Params:
             cluster (str): The namespace's cluster (required if building from raw fields)
             database (str): The namespace's database (required if building from raw fields)
-            transformers (listof(str)): The transformations applied to the namespace
+            environment (optional(str)): The namespace's environment
+            transformers (optional(listof(str))): The transformations applied to the namespace
         """
-        if namespace_name is None and (
-            cluster is None or
-            database is None
-        ):
-            raise ValueError("namespace_name or all of cluster, database must be defined")
-        if namespace_name is not None and (
-            environment or
-            cluster or
-            database or
-            transformers
-        ):
-            raise ValueError(
-                "cannot create namespace by parsing name and raw field assignment simultaneously"
-            )
-        if namespace_name:
-            self._create_from_namespace_name(namespace_name)
-            self.was_parsed = True
-        else:
-            self.environment = environment
-            self.cluster = cluster
-            self.database = database
-            self.transformers = transformers
-            self.was_parsed = False
+        self.environment = environment
+        self.cluster = cluster
+        self.database = database
+        self.transformers = transformers if transformers else []
 
-    def _build_from_sections(self, sections, environment_exists):
+    @classmethod
+    def _build_from_sections(cls, sections, environment_exists):
         if environment_exists:
             cluster_pos = 1
-            self.environment = sections[0]
+            environment = sections[0]
         else:
             cluster_pos = 0
-            self.environment = None
-        self.cluster = sections[cluster_pos]
-        self.database = sections[cluster_pos + 1]
-        self.transformers = sections[cluster_pos + 2:]
+            environment = None
+        cluster = sections[cluster_pos]
+        database = sections[cluster_pos + 1]
+        transformers = sections[cluster_pos + 2:]
+        return DBSourcedNamespace(cluster, database, environment, transformers)
 
-    def _create_from_namespace_name(self, namespace_name):
-        self._validate_namespace_name(namespace_name)
+    @classmethod
+    def create_from_namespace_name(cls, namespace_name):
         sections = namespace_name.split('.')
-        self._build_from_sections(
+        cls._validate_sections(sections)
+        return cls._build_from_sections(
             sections,
-            self._is_first_section_an_environment(sections)
+            cls._is_first_section_an_environment(sections)
         )
 
-    def _is_first_section_an_environment(self, sections):
-        """Determines whether or not the first section is an environment or cluster definition"""
-        return (
-            sections[0] in self.ENVIRONMENTS and
-            # ex: main.database
-            len(sections) >= 3
-        )
-
-    def _is_first_section_an_environment_with_guarantees(
-        self,
-        sections,
-        environment=None,
-        cluster=None,
-        database=None,
-        transformers=[]
-    ):
-        return (
-            self._is_first_section_an_environment(sections) and
-            (cluster is not None or cluster == sections[1]) and
-            (database is not None or database == sections[2]) and
-            (set(transformers).issubset(set(sections[3:])))
-        ) or sections[0] == environment
-
-    def _validate_namespace_name(self, namespace_name):
-        if re.match("^[a-zA-Z0-9_\.-]+$", namespace_name) is None:
-            raise ValueError("namespace_name must contain only alphanumeric characters and -, _, .")
-        if len(namespace_name.split('.')) < 2:
-            raise ValueError("not enough sections to split namespace_name to extract information")
-
-    def _validate_guarantees_satisfied(
-        self,
-        environment=None,
-        cluster=None,
-        database=None,
-        transformers=[]
-    ):
-        if (
-            (environment is not None and environment != self.environment) or
-            (cluster is not None and cluster != self.cluster) or
-            (database is not None and database != self.database) or
-            not set(transformers).issubset(set(self.transformers))
-        ):
-            raise ValueError("Guarantees are impossible to rectify with existing namespace")
-
-    def apply_guarantees(
-        self,
-        environment=None,
-        cluster=None,
-        database=None,
-        transformers=[]
+    @classmethod
+    def create_from_namespace_name_with_guarantees(
+        cls,
+        namespace_name,
+        expected_cluster=None,
+        expected_database=None,
+        expected_environment=None,
+        expected_transformers=None
     ):
         """For namespaces created by parsing names, it's possible that we want to modify how they are parsed based on
         something we know about the namespace in question to mitigate possible errors.
         e.g. for main.database.transformer where main is a cluster, normal parsing would treat it as an environment.
 
-        Anything defined by the user will be forced on the name as true to re-parse the namespace
+        Anything defined by the user will be forced on the name as true to parse the namespace name
 
         NOTE: Anything in transformers will be guaranteed to be a subset of the end-transformers
         """
-        if not self.was_parsed:
-            raise ValueError("Can only apply guarantees on namespaces created by parsing")
-        sections = self.get_name().split('.')
-        self._build_from_sections(
+        sections = namespace_name.split('.')
+        cls._validate_sections(sections)
+        namespace = cls._build_from_sections(
             sections,
-            self._is_first_section_an_environment_with_guarantees(
+            cls._is_first_section_an_environment_with_guarantees(
                 sections,
-                environment=environment,
-                cluster=cluster,
-                database=database,
-                transformers=transformers
+                expected_cluster=expected_cluster,
+                expected_database=expected_database,
+                expected_environment=expected_environment,
+                expected_transformers=expected_transformers
             )
         )
-        self._validate_guarantees_satisfied(
-            environment=environment,
-            cluster=cluster,
-            database=database,
-            transformers=transformers
+        namespace._assert_guarantees_satisfied(
+            expected_cluster=expected_cluster,
+            expected_database=expected_database,
+            expected_environment=expected_environment,
+            expected_transformers=expected_transformers
         )
-        return self
+        return namespace
+
+    @classmethod
+    def _is_first_section_an_environment(cls, sections):
+        """Determines whether or not the first section is an environment or cluster definition"""
+        return (
+            sections[0] in cls.ENVIRONMENTS and
+            # ex: main.database
+            len(sections) >= 3
+        )
+
+    @classmethod
+    def _is_first_section_an_environment_with_guarantees(
+        cls,
+        sections,
+        expected_cluster=None,
+        expected_database=None,
+        expected_environment=None,
+        expected_transformers=None
+    ):
+        return (
+            cls._is_first_section_an_environment(sections) and
+            (not expected_cluster or expected_cluster == sections[1]) and
+            (not expected_database or expected_database == sections[2]) and
+            (not expected_transformers or set(expected_transformers).issubset(set(sections[3:])))
+        ) or sections[0] == expected_environment
+
+    @classmethod
+    def _validate_sections(cls, sections):
+        for section in sections:
+            if not re.match("^[_-]*[a-zA-Z0-9][a-zA-Z0-9_-]*$", section):
+                raise ValueError("namespace_name section must contain at least one alphanumeric character and may include - or _")
+        if len(sections) < 2:
+            raise ValueError(
+                "not enough sections to split namespace_name to extract information "
+                "(we need at least 2 to extract a cluster and database)"
+            )
+
+    def _assert_guarantees_satisfied(
+        self,
+        expected_cluster=None,
+        expected_database=None,
+        expected_environment=None,
+        expected_transformers=None
+    ):
+        if (
+            (expected_environment and expected_environment != self.environment) or
+            (expected_cluster and expected_cluster != self.cluster) or
+            (expected_database and expected_database != self.database) or
+            (expected_transformers and not set(expected_transformers).issubset(set(self.transformers)))
+        ):
+            raise ValueError("Guarantees are impossible to rectify with existing namespace")
 
     def get_name(self):
         output = ""
-        if self.environment is not None:
+        if self.environment:
             output += self.environment + "."
         output += self.cluster + "."
         output += self.database
