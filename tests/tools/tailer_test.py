@@ -44,12 +44,40 @@ class TestTailer(object):
             updated_at=time.time()
         )]
 
+    @pytest.fixture
+    def topics_multiple(self, topic_name, topic_two_name, source):
+        return [Topic(
+            topic_id='10',
+            name=topic_name,
+            source=source,
+            contains_pii=False,
+            created_at=time.time(),
+            updated_at=time.time()
+        ), Topic(
+            topic_id='11',
+            name=topic_two_name,
+            source=source,
+            contains_pii=False,
+            created_at=time.time() + 10000,
+            updated_at=time.time() + 10000
+        )]
+
     @pytest.yield_fixture
     def mock_get_topics_by_criteria(self, topics):
         with mock.patch.object(
             get_schematizer(),
             'get_topics_by_criteria',
             return_value=topics,
+            autospec=True
+        ) as mock_schematizer:
+            yield mock_schematizer
+
+    @pytest.yield_fixture
+    def mock_get_topics_by_criteria_multiple(self, topics_multiple):
+        with mock.patch.object(
+            get_schematizer(),
+            'get_topics_by_criteria',
+            return_value=topics_multiple,
             autospec=True
         ) as mock_schematizer:
             yield mock_schematizer
@@ -128,7 +156,8 @@ class TestTailer(object):
         self,
         batch,
         topic_name,
-        mock_get_topics_by_criteria,
+        topic_two_name,
+        mock_get_topics_by_criteria_multiple,
         namespace,
         source
     ):
@@ -136,9 +165,30 @@ class TestTailer(object):
             '--namespace', namespace,
             '--source', source
         ])
-        self._assert_topics(batch, [topic_name])
+        self._assert_topics(batch, [topic_name, topic_two_name])
         self._assert_get_topics_called(
-            mock_get_topics_by_criteria,
+            mock_get_topics_by_criteria_multiple,
+            namespace=namespace,
+            source=source
+        )
+
+    def test_with_namespace_and_source_only_newest(
+        self,
+        batch,
+        topic_name,
+        topic_two_name,
+        mock_get_topics_by_criteria_multiple,
+        namespace,
+        source
+    ):
+        self._init_batch(batch, [
+            '--namespace', namespace,
+            '--source', source,
+            '--only-newest'
+        ])
+        self._assert_topics(batch, [topic_two_name])
+        self._assert_get_topics_called(
+            mock_get_topics_by_criteria_multiple,
             namespace=namespace,
             source=source
         )

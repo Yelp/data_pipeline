@@ -6,7 +6,6 @@ import logging
 
 import staticconf
 from cached_property import cached_property
-from kafka import KafkaClient
 from swaggerpy import client
 from yelp_kafka.config import ClusterConfig
 from yelp_kafka.discovery import get_cluster_by_name
@@ -44,13 +43,6 @@ class Config(object):
     def logger(self):
         """Logger instance for the clientlib"""
         return logging.getLogger('data_pipeline_clientlib')
-
-    @property
-    def kafka_client(self):
-        """Handles building a Kafka connection.  By default, this will connect to
-        the Kafka instance in the included docker-compose file.
-        """
-        return KafkaClient(self.cluster_config.broker_list)
 
     @property
     def schematizer_port(self):
