@@ -140,12 +140,10 @@ class DBSourcedNamespace(object):
             raise ValueError("Guarantees are impossible to rectify with existing namespace")
 
     def get_name(self):
-        output = ""
+        sections = []
         if self.environment:
-            output += self.environment + "."
-        output += self.cluster + "."
-        output += self.database
-        if self.transformers:
-            output += "."
-        output += '.'.join(self.transformers)
-        return output
+            sections.append(self.environment)
+        sections.append(self.cluster)
+        sections.append(self.database)
+        sections += self.transformers
+        return '.'.join(sections)
