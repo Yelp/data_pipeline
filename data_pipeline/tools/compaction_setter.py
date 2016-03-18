@@ -48,7 +48,7 @@ class CompactionSetter(Batch):
         self.dry_run = self.options.dry_run
         self.schematizer = get_schematizer()
 
-    def get_all_topics(self):
+    def _get_all_topics(self):
         namespaces = self.schematizer.get_namespaces()
         namespace_to_source_map = {
             namespace.name: self.schematizer.get_sources_by_namespace(
@@ -65,8 +65,8 @@ class CompactionSetter(Batch):
                 )
         return topics
 
-    def get_all_topics_to_compact(self):
-        topics = self.get_all_topics()
+    def _get_all_topics_to_compact(self):
+        topics = self._get_all_topics()
         topics = [topic.name for topic in topics]
         self.log.debug("Found {} topics to filter".format(len(topics)))
         return self.schematizer.filter_topics_by_pkeys(topics)
@@ -131,7 +131,7 @@ class CompactionSetter(Batch):
     def run(self):
         self.log.info("Starting the Datapipeline Compaction Setter")
 
-        topics = self.get_all_topics_to_compact()
+        topics = self._get_all_topics_to_compact()
         self.log.info("Found {} topics to compact".format(len(topics)))
         self.apply_log_compaction(topics)
 

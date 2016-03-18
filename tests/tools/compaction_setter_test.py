@@ -146,7 +146,7 @@ class TestCompactionSetter(object):
         mock_log_results
     ):
         self._run_compaction_setter(compaction_setter)
-        assert mock_log_results.called_once_with(
+        mock_log_results.assert_called_once_with(
             compacted_topics=[topic_name],
             skipped_topics=[],
             missed_topics=[]
@@ -165,7 +165,7 @@ class TestCompactionSetter(object):
         mock_log_results
     ):
         self._run_compaction_setter(compaction_setter)
-        assert mock_log_results.called_once_with(
+        mock_log_results.assert_called_once_with(
             compacted_topics=[],
             skipped_topics=[],
             missed_topics=[]
@@ -182,7 +182,7 @@ class TestCompactionSetter(object):
         mock_log_results
     ):
         self._run_compaction_setter(compaction_setter)
-        assert mock_log_results.called_once_with(
+        mock_log_results.assert_called_once_with(
             compacted_topics=[],
             skipped_topics=[topic_name],
             missed_topics=[]
@@ -199,7 +199,7 @@ class TestCompactionSetter(object):
         mock_log_results
     ):
         self._run_compaction_setter(compaction_setter)
-        assert mock_log_results.called_once_with(
+        mock_log_results.assert_called_once_with(
             compacted_topics=[],
             skipped_topics=[],
             missed_topics=[topic_name]

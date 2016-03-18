@@ -38,7 +38,6 @@ setup(
         'swaggerpy>=0.7.6',
         'yelp-avro>=0.1.1',
         'yelp-kafka>=4.2.0',
-        'yelp-kafka-tool>=0.8.2',
         'yelp-lib>=10.0.5',
         'yelp-servlib>=4.3.0',
     ],
@@ -48,7 +47,8 @@ setup(
             # implicit dependency of yelp_batch
             'thriftpy<0.2.0',
             'yelp_batch>=0.19.4',
-            'yelp_conn>=7.0.0'
+            'yelp_conn>=7.0.0',
+            'yelp-kafka-tool>=0.8.2'
         ],
         'testing_helpers': [
             'docker-compose==1.5.2',
