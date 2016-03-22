@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 import copy
 import datetime
 import random
+import time
 
 import mock
 import pytest
@@ -14,9 +15,20 @@ from yelp_avro.testing_helpers.generate_payload_data import \
 
 from data_pipeline.base_consumer import ConsumerTopicState
 from data_pipeline.base_consumer import TopicFilter
+from data_pipeline.consumer_source import MultiTopics
+from data_pipeline.consumer_source import NewTopicOnlyInDataTarget
+from data_pipeline.consumer_source import NewTopicOnlyInNamespace
+from data_pipeline.consumer_source import NewTopicOnlyInSource
+from data_pipeline.consumer_source import SingleSchema
+from data_pipeline.consumer_source import SingleTopic
+from data_pipeline.consumer_source import TopicInDataTarget
+from data_pipeline.consumer_source import TopicInNamespace
+from data_pipeline.consumer_source import TopicInSource
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import UpdateMessage
 from data_pipeline.producer import Producer
+from data_pipeline.schematizer_clientlib.models.data_source_type_enum \
+    import DataSourceTypeEnum
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 
@@ -246,7 +258,7 @@ class ConsumerAsserter(object):
 
 
 @pytest.mark.usefixtures("configure_teams")
-class RefreshTopicsTest(object):
+class RefreshNewTopicsTest(object):
 
     @pytest.fixture
     def yelp_namespace(self):
@@ -487,3 +499,426 @@ class RefreshTopicsTest(object):
                 continue
             assert actual.last_seen_schema_id == expected.last_seen_schema_id
             assert actual.partition_offset_map == expected.partition_offset_map
+
+
+@pytest.mark.usefixtures("configure_teams")
+class RefreshTopicsTestBase(object):
+
+    @pytest.yield_fixture
+    def consumer(self, consumer_instance):
+        with consumer_instance as consumer:
+            yield consumer
+
+    @pytest.fixture(scope='module')
+    def _register_schema(self, containers, schematizer_client):
+        def register_func(namespace, source, avro_schema=None):
+            avro_schema = avro_schema or {
+                'type': 'record',
+                'name': source,
+                'namespace': namespace,
+                'fields': [{'type': 'int', 'name': 'id'}]
+            }
+            new_schema = schematizer_client.register_schema_from_schema_json(
+                namespace=namespace,
+                source=source,
+                schema_json=avro_schema,
+                source_owner_email='bam+test@yelp.com',
+                contains_pii=False
+            )
+            containers.create_kafka_topic(str(new_schema.topic.name))
+            return new_schema
+        return register_func
+
+    def random_name(self, prefix=None):
+        suffix = random.random()
+        return '{}_{}'.format(prefix, suffix) if prefix else '{}'.format(suffix)
+
+    @pytest.fixture
+    def foo_namespace(self):
+        return self.random_name('foo_ns')
+
+    @pytest.fixture
+    def foo_src(self):
+        return self.random_name('foo_src')
+
+    @pytest.fixture
+    def foo_schema(self, foo_namespace, foo_src, _register_schema):
+        return _register_schema(foo_namespace, foo_src)
+
+    @pytest.fixture
+    def foo_topic(self, foo_schema):
+        return foo_schema.topic.name
+
+    @property
+    def target_type(self):
+        return 'redshift'
+
+    @property
+    def destination(self):
+        return 'dw.redshift.destination'
+
+    @pytest.fixture
+    def data_target(self, schematizer_client):
+        return schematizer_client.create_data_target(
+            target_type=self.target_type,
+            destination=self.destination
+        )
+
+    @pytest.fixture
+    def consumer_group(self, data_target, schematizer_client):
+        return schematizer_client.create_consumer_group(
+            group_name=self.random_name('test_group'),
+            data_target_id=data_target.data_target_id
+        )
+
+    @pytest.fixture
+    def data_source(self, foo_schema, consumer_group, schematizer_client):
+        return schematizer_client.create_consumer_group_data_source(
+            consumer_group_id=consumer_group.consumer_group_id,
+            data_source_type=DataSourceTypeEnum.Source,
+            data_source_id=foo_schema.topic.source.source_id
+        )
+
+    @pytest.fixture(scope='class')
+    def test_schema(self, _register_schema):
+        return _register_schema('test_namespace', 'test_src')
+
+    @pytest.fixture(scope='class')
+    def topic(self, test_schema):
+        return str(test_schema.topic.name)
+
+    @pytest.fixture
+    def schema_with_bad_topic(self, schematizer_client, foo_namespace, foo_src):
+        avro_schema = {
+            'type': 'record',
+            'name': foo_src,
+            'namespace': foo_namespace,
+            'fields': [{'type': 'int', 'name': 'id'}]
+        }
+        new_schema = schematizer_client.register_schema_from_schema_json(
+            namespace=foo_namespace,
+            source=foo_src,
+            schema_json=avro_schema,
+            source_owner_email='bam+test@yelp.com',
+            contains_pii=False
+        )
+        return new_schema
+
+    def _publish_then_consume_message(self, consumer, avro_schema):
+        with Producer(
+            'test_producer',
+            team_name='bam',
+            expected_frequency_seconds=ExpectedFrequency.constantly,
+            monitoring_enabled=False
+        ) as producer:
+            message = UpdateMessage(
+                topic=str(avro_schema.topic.name),
+                schema_id=avro_schema.schema_id,
+                payload_data={'id': 2},
+                previous_payload_data={'id': 1}
+            )
+            producer.publish(message)
+            producer.flush()
+
+        consumer.get_messages(1, blocking=True, timeout=TIMEOUT)
+
+    def _assert_equal_state_map(self, actual_map, expected_map):
+        assert set(actual_map.keys()) == set(expected_map.keys())
+        for topic, actual in actual_map.iteritems():
+            expected = expected_map[topic]
+            if expected is None:
+                assert actual is None
+                continue
+            assert actual.last_seen_schema_id == expected.last_seen_schema_id
+            assert actual.partition_offset_map == expected.partition_offset_map
+
+
+class RefreshFixedTopicTests(RefreshTopicsTestBase):
+
+    def test_get_toipcs(self, consumer, consumer_source, expected_topics, topic):
+        expected_map = {topic: None}
+        expected_map.update({topic: None for topic in expected_topics})
+
+        actual = consumer.refresh_topics(consumer_source)
+
+        assert set(actual) == set(expected_topics)
+        self._assert_equal_state_map(
+            actual_map=consumer.topic_to_consumer_topic_state_map,
+            expected_map=expected_map
+        )
+
+    def test_get_topics_multiple_times(
+        self,
+        consumer,
+        consumer_source,
+        expected_topics,
+        topic
+    ):
+        expected_map = {topic: None}
+        expected_map.update({topic: None for topic in expected_topics})
+
+        actual = consumer.refresh_topics(consumer_source)
+        assert set(actual) == set(expected_topics)
+        self._assert_equal_state_map(
+            actual_map=consumer.topic_to_consumer_topic_state_map,
+            expected_map=expected_map
+        )
+
+        actual = consumer.refresh_topics(consumer_source)
+        assert actual == []
+        self._assert_equal_state_map(
+            actual_map=consumer.topic_to_consumer_topic_state_map,
+            expected_map=expected_map
+        )
+
+    def test_bad_topic(self, consumer, bad_consumer_source, topic):
+        actual = consumer.refresh_topics(bad_consumer_source)
+
+        assert actual == []
+        self._assert_equal_state_map(
+            actual_map=consumer.topic_to_consumer_topic_state_map,
+            expected_map={topic: None}
+        )
+
+
+class SingleTopicSetupMixin(RefreshFixedTopicTests):
+
+    @pytest.fixture
+    def expected_topics(self, foo_topic):
+        return [foo_topic]
+
+    @pytest.fixture
+    def consumer_source(self, foo_topic):
+        return SingleTopic(topic_name=foo_topic)
+
+    @pytest.fixture
+    def bad_consumer_source(self):
+        return SingleTopic(topic_name='bad_topic')
+
+
+class MultiTopicsSetupMixin(RefreshFixedTopicTests):
+
+    @pytest.fixture
+    def bar_schema(self, foo_namespace, foo_src, _register_schema):
+        new_schema = {
+            'type': 'record',
+            'name': foo_src,
+            'namespace': foo_namespace,
+            'fields': [{'type': 'string', 'name': 'memo'}]
+        }
+        return _register_schema(foo_namespace, foo_src, new_schema)
+
+    @pytest.fixture
+    def bar_topic(self, bar_schema):
+        return bar_schema.topic.name
+
+    @pytest.fixture
+    def expected_topics(self, foo_topic, bar_topic):
+        return [foo_topic, bar_topic]
+
+    @pytest.fixture
+    def consumer_source(self, foo_topic, bar_topic):
+        return MultiTopics(foo_topic, bar_topic)
+
+    @pytest.fixture
+    def bad_consumer_source(self):
+        return MultiTopics('bad_topic_1', 'bad_topic_2')
+
+
+class SingleSchemaSetupMixin(RefreshFixedTopicTests):
+
+    @pytest.fixture
+    def expected_topics(self, foo_schema):
+        return [foo_schema.topic.name]
+
+    @pytest.fixture
+    def consumer_source(self, foo_schema):
+        return SingleSchema(schema_id=foo_schema.schema_id)
+
+    @pytest.fixture
+    def bad_consumer_source(self, schema_with_bad_topic):
+        return SingleSchema(schema_id=schema_with_bad_topic.schema_id)
+
+
+class RefreshDynamicTopicTests(RefreshTopicsTestBase):
+
+    def test_no_topics_in_consumer_source(self, consumer, consumer_source, topic):
+        actual = consumer.refresh_topics(consumer_source)
+        assert actual == []
+        self._assert_equal_state_map(
+            actual_map=consumer.topic_to_consumer_topic_state_map,
+            expected_map={topic: None}
+        )
+
+    def test_pick_up_new_topic(
+        self,
+        consumer,
+        consumer_source,
+        foo_topic,
+        data_source,
+        test_schema,
+        topic
+    ):
+        assert consumer.topic_to_consumer_topic_state_map == {topic: None}
+
+        self._publish_then_consume_message(consumer, test_schema)
+        new_topic_state = consumer.topic_to_consumer_topic_state_map[topic]
+        assert new_topic_state is not None
+
+        actual = consumer.refresh_topics(consumer_source)
+
+        assert actual == [foo_topic]
+        self._assert_equal_state_map(
+            actual_map=consumer.topic_to_consumer_topic_state_map,
+            expected_map={
+                topic: new_topic_state,
+                foo_topic: None
+            }
+        )
+
+    def test_not_pick_up_new_topic_in_diff_source(
+        self,
+        consumer,
+        consumer_source,
+        foo_topic,
+        data_source,
+        topic,
+        _register_schema
+    ):
+        actual = consumer.refresh_topics(consumer_source)
+        assert actual == [foo_topic]
+
+        # force topic is created at least 1 second after last topic query.
+        time.sleep(1)
+        new_schema = {
+            'type': 'record',
+            'name': 'src_two',
+            'namespace': 'namespace_two',
+            'fields': [{'type': 'bytes', 'name': 'md5'}]
+        }
+        _register_schema('namespace_two', 'src_two', new_schema)
+
+        actual = consumer.refresh_topics(consumer_source)
+        assert actual == []
+        self._assert_equal_state_map(
+            actual_map=consumer.topic_to_consumer_topic_state_map,
+            expected_map={topic: None, foo_topic: None}
+        )
+
+    def test_bad_consumer_source(self, consumer, bad_consumer_source, topic):
+        actual = consumer.refresh_topics(bad_consumer_source)
+
+        assert actual == []
+        self._assert_equal_state_map(
+            actual_map=consumer.topic_to_consumer_topic_state_map,
+            expected_map={topic: None}
+        )
+
+    def test_consumer_source_has_bad_topic(
+        self,
+        consumer,
+        consumer_source_with_bad_topic,
+        topic
+    ):
+        actual = consumer.refresh_topics(consumer_source_with_bad_topic)
+
+        assert actual == []
+        self._assert_equal_state_map(
+            actual_map=consumer.topic_to_consumer_topic_state_map,
+            expected_map={topic: None}
+        )
+
+
+class TopicInNamespaceSetupMixin(RefreshDynamicTopicTests):
+
+    @pytest.fixture(params=[TopicInNamespace, NewTopicOnlyInNamespace])
+    def consumer_source_cls(self, request):
+        return request.param
+
+    @pytest.fixture
+    def consumer_source(self, consumer_source_cls, foo_namespace):
+        return consumer_source_cls(namespace_name=foo_namespace)
+
+    @pytest.fixture
+    def bad_consumer_source(self, consumer_source_cls):
+        return consumer_source_cls(namespace_name='bad_namespace')
+
+    @pytest.fixture
+    def consumer_source_with_bad_topic(
+        self,
+        consumer_source_cls,
+        schema_with_bad_topic
+    ):
+        return consumer_source_cls(
+            namespace_name=schema_with_bad_topic.topic.source.namespace.name
+        )
+
+
+class TopicInSourceSetupMixin(RefreshDynamicTopicTests):
+
+    @pytest.fixture(params=[TopicInSource, NewTopicOnlyInSource])
+    def consumer_source_cls(self, request):
+        return request.param
+
+    @pytest.fixture
+    def consumer_source(self, consumer_source_cls, foo_namespace, foo_src):
+        return consumer_source_cls(
+            namespace_name=foo_namespace,
+            source_name=foo_src
+        )
+
+    @pytest.fixture
+    def bad_consumer_source(self, consumer_source_cls):
+        return consumer_source_cls(
+            namespace_name='bad_namespace',
+            source_name='bad_source'
+        )
+
+    @pytest.fixture
+    def consumer_source_with_bad_topic(
+        self,
+        consumer_source_cls,
+        schema_with_bad_topic
+    ):
+        return consumer_source_cls(
+            namespace_name=schema_with_bad_topic.topic.source.namespace.name,
+            source_name=schema_with_bad_topic.topic.source.name
+        )
+
+
+class TopicInDataTargetSetupMixin(RefreshDynamicTopicTests):
+
+    @pytest.fixture(params=[TopicInDataTarget, NewTopicOnlyInDataTarget])
+    def consumer_source_cls(self, request):
+        return request.param
+
+    @pytest.fixture
+    def consumer_source(self, consumer_source_cls, data_target):
+        return consumer_source_cls(data_target_id=data_target.data_target_id)
+
+    @pytest.fixture
+    def bad_consumer_source(self, consumer_source_cls, schematizer_client):
+        data_target = schematizer_client.create_data_target(
+            target_type='bad target type',
+            destination='bad destination'
+        )
+        return consumer_source_cls(data_target_id=data_target.data_target_id)
+
+    @pytest.fixture
+    def consumer_source_with_bad_topic(
+        self,
+        consumer_source_cls,
+        schema_with_bad_topic,
+        consumer_group,
+        schematizer_client
+    ):
+        data_target = schematizer_client.create_data_target(
+            target_type='some target type',
+            destination='some destination'
+        )
+        schematizer_client.create_consumer_group_data_source(
+            consumer_group_id=consumer_group.consumer_group_id,
+            data_source_type=DataSourceTypeEnum.Source,
+            data_source_id=schema_with_bad_topic.topic.source.source_id
+        )
+        return consumer_source_cls(data_target.data_target_id)

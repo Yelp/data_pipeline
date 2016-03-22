@@ -482,6 +482,8 @@ class BaseConsumer(Client):
         Returns:
             [data_pipeline.schematizer_clientlib.models.Topic]: A list of new topics.
         """
+        # TODO [DATAPIPE-843|clin] deprecate this function in favor of new
+        # `refresh_topics` function once AST is revised to use the new function.
         new_topics = self._get_new_topics(topic_filter)
 
         new_topics = [topic for topic in new_topics
@@ -510,6 +512,35 @@ class BaseConsumer(Client):
     def _update_new_topic_state_map(self, new_topics):
         for new_topic in new_topics:
             self.topic_to_consumer_topic_state_map[new_topic.name] = None
+
+    def refresh_topics(self, consumer_source):
+        """Refresh the topics this consumer are consuming from based on the
+        settings in the given consumer_source.
+
+        Args:
+            consumer_source (data_pipeline.consumer_source.ConsumerSource): one
+                of ConsumerSource types, such as SingleTopic, TopicInNamespace.
+
+        Returns:
+            [str]: A list of new topic names that this consumer starts to consume.
+        """
+        topics = consumer_source.get_topics()
+        new_topics = [topic for topic in topics
+                      if topic not in self.topic_to_consumer_topic_state_map]
+
+        if new_topics:
+            self.stop()
+            for new_topic in new_topics:
+                self.topic_to_consumer_topic_state_map[new_topic] = None
+            self.start()
+
+            # If a new topic doesn't exist, when the consumer restarts, it will
+            # be removed from the topic state map after the re-balance callback.
+            # In such case, the non-existent topics are removed from the new_topics.
+            new_topics = [topic for topic in new_topics
+                          if topic in self.topic_to_consumer_topic_state_map]
+
+        return new_topics
 
 
 class TopicFilter(object):
