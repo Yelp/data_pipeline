@@ -320,10 +320,12 @@ class NewTopicOnlySrcTests(ConsumerSourceTestBase):
         consumer_source,
         foo_topic,
     ):
-        # Wait for at least one second after the topic is created
+        # Wait some time so that the 1st query time is at least 1 second apart
+        # from `foo_topic` creation timestamp to avoid flaky test
         time.sleep(1)
         assert consumer_source.get_topics() == [foo_topic]
-        # Wait for some time before next query
+        # Because the timestamp is rounded up to seconds, here it makes the 2nd
+        # query time is at least 1 second after the 1st query to avoid flaky test
         time.sleep(1)
         assert consumer_source.get_topics() == []
 
@@ -335,11 +337,9 @@ class NewTopicOnlySrcTests(ConsumerSourceTestBase):
         foo_namespace,
         _register_schema,
     ):
-        # Wait for at least one second after the topic is created
         time.sleep(1)
         assert consumer_source.get_topics() == [foo_topic]
 
-        # Wait for one second to create a new topic
         time.sleep(1)
         new_schema = {
             'type': 'record',
@@ -359,7 +359,6 @@ class NewTopicOnlySrcTests(ConsumerSourceTestBase):
         time.sleep(1)
         assert consumer_source.get_topics() == [foo_topic]
 
-        # Wait for one second to create a new topic
         time.sleep(1)
         new_schema = {
             'type': 'record',
