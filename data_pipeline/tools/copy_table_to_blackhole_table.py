@@ -291,6 +291,12 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             'ENGINE=BLACKHOLE',
             refresh_table_create_query
         )
+        refresh_table_create_query = re.sub(
+            "CREATE TABLE",
+            "CREATE TABLE IF NOT EXISTS",
+            refresh_table_create_query,
+            count=1
+        )
         self.log.info("New blackhole table query: {query}".format(
             query=refresh_table_create_query
         ))
@@ -467,7 +473,9 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self._email_exception_in_exception_context()
             is_success = False
         finally:
-            self.final_action()
+            # We don't want to drop the blackhole table until the replication handler is using
+            # the schema_tracker database stably.
+            # self.final_action()
             if not is_success:
                 os._exit(1)
 
