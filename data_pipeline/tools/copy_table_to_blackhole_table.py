@@ -474,7 +474,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             is_success = False
         finally:
             # We don't want to drop the blackhole table until the replication handler is using
-            # the schema_tracker database stably.
+            # the schema_tracker database stably. (TODO: DATAPIPE-845)
             # self.final_action()
             if not is_success:
                 os._exit(1)
