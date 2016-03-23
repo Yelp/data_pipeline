@@ -16,6 +16,7 @@ help:
 	@echo "compose-prefix - generates a preconfigured docker-compose command"
 	@echo "prepare-release - Bump the version number and add a changelog entry (pushmasters only)"
 	@echo "release - Commit the latest version, tag the commit, and push it (pushmasters only)"
+	@echo "get-venv-update - fetched the latest version of venv-update"
 
 all: production install-hooks
 
@@ -87,3 +88,6 @@ release:
 
 compose-prefix:
 	@python -c "from data_pipeline.testing_helpers.containers import Containers; print Containers.compose_prefix()"
+	
+get-venv-update:
+	curl http://yelp.github.io/venv-update/install.txt | bash -s v1.0.0
