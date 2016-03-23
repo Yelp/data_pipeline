@@ -44,7 +44,7 @@ class TestDBSourcedtNamespace(object):
             expected_cluster="refresh_primary",
             expected_database="yelp",
             expected_environment="dev",
-            expected_transformers=["heartbeat", "yelp-main_transformed"]
+            expected_suffixes=["heartbeat", "yelp-main_transformed"]
         )
 
     def test_fail_missing(self):
@@ -67,7 +67,7 @@ class TestDBSourcedtNamespace(object):
             expected_name=name,
             expected_cluster="main",
             expected_database="database",
-            expected_transformers=["transformer"]
+            expected_suffixes=["transformer"]
         )
 
     def test_guarantees_db(self):
@@ -80,7 +80,7 @@ class TestDBSourcedtNamespace(object):
             expected_name=name,
             expected_cluster="main",
             expected_database="database",
-            expected_transformers=["transformer"]
+            expected_suffixes=["transformer"]
         )
 
     def test_guarantees_transformer(self):
@@ -88,12 +88,12 @@ class TestDBSourcedtNamespace(object):
         self._assert_success(
             actual_namespace=DBSourcedNamespace.create_from_namespace_name_with_guarantees(
                 name,
-                expected_transformers=["transformer"]
+                expected_suffixes=["transformer"]
             ),
             expected_name=name,
             expected_cluster="main",
             expected_database="database",
-            expected_transformers=["transformer"]
+            expected_suffixes=["transformer"]
         )
 
     def test_guarantees_environment(self):
@@ -116,11 +116,11 @@ class TestDBSourcedtNamespace(object):
             expected_environment="main"
         )
 
-    def test_fail_impossible_transformers(self):
+    def test_fail_impossible_suffixes(self):
         name = "dev.refresh_primary.yelp.transformer"
         self._assert_failure_with_guarantees(
             name,
-            expected_transformers=["heartbeat"]
+            expected_suffixes=["heartbeat"]
         )
 
     def test_fail_impossible_double_cluster_env(self):
@@ -157,12 +157,12 @@ class TestDBSourcedtNamespace(object):
             actual_namespace=DBSourcedNamespace(
                 cluster="refresh_primary",
                 database="yelp",
-                transformers=["heartbeat"]
+                suffixes=["heartbeat"]
             ),
             expected_name="refresh_primary.yelp.heartbeat",
             expected_cluster="refresh_primary",
             expected_database="yelp",
-            expected_transformers=["heartbeat"]
+            expected_suffixes=["heartbeat"]
         )
 
     def _assert_failure(self, name, error_substr):
@@ -176,7 +176,7 @@ class TestDBSourcedtNamespace(object):
         expected_cluster=None,
         expected_database=None,
         expected_environment=None,
-        expected_transformers=None
+        expected_suffixes=None
     ):
         with pytest.raises(ValueError) as e:
             DBSourcedNamespace.create_from_namespace_name_with_guarantees(
@@ -184,7 +184,7 @@ class TestDBSourcedtNamespace(object):
                 expected_environment=expected_environment,
                 expected_cluster=expected_cluster,
                 expected_database=expected_database,
-                expected_transformers=expected_transformers
+                expected_suffixes=expected_suffixes
             )
             assert "impossible to rectify" in e
 
@@ -195,12 +195,12 @@ class TestDBSourcedtNamespace(object):
         expected_cluster,
         expected_database,
         expected_environment=None,
-        expected_transformers=None
+        expected_suffixes=None
     ):
-        if not expected_transformers:
-            expected_transformers = []
+        if not expected_suffixes:
+            expected_suffixes = []
         assert actual_namespace.get_name() == expected_name
         assert actual_namespace.cluster == expected_cluster
         assert actual_namespace.database == expected_database
         assert actual_namespace.environment == expected_environment
-        assert actual_namespace.transformers == expected_transformers
+        assert actual_namespace.suffixes == expected_suffixes
