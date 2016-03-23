@@ -43,26 +43,14 @@ clean-vim:
 	find . -name '*.swp' -exec rm -f {} +
 	find . -name '*.swo' -exec rm -f {} +
 
-test:.venv.touch
+test:
 	# This will timeout after 15 minutes, in case there is a hang on jenkins
 	PULL_CONTAINERS=true FORCE_FRESH_CONTAINERS=true timeout -9 900 tox $(REBUILD_FLAG)
 
-docs: clean-docs .venv.docs.touch
+docs: clean-docs 
 	tox -e docs $(REBUILD_FLAG)
 
 coverage: test
-
-# The .venv.*.touch hack is necessary because of
-# https://bitbucket.org/hpk42/tox/issues/149/virtualenv-is-not-recreated-when-deps
-#
-# The idea is changes in setup.py or requirements-dev.txt will force a rebuild.
-.venv.touch: setup.py requirements-dev.txt
-	$(eval REBUILD_FLAG := --recreate)
-	touch .venv.touch
-
-.venv.docs.touch: setup.py requirements-dev.txt
-	$(eval REBUILD_FLAG := --recreate)
-	touch .venv.docs.touch
 
 install-hooks:
 	tox -e pre-commit -- install -f --install-hooks
