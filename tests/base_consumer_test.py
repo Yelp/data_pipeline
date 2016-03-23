@@ -15,12 +15,11 @@ from yelp_avro.testing_helpers.generate_payload_data import \
 
 from data_pipeline.base_consumer import ConsumerTopicState
 from data_pipeline.base_consumer import TopicFilter
-from data_pipeline.consumer_source import MultiTopics
+from data_pipeline.consumer_source import FixedTopics
 from data_pipeline.consumer_source import NewTopicOnlyInDataTarget
 from data_pipeline.consumer_source import NewTopicOnlyInNamespace
 from data_pipeline.consumer_source import NewTopicOnlyInSource
 from data_pipeline.consumer_source import SingleSchema
-from data_pipeline.consumer_source import SingleTopic
 from data_pipeline.consumer_source import TopicInDataTarget
 from data_pipeline.consumer_source import TopicInNamespace
 from data_pipeline.consumer_source import TopicInSource
@@ -689,11 +688,11 @@ class SingleTopicSetupMixin(RefreshFixedTopicTests):
 
     @pytest.fixture
     def consumer_source(self, foo_topic):
-        return SingleTopic(topic_name=foo_topic)
+        return FixedTopics(foo_topic)
 
     @pytest.fixture
     def bad_consumer_source(self):
-        return SingleTopic(topic_name='bad_topic')
+        return FixedTopics('bad_topic')
 
 
 class MultiTopicsSetupMixin(RefreshFixedTopicTests):
@@ -718,11 +717,11 @@ class MultiTopicsSetupMixin(RefreshFixedTopicTests):
 
     @pytest.fixture
     def consumer_source(self, foo_topic, bar_topic):
-        return MultiTopics(foo_topic, bar_topic)
+        return FixedTopics(foo_topic, bar_topic)
 
     @pytest.fixture
     def bad_consumer_source(self):
-        return MultiTopics('bad_topic_1', 'bad_topic_2')
+        return FixedTopics('bad_topic_1', 'bad_topic_2')
 
 
 class SingleSchemaSetupMixin(RefreshFixedTopicTests):

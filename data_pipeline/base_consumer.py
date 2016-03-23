@@ -522,7 +522,8 @@ class BaseConsumer(Client):
                 of ConsumerSource types, such as SingleTopic, TopicInNamespace.
 
         Returns:
-            [str]: A list of new topic names that this consumer starts to consume.
+            List[str]: A list of new topic names that this consumer starts to
+            consume.
         """
         topics = consumer_source.get_topics()
         new_topics = [topic for topic in topics

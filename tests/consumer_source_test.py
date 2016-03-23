@@ -7,12 +7,11 @@ import time
 
 import pytest
 
-from data_pipeline.consumer_source import MultiTopics
+from data_pipeline.consumer_source import FixedTopics
 from data_pipeline.consumer_source import NewTopicOnlyInDataTarget
 from data_pipeline.consumer_source import NewTopicOnlyInNamespace
 from data_pipeline.consumer_source import NewTopicOnlyInSource
 from data_pipeline.consumer_source import SingleSchema
-from data_pipeline.consumer_source import SingleTopic
 from data_pipeline.consumer_source import TopicInDataTarget
 from data_pipeline.consumer_source import TopicInNamespace
 from data_pipeline.consumer_source import TopicInSource
@@ -109,22 +108,18 @@ class TestSingleTopic(FixedTopicsSourceTestBase):
 
     @pytest.fixture
     def consumer_source(self, foo_topic):
-        return SingleTopic(topic_name=foo_topic)
+        return FixedTopics(foo_topic)
 
     @pytest.fixture
     def expected(self, foo_topic):
         return {foo_topic}
-
-    def test_invalid_topic(self):
-        with pytest.raises(ValueError):
-            SingleTopic(topic_name='')
 
 
 class TestMultiTopics(FixedTopicsSourceTestBase):
 
     @pytest.fixture
     def consumer_source(self, foo_topic, bar_topic):
-        return MultiTopics(foo_topic, bar_topic)
+        return FixedTopics(foo_topic, bar_topic)
 
     @pytest.fixture
     def expected(self, foo_topic, bar_topic):
@@ -132,9 +127,11 @@ class TestMultiTopics(FixedTopicsSourceTestBase):
 
     def test_invalid_topic(self):
         with pytest.raises(ValueError):
-            MultiTopics()
+            FixedTopics()
         with pytest.raises(ValueError):
-            MultiTopics('')
+            FixedTopics('')
+        with pytest.raises(ValueError):
+            FixedTopics('', '')
 
 
 class TestSingleSchema(FixedTopicsSourceTestBase):

@@ -19,6 +19,10 @@ class ConsumerSource(object):
         """Get a list of topics where the consumer get the messages from.  The
         derived class must implement this function.  It should return a list
         of topic names.
+
+        Returns:
+            List[str]: A list of topic names.  If no topics, an empty list is
+            returned.
         """
         raise NotImplemented()
 
@@ -27,34 +31,17 @@ class ConsumerSource(object):
         return get_schematizer()
 
 
-class SingleTopic(ConsumerSource):
-    """Consumer only tails single topic.
+class FixedTopics(ConsumerSource):
+    """Consumer tails one or a fixed set of topics.
 
     Args:
-        topic_name (str): the name of the Kafka topic to consume from.
-    """
-
-    def __init__(self, topic_name):
-        if not topic_name:
-            raise ValueError("topic_name must be specified.")
-        self.topic = topic_name
-
-    def get_topics(self):
-        return [self.topic]
-
-
-class MultiTopics(ConsumerSource):
-    """Consumer tails a fixed set of topics.
-
-    Args:
-        topic_names (list of str): List of Kafka topic names to consume from.
+        topic_names: Variable number of Kafka topic names to consume from.
+            At least one topic must be specified.
     """
 
     def __init__(self, *topic_names):
-        if not topic_names:
+        if not any(topic_names):
             raise ValueError("At least one topic must be specified.")
-        if all(not topic for topic in topic_names):
-            raise ValueError('At least one topic must be specified.')
         self.topics = topic_names
 
     def get_topics(self):
@@ -226,5 +213,5 @@ class NewTopicOnlyInDataTarget(TopicInDataTarget):
                 self.last_query_timestamp
             )
         ]
-        self.last_query_timestamp = time.time()
+        self.last_query_timestamp = long(time.time())
         return topic_names
