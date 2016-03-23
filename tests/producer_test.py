@@ -252,13 +252,13 @@ class TestProducer(TestProducerBase):
             mock.patch.object(
                 data_pipeline._kafka_producer,
                 'logger'
-            ) as mock_logger:
+        ) as mock_logger:
             message = self.create_message(
-                    topic,
-                    payload,
-                    registered_schema,
-                    contains_pii=True
-                )
+                topic,
+                payload,
+                registered_schema,
+                contains_pii=True
+            )
             messages = self._publish_message(
                 topic,
                 message,
