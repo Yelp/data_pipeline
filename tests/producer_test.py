@@ -286,6 +286,42 @@ class TestProducer(TestProducerBase):
             self._publish_and_assert_pii_message(pii_message, producer)
         assert len(multiprocessing.active_children()) == 0
 
+    def test_basic_publish_message_with_pii_logging(
+        self,
+        topic,
+        payload,
+        producer,
+        registered_schema
+    ):
+        """To test logging when the producer skips a PII message"""
+        with reconfigure(encryption_type='AES_MODE_CBC-1'),\
+            mock.patch.object(
+                data_pipeline._kafka_producer,
+                'logger'
+        ) as mock_logger:
+            message = self.create_message(
+                topic,
+                payload,
+                registered_schema,
+                contains_pii=True
+            )
+            messages = self._publish_message(
+                topic,
+                message,
+                producer
+            )
+            call_args = "Skipping a message with PII - uuid_base64: {0}, " \
+                        "schema_id: {1}, " \
+                        "timestamp: {2}, " \
+                        "type: {3}".format(
+                            message.uuid_base64,
+                            message.schema_id,
+                            message.timestamp,
+                            message.message_type.name
+                        )
+            assert len(messages) == 0
+            assert mock_logger.info.call_args_list[0] == mock.call(call_args)
+
     def _publish_and_assert_pii_message(self, message, producer):
         with capture_new_messages(message.topic) as get_messages:
             producer.publish(message)
