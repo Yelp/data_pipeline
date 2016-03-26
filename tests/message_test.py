@@ -2,8 +2,6 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from uuid import UUID
-
 import mock
 import pytest
 from kafka import create_message
@@ -407,6 +405,7 @@ class TestUpdateMessage(SharedMessageTest):
         )
 
     def test_encrypted_message(self, pii_schema, payload, example_payload_data):
+        # TODO [clin|DATAPIPE-851] let's see if this can be refactored
         with reconfigure(encryption_type='AES_MODE_CBC-1'):
             test_params = [(payload, None), (None, example_payload_data)]
             for _payload, _payload_data in test_params:
@@ -467,7 +466,7 @@ class TestUpdateMessage(SharedMessageTest):
             'timestamp': message.timestamp,
             'meta': message._get_meta_attr_avro_repr(),
             'encryption_type': message.encryption_type,
-            'uuid': UUID(bytes=message.uuid).hex,
+            'uuid': message.uuid_hex,
             'payload_data': message.payload_data,
             'previous_payload_data': message.previous_payload_data
         }
