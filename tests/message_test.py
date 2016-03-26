@@ -224,7 +224,7 @@ class SharedMessageTest(object):
             'timestamp': message.timestamp,
             'meta': message._get_meta_attr_avro_repr(),
             'encryption_type': message.encryption_type,
-            'uuid': UUID(bytes=message.uuid).hex,
+            'uuid': message.uuid_hex,
             'payload_data': message.payload_data
         }
         # only use eval to get the original dict when the string is trusted

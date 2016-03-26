@@ -13,19 +13,28 @@ class EncryptionHelper(object):
     payload in the data pipeline.
 
     Args:
-        encryption_type (string): Encryption algorithm used to encrypt/decrypt
-            payload
-        initialization_vector: initialization vector used in AES algorithm
+        encryption_type (string): string indicating the encryption algorithm and
+            encryption key used to encrypt/decrypt payload.  The format must be
+            "{algorithm_name}-{key_id}".  The "key_id" is the file name that
+            contains specific encryption key for the specified algorithm.
+        encryption_meta (:class:data_pipeline.meta_attribute.MetaAttribute):
+            meta attribute that contains necessary information for the given
+            encryption type to perform encryption/decryption.  For example, if
+            the encryption type is AES algorithm, the meta attribute is then
+            the initialization vector meta attribute.
 
     Remarks:
         This class currently is implemented specifically for AES algorithm,
         although the original design is to support multiple encryption algorithms.
     """
 
-    def __init__(self, encryption_type, initialization_vector=None):
+    def __init__(self, encryption_type, encryption_meta=None):
         key_location = get_config().key_location + 'key-{}.key'
         self.key = self._retrieve_key(encryption_type, key_location)
-        self.initialization_vector = InitializationVector(initialization_vector)
+        self.encryption_meta = (
+            encryption_meta or
+            self.get_encryption_meta_by_encryption_type(encryption_type)
+        )
 
     def _retrieve_key(self, encryption_type, key_location):
         if not encryption_type:
@@ -33,25 +42,39 @@ class EncryptionHelper(object):
 
         # Get the key number to use, allowing for key rotation. encryption_type
         # must be of the form 'Algorithm_name-{key_id}'
-        key_id = encryption_type.split('-')[-1]
+        _, key_id = self._get_algorithm_and_key_id(encryption_type)
 
         with open(key_location.format(key_id), 'r') as f:
             return f.read(AES.block_size)
 
-    @property
-    def encryption_meta(self):
-        return self.initialization_vector
+    @classmethod
+    def _get_algorithm_and_key_id(cls, encryption_type):
+        # encryption_type must be of the form 'Algorithm_name-{key_id}'
+        algorithm, key_id = encryption_type.split('-')
+        return algorithm, key_id
 
     @classmethod
-    def get_meta_schema_id(cls):
-        return InitializationVector().schema_id
+    def get_encryption_meta_by_encryption_type(cls, encryption_type):
+        """This function returns the meta attribute for the given encryption type.
+
+        Remarks:
+            Currently because only AES algorithm is supported, it returns
+            `class:data_pipeline.initialization_vector.InitializationVector` meta
+            attribute directly.
+        """
+        algorithm, _ = cls._get_algorithm_and_key_id(encryption_type)
+        if algorithm:
+            return InitializationVector()
+        raise Exception(
+            "Encryption algorithm {} is not supported.".format(algorithm)
+        )
 
     def encrypt_payload(self, payload):
         """Encrypt payload with key on machine, using AES."""
         encrypter = AES.new(
             self.key,
             AES.MODE_CBC,
-            self.initialization_vector.payload
+            self.encryption_meta.payload
         )
         payload = self._pad_payload(payload)
         return encrypter.encrypt(payload)
@@ -70,7 +93,7 @@ class EncryptionHelper(object):
         decrypter = AES.new(
             self.key,
             AES.MODE_CBC,
-            self.initialization_vector.payload
+            self.encryption_meta.payload
         )
         data = decrypter.decrypt(payload)
         return self._unpad(data)

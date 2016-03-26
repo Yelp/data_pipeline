@@ -168,6 +168,11 @@ class Message(object):
         self._uuid = uuid
 
     @property
+    def uuid_hex(self):
+        # TODO: DATAPIPE-848
+        return UUID(bytes=self.uuid).hex
+
+    @property
     def contains_pii(self):
         return self._contains_pii
 
@@ -194,7 +199,10 @@ class Message(object):
 
     @property
     def _should_be_encrypted(self):
-        """Whether this message should be encrypted."""
+        """Whether this message should be encrypted.  So far the criteria used
+        to determine if the message should be encrypted is the pii information.
+        Include additional criteria if necessary.
+        """
         return self.contains_pii
 
     def _manual_set_encryption_type(self, encryption_type):
@@ -360,7 +368,7 @@ class Message(object):
         if self.encryption_type:
             if self._meta is None:
                 self._meta = []
-            if not self.get_encryption_meta(self.meta):
+            if not self.get_encryption_meta(self.encryption_type, self.meta):
                 self.meta.append(self._encryption_helper.encryption_meta)
 
     def _set_payload_or_payload_data(self, payload, payload_data):
@@ -400,11 +408,6 @@ class Message(object):
     def _encrypt_payload_if_necessary(self, payload):
         if self.encryption_type is not None:
             return self._encryption_helper.encrypt_payload(payload)
-        return payload
-
-    def _decrypt_payload_if_necessary(self, payload):
-        if self.encryption_type is not None:
-            return self._encryption_helper.decrypt_payload(payload)
         return payload
 
     def _set_payload_data_if_necessary(self, payload):
@@ -461,18 +464,17 @@ class Message(object):
         if not encryption_type:
             return payload
 
-        encryption_meta = cls.get_encryption_meta(meta)
-        encryption_helper = EncryptionHelper(
-            encryption_type,
-            initialization_vector=encryption_meta.payload
-        )
+        encryption_meta = cls.get_encryption_meta(encryption_type, meta)
+        encryption_helper = EncryptionHelper(encryption_type, encryption_meta)
         return encryption_helper.decrypt_payload(payload)
 
     @classmethod
-    def get_encryption_meta(cls, meta):
-        meta_schema_id = EncryptionHelper.get_meta_schema_id()
+    def get_encryption_meta(cls, encryption_type, meta):
+        encryption_meta = EncryptionHelper.get_encryption_meta_by_encryption_type(
+            encryption_type
+        )
         return next(
-            (m for m in meta if m.schema_id == meta_schema_id),
+            (m for m in meta if m.schema_id == encryption_meta.schema_id),
             None
         )
 
@@ -484,8 +486,10 @@ class Message(object):
 
     @property
     def _str_repr(self):
+        # TODO [clin|DATAPIPE-849] It should properly handle pii payload data,
+        # especially it shouldn't leak it into the logs if it's used for logging.
         return {
-            'uuid': UUID(bytes=self.uuid).hex,
+            'uuid': self.uuid_hex,
             'message_type': self.message_type.name,
             'schema_id': self.schema_id,
             'payload_data': self.payload_data,
