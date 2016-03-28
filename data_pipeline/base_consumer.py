@@ -514,7 +514,7 @@ class BaseConsumer(Client):
             self.topic_to_consumer_topic_state_map[new_topic.name] = None
 
     def refresh_topics(self, consumer_source):
-        """Refresh the topics this consumer are consuming from based on the
+        """Refresh the topics this consumer is consuming from based on the
         settings in the given consumer_source.
 
         Args:
