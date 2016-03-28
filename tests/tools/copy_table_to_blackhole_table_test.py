@@ -65,7 +65,7 @@ class TestFullRefreshRunner(object):
     @pytest.fixture
     def fake_new_table(self):
         return (
-            'CREATE TABLE test_db_data_pipeline_refresh('
+            'CREATE TABLE IF NOT EXISTS test_db_data_pipeline_refresh('
             'PersonID int,'
             'LastName varchar(255),'
             'FirstName varchar(255),'
