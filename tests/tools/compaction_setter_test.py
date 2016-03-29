@@ -2,14 +2,15 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import copy
 from collections import namedtuple
 
 import mock
 import pytest
 from kazoo.exceptions import NoNodeError
-from yelp_kafka_tool.util.zookeeper import ZK
 
 from data_pipeline.tools.compaction_setter import CompactionSetter
+from data_pipeline.tools.compaction_setter import ZK
 
 
 class TestCompactionSetter(object):
@@ -17,6 +18,12 @@ class TestCompactionSetter(object):
     @pytest.fixture
     def compaction_setter(self):
         return CompactionSetter()
+
+    @pytest.fixture
+    def real_schematizer_compaction_setter(self, containers):
+        compaction_setter = CompactionSetter()
+        compaction_setter.process_commandline_options(args=[])
+        return compaction_setter
 
     @pytest.fixture
     def namespace(self):
@@ -30,7 +37,7 @@ class TestCompactionSetter(object):
 
     @pytest.fixture
     def topic_name(self):
-        return "some_topic"
+        return "some_topic_compaction_setter"
 
     @pytest.fixture
     def topic(self, topic_name):
@@ -54,7 +61,9 @@ class TestCompactionSetter(object):
         with mock.patch.object(
             ZK,
             'get_topic_config',
-            return_value=fake_topic_config
+            # We mutate these topic configs within the code, so we need to create copies
+            # We can't use the deepcopy method itself since it doesn't take a parameter
+            side_effect=lambda x: copy.deepcopy(fake_topic_config)
         ) as mock_get_topic_config:
             yield mock_get_topic_config
 
@@ -63,7 +72,9 @@ class TestCompactionSetter(object):
         with mock.patch.object(
             ZK,
             'get_topic_config',
-            return_value=fake_topic_config_with_cleanup_policy
+            # We mutate these topic configs within the code, so we need to create copies
+            # We can't use the deepcopy method itself since it doesn't take a parameter
+            side_effect=lambda x: copy.deepcopy(fake_topic_config_with_cleanup_policy)
         ) as mock_get_topic_config:
             yield mock_get_topic_config
 
@@ -134,6 +145,26 @@ class TestCompactionSetter(object):
             'set_topic_config'
         ) as mock_set_topic_config:
             yield mock_set_topic_config
+
+    @pytest.fixture
+    def topic_resp(self, source, namespace, real_schematizer_compaction_setter):
+        pk_schema_json = {
+            'type': 'record',
+            'name': source.name,
+            'namespace': namespace.name,
+            'fields': [
+                {'type': 'int', 'name': 'id', 'pkey': 1},
+                {'type': 'int', 'name': 'data'}
+            ],
+            'pkey': ['id']
+        }
+        return real_schematizer_compaction_setter.schematizer.register_schema_from_schema_json(
+            namespace=namespace.name,
+            source=source.name,
+            source_owner_email='bam+test@yelp.com',
+            schema_json=pk_schema_json,
+            contains_pii=False
+        ).topic
 
     def test_compact(
         self,
@@ -206,6 +237,38 @@ class TestCompactionSetter(object):
         )
         assert mock_set_topic_config.call_count == 0
 
+    def test_real_schematizer(
+        self,
+        real_schematizer_compaction_setter,
+        topic_resp,
+        containers,
+        mock_get_topic_config,
+        mock_set_topic_config,
+        mock_log_results
+    ):
+        self._run_compaction_setter(real_schematizer_compaction_setter)
+        kall = mock_log_results.call_args
+        _, kwargs = kall
+        assert topic_resp.name in kwargs['compacted_topics']
+        assert topic_resp.name not in kwargs['skipped_topics']
+        assert topic_resp.name not in kwargs['missed_topics']
+
+    def test_real_schematizer_skip(
+        self,
+        real_schematizer_compaction_setter,
+        topic_resp,
+        containers,
+        mock_get_topic_config_with_cleanup_policy,
+        mock_set_topic_config,
+        mock_log_results
+    ):
+        self._run_compaction_setter(real_schematizer_compaction_setter)
+        kall = mock_log_results.call_args
+        _, kwargs = kall
+        assert topic_resp.name not in kwargs['compacted_topics']
+        assert topic_resp.name in kwargs['skipped_topics']
+        assert topic_resp.name not in kwargs['missed_topics']
+
     def _run_compaction_setter(self, compaction_setter):
-        compaction_setter.process_commandline_options([])
+        compaction_setter.process_commandline_options(args=[])
         compaction_setter.run()
