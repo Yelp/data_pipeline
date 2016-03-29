@@ -33,7 +33,7 @@ setup(
         'enum34>=1.0.4',
         'kafka-python==0.9.4.post2',
         'psutil==2.1.1',
-        'pycrypto==2.6.1',
+        'pycrypto>=2.6.1',
         'PyStaticConfiguration>=0.9.0',
         'simplejson>=2.1.2',
         'swaggerpy>=0.7.6',
