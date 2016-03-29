@@ -353,11 +353,10 @@ class TestPublishMonitorMessage(TestProducerBase):
         actual_raw_messages,
         expected_topic,
         expected_messages_counts,
-        expected_start_timstamp=0
+        expected_start_timestamp=0
     ):
         envelope = Envelope()
 
-        expected_start_timestamp = expected_start_timstamp
         expected_count_idx = 0
         for msg in actual_raw_messages:
             actual_message = self._get_actual_message(msg.message.value, envelope)
@@ -409,9 +408,7 @@ class TestPublishMonitorMessage(TestProducerBase):
             return CreateMessage(
                 schema.schema_id,
                 payload=payload,
-                timestamp=int(
-                    monitor_start_time + self.monitor_window_in_sec * timeslot
-                )
+                timestamp=int(self.get_timestamp(monitor_start_time, timeslot))
             )
         return _create_message
 
@@ -439,7 +436,7 @@ class TestPublishMonitorMessage(TestProducerBase):
                 actual_raw_messages=monitor_messages,
                 expected_topic=topic,
                 expected_messages_counts=[0, 0, 10],
-                expected_start_timstamp=producer.monitor.start_time
+                expected_start_timestamp=producer.monitor.start_time
             )
 
     def test_publish_messages_with_diff_timestamps(
@@ -469,7 +466,7 @@ class TestPublishMonitorMessage(TestProducerBase):
                 actual_raw_messages=monitor_messages,
                 expected_topic=topic,
                 expected_messages_counts=[1, 1, 0, 1],
-                expected_start_timstamp=producer.monitor.start_time
+                expected_start_timestamp=producer.monitor.start_time
             )
 
     def test_publish_messages_with_diff_topic_and_timestamp(
@@ -508,13 +505,13 @@ class TestPublishMonitorMessage(TestProducerBase):
                 actual_raw_messages=monitor_messages,
                 expected_topic=topic,
                 expected_messages_counts=[1, 0, 0, 1, 0, 0, 0],
-                expected_start_timstamp=producer.monitor.start_time
+                expected_start_timestamp=producer.monitor.start_time
             )
             self.assert_equal_monitor_messages(
                 actual_raw_messages=monitor_messages,
                 expected_topic=another_topic,
                 expected_messages_counts=[1, 0, 0, 0, 1, 0, 1],
-                expected_start_timstamp=producer.monitor.start_time
+                expected_start_timestamp=producer.monitor.start_time
             )
 
     def test_monitoring_system_dry_run(self, producer_name, team_name):
