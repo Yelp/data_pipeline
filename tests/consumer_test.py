@@ -91,7 +91,6 @@ class TestConsumer(BaseConsumerTest):
     ):
         return Consumer(
             consumer_name=consumer_group_name,
-            # consumer_name='test_consumer',
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
             topic_to_consumer_topic_state_map={topic: None, pii_topic: None},
