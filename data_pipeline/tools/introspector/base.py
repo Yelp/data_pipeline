@@ -166,6 +166,7 @@ class IntrospectorBatch(object):
             if isinstance(value, datetime.datetime):
                 # datetimes are not json serializable
                 value = str(value)
+            result_dict[field] = value
         result_dict['source_name'] = topic.source.name
         result_dict['source_id'] = topic.source.source_id
         result_dict['namespace'] = topic.source.namespace.name
