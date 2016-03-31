@@ -45,7 +45,7 @@ class InfoCommand(IntrospectorBatch):
                  "Note: --id will override --name if both are used."
         )
 
-        info_command_parser.set_defaults(command=cls().run)
+        info_command_parser.set_defaults(command=cls("data_pipeline_instropsector_info").run)
 
     def run(self, args):
         print "This is the list command"

@@ -31,7 +31,7 @@ class SchemaCheckCommand(IntrospectorBatch):
             type=str
         )
 
-        schema_check_command_parser.set_defaults(command=cls().run)
+        schema_check_command_parser.set_defaults(command=cls("data_pipeline_instropsector_schema_check").run)
 
     def run(self, args):
         print "This is the schema-check command"

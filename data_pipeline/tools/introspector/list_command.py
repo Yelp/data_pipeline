@@ -2,14 +2,46 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import argparse
+import logging
+import pprint
 from data_pipeline.tools.introspector.base import IntrospectorBatch
 
 class ListCommand(IntrospectorBatch):
+
+    list_type_to_fields_map = {
+        'topics': [
+            'name', 'id', 'in_kafka', 'message_count',
+            'contains_pii', 'primary_keys',
+            'source_name', 'source_id',
+            'namespace_name', 'namespace_id',
+            'created_at', 'updated_at'
+        ],
+        'sources': [
+            'name', 'id', 'owner_email',
+            'namespace_name', 'namespace_id',
+            'created_at', 'updated_at', 'active_topic_count'
+        ],
+        'namespaces': [
+            'name', 'id',
+            'active_topic_count', 'active_source_count',
+            'created_at'
+        ]
+    }
+
+
     @classmethod
     def add_parser(cls, subparsers):
         list_command_parser = subparsers.add_parser(
             "list",
-            description="List the specified items, with a row for each item.",
+            description="List the specified items, with a row for each item.\n"
+                        "The fields of each type are as follows: \n{}\n\n"
+                        "NOTE: It is required to use either --source-id-filter or \n"
+                        "both of --namespace-filter and --source-name-filter to list topics".format(
+                            pprint.pformat(cls.list_type_to_fields_map)
+                        ),
+            #Use the raw formatter so that the fields can be printed in a useable way
+            formatter_class=argparse.RawDescriptionHelpFormatter,
             add_help=False
         )
 
@@ -21,11 +53,10 @@ class ListCommand(IntrospectorBatch):
         )
 
         list_command_parser.add_argument(
-            "type",
+            "list_type",
             type=str,
-            choices=("topics", "sources", "namespaces"),
+            choices=[list_type for list_type in cls.list_type_to_fields_map.keys()],
             help="What type of object you want to list. "
-            "Note: It is required to use the --filter argument for topic lists"
         )
 
         list_command_parser.add_argument(
@@ -33,23 +64,21 @@ class ListCommand(IntrospectorBatch):
             "--sort-by",
             type=str,
             default=None,
-            help="Sort the listing by a particular field of the object."
+            help="Sort the listing by a particular field of the object in ascending order (by default)"
         )
 
         list_command_parser.add_argument(
-            "--namespace-name-filter",
+            "--descending-order",
+            action="store_true",
+            default=False,
+            help="Use --sort-by with descending order"
+        )
+
+        list_command_parser.add_argument(
+            "--namespace-filter",
             type=str,
             default=None,
             help="Filter by namespace, using the namespace's name. "
-                 "Note: Cannot filter list namespaces by a particular namespace (will be ignored). "
-                 "Will be overrided if filtering by source id"
-        )
-
-        list_command_parser.add_argument(
-            "--namespace-id-filter",
-            type=int,
-            default=None,
-            help="Filter by namespace, using the namespace's id. "
                  "Note: Cannot filter list namespaces by a particular namespace (will be ignored). "
                  "Will be overrided if filtering by source id"
         )
@@ -71,9 +100,62 @@ class ListCommand(IntrospectorBatch):
                  "Note: Can only filter topics by sources (will otherwise be ignored). "
                  "Will override all other filters"
         )
-        list_command_parser.set_defaults(command=cls().run)
+        list_command_parser.set_defaults(
+            command = lambda args:
+                cls("data_pipeline_introspector_list").run(args, list_command_parser)
+        )
 
-    def run(self, args):
-        print "This is the list command"
 
+    def process_args(self, args, parser):
+        self.list_type = args.list_type
+        self.fields = self.list_type_to_fields_map[self.list_type]
+        self.sort_by = args.sort_by
+        if self.sort_by and self.sort_by not in self.fields:
+            raise parser.error(
+                "You can not sort_by by {} for list type {}. Possible fields are: {}".format(
+                    self.sort_by, self.list_type, self.fields
+                )
+            )
 
+        self.namespace_filter = args.namespace_filter
+        self.source_name_filter = args.source_name_filter
+        self.source_id_filter = args.source_id_filter
+        if self.list_type == "topics" and not (
+            (self.namespace_filter and self.source_name_filter) or self.source_id_filter
+        ):
+            raise parser.error(
+                "Must provide topic filters of --source-id-filter or both of " + \
+                    "--namespace-filter and --source-name-filter"
+            )
+        if self.list_type == "namespaces" and self.namespace_filter:
+            self.log.warning("Will not use --namespace-filter to filter namespaces")
+        if (self.list_type == "sources" or self.list_type == "namespaces") and (
+            self.source_name_filter or self.source_id_filter
+        ):
+            self.log.warning(
+                "Will not use --source-id-filter or --source-name-filter to filter {}".format(
+                    self.list_type
+                )
+            )
+        if (
+            self.list_type == "topics" and
+            self.source_id_filter and (
+                self.source_name_filter or self.namespace_filter
+            )
+        ):
+            self.log.warning(
+                "Overriding all other filters with --source-id-filter"
+            )
+
+    def run(self, args, parser):
+        self.process_args(args, parser)
+        if self.list_type == "topics":
+            self.list_topics(
+                source_id=self.source_id_filter,
+                namespace_name=self.namespace_filter,
+                source_name=self.source_name_filter
+            )
+        elif self.list_type == "sources":
+            self.list_sources()
+        else:
+            self.list_namespaces()

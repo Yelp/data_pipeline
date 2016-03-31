@@ -84,7 +84,7 @@ class RegisterCommand(IntrospectorBatch):
             help="Flag indicating if schema could possibly contain pii. More info at y/pii"
         )
 
-        register_command_parser.set_defaults(command=cls().run)
+        register_command_parser.set_defaults(command=cls("data_pipeline_instropsector_register").run)
 
     def run(self, args):
         print "This is the register command"
