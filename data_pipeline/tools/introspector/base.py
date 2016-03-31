@@ -183,7 +183,9 @@ class IntrospectorBatch(object):
         self,
         source_id=None,
         source_name=None,
-        namespace_name=None
+        namespace_name=None,
+        sort_by=None,
+        descending_order=False
     ):
         if source_id:
             topics = self.schematizer.get_topics_by_source_id(
@@ -194,7 +196,11 @@ class IntrospectorBatch(object):
                 namespace_name = namespace_name,
                 source_name = source_name
             )
-        print simplejson.dumps([self.topic_to_dict(topic) for topic in topics])
+        topics = [self.topic_to_dict(topic) for topic in topics]
+        topics.sort(key=lambda topic: topic['updated_at'], reverse=True)
+        if sort_by:
+            topics.sort(key=lambda topic: topic[sort_by], reverse=descending_order)
+        print simplejson.dumps(topics)
 
     def list_sources(self):
         print "source listing in development"

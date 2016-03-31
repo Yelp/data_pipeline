@@ -11,15 +11,15 @@ class ListCommand(IntrospectorBatch):
 
     list_type_to_fields_map = {
         'topics': [
-            'name', 'id', 'in_kafka', 'message_count',
-            'contains_pii', 'primary_keys',
+            'name', 'topic_id', 'contains_pii',
+            'in_kafka', 'message_count',
             'source_name', 'source_id',
-            'namespace_name', 'namespace_id',
+            'namespace',
             'created_at', 'updated_at'
         ],
         'sources': [
             'name', 'id', 'owner_email',
-            'namespace_name', 'namespace_id',
+            'namespace',
             'created_at', 'updated_at', 'active_topic_count'
         ],
         'namespaces': [
@@ -110,6 +110,7 @@ class ListCommand(IntrospectorBatch):
         self.list_type = args.list_type
         self.fields = self.list_type_to_fields_map[self.list_type]
         self.sort_by = args.sort_by
+        self.descending_order = args.descending_order
         if self.sort_by and self.sort_by not in self.fields:
             raise parser.error(
                 "You can not sort_by by {} for list type {}. Possible fields are: {}".format(
@@ -153,7 +154,9 @@ class ListCommand(IntrospectorBatch):
             self.list_topics(
                 source_id=self.source_id_filter,
                 namespace_name=self.namespace_filter,
-                source_name=self.source_name_filter
+                source_name=self.source_name_filter,
+                sort_by = self.sort_by,
+                descending_order = self.descending_order
             )
         elif self.list_type == "sources":
             self.list_sources()
