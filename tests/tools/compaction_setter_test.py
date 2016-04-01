@@ -147,7 +147,7 @@ class TestCompactionSetter(object):
             yield mock_set_topic_config
 
     @pytest.fixture
-    def topic_resp(self, source, namespace, real_schematizer_compaction_setter):
+    def topic_resp(self, source, namespace, schematizer_client):
         pk_schema_json = {
             'type': 'record',
             'name': source.name,
@@ -158,7 +158,7 @@ class TestCompactionSetter(object):
             ],
             'pkey': ['id']
         }
-        return real_schematizer_compaction_setter.schematizer.register_schema_from_schema_json(
+        return schematizer_client.register_schema_from_schema_json(
             namespace=namespace.name,
             source=source.name,
             source_owner_email='bam+test@yelp.com',
