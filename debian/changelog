@@ -1,3 +1,11 @@
+data-pipeline-tools (0.1.59) lucid; urgency=low
+
+  * Commit: Merge branch 'master' of
+    git.yelpcorp.com:clientlibs/data_pipeline into DATAPIPE-615-
+    refactor-consuemr-refresh-topic-to-support-more-source-topic-type
+
+ -- Chia-Chi Lin <clin@yelp.com>  Thu, 31 Mar 2016 17:48:46 -0700
+
 data-pipeline-tools (0.1.58) lucid; urgency=low
 
   * Commit: Merge branch 'datapipe-750_log-when-the-producer-skips-a-

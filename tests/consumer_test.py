@@ -12,8 +12,16 @@ import pytest
 from data_pipeline.consumer import Consumer
 from data_pipeline.expected_frequency import ExpectedFrequency
 from tests.base_consumer_test import BaseConsumerTest
-from tests.base_consumer_test import RefreshTopicsTest
+from tests.base_consumer_test import MultiTopicsSetupMixin
+from tests.base_consumer_test import RefreshDynamicTopicTests
+from tests.base_consumer_test import RefreshFixedTopicTests
+from tests.base_consumer_test import RefreshNewTopicsTest
+from tests.base_consumer_test import SingleSchemaSetupMixin
+from tests.base_consumer_test import SingleTopicSetupMixin
 from tests.base_consumer_test import TIMEOUT
+from tests.base_consumer_test import TopicInDataTargetSetupMixin
+from tests.base_consumer_test import TopicInNamespaceSetupMixin
+from tests.base_consumer_test import TopicInSourceSetupMixin
 
 
 class TestConsumer(BaseConsumerTest):
@@ -170,7 +178,7 @@ class TestConsumer(BaseConsumerTest):
                 consumer_two.get_message(blocking=True, timeout=TIMEOUT)
 
 
-class TestRefreshTopics(RefreshTopicsTest):
+class TestRefreshTopics(RefreshNewTopicsTest):
 
     @pytest.fixture
     def consumer_instance(self, topic, team_name):
@@ -180,3 +188,69 @@ class TestRefreshTopics(RefreshTopicsTest):
             expected_frequency_seconds=ExpectedFrequency.constantly,
             topic_to_consumer_topic_state_map={topic: None}
         )
+
+
+class ConsumerRefreshFixedTopicTests(RefreshFixedTopicTests):
+
+    @pytest.fixture
+    def consumer_instance(self, topic, team_name):
+        return Consumer(
+            consumer_name='test_consumer',
+            team_name=team_name,
+            expected_frequency_seconds=ExpectedFrequency.constantly,
+            topic_to_consumer_topic_state_map={topic: None}
+        )
+
+
+class TestRefreshSingleTopic(
+    ConsumerRefreshFixedTopicTests,
+    SingleTopicSetupMixin
+):
+    pass
+
+
+class TestRefreshMultiTopics(
+    ConsumerRefreshFixedTopicTests,
+    MultiTopicsSetupMixin
+):
+    pass
+
+
+class TestRefreshSingleSchema(
+    ConsumerRefreshFixedTopicTests,
+    SingleSchemaSetupMixin
+):
+    pass
+
+
+class ConsumerRefreshDynamicTopicTests(RefreshDynamicTopicTests):
+
+    @pytest.fixture
+    def consumer_instance(self, topic, team_name):
+        return Consumer(
+            consumer_name='test_consumer',
+            team_name=team_name,
+            expected_frequency_seconds=ExpectedFrequency.constantly,
+            topic_to_consumer_topic_state_map={topic: None}
+        )
+
+
+class TestRefreshTopicInNamespace(
+    ConsumerRefreshDynamicTopicTests,
+    TopicInNamespaceSetupMixin
+):
+    pass
+
+
+class TestRefreshTopicInSource(
+    ConsumerRefreshDynamicTopicTests,
+    TopicInSourceSetupMixin
+):
+    pass
+
+
+class TestRefreshTopicInDataTarget(
+    ConsumerRefreshDynamicTopicTests,
+    TopicInDataTargetSetupMixin
+):
+    pass
