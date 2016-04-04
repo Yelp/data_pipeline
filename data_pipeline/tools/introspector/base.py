@@ -210,7 +210,7 @@ class IntrospectorBatch(object):
         return result_dict
 
     def namespace_to_dict(self, namespace):
-        result_dict= self._create_serializable_ordered_dict_from_object_and_fields(
+        result_dict = self._create_serializable_ordered_dict_from_object_and_fields(
             namespace,
             ['name', 'namespace_id']
         )
