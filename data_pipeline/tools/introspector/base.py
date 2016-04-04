@@ -6,7 +6,6 @@ import datetime
 import logging
 from collections import OrderedDict
 
-import simplejson
 from kafka import KafkaClient
 from swaggerpy.exception import HTTPError
 from yelp_kafka import offsets
@@ -244,7 +243,7 @@ class IntrospectorBatch(object):
         topics.sort(key=lambda topic: topic['updated_at'], reverse=True)
         if sort_by:
             topics.sort(key=lambda topic: topic[sort_by], reverse=descending_order)
-        print simplejson.dumps(topics)
+        return topics
 
     def list_sources(
         self,
@@ -265,7 +264,7 @@ class IntrospectorBatch(object):
         sources.sort(key=lambda source: source['source_id'], reverse=True)
         if sort_by:
             sources.sort(key=lambda source: source[sort_by], reverse=descending_order)
-        print simplejson.dumps(sources)
+        return sources
 
     def list_namespaces(
         self,
@@ -277,7 +276,7 @@ class IntrospectorBatch(object):
         namespaces.sort(key=lambda namespace: namespace['namespace_id'], reverse=True)
         if sort_by:
             namespaces.sort(key=lambda namespace: namespace[sort_by], reverse=descending_order)
-        print simplejson.dumps(namespaces)
+        return namespaces
 
     def _setup_logging(self):
         CONSOLE_FORMAT = '%(asctime)s - %(name)-12s: %(levelname)-8s %(message)s'

@@ -5,6 +5,8 @@ from __future__ import unicode_literals
 import argparse
 import pprint
 
+import simplejson
+
 from data_pipeline.tools.introspector.base import IntrospectorBatch
 
 
@@ -142,18 +144,21 @@ class ListCommand(IntrospectorBatch):
     def run(self, args, parser):
         self.process_args(args, parser)
         if self.list_type == "topics":
-            self.list_topics(
+            print simplejson.dumps(self.list_topics(
                 source_id=self.source_id_filter,
                 namespace_name=self.namespace_filter,
                 source_name=self.source_name_filter,
                 sort_by=self.sort_by,
                 descending_order=self.descending_order
-            )
+            ))
         elif self.list_type == "sources":
-            self.list_sources(
+            print simplejson.dumps(self.list_sources(
                 namespace_name=self.namespace_filter,
                 sort_by=self.sort_by,
                 descending_order=self.descending_order
-            )
+            ))
         else:
-            self.list_namespaces()
+            print simplejson.dumps(self.list_namespaces(
+                sort_by=self.sort_by,
+                descending_order=self.descending_order
+            ))
