@@ -209,6 +209,20 @@ class IntrospectorBatch(object):
         result_dict['active_topic_count'] = 0 if not active_source else active_source['active_topic_count']
         return result_dict
 
+    def namespace_to_dict(self, namespace):
+        result_dict= self._create_serializable_ordered_dict_from_object_and_fields(
+            namespace,
+            ['name', 'namespace_id']
+        )
+        active_namespace = self.active_namespaces.get(namespace.name, None)
+        if active_namespace:
+            result_dict['active_source_count'] = active_namespace['active_source_count']
+            result_dict['active_topic_count'] = active_namespace['active_topic_count']
+        else:
+            result_dict['active_source_count'] = 0
+            result_dict['active_topic_count'] = 0
+        return result_dict
+
     def list_topics(
         self,
         source_id=None,
@@ -241,10 +255,10 @@ class IntrospectorBatch(object):
         if namespace_name:
             sources = self.schematizer.get_sources_by_namespace(namespace_name)
         else:
-            self.log.debug("Getting all namespaces...")
-            namespaces = self.schematizer  # .get_all_namespaces
+            self.log.info("Getting all namespaces...")
+            namespaces = self.schematizer.get_namespaces()
             sources = []
-            self.log.debug("Getting all sources for each namespace...")
+            self.log.info("Getting all sources for each namespace...")
             for namespace in namespaces:
                 sources += self.schematizer.get_sources_by_namespace(namespace.name)
         sources = [self.source_to_dict(source) for source in sources]
@@ -258,7 +272,12 @@ class IntrospectorBatch(object):
         sort_by=None,
         descending_order=False
     ):
-        namespaces = self.schematizer  # .get_all_namespaces
+        namespaces = self.schematizer.get_namespaces()
+        namespaces = [self.namespace_to_dict(namespace) for namespace in namespaces]
+        namespaces.sort(key=lambda namespace: namespace['namespace_id'], reverse=True)
+        if sort_by:
+            namespaces.sort(key=lambda namespace: namespace[sort_by], reverse=descending_order)
+        print simplejson.dumps(namespaces)
 
     def _setup_logging(self):
         CONSOLE_FORMAT = '%(asctime)s - %(name)-12s: %(levelname)-8s %(message)s'

@@ -23,7 +23,7 @@ class ListCommand(IntrospectorBatch):
             'namespace', 'active_topic_count'
         ],
         'namespaces': [
-            'name', 'id',
+            'name', 'namespace_id',
             'active_topic_count', 'active_source_count'
         ]
     }
