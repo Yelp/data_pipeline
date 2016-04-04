@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 from data_pipeline.tools.introspector.base import IntrospectorBatch
 
+
 class RegisterCommand(IntrospectorBatch):
     @classmethod
     def add_parser(cls, subparsers):
@@ -88,5 +89,3 @@ class RegisterCommand(IntrospectorBatch):
 
     def run(self, args):
         print "This is the register command"
-
-

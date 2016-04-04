@@ -4,19 +4,19 @@ from __future__ import unicode_literals
 
 import datetime
 import logging
-import simplejson
 from collections import OrderedDict
 
+import simplejson
 from kafka import KafkaClient
 from swaggerpy.exception import HTTPError
-from yelp_lib.classutil import cached_property
-from yelp_kafka_tool.util.zookeeper import ZK
 from yelp_kafka import offsets
+from yelp_kafka_tool.util.zookeeper import ZK
+from yelp_lib.classutil import cached_property
 from yelp_servlib.config_util import load_package_config
 
 from data_pipeline.config import get_config
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
-from data_pipeline.schematizer_clientlib.models.topic import Topic
+
 
 class IntrospectorBatch(object):
     """The Data Pipeline Introspector provides information in to the current
@@ -48,7 +48,24 @@ class IntrospectorBatch(object):
 
     @classmethod
     def add_parser(cls, subparsers):
-        raise NotImplementedError
+        raise NotImplementedError("All InspectorBatch sub classes must have add_parser defined")
+
+    @classmethod
+    def add_base_arguments(cls, parser):
+        parser.add_argument(
+            "-h",
+            "--help",
+            action="help",
+            help="Show help messages and exit."
+        )
+
+        parser.add_argument(
+            "-v", "--verbose",
+            dest="verbosity",
+            default=0,
+            action="count",
+            help="Adjust log level"
+        )
 
     @cached_property
     def _kafka_topics(self):
@@ -66,17 +83,10 @@ class IntrospectorBatch(object):
             topics
         )
 
-    def _is_topic_in_schematizer(self, topic):
-        try:
-            self.schematizer.get_topic_by_name(topic)
-            return True
-        except HTTPError:
-            return False
-
     def _does_topic_range_map_have_messages(self, range_map):
         range_sum = 0
-        for _, range in range_map.iteritems():
-            range_sum += range
+        for _, watermark_range in range_map.iteritems():
+            range_sum += watermark_range
         return range_sum > 0
 
     def _topic_watermarks_to_range(self, watermarks):
@@ -92,8 +102,9 @@ class IntrospectorBatch(object):
                 topic_result = self.schematizer.get_topic_by_name(topic)._asdict()
                 topic_result['range_map'] = range_map
                 output.append(topic_result)
-            except HTTPError:
-                continue
+            except HTTPError as e:
+                if e.response.status_code != 404:
+                    raise e
         return output
 
     @cached_property
@@ -159,24 +170,43 @@ class IntrospectorBatch(object):
                 }
         return active_namespaces
 
-    def topic_to_dict(self, topic):
+    def _create_serializable_ordered_dict_from_object_and_fields(self, obj, fields):
         result_dict = OrderedDict()
-        for field in ('name', 'topic_id', 'contains_pii', 'created_at', 'updated_at'):
-            value = getattr(topic, field)
+        for field in fields:
+            value = getattr(obj, field)
             if isinstance(value, datetime.datetime):
                 # datetimes are not json serializable
                 value = str(value)
             result_dict[field] = value
-        result_dict['source_name'] = topic.source.name
-        result_dict['source_id'] = topic.source.source_id
-        result_dict['namespace'] = topic.source.namespace.name
-        result_dict['in_kafka'] = topic.name in self._kafka_topics
-        result_dict['message_count'] = 0
+        return result_dict
+
+    def _get_topic_message_count(self, topic):
         if topic.name in self.topics_with_messages_to_range_map:
             message_count = 0
             for _, count in self.topics_with_messages_to_range_map[topic.name].iteritems():
                 message_count += count
-            result_dict['message_count'] = message_count
+            return message_count
+        return 0
+
+    def topic_to_dict(self, topic):
+        result_dict = self._create_serializable_ordered_dict_from_object_and_fields(
+            topic,
+            ['name', 'topic_id', 'contains_pii', 'created_at', 'updated_at']
+        )
+        result_dict['source_name'] = topic.source.name
+        result_dict['source_id'] = topic.source.source_id
+        result_dict['namespace'] = topic.source.namespace.name
+        result_dict['in_kafka'] = topic.name in self._kafka_topics
+        result_dict['message_count'] = self._get_topic_message_count(topic)
+        return result_dict
+
+    def source_to_dict(self, source):
+        result_dict = self._create_serializable_ordered_dict_from_object_and_fields(
+            source,
+            ['name', 'source_id', 'owner_email', 'owner_email']
+        )
+        active_source = self.active_sources.get(source.source_id, None)
+        result_dict['active_topic_count'] = 0 if not active_source else active_source['active_topic_count']
         return result_dict
 
     def list_topics(
@@ -189,12 +219,12 @@ class IntrospectorBatch(object):
     ):
         if source_id:
             topics = self.schematizer.get_topics_by_source_id(
-                    source_id
+                source_id
             )
         else:
             topics = self.schematizer.get_topics_by_criteria(
-                namespace_name = namespace_name,
-                source_name = source_name
+                namespace_name=namespace_name,
+                source_name=source_name
             )
         topics = [self.topic_to_dict(topic) for topic in topics]
         topics.sort(key=lambda topic: topic['updated_at'], reverse=True)
@@ -202,18 +232,43 @@ class IntrospectorBatch(object):
             topics.sort(key=lambda topic: topic[sort_by], reverse=descending_order)
         print simplejson.dumps(topics)
 
-    def list_sources(self):
-        print "source listing in development"
+    def list_sources(
+        self,
+        namespace_name=None,
+        sort_by=None,
+        descending_order=False
+    ):
+        if namespace_name:
+            sources = self.schematizer.get_sources_by_namespace(namespace_name)
+        else:
+            self.log.debug("Getting all namespaces...")
+            namespaces = self.schematizer  # .get_all_namespaces
+            sources = []
+            self.log.debug("Getting all sources for each namespace...")
+            for namespace in namespaces:
+                sources += self.schematizer.get_sources_by_namespace(namespace.name)
+        sources = [self.source_to_dict(source) for source in sources]
+        sources.sort(key=lambda source: source['source_id'], reverse=True)
+        if sort_by:
+            sources.sort(key=lambda source: source[sort_by], reverse=descending_order)
+        print simplejson.dumps(sources)
 
-    def list_namespaces(self):
-        print "namespace listing in development"
+    def list_namespaces(
+        self,
+        sort_by=None,
+        descending_order=False
+    ):
+        namespaces = self.schematizer  # .get_all_namespaces
 
     def _setup_logging(self):
         CONSOLE_FORMAT = '%(asctime)s - %(name)-12s: %(levelname)-8s %(message)s'
 
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter(CONSOLE_FORMAT))
-        handler.setLevel(logging.INFO)
+        handler.setLevel(logging.DEBUG)
         self.log.addHandler(handler)
 
-        self.log.setLevel(logging.INFO)
+        self.log.setLevel(logging.DEBUG)
+
+    def process_args(self, args, parser):
+        self.log.setLevel(max(logging.WARNING - (args.verbosity * 10), logging.DEBUG))

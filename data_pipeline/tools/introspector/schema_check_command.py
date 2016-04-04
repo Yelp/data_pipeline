@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 from data_pipeline.tools.introspector.base import IntrospectorBatch
 
+
 class SchemaCheckCommand(IntrospectorBatch):
     @classmethod
     def add_parser(cls, subparsers):
@@ -35,5 +36,3 @@ class SchemaCheckCommand(IntrospectorBatch):
 
     def run(self, args):
         print "This is the schema-check command"
-
-
