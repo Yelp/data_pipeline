@@ -198,7 +198,7 @@ class IntrospectorBatch(object):
     def topic_to_dict(self, topic):
         result_dict = self._create_serializable_ordered_dict_from_object_and_fields(
             topic,
-            ['name', 'topic_id', 'contains_pii', 'created_at', 'updated_at']
+            ['name', 'topic_id', 'primary_keys', 'contains_pii', 'created_at', 'updated_at']
         )
         result_dict['source_name'] = topic.source.name
         result_dict['source_id'] = topic.source.source_id

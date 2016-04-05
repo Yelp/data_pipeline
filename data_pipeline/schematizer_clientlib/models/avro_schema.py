@@ -90,6 +90,7 @@ class _AvroSchema(BaseModel):
             name=cache_value['topic_name'],
             source=None,
             contains_pii=None,
+            primary_keys=None,
             created_at=None,
             updated_at=None
         )

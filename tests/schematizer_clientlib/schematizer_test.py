@@ -106,7 +106,7 @@ class SchematizerClientTestBase(object):
         self._assert_topic_values(actual.topic, expected_resp.topic)
 
     def _assert_topic_values(self, actual, expected_resp):
-        attrs = ('topic_id', 'name', 'contains_pii', 'created_at', 'updated_at')
+        attrs = ('topic_id', 'name', 'contains_pii', 'primary_keys', 'created_at', 'updated_at')
         self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
         self._assert_source_values(actual.source, expected_resp.source)
 
@@ -153,6 +153,31 @@ class TestGetSchemaById(SchematizerClientTestBase):
             assert schema_api_spy.call_count == 0
             assert topic_api_spy.call_count == 0
             assert source_api_spy.call_count == 0
+
+
+class TestGetSchemasByTopic(SchematizerClientTestBase):
+
+    @pytest.fixture(autouse=True, scope='class')
+    def biz_schema(self, yelp_namespace, biz_src_name):
+        return self._register_avro_schema(yelp_namespace, biz_src_name)
+
+    def test_get_schemas_by_topic(self, schematizer, biz_schema):
+        with self.attach_spy_on_api(
+            schematizer._client.topics,
+            'list_schemas_by_topic_name'
+        ) as api_spy:
+            topic_name = biz_schema.topic.name
+            actual = schematizer.get_schemas_by_topic(topic_name)
+            found_schema = False
+            for schema in actual:
+                try:
+                    self._assert_schema_values(schema, biz_schema)
+                    found_schema = True
+                    break
+                except Exception:
+                    pass
+            assert found_schema
+            assert api_spy.call_count == 1
 
 
 class TestGetNamespaces(SchematizerClientTestBase):
