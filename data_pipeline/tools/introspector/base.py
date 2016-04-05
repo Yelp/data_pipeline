@@ -187,6 +187,14 @@ class IntrospectorBatch(object):
             return message_count
         return 0
 
+    def schema_to_dict(self, schema):
+        result_dict = self._create_serializable_ordered_dict_from_object_and_fields(
+            schema,
+            ['schema_id', 'base_schema_id', 'status', 'primary_keys', 'created_at',
+             'note', 'schema_json']
+        )
+        return result_dict
+
     def topic_to_dict(self, topic):
         result_dict = self._create_serializable_ordered_dict_from_object_and_fields(
             topic,
@@ -199,13 +207,17 @@ class IntrospectorBatch(object):
         result_dict['message_count'] = self._get_topic_message_count(topic)
         return result_dict
 
-    def source_to_dict(self, source):
+    def source_to_dict(self, source, get_active_topic_count=True):
         result_dict = self._create_serializable_ordered_dict_from_object_and_fields(
             source,
             ['name', 'source_id', 'owner_email', 'owner_email']
         )
-        active_source = self.active_sources.get(source.source_id, None)
-        result_dict['active_topic_count'] = 0 if not active_source else active_source['active_topic_count']
+        if get_active_topic_count:
+            active_source = self.active_sources.get(source.source_id, None)
+            result_dict['active_topic_count'] = 0 if (
+                not active_source
+            ) else active_source['active_topic_count']
+        result_dict['namespace'] = source.namespace.name
         return result_dict
 
     def namespace_to_dict(self, namespace):
@@ -221,6 +233,15 @@ class IntrospectorBatch(object):
             result_dict['active_source_count'] = 0
             result_dict['active_topic_count'] = 0
         return result_dict
+
+    def list_schemas(
+        self,
+        topic_name
+    ):
+        schemas = self.schematizer.get_schemas_by_topic(topic_name)
+        schemas = [self.schema_to_dict(schema) for schema in schemas]
+        schemas.sort(key=lambda schema: schema['created_at'], reverse=True)
+        return schemas
 
     def list_topics(
         self,

@@ -124,6 +124,27 @@ class SchematizerClient(object):
             # Schema object given a schema_json
             return None
 
+    def get_schemas_by_topic(self, topic_name):
+        """Get the list of schemas in the specified topic.
+
+        Args:
+            topic_name (str): name of the topic to look up
+
+        Returns:
+            (List[data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
+                List of schemas in the given topic
+        """
+        response = self._call_api(
+            api=self._client.topics.list_schemas_by_topic_name,
+            params={"topic_name": topic_name}
+        )
+        result = []
+        for resp_item in response:
+            _schema = _AvroSchema.from_response(resp_item)
+            result.append(_schema.to_result())
+            self._set_cache_by_schema(_schema)
+        return result
+
     def get_topic_by_name(self, topic_name):
         """Get the topic of given topic name.
 
