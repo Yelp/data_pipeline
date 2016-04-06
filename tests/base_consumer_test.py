@@ -190,7 +190,6 @@ class BaseConsumerTest(object):
             count=10,
             expected_msg_count=0
         )
-
         # Set the offset to one previous so we can use reset_topics to
         # receive the same two messages again
         consumer = consumer_asserter.consumer
