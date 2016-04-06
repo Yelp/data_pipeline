@@ -94,8 +94,6 @@ class Consumer(BaseConsumer):
         It's recommended to retrieve messages in batches via
         `get_messages(..)`, do your work with them, and then commit them as
         a group with a single call to `commit_messages(..)`
-
-
     """
 
     def _start(self):
