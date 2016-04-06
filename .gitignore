@@ -70,6 +70,7 @@ __pycache__
 tmp
 out.txt
 scratch
+code/*
 
 # Sublime
 *.sublime-*

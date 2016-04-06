@@ -103,7 +103,8 @@ class KafkaProducer(object):
         self._reset_message_buffer()
 
     def close(self):
-        self.flush_buffered_messages()
+        if not self.message_buffer_size == 0:
+            self.flush_buffered_messages()
         self.kafka_client.close()
 
     def _publish_produce_requests(self, requests):
@@ -195,6 +196,8 @@ class KafkaProducer(object):
         )
 
     def _is_ready_to_flush(self):
+        if self.message_buffer_size == 0:
+            return False
         time_limit = get_config().kafka_producer_flush_time_limit_seconds
         return (
             (time.time() - self.start_time) >= time_limit or
