@@ -15,6 +15,7 @@ class ListCommand(IntrospectorBatch):
     list_type_to_fields_map = {
         'topics': [
             'name', 'topic_id', 'contains_pii',
+            'primary_keys',
             'in_kafka', 'message_count',
             'source_name', 'source_id',
             'namespace',
@@ -36,8 +37,8 @@ class ListCommand(IntrospectorBatch):
             "list",
             description="List the specified items, with a row for each item.\n"
                         "The fields of each type are as follows: \n{}\n\n"
-                        "NOTE: It is required to use either --source-id-filter or \n"
-                        "both of --namespace-filter and --source-name-filter to list topics\n".format(
+                        "NOTE: It is required to use either --source-filter with a source id or \n"
+                        "both of --namespace-filter and --source-filter (as source name) to list topics\n".format(
                             pprint.pformat(cls.list_type_to_fields_map)
                         ),
             # Use the raw formatter so that the fields can be printed in a useable way
@@ -66,7 +67,7 @@ class ListCommand(IntrospectorBatch):
             "--descending-order", "--desc",
             action="store_true",
             default=False,
-            help="Use --sort-by with descending order"
+            help="Use --sort-by with descending order (Will be ignored if --sort-by is not set)"
         )
 
         list_command_parser.add_argument(
@@ -118,8 +119,8 @@ class ListCommand(IntrospectorBatch):
             (self.namespace_filter and self.source_name_filter) or self.source_id_filter
         ):
             raise parser.error(
-                "Must provide topic filters of --source-id-filter or both of " +
-                "--namespace-filter and --source-name-filter"
+                "Must provide topic filters of --source-filter with a source id or both of " +
+                "--namespace-filter and --source-filter with a source name"
             )
         if self.list_type == "namespaces" and self.namespace_filter:
             self.log.warning("Will not use --namespace-filter to filter namespaces")
@@ -127,7 +128,7 @@ class ListCommand(IntrospectorBatch):
             self.source_name_filter or self.source_id_filter
         ):
             self.log.warning(
-                "Will not use --source-id-filter or --source-name-filter to filter {}".format(
+                "Will not use --source-filter to filter {}".format(
                     self.list_type
                 )
             )
@@ -138,7 +139,7 @@ class ListCommand(IntrospectorBatch):
             )
         ):
             self.log.warning(
-                "Overriding all other filters with --source-id-filter"
+                "Overriding all other filters with --source-filter"
             )
 
     def run(self, args, parser):
