@@ -18,19 +18,84 @@ class Consumer(BaseConsumer):
     """The Consumer uses an iterator to get messages that need to be consumed
     from Kafka.
 
+    Args:
+        consumer_name (str): See parameter `client_name` in
+            :class:`data_pipeline.client.Client`.  The `consumer_name` will
+            be registered with Kafka to commit offsets.
+        team_name (str): See parameter `team_name` in
+            :class:`data_pipeline.client.Client`.
+        expected_frequency_seconds (int, ExpectedFrequency): See parameter
+            `expected_frequency_seconds` in :class:`data_pipeline.client.Client`.
+        topic_to_consumer_topic_state_map ({str:Optional(ConsumerTopicState)}):
+            A map of topic names to ``ConsumerTopicState`` objects which
+            define the offsets to start from. These objects may be `None`,
+            in which case the committed kafka offset for the consumer_name is
+            used. If there is no committed kafka offset for the consumer_name
+            the MultiprocessingConsumer will begin from the `auto_offset_reset` offset in
+            the topic.
+        auto_offset_reset (str): Used for offset validation. If 'largest'
+            reset the offset to the latest available message (tail). If
+            'smallest' reset from the earliest (head).
+        partitioner_cooldown (float): Waiting time (in seconds) for the
+            consumer to acquire the partitions. See
+            yelp_kafka/yelp_kafka/partitioner.py for more details
+        pre_rebalance_callback: Optional callback called prior to
+            topic/partition rebalancing.
+            Required args, dict of partitions to offset.
+        post_rebalance_callback: Optional callback called following
+            topic/partition rebalancing.
+            Required args, dict of partitions to offset.
+
     Note:
         The Consumer leverages the yelp_kafka ``KafkaConsumerGroup``.
 
-    Example:
-        with Consumer(
-            consumer_name='my_consumer',
-            topic_to_consumer_topic_state_map={'topic_a': None, 'topic_b': None}
-        ) as consumer:
-            while True:
-                message = consumer.get_message()
-                if message is not None:
-                    ... do stuff with message ...
-                    consumer.commit_message(message)
+    **Examples**:
+
+        A simple example can be a consumer with name 'my_consumer' that
+        consumes a message from multiple topics, processes it and
+        commits the offset and this process continues::
+
+            with Consumer(
+                consumer_name='my_consumer',
+                team_name='bam',
+                expected_frequency_seconds=12345,
+                topic_to_consumer_topic_state_map={
+                    'topic_a': None,
+                    'topic_b': None
+                }
+            ) as consumer:
+                while True:
+                    message = consumer.get_message()
+                    if message is not None:
+                        ... do stuff with message ...
+                        consumer.commit_message(message)
+
+        Another example can be a consumer which consumes multiple messages
+        (with maximum number of messages in batch as `count`) from 2 topics
+        'topic_a' and 'topic_b', processes them and commits them.
+
+            with Consumer(
+                consumer_name='my_consumer',
+                team_name='bam',
+                expected_frequency_seconds=12345,
+                topic_to_consumer_topic_state_map={'topic_a': None, 'topic_b': None}
+            ) as consumer:
+                while True:
+                    messages = consumer.get_messages(
+                        count=batch_size,
+                        blocking=True,
+                        timeout=batch_timeout
+                    )
+                    if messages:
+                        ... do stuff with messages ...
+                        consumer.commit_messages(messages)
+
+        Note:
+            It's recommended to retrieve messages in batches via
+            `get_messages(..)`, do your work with them, and then commit them as
+            a group with a single call to `commit_messages(..)`
+
+
     """
 
     def _start(self):
@@ -49,6 +114,28 @@ class Consumer(BaseConsumer):
             blocking=False,
             timeout=get_config().consumer_get_messages_timeout_default
     ):
+        """ Retrieve a list of messages from the message buffer, optionally
+        blocking until the requested number of messages has been retrieved.
+
+        Warning:
+            If `blocking` is True and `timeout` is None this will block until
+            the requested number of messages is retrieved, potentially blocking
+            forever. Please be absolutely sure this is what you are intending
+            if you use these options!
+
+        Args:
+            count (int): Number of messages to retrieve
+            blocking (boolean): Set to True to block while waiting for messages
+                if the buffer has been depleted. Otherwise returns immediately
+                if the buffer reaches depletion. Default is False.
+            timeout (double): Maximum time (in seconds) to wait if blocking is
+                set to True. Set to None to wait indefinitely.
+
+        Returns:
+            ([data_pipeline.message.Message]): List of Message objects with
+            maximum size `count`, but may be smaller or empty depending on
+            how many messages were retrieved within the timeout.
+        """
         messages = []
         has_timeout = timeout is not None
         if has_timeout:
