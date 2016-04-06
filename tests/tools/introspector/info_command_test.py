@@ -2,22 +2,24 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+from collections import namedtuple
+
 import mock
 import pytest
 
-from collections import namedtuple
-
 from data_pipeline.tools.introspector.info_command import InfoCommand
+
 
 class FakeParserError(Exception):
     pass
 
 Args = namedtuple("Namespace", [
-        "info_type",
-        "identifier",
-        "verbosity"
-    ]
+    "info_type",
+    "identifier",
+    "verbosity"
+]
 )
+
 
 class TestInfoCommand(object):
 

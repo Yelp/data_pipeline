@@ -2,25 +2,27 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+from collections import namedtuple
+
 import mock
 import pytest
 
-from collections import namedtuple
-
 from data_pipeline.tools.introspector.list_command import ListCommand
+
 
 class FakeParserError(Exception):
     pass
 
 Args = namedtuple("Namespace", [
-        "list_type",
-        "namespace_filter",
-        "source_filter",
-        "sort_by",
-        "descending_order",
-        "verbosity"
-    ]
+    "list_type",
+    "namespace_filter",
+    "source_filter",
+    "sort_by",
+    "descending_order",
+    "verbosity"
+]
 )
+
 
 class TestListCommand(object):
 
@@ -101,7 +103,6 @@ class TestListCommand(object):
         assert list_command.source_name_filter == source_name_filter
         assert list_command.sort_by == sort_by
         assert list_command.descending_order == descending_order
-
 
     def test_bad_sort_by_fields(self, list_command, parser, list_type, source_id):
         # Using source id since it guarantees we won't get an error for any list_type
