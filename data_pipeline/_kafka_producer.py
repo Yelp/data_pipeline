@@ -64,6 +64,8 @@ class KafkaProducer(object):
         self.dry_run = dry_run
         self.kafka_client = KafkaClient(get_config().cluster_config.broker_list)
         self.position_data_tracker = PositionDataTracker()
+        self.message_buffer_size = 0
+        self.producer_position_callback(self.position_data_tracker.get_position_data())
         self._reset_message_buffer()
         self.skip_messages_with_pii = get_config().skip_messages_with_pii
         self._publish_retry_policy = RetryPolicy(
@@ -103,8 +105,7 @@ class KafkaProducer(object):
         self._reset_message_buffer()
 
     def close(self):
-        if not self.message_buffer_size == 0:
-            self.flush_buffered_messages()
+        self.flush_buffered_messages()
         self.kafka_client.close()
 
     def _publish_produce_requests(self, requests):
@@ -196,8 +197,6 @@ class KafkaProducer(object):
         )
 
     def _is_ready_to_flush(self):
-        if self.message_buffer_size == 0:
-            return False
         time_limit = get_config().kafka_producer_flush_time_limit_seconds
         return (
             (time.time() - self.start_time) >= time_limit or
@@ -228,7 +227,8 @@ class KafkaProducer(object):
         return _prepare(_EnvelopeAndMessage(envelope=self.envelope, message=message))
 
     def _reset_message_buffer(self):
-        self.producer_position_callback(self.position_data_tracker.get_position_data())
+        if self.message_buffer_size:
+            self.producer_position_callback(self.position_data_tracker.get_position_data())
 
         self.start_time = time.time()
         self.message_buffer = defaultdict(list)
