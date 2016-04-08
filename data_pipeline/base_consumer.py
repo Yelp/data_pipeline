@@ -119,8 +119,7 @@ class BaseConsumer(Client):
 
     @cached_property
     def kafka_client(self):
-        """ Returns the `KafkaClient` object.
-        """
+        """ Returns the `KafkaClient` object."""
         return KafkaClient(get_config().cluster_config.broker_list)
 
     @property
