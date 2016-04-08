@@ -101,6 +101,29 @@ class BaseConsumerTest(object):
                 consumer_asserter.assert_messages([msg])
             break
 
+    def test_do_not_call_kafka_commit_offsets_unnecessary(
+            self,
+            publish_messages,
+            consumer
+    ):
+        publish_messages(2)
+        msgs = consumer.get_messages(
+            count=2,
+            blocking=True,
+            timeout=TIMEOUT
+        )
+        assert len(msgs) == 2
+        with consumer.ensure_committed([msgs[1]]):
+            pass
+        # we have already committed latest msg thus when we try to commit
+        # older msg send_offset_commit_request should not be called
+        with mock.patch.object(
+            consumer.kafka_client,
+            'send_offset_commit_request'
+        ) as mock_send_offset_commit_request:
+            consumer.commit_message(msgs[0])
+            assert not mock_send_offset_commit_request.called
+
     @pytest.fixture
     def example_prev_payload_data(self, example_schema_obj):
         return generate_payload_data(example_schema_obj)

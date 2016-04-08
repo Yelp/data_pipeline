@@ -143,6 +143,7 @@ class BaseConsumer(Client):
             raise RuntimeError("Consumer '{0}' is already running".format(
                 self.client_name
             ))
+        self.topic_to_partition_offset_map_cache = {}
         self._commit_topic_map_offsets()
         self._start()
         self.running = True
@@ -160,6 +161,7 @@ class BaseConsumer(Client):
         if self.running:
             self._stop()
         self.kafka_client.close()
+        self.topic_to_partition_offset_map_cache = {}
         self.running = False
         logger.info("Consumer '{0}' stopped".format(self.client_name))
 
@@ -272,10 +274,16 @@ class BaseConsumer(Client):
         for message in messages:
             pos_info = message.kafka_position_info
             partition_offset_map = topic_to_partition_offset_map.get(message.topic, {})
+            partition_offset_map_cache = self.topic_to_partition_offset_map_cache.get(message.topic, {})
             max_offset = partition_offset_map.get(pos_info.partition, 0)
             # Increment the offset value by 1 so the consumer knows where to retrieve the next message.
-            partition_offset_map[pos_info.partition] = max(pos_info.offset, max_offset) + 1
-            topic_to_partition_offset_map[message.topic] = partition_offset_map
+            res_offset = max(pos_info.offset, max_offset) + 1
+            if (pos_info.partition not in partition_offset_map_cache or
+                    res_offset > partition_offset_map_cache[pos_info.partition]):
+                partition_offset_map[pos_info.partition] = res_offset
+                topic_to_partition_offset_map[message.topic] = partition_offset_map
+                partition_offset_map_cache[pos_info.partition] = res_offset
+                self.topic_to_partition_offset_map_cache[message.topic] = partition_offset_map_cache
         self.commit_offsets(topic_to_partition_offset_map)
 
     def commit_offsets(self, topic_to_partition_offset_map):
