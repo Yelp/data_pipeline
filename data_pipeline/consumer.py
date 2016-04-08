@@ -15,7 +15,8 @@ logger = get_config().logger
 
 
 class Consumer(BaseConsumer):
-    """The Consumer uses an iterator to get messages that need to be consumed
+    """
+    The Consumer uses an iterator to get messages that need to be consumed
     from Kafka.
 
     Args:

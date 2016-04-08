@@ -20,7 +20,8 @@ logger = get_config().logger
 
 
 class ConsumerTopicState(object):
-    """ConsumerTopicState object holds the state of a consumer topic with
+    """
+    ConsumerTopicState object holds the state of a consumer topic with
     partition_offset_map mapping all the partitions of the topic with their
     last seen offsets and last_seen_schema_id with the schema id of the
     latest processed message.
