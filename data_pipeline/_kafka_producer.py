@@ -64,8 +64,7 @@ class KafkaProducer(object):
         self.dry_run = dry_run
         self.kafka_client = KafkaClient(get_config().cluster_config.broker_list)
         self.position_data_tracker = PositionDataTracker()
-        self.message_buffer_size = 0
-        self.producer_position_callback(self.position_data_tracker.get_position_data())
+        self._reset_message_buffer_helper()
         self._reset_message_buffer()
         self.skip_messages_with_pii = get_config().skip_messages_with_pii
         self._publish_retry_policy = RetryPolicy(
@@ -228,9 +227,12 @@ class KafkaProducer(object):
 
     def _reset_message_buffer(self):
         if self.message_buffer_size:
-            self.producer_position_callback(self.position_data_tracker.get_position_data())
+            self._reset_message_buffer_helper()
 
         self.start_time = time.time()
+
+    def _reset_message_buffer_helper(self):
+        self.producer_position_callback(self.position_data_tracker.get_position_data())
         self.message_buffer = defaultdict(list)
         self.message_buffer_size = 0
 
