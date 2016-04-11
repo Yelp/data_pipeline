@@ -45,6 +45,13 @@ class Config(object):
         return logging.getLogger('data_pipeline_clientlib')
 
     @property
+    def should_use_testing_containers(self):
+        return data_pipeline_conf.read_string(
+            'should_use_testing_containers',
+            default=None
+        )
+
+    @property
     def schematizer_port(self):
         """Port for the schematizer as an int.
 
@@ -61,7 +68,8 @@ class Config(object):
         If :meth:`load_schematizer_host_and_port_from_smartstack` is True, this
         value will be loaded from smartstack instead of read directly.
         """
-        if self.load_schematizer_host_and_port_from_smartstack:
+        if (self.load_schematizer_host_and_port_from_smartstack and
+                not self.should_use_testing_containers):
             host, port = get_service_host_and_port('schematizer.main')
             return "{0}:{1}".format(host, port)
         else:
@@ -106,7 +114,11 @@ class Config(object):
         and :meth:`kafka_zookeeper`.  The default `ClusterConfig` will point
         at the testing docker container.
         """
-        if self.kafka_cluster_type is not None and self.kafka_cluster_name is not None:
+        if (
+            self.kafka_cluster_type is not None and
+            self.kafka_cluster_name is not None and
+            not self.should_use_testing_containers
+        ):
             return get_cluster_by_name(self.kafka_cluster_type, self.kafka_cluster_name)
         else:
             return ClusterConfig(

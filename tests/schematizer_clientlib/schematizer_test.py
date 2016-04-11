@@ -820,8 +820,10 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
         )
         assert actual == []
 
-    def test_topics_should_be_cached(self, schematizer):
-        topics = schematizer.get_topics_by_criteria()
+    def test_topics_should_be_cached(self, schematizer, yelp_namespace):
+        topics = schematizer.get_topics_by_criteria(
+            namespace_name=yelp_namespace
+        )
         with self.attach_spy_on_api(
             schematizer._client.topics,
             'get_topic_by_topic_name'

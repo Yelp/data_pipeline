@@ -27,23 +27,11 @@ class IntrospectorBatch(object):
     def __init__(self, log_name):
         self.log_name = log_name
         load_package_config('/nail/srv/configs/data_pipeline_tools.yaml')
+        self.config = get_config()
+        self.log = logging.getLogger(self.log_name)
         self._setup_logging()
-
-    @cached_property
-    def schematizer(self):
-        return get_schematizer()
-
-    @cached_property
-    def config(self):
-        return get_config()
-
-    @cached_property
-    def log(self):
-        return logging.getLogger(self.log_name)
-
-    @cached_property
-    def kafka_client(self):
-        return KafkaClient(self.config.cluster_config.broker_list)
+        self.kafka_client = KafkaClient(self.config.cluster_config.broker_list)
+        self.schematizer = get_schematizer()
 
     @classmethod
     def add_parser(cls, subparsers):
