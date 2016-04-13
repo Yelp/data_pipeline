@@ -97,27 +97,27 @@ class TestBaseCommand(object):
 
     @pytest.fixture(scope='class')
     def namespace_one(self):
-        return "namespace_one"
+        return "introspector_namespace_one"
 
     @pytest.fixture(scope='class')
     def namespace_two(self):
-        return "namespace_two"
+        return "introspector_namespace_two"
 
     @pytest.fixture(scope='class')
     def source_one_active(self):
-        return "source_one_active"
+        return "introspector_source_one_active"
 
     @pytest.fixture(scope='class')
     def source_one_inactive(self):
-        return "source_one_inactive"
+        return "introspector_source_one_inactive"
 
     @pytest.fixture(scope='class')
     def source_two_active(self):
-        return "source_two_active"
+        return "introspector_source_two_active"
 
     @pytest.fixture(scope='class')
     def source_two_inactive(self):
-        return "source_two_inactive"
+        return "introspector_source_two_inactive"
 
     @pytest.fixture(scope='class')
     def schema_one_active(self, containers, namespace_one, source_one_active):
@@ -228,6 +228,10 @@ class TestBaseCommand(object):
         return [source_one_inactive, source_two_inactive]
 
     @pytest.fixture
+    def sources(self, active_sources, inactive_sources):
+        return active_sources + inactive_sources
+
+    @pytest.fixture
     def namespaces(self, namespace_one, namespace_two):
         return [namespace_one, namespace_two]
 
@@ -293,7 +297,7 @@ class TestBaseCommand(object):
             topic_one_active.name
         )
         actual_schema_dict = batch.schema_to_dict(topic_schema)
-        self._assert_schemas_equal_schema_dict(
+        self._assert_schema_equals_schema_dict(
             topic_schema=topic_schema,
             schema_obj=schema_one_active,
             schema_dict=actual_schema_dict
@@ -390,7 +394,7 @@ class TestBaseCommand(object):
             topic_one_active.name
         )
         assert len(actual_schemas) == 1
-        self._assert_schemas_equal_schema_dict(
+        self._assert_schema_equals_schema_dict(
             topic_schema=topic_schema,
             schema_obj=schema_one_active,
             schema_dict=actual_schemas[0]
@@ -433,13 +437,11 @@ class TestBaseCommand(object):
         b_name = topic_one_inactive_b.name
         a_pos = -1
         b_pos = -1
-        i = 0
-        for topic_dict in actual_topics:
+        for i, topic_dict in enumerate(actual_topics):
             if topic_dict['name'] == a_name:
                 a_pos = i
             elif topic_dict['name'] == b_name:
                 b_pos = i
-            i += 1
         assert a_pos != -1
         assert b_pos != -1
         assert (
@@ -467,7 +469,251 @@ class TestBaseCommand(object):
             is_active=True
         )
 
-    def _assert_schemas_equal_schema_dict(
+    def test_list_sources_namespace_name_sort(
+        self,
+        batch,
+        namespace_one,
+        topic_one_active,
+        topic_one_inactive,
+        source_one_active,
+        source_one_inactive
+    ):
+        actual_sources = batch.list_sources(
+            namespace_name=namespace_one,
+            sort_by='name'
+        )
+        active_source_obj = topic_one_active.source
+        inactive_source_obj = topic_one_inactive.source
+        assert len(actual_sources) == 2
+        self._assert_source_equals_source_dict(
+            source=active_source_obj,
+            source_dict=actual_sources[0],
+            namespace_name=namespace_one,
+            source_name=source_one_active,
+            active_topic_count=1
+        )
+        self._assert_source_equals_source_dict(
+            source=inactive_source_obj,
+            source_dict=actual_sources[1],
+            namespace_name=namespace_one,
+            source_name=source_one_inactive,
+            active_topic_count=0
+        )
+
+    def test_list_sources_no_name_no_sort(
+        self,
+        batch,
+        sources
+    ):
+        actual_sources = batch.list_sources()
+        found_sources = [False for source in sources]
+        for actual_source in actual_sources:
+            source_name = actual_source['name']
+            for i, expected_source in enumerate(sources):
+                if expected_source == source_name:
+                    assert not found_sources[i]
+                    found_sources[i] = True
+                    break
+        for i, found_result in enumerate(found_sources):
+            if not found_result:
+                assert not "Could not find {} when listing all namespaces".format(sources[i])
+
+    def test_list_namespaces(
+        self,
+        batch,
+        namespace_one,
+        namespace_two,
+        topic_one_active,
+        topic_two_active
+    ):
+        namespace_one_obj = topic_one_active.source.namespace
+        namespace_two_obj = topic_two_active.source.namespace
+        actual_namespaces = batch.list_namespaces(
+            sort_by='name'
+        )
+        one_pos = -1
+        two_pos = -1
+        for i, namespace_dict in enumerate(actual_namespaces):
+            namespace_name = namespace_dict['name']
+            if namespace_name == namespace_one:
+                assert one_pos == -1
+                one_pos = i
+                self._assert_namespace_equals_namespace_dict(
+                    namespace=namespace_one_obj,
+                    namespace_name=namespace_one,
+                    namespace_dict=namespace_dict
+                )
+            elif namespace_name == namespace_two:
+                assert two_pos == -1
+                two_pos = i
+                self._assert_namespace_equals_namespace_dict(
+                    namespace=namespace_two_obj,
+                    namespace_name=namespace_two,
+                    namespace_dict=namespace_dict
+                )
+        assert one_pos != -1
+        assert two_pos != -1
+        assert one_pos < two_pos
+
+    def test_info_topic(
+        self,
+        batch,
+        schematizer,
+        schema_one_active,
+        namespace_one,
+        source_one_active,
+        topic_one_active
+    ):
+        topic_schema = schematizer.get_latest_schema_by_topic_name(
+            topic_one_active.name
+        )
+        topic_dict = batch.info_topic(topic_one_active.name)
+        self._assert_topic_equals_topic_dict(
+            topic=topic_one_active,
+            topic_dict=topic_dict,
+            namespace_name=namespace_one,
+            source_name=source_one_active,
+            is_active=True
+        )
+        actual_schemas = topic_dict['schemas']
+        assert len(actual_schemas) == 1
+        self._assert_schema_equals_schema_dict(
+            topic_schema=topic_schema,
+            schema_obj=schema_one_active,
+            schema_dict=actual_schemas[0]
+        )
+
+    def test_info_source_id(
+        self,
+        batch,
+        topic_one_inactive,
+        topic_one_inactive_b,
+        source_one_inactive,
+        namespace_one
+    ):
+        source_obj = topic_one_inactive.source
+        source_dict = batch.info_source(
+            source_id=source_obj.source_id,
+            source_name=None,
+            namespace_name=None
+        )
+        self._assert_source_equals_source_dict(
+            source=source_obj,
+            source_dict=source_dict,
+            namespace_name=namespace_one,
+            source_name=source_one_inactive,
+            active_topic_count=0
+        )
+        source_topics = source_dict['topics']
+        assert len(source_topics) == 2
+        try:
+            self._assert_topic_equals_topic_dict(
+                topic=topic_one_inactive,
+                topic_dict=source_topics[0],
+                namespace_name=namespace_one,
+                source_name=source_one_inactive,
+                is_active=False
+            )
+            self._assert_topic_equals_topic_dict(
+                topic=topic_one_inactive_b,
+                topic_dict=source_topics[1],
+                namespace_name=namespace_one,
+                source_name=source_one_inactive,
+                is_active=False
+            )
+        except AssertionError:
+            self._assert_topic_equals_topic_dict(
+                topic=topic_one_inactive,
+                topic_dict=source_topics[1],
+                namespace_name=namespace_one,
+                source_name=source_one_inactive,
+                is_active=False
+            )
+            self._assert_topic_equals_topic_dict(
+                topic=topic_one_inactive_b,
+                topic_dict=source_topics[0],
+                namespace_name=namespace_one,
+                source_name=source_one_inactive,
+                is_active=False
+            )
+
+    def test_info_source_missing_source_name(
+        self,
+        batch,
+        namespace_one
+    ):
+        with pytest.raises(ValueError) as e:
+            batch.info_source(
+                source_id=None,
+                source_name="this_source_will_not_exist",
+                namespace_name=namespace_one
+            )
+        assert e.value.args
+        assert "Given SOURCE_NAME|NAMESPACE_NAME doesn't exist" in e.value.args[0]
+
+    def test_info_source_name_pair(
+        self,
+        batch,
+        topic_one_active,
+        source_one_active,
+        namespace_one
+    ):
+        source_dict = batch.info_source(
+            source_id=None,
+            source_name=source_one_active,
+            namespace_name=namespace_one
+        )
+        source_obj = topic_one_active.source
+        self._assert_source_equals_source_dict(
+            source=source_obj,
+            source_dict=source_dict,
+            namespace_name=namespace_one,
+            source_name=source_one_active,
+            active_topic_count=1
+        )
+        source_topics = source_dict['topics']
+        assert len(source_topics) == 1
+        self._assert_topic_equals_topic_dict(
+            topic=topic_one_active,
+            topic_dict=source_topics[0],
+            namespace_name=namespace_one,
+            source_name=source_one_active,
+            is_active=True
+        )
+
+    def test_info_namespace_missing(
+        self,
+        batch
+    ):
+        with pytest.raises(ValueError) as e:
+            batch.info_namespace("not_a_namespace")
+        assert e.value.args
+        assert "Given namespace doesn't exist" in e.value.args[0]
+
+    def test_info_namespace(
+        self,
+        batch,
+        namespace_two,
+        source_two_inactive,
+        source_two_active,
+        topic_two_active
+    ):
+        namespace_obj = topic_two_active.source.namespace
+        namespace_dict = batch.info_namespace(namespace_two)
+        self._assert_namespace_equals_namespace_dict(
+            namespace=namespace_obj,
+            namespace_dict=namespace_dict,
+            namespace_name=namespace_two
+        )
+        namespace_sources = namespace_dict['sources']
+        assert len(namespace_sources) == 2
+        if namespace_sources[0]['name'] == source_two_active:
+            assert namespace_sources[1]['name'] == source_two_inactive
+        else:
+            assert namespace_sources[0]['name'] == source_two_inactive
+            assert namespace_sources[1]['name'] == source_two_active
+
+    def _assert_schema_equals_schema_dict(
         self,
         topic_schema,
         schema_obj,

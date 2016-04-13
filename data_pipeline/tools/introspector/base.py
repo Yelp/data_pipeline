@@ -317,7 +317,9 @@ class IntrospectorBatch(object):
         topics = self.list_topics(
             source_id=info_source["source_id"]
         )
-        info_source['active_topic_count'] = len(topics)
+        info_source['active_topic_count'] = len(
+            [topic for topic in topics if topic['message_count']]
+        )
         info_source['topics'] = topics
         return info_source
 
