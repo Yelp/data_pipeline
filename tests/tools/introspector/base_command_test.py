@@ -14,10 +14,11 @@ from data_pipeline.config import get_config
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import CreateMessage
 from data_pipeline.producer import Producer
+from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.tools.introspector.base import IntrospectorBatch
 
 
-@pytest.mark.usefixtures('containers', "configure_teams")
+@pytest.mark.usefixtures('containers')
 class TestBaseCommand(object):
 
     def _get_client(self):
@@ -74,11 +75,11 @@ class TestBaseCommand(object):
         batch.log.warning = mock.Mock()
         return batch
 
-    @pytest.yield_fixture
-    def producer(self, containers, team_name):
+    @pytest.yield_fixture(scope='class')
+    def producer(self, containers):
         instance = Producer(
             producer_name="introspector_producer",
-            team_name=team_name,
+            team_name="bam",
             expected_frequency_seconds=ExpectedFrequency.constantly,
             use_work_pool=False,
             monitoring_enabled=False
@@ -86,83 +87,97 @@ class TestBaseCommand(object):
         with instance as producer:
             yield producer
 
+    @pytest.fixture(scope='class')
+    def schematizer(self, containers):
+        return get_schematizer()
+
     @property
     def source_owner_email(self):
         return "bam+test+introspection@yelp.com"
 
-    @pytest.fixture
+    @pytest.fixture(scope='class')
     def namespace_one(self):
         return "namespace_one"
 
-    @pytest.fixture
+    @pytest.fixture(scope='class')
     def namespace_two(self):
         return "namespace_two"
 
-    @pytest.fixture
+    @pytest.fixture(scope='class')
     def source_one_active(self):
         return "source_one_active"
 
-    @pytest.fixture
+    @pytest.fixture(scope='class')
     def source_one_inactive(self):
         return "source_one_inactive"
 
-    @pytest.fixture
+    @pytest.fixture(scope='class')
     def source_two_active(self):
         return "source_two_active"
 
-    @pytest.fixture
+    @pytest.fixture(scope='class')
     def source_two_inactive(self):
         return "source_two_inactive"
 
-    @pytest.fixture
+    @pytest.fixture(scope='class')
     def schema_one_active(self, containers, namespace_one, source_one_active):
         return self._register_avro_schema(namespace_one, source_one_active, two_fields=False)
 
-    @pytest.fixture
+    @pytest.fixture(scope='class')
     def schema_one_inactive(self, containers, namespace_one, source_one_inactive):
         return self._register_avro_schema(namespace_one, source_one_inactive, two_fields=True)
 
-    @pytest.fixture
+    @pytest.fixture(scope='class')
+    def schema_one_inactive_b(self, containers, namespace_one, source_one_inactive):
+        return self._register_avro_schema(namespace_one, source_one_inactive, two_fields=False)
+
+    @pytest.fixture(scope='class')
     def schema_two_active(self, containers, namespace_two, source_two_active):
         return self._register_avro_schema(namespace_two, source_two_active, two_fields=False)
 
-    @pytest.fixture
+    @pytest.fixture(scope='class')
     def schema_two_inactive(self, containers, namespace_two, source_two_inactive):
         return self._register_avro_schema(namespace_two, source_two_inactive, two_fields=True)
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture(autouse=True, scope='class')
     def topic_one_inactive(self, containers, schema_one_inactive):
         topic = schema_one_inactive.topic
         containers.create_kafka_topic(str(topic.name))
         return topic
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture(autouse=True, scope='class')
+    def topic_one_inactive_b(self, containers, schema_one_inactive_b):
+        topic = schema_one_inactive_b.topic
+        containers.create_kafka_topic(str(topic.name))
+        return topic
+
+    @pytest.fixture(autouse=True, scope='class')
     def topic_one_active(self, containers, schema_one_active):
         topic = schema_one_active.topic
         containers.create_kafka_topic(str(topic.name))
         return topic
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture(autouse=True, scope='class')
     def topic_two_inactive(self, containers, schema_two_inactive):
         topic = schema_two_inactive.topic
         containers.create_kafka_topic(str(topic.name))
         return topic
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture(autouse=True, scope='class')
     def topic_two_active(self, containers, schema_two_active):
         topic = schema_two_active.topic
         containers.create_kafka_topic(str(topic.name))
         return topic
 
-    @pytest.fixture
+    @pytest.fixture(scope='class')
     def payload_one(self, schema_one_active):
         return self._create_payload(schema_one_active)
 
-    @pytest.fixture
+    @pytest.fixture(scope='class')
     def payload_two(self, schema_two_active):
         return self._create_payload(schema_two_active)
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture(autouse=True, scope='class')
     def message_one(
         self,
         producer,
@@ -179,7 +194,7 @@ class TestBaseCommand(object):
         producer.flush()
         return message
 
-    @pytest.fixture(autouse=True)
+    @pytest.fixture(autouse=True, scope='class')
     def message_two(
         self,
         producer,
@@ -201,8 +216,8 @@ class TestBaseCommand(object):
         return [topic_one_active, topic_two_active]
 
     @pytest.fixture
-    def inactive_topics(self, topic_one_inactive, topic_two_inactive):
-        return [topic_one_inactive, topic_two_inactive]
+    def inactive_topics(self, topic_one_inactive, topic_one_inactive_b, topic_two_inactive):
+        return [topic_one_inactive, topic_one_inactive_b, topic_two_inactive]
 
     @pytest.fixture
     def active_sources(self, source_one_active, source_two_active):
@@ -267,6 +282,23 @@ class TestBaseCommand(object):
                 namespace
             ]['active_source_count'] == 1
 
+    def test_schema_to_dict(
+        self,
+        batch,
+        schematizer,
+        schema_one_active,
+        topic_one_active
+    ):
+        topic_schema = schematizer.get_latest_schema_by_topic_name(
+            topic_one_active.name
+        )
+        actual_schema_dict = batch.schema_to_dict(topic_schema)
+        self._assert_schemas_equal_schema_dict(
+            topic_schema=topic_schema,
+            schema_obj=schema_one_active,
+            schema_dict=actual_schema_dict
+        )
+
     def test_topic_to_dict(
         self,
         batch,
@@ -283,16 +315,170 @@ class TestBaseCommand(object):
             topic=topic_one_active,
             topic_dict=dict_one,
             namespace_name=namespace_one,
-            source_name = source_one_active,
+            source_name=source_one_active,
             is_active=True
         )
         self._assert_topic_equals_topic_dict(
             topic=topic_two_inactive,
             topic_dict=dict_two,
             namespace_name=namespace_two,
-            source_name = source_two_inactive,
+            source_name=source_two_inactive,
             is_active=False
         )
+
+    def test_source_to_dict(
+        self,
+        batch,
+        source_one_active,
+        source_two_inactive,
+        topic_one_active,
+        topic_two_inactive,
+        namespace_one,
+        namespace_two
+    ):
+        source_one_obj = topic_one_active.source
+        source_two_obj = topic_two_inactive.source
+        source_one_dict = batch.source_to_dict(source_one_obj)
+        source_two_dict = batch.source_to_dict(source_two_obj)
+        self._assert_source_equals_source_dict(
+            source=source_one_obj,
+            source_dict=source_one_dict,
+            namespace_name=namespace_one,
+            source_name=source_one_active,
+            active_topic_count=1
+        )
+        self._assert_source_equals_source_dict(
+            source=source_two_obj,
+            source_dict=source_two_dict,
+            namespace_name=namespace_two,
+            source_name=source_two_inactive,
+            active_topic_count=0
+        )
+
+    def test_namespace_to_dict(
+        self,
+        batch,
+        topic_one_active,
+        topic_two_active,
+        namespace_one,
+        namespace_two
+    ):
+        namespace_one_obj = topic_one_active.source.namespace
+        namespace_two_obj = topic_two_active.source.namespace
+        namespace_one_dict = batch.namespace_to_dict(namespace_one_obj)
+        namespace_two_dict = batch.namespace_to_dict(namespace_two_obj)
+        self._assert_namespace_equals_namespace_dict(
+            namespace=namespace_one_obj,
+            namespace_dict=namespace_one_dict,
+            namespace_name=namespace_one
+        )
+        self._assert_namespace_equals_namespace_dict(
+            namespace=namespace_two_obj,
+            namespace_dict=namespace_two_dict,
+            namespace_name=namespace_two
+        )
+
+    def test_list_schemas(
+        self,
+        batch,
+        schematizer,
+        topic_one_active,
+        schema_one_active
+    ):
+        actual_schemas = batch.list_schemas(topic_one_active.name)
+        topic_schema = schematizer.get_latest_schema_by_topic_name(
+            topic_one_active.name
+        )
+        assert len(actual_schemas) == 1
+        self._assert_schemas_equal_schema_dict(
+            topic_schema=topic_schema,
+            schema_obj=schema_one_active,
+            schema_dict=actual_schemas[0]
+        )
+
+    def test_list_topics_source_id_no_sort(
+        self,
+        batch,
+        topic_one_active,
+        source_one_active,
+        namespace_one
+    ):
+        actual_topics = batch.list_topics(
+            source_id=topic_one_active.source.source_id
+        )
+        assert len(actual_topics) == 1
+        self._assert_topic_equals_topic_dict(
+            topic=topic_one_active,
+            topic_dict=actual_topics[0],
+            namespace_name=namespace_one,
+            source_name=source_one_active,
+            is_active=True
+        )
+
+    def test_list_topics_source_id_sort(
+        self,
+        batch,
+        topic_one_inactive,
+        topic_one_inactive_b
+    ):
+        actual_topics = batch.list_topics(
+            source_id=topic_one_inactive.source.source_id,
+            sort_by='name',
+            descending_order=True
+        )
+        # Can have higher length if the container is
+        # not restarted in between runs
+        assert len(actual_topics) >= 2
+        a_name = topic_one_inactive.name
+        b_name = topic_one_inactive_b.name
+        a_pos = -1
+        b_pos = -1
+        i = 0
+        for topic_dict in actual_topics:
+            if topic_dict['name'] == a_name:
+                a_pos = i
+            elif topic_dict['name'] == b_name:
+                b_pos = i
+            i += 1
+        assert a_pos != -1
+        assert b_pos != -1
+        assert (
+            (a_pos < b_pos and a_name > b_name) or
+            (a_pos > b_pos and a_name < b_name)
+        )
+
+    def test_list_topics_namespace_source_names_no_sort(
+        self,
+        batch,
+        source_one_active,
+        namespace_one,
+        topic_one_active
+    ):
+        actual_topics = batch.list_topics(
+            namespace_name=namespace_one,
+            source_name=source_one_active
+        )
+        assert len(actual_topics) == 1
+        self._assert_topic_equals_topic_dict(
+            topic=topic_one_active,
+            topic_dict=actual_topics[0],
+            namespace_name=namespace_one,
+            source_name=source_one_active,
+            is_active=True
+        )
+
+    def _assert_schemas_equal_schema_dict(
+        self,
+        topic_schema,
+        schema_obj,
+        schema_dict
+    ):
+        assert topic_schema.schema_id == schema_dict['schema_id']
+        assert topic_schema.base_schema_id == schema_dict['base_schema_id']
+        assert topic_schema.primary_keys == schema_dict['primary_keys']
+        assert topic_schema.note == schema_dict['note']
+        assert simplejson.loads(schema_obj.schema) == schema_dict['schema_json']
+        assert schema_obj.status == schema_dict['status']
 
     def _assert_topic_equals_topic_dict(
         self,
@@ -318,3 +504,33 @@ class TestBaseCommand(object):
             (is_active and topic_dict['message_count']) or
             (not is_active and not topic_dict['message_count'])
         )
+
+    def _assert_source_equals_source_dict(
+        self,
+        source,
+        source_dict,
+        namespace_name,
+        source_name,
+        active_topic_count
+    ):
+        fields = [
+            'name',
+            'source_id',
+            'owner_email'
+        ]
+        for field in fields:
+            assert source_dict[field] == getattr(source, field)
+        assert source_dict['active_topic_count'] == active_topic_count
+        assert source_dict['namespace'] == namespace_name
+        assert source_dict['name'] == source_name
+
+    def _assert_namespace_equals_namespace_dict(
+        self,
+        namespace,
+        namespace_dict,
+        namespace_name
+    ):
+        assert namespace_dict['namespace_id'] == namespace.namespace_id
+        assert namespace_dict['name'] == namespace_name
+        assert namespace_dict['active_topic_count'] == 1
+        assert namespace_dict['active_source_count'] == 1

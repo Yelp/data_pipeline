@@ -63,7 +63,7 @@ class IntrospectorBatch(object):
             )
 
     @cached_property
-    def all_topic_watermarks(self):
+    def _all_topic_watermarks(self):
         topics = self._kafka_topics
         return offsets.get_topics_watermarks(
             self.kafka_client,
@@ -95,10 +95,10 @@ class IntrospectorBatch(object):
         return output
 
     @cached_property
-    def topics_with_messages_to_range_map(self):
+    def _topics_with_messages_to_range_map(self):
         topic_to_range_map = {
             topic: self._topic_watermarks_to_range(topic_watermarks)
-            for topic, topic_watermarks in self.all_topic_watermarks.items()
+            for topic, topic_watermarks in self._all_topic_watermarks.items()
         }
         return {
             topic: range_map
@@ -115,7 +115,7 @@ class IntrospectorBatch(object):
         as well as a partition - message_count map (range_map)
         """
         self.log.info("Loading active topics...")
-        return self._topic_to_range_map_to_topics_list(self.topics_with_messages_to_range_map)
+        return self._topic_to_range_map_to_topics_list(self._topics_with_messages_to_range_map)
 
     @cached_property
     def active_sources(self):
@@ -168,9 +168,9 @@ class IntrospectorBatch(object):
         return result_dict
 
     def _get_topic_message_count(self, topic):
-        if topic.name in self.topics_with_messages_to_range_map:
+        if topic.name in self._topics_with_messages_to_range_map:
             message_count = 0
-            for _, count in self.topics_with_messages_to_range_map[topic.name].iteritems():
+            for _, count in self._topics_with_messages_to_range_map[topic.name].iteritems():
                 message_count += count
             return message_count
         return 0
@@ -198,7 +198,7 @@ class IntrospectorBatch(object):
     def source_to_dict(self, source, get_active_topic_count=True):
         result_dict = self._create_serializable_ordered_dict_from_object_and_fields(
             source,
-            ['name', 'source_id', 'owner_email', 'owner_email']
+            ['name', 'source_id', 'owner_email']
         )
         if get_active_topic_count:
             active_source = self.active_sources.get(source.source_id, None)
