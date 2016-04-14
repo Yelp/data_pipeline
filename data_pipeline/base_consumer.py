@@ -274,16 +274,10 @@ class BaseConsumer(Client):
         for message in messages:
             pos_info = message.kafka_position_info
             partition_offset_map = topic_to_partition_offset_map.get(message.topic, {})
-            partition_offset_map_cache = self.topic_to_partition_offset_map_cache.get(message.topic, {})
             max_offset = partition_offset_map.get(pos_info.partition, 0)
             # Increment the offset value by 1 so the consumer knows where to retrieve the next message.
-            res_offset = max(pos_info.offset, max_offset) + 1
-            if (pos_info.partition not in partition_offset_map_cache or
-                    res_offset > partition_offset_map_cache[pos_info.partition]):
-                partition_offset_map[pos_info.partition] = res_offset
-                topic_to_partition_offset_map[message.topic] = partition_offset_map
-                partition_offset_map_cache[pos_info.partition] = res_offset
-                self.topic_to_partition_offset_map_cache[message.topic] = partition_offset_map_cache
+            partition_offset_map[pos_info.partition] = max(pos_info.offset, max_offset) + 1
+            topic_to_partition_offset_map[message.topic] = partition_offset_map
         self.commit_offsets(topic_to_partition_offset_map)
 
     def commit_offsets(self, topic_to_partition_offset_map):
@@ -304,6 +298,14 @@ class BaseConsumer(Client):
             topic_to_partition_offset_map (Dict[str, Dict[int, int]]): Maps from
                 topics to a partition and offset map for each topic.
         """
+        for topic, partition_map in topic_to_partition_offset_map.items():
+            partition_offset_map_cache = self.topic_to_partition_offset_map_cache.get(topic, {})
+            for partition, offset in partition_map.items():
+                if partition_offset_map_cache.get(partition, 0) >= offset:
+                    del topic_to_partition_offset_map[topic][partition]
+                else:
+                    partition_offset_map_cache[partition] = offset
+            self.topic_to_partition_offset_map_cache[topic] = partition_offset_map_cache
         return self._send_offset_commit_requests(
             offset_commit_request_list=[
                 OffsetCommitRequest(
