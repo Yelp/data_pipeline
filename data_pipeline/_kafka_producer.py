@@ -225,8 +225,8 @@ class KafkaProducer(object):
         return _prepare(_EnvelopeAndMessage(envelope=self.envelope, message=message))
 
     def _reset_message_buffer(self):
-        self.producer_position_callback(self.position_data_tracker.get_position_data())
-
+        if not hasattr(self, 'message_buffer_size') or self.message_buffer_size > 0:
+            self.producer_position_callback(self.position_data_tracker.get_position_data())
         self.start_time = time.time()
         self.message_buffer = defaultdict(list)
         self.message_buffer_size = 0
