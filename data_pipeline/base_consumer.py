@@ -144,7 +144,7 @@ class BaseConsumer(Client):
             raise RuntimeError("Consumer '{0}' is already running".format(
                 self.client_name
             ))
-        self.topic_to_partition_offset_map_cache = defaultdict(lambda : defaultdict(int))
+        self.topic_to_partition_offset_map_cache = defaultdict(lambda: defaultdict(int))
         self._commit_topic_map_offsets()
         self._start()
         self.running = True
@@ -162,7 +162,7 @@ class BaseConsumer(Client):
         if self.running:
             self._stop()
         self.kafka_client.close()
-        self.topic_to_partition_offset_map_cache = defaultdict(lambda : defaultdict(int))
+        self.topic_to_partition_offset_map_cache = defaultdict(lambda: defaultdict(int))
         self.running = False
         logger.info("Consumer '{0}' stopped".format(self.client_name))
 
@@ -475,6 +475,8 @@ class BaseConsumer(Client):
             key: self.topic_to_consumer_topic_state_map.get(key)
             for key in partitions
         }
+
+        self.topic_to_partition_offset_map_cache = defaultdict(lambda: defaultdict(int))
 
         if self.post_rebalance_callback:
             return self.post_rebalance_callback(partitions)
