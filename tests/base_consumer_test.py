@@ -101,7 +101,7 @@ class BaseConsumerTest(object):
                 consumer_asserter.assert_messages([msg])
             break
 
-    def test_do_not_call_kafka_commit_offsets_unnecessary(
+    def test_do_not_call_kafka_commit_offsets_when_offset_dont_change(
             self,
             publish_messages,
             consumer
@@ -115,14 +115,41 @@ class BaseConsumerTest(object):
         assert len(msgs) == 2
         with consumer.ensure_committed([msgs[1]]):
             pass
-        # we have already committed latest msg thus when we try to commit
-        # older msg send_offset_commit_request should not be called
+        with mock.patch.object(
+            consumer.kafka_client,
+            'send_offset_commit_request'
+        ) as mock_send_offset_commit_request:
+            consumer.commit_message(msgs[1])
+            assert not mock_send_offset_commit_request.called
+
+    def test_call_kafka_commit_offsets_when_offset_change(
+            self,
+            publish_messages,
+            consumer
+    ):
+        publish_messages(4)
+        msgs = consumer.get_messages(
+            count=4,
+            blocking=True,
+            timeout=TIMEOUT
+        )
+        assert len(msgs) == 4
+        with consumer.ensure_committed([msgs[1]]):
+            pass
         with mock.patch.object(
             consumer.kafka_client,
             'send_offset_commit_request'
         ) as mock_send_offset_commit_request:
             consumer.commit_message(msgs[0])
-            assert not mock_send_offset_commit_request.called
+            assert mock_send_offset_commit_request.called
+
+            consumer.commit_message(msgs[2])
+            assert mock_send_offset_commit_request.called
+
+        # commiting last msg in kafka queue to ensure
+        # other tests work fine
+        with consumer.ensure_committed([msgs[3]]):
+            pass
 
     @pytest.fixture
     def example_prev_payload_data(self, example_schema_obj):
