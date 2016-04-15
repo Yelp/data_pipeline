@@ -70,6 +70,32 @@ class IntrospectorBatch(object):
             topics
         )
 
+    def _retrieve_names_from_source_id(self, source_id):
+        """Returns (source_name, namespace_name) of source with given source_id"""
+        source = self.schematizer.get_source_by_id(source_id)
+        return (source.name, source.namespace.name)
+
+    def process_source_and_namespace_args(self, args, parser):
+        self.source_id = None
+        self.source_name = None
+        self.namespace = None
+        if args.source.isdigit():
+            self.source_id = int(args.source)
+            self.source_name, self.namespace = self._retrieve_names_from_source_id(
+                self.source_id
+            )
+            if args.namespace:
+                self.log.warning(
+                    "Since source id was given, --namespace will be ignored"
+                )
+        else:
+            self.source_name = args.source
+            if not args.namespace:
+                raise parser.error(
+                    "--namespace must be provided when given a source name as source identifier."
+                )
+            self.namespace = args.namespace
+
     def _does_topic_range_map_have_messages(self, range_map):
         range_sum = 0
         for _, watermark_range in range_map.iteritems():
@@ -175,15 +201,20 @@ class IntrospectorBatch(object):
             return message_count
         return 0
 
-    def schema_to_dict(self, schema):
+    def schema_to_dict(self, schema, include_topic_info=False):
         result_dict = self._create_serializable_ordered_dict_from_object_and_fields(
             schema,
             ['schema_id', 'base_schema_id', 'status', 'primary_keys', 'created_at',
              'note', 'schema_json']
         )
+        if include_topic_info:
+            result_dict['topic'] = self.topic_to_dict(
+                schema.topic,
+                include_kafka_info=False
+            )
         return result_dict
 
-    def topic_to_dict(self, topic):
+    def topic_to_dict(self, topic, include_kafka_info=True):
         result_dict = self._create_serializable_ordered_dict_from_object_and_fields(
             topic,
             ['name', 'topic_id', 'primary_keys', 'contains_pii', 'created_at', 'updated_at']
@@ -191,8 +222,9 @@ class IntrospectorBatch(object):
         result_dict['source_name'] = topic.source.name
         result_dict['source_id'] = topic.source.source_id
         result_dict['namespace'] = topic.source.namespace.name
-        result_dict['in_kafka'] = topic.name in self._kafka_topics
-        result_dict['message_count'] = self._get_topic_message_count(topic)
+        if include_kafka_info:
+            result_dict['in_kafka'] = topic.name in self._kafka_topics
+            result_dict['message_count'] = self._get_topic_message_count(topic)
         return result_dict
 
     def source_to_dict(self, source, get_active_topic_count=True):

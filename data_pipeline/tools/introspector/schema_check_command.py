@@ -48,25 +48,7 @@ class SchemaCheckCommand(IntrospectorBatch):
     def process_args(self, args, parser):
         super(SchemaCheckCommand, self).process_args(args, parser)
         self.schema = str(args.schema)
-        self.source_id = None
-        self.source_name = None
-        self.namespace = None
-        if args.source.isdigit():
-            self.source_id = int(args.source)
-            self.source_name, self.namespace = self.retrieve_names_from_source_id(
-                self.source_id
-            )
-            if args.namespace:
-                self.log.warning(
-                    "Since source id was given, --namespace will be ignored"
-                )
-        else:
-            self.source_name = args.source
-            if not args.namespace:
-                raise parser.error(
-                    "--namespace must be provided when given a source name as source identifier."
-                )
-            self.namespace = args.namespace
+        self.process_source_and_namespace_args(args, parser)
 
     def retrieve_names_from_source_id(self, source_id):
         """Returns (source_name, namespace_name) of source with given source_id"""

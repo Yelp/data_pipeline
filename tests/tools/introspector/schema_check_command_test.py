@@ -2,16 +2,15 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from collections import namedtuple
-
 import random
-import simplejson
+from collections import namedtuple
 
 import mock
 import pytest
+import simplejson
 
-from data_pipeline.tools.introspector.schema_check_command import SchemaCheckCommand
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+from data_pipeline.tools.introspector.schema_check_command import SchemaCheckCommand
 
 
 class FakeParserError(Exception):
@@ -119,7 +118,6 @@ class TestInfoCommand(object):
                 source=source_id
             )
         }[request.param]
-
 
     @pytest.fixture(params=['names', 'id'])
     def incompatible_args(

@@ -2,6 +2,8 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+from collections import namedtuple
+
 import mock
 import pytest
 import simplejson
@@ -16,6 +18,17 @@ from data_pipeline.message import CreateMessage
 from data_pipeline.producer import Producer
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.tools.introspector.base import IntrospectorBatch
+
+
+class FakeParserError(Exception):
+    pass
+
+Args = namedtuple(
+    "Namespace", [
+        "source",
+        "namespace"
+    ]
+)
 
 
 @pytest.mark.usefixtures('containers')
@@ -90,6 +103,12 @@ class TestBaseCommand(object):
     @pytest.fixture(scope='class')
     def schematizer(self, containers):
         return get_schematizer()
+
+    @pytest.fixture
+    def parser(self):
+        parser = mock.Mock()
+        parser.error = FakeParserError
+        return parser
 
     @property
     def source_owner_email(self):
@@ -303,6 +322,27 @@ class TestBaseCommand(object):
             schema_dict=actual_schema_dict
         )
 
+    def test_schema_to_dict_with_topic_info(
+        self,
+        batch,
+        schematizer,
+        schema_one_active,
+        topic_one_active
+    ):
+        topic_schema = schematizer.get_latest_schema_by_topic_name(
+            topic_one_active.name
+        )
+        actual_schema_dict = batch.schema_to_dict(
+            topic_schema,
+            include_topic_info=True
+        )
+        self._assert_schema_equals_schema_dict(
+            topic_schema=topic_schema,
+            schema_obj=schema_one_active,
+            schema_dict=actual_schema_dict,
+            topic_to_check=topic_one_active
+        )
+
     def test_topic_to_dict(
         self,
         batch,
@@ -328,6 +368,26 @@ class TestBaseCommand(object):
             namespace_name=namespace_two,
             source_name=source_two_inactive,
             is_active=False
+        )
+
+    def test_topic_to_dict_no_kafka_info(
+        self,
+        batch,
+        topic_one_active,
+        namespace_one,
+        source_one_active,
+    ):
+        topic_dict = batch.topic_to_dict(
+            topic_one_active,
+            include_kafka_info=False
+        )
+        self._assert_topic_equals_topic_dict(
+            topic=topic_one_active,
+            topic_dict=topic_dict,
+            namespace_name=namespace_one,
+            source_name=source_one_active,
+            is_active=True,
+            include_kafka_info=False
         )
 
     def test_source_to_dict(
@@ -713,11 +773,65 @@ class TestBaseCommand(object):
             assert namespace_sources[0]['name'] == source_two_inactive
             assert namespace_sources[1]['name'] == source_two_active
 
+    def test_process_source_and_namespace_args_names(
+        self,
+        batch,
+        parser,
+        namespace_one,
+        source_one_active
+    ):
+        args = Args(
+            source=source_one_active,
+            namespace=namespace_one
+        )
+        batch.process_source_and_namespace_args(args, parser)
+        assert batch.source_name == source_one_active
+        assert batch.namespace == namespace_one
+        assert not batch.source_id
+
+    def test_process_source_and_namespace_args_name_error(
+        self,
+        batch,
+        parser,
+        source_one_active
+    ):
+        args = Args(
+            source=source_one_active,
+            namespace=None
+        )
+        with pytest.raises(FakeParserError) as e:
+            batch.process_source_and_namespace_args(args, parser)
+        assert e
+        assert e.value.args
+        assert "--namespace must be provided" in e.value.args[0]
+
+    def test_process_source_and_namespace_args_id_with_warning(
+        self,
+        batch,
+        parser,
+        source_one_active,
+        namespace_one,
+        namespace_two,
+        topic_one_active
+    ):
+        source_id = topic_one_active.source.source_id
+        args = Args(
+            source=str(source_id),
+            namespace=namespace_two
+        )
+        batch.process_source_and_namespace_args(args, parser)
+        batch.log.warning.assert_called_once_with(
+            "Since source id was given, --namespace will be ignored"
+        )
+        assert batch.source_name == source_one_active
+        assert batch.namespace == namespace_one
+
     def _assert_schema_equals_schema_dict(
         self,
         topic_schema,
         schema_obj,
-        schema_dict
+        schema_dict,
+        topic_to_check=None
     ):
         assert topic_schema.schema_id == schema_dict['schema_id']
         assert topic_schema.base_schema_id == schema_dict['base_schema_id']
@@ -725,6 +839,18 @@ class TestBaseCommand(object):
         assert topic_schema.note == schema_dict['note']
         assert simplejson.loads(schema_obj.schema) == schema_dict['schema_json']
         assert schema_obj.status == schema_dict['status']
+        if topic_to_check:
+            self._assert_topic_equals_topic_dict(
+                topic=topic_to_check,
+                topic_dict=schema_dict['topic'],
+                namespace_name=topic_to_check.source.namespace.name,
+                source_name=topic_to_check.source.name,
+                is_active=False,
+                include_kafka_info=False
+            )
+        else:
+            with pytest.raises(KeyError):
+                schema_dict['topic']
 
     def _assert_topic_equals_topic_dict(
         self,
@@ -732,7 +858,8 @@ class TestBaseCommand(object):
         topic_dict,
         namespace_name,
         source_name,
-        is_active
+        is_active,
+        include_kafka_info=True
     ):
         fields = [
             'name',
@@ -745,11 +872,17 @@ class TestBaseCommand(object):
         assert topic_dict['source_name'] == source_name
         assert topic_dict['source_id'] == topic.source.source_id
         assert topic_dict['namespace'] == namespace_name
-        assert topic_dict['in_kafka']
-        assert (
-            (is_active and topic_dict['message_count']) or
-            (not is_active and not topic_dict['message_count'])
-        )
+        if include_kafka_info:
+            assert topic_dict['in_kafka']
+            assert (
+                (is_active and topic_dict['message_count']) or
+                (not is_active and not topic_dict['message_count'])
+            )
+        else:
+            with pytest.raises(KeyError):
+                topic_dict['in_kafka']
+            with pytest.raises(KeyError):
+                topic_dict['message_count']
 
     def _assert_source_equals_source_dict(
         self,
