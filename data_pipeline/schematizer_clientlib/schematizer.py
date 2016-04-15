@@ -728,6 +728,36 @@ class SchematizerClient(object):
         _consumer_group_data_src = _ConsumerGroupDataSource.from_response(response)
         return _consumer_group_data_src.to_result()
 
+    def is_avro_schema_compatible(
+        self,
+        avro_schema,
+        source_name,
+        namespace_name
+    ):
+        """Determines if given avro_schema is backward and forward compatible with all
+        enabled schemas of given source (contained in given namespace).
+
+        Note: Compatibility means the input schema should be able to deserialize data serialized
+            by existing schemas within the same topic and vice versa.
+
+        Args:
+            avro_schema (str): json string representing avro_schema to check compatiblity on.
+            source_name (str): name of the source that contains the schemas to check compatibiliy
+                against.
+            namespace_name (str): name of namespace containing the given source
+
+        Returns:
+            (boolean): If the given schema is compatible with all enabled schemas of the source."""
+        response = self._call_api(
+            api=self._client.compatibility.is_avro_schema_compatible,
+            post_body={
+                'source': source_name,
+                'namespace': namespace_name,
+                'schema': avro_schema
+            }
+        )
+        return response
+
     def filter_topics_by_pkeys(self, topics):
         """ Create and return a new list of topic names built from topics,
         filtered by whether a topic's most recent schema has a primary_key

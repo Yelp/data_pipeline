@@ -837,6 +837,67 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
             assert source_api_spy.call_count == 0
 
 
+class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
+
+    @pytest.fixture(scope='class')
+    def schema_json(self, yelp_namespace, biz_src_name):
+        return {
+            'type': 'record',
+            'name': biz_src_name,
+            'namespace': yelp_namespace,
+            'fields': [
+                {'type': 'int', 'name': 'biz_id'}
+            ]
+        }
+
+    @pytest.fixture
+    def schema_json_incompatible(self, yelp_namespace, biz_src_name):
+        return {
+            'type': 'record',
+            'name': biz_src_name,
+            'namespace': yelp_namespace,
+            'fields': [
+                {'type': 'int', 'name': 'biz_id'},
+                {'type': 'int', 'name': 'new_field'}
+            ]
+        }
+
+    @pytest.fixture(scope='class')
+    def schema_str(self, schema_json):
+        return simplejson.dumps(schema_json)
+
+    @pytest.fixture
+    def schema_str_incompatible(self, schema_json_incompatible):
+        return simplejson.dumps(schema_json_incompatible)
+
+    @pytest.fixture(autouse=True, scope='class')
+    def biz_schema(self, yelp_namespace, biz_src_name, schema_str):
+        return self._register_avro_schema(
+            yelp_namespace,
+            biz_src_name,
+            schema=schema_str
+        )
+
+    def test_is_avro_schema_compatible(
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name,
+        schema_str,
+        schema_str_incompatible
+    ):
+        assert schematizer.is_avro_schema_compatible(
+            avro_schema=schema_str,
+            namespace_name=yelp_namespace,
+            source_name=biz_src_name
+        )
+        assert not schematizer.is_avro_schema_compatible(
+            avro_schema=schema_str_incompatible,
+            namespace_name=yelp_namespace,
+            source_name=biz_src_name
+        )
+
+
 class TestFilterTopicsByPkeys(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
