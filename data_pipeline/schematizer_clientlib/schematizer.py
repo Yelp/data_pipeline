@@ -13,6 +13,7 @@ from data_pipeline.schematizer_clientlib.models.consumer_group_data_source \
     import _ConsumerGroupDataSource
 from data_pipeline.schematizer_clientlib.models.data_target import _DataTarget
 from data_pipeline.schematizer_clientlib.models.refresh import _Refresh
+from data_pipeline.schematizer_clientlib.models.schema_migration import _SchemaMigration
 from data_pipeline.schematizer_clientlib.models.source import _Source
 from data_pipeline.schematizer_clientlib.models.topic import _Topic
 
@@ -278,7 +279,7 @@ class SchematizerClient(object):
             (data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
                 The newly created avro Schema.
         """
-        post_body = {
+        request_body = {
             'schema': schema_str,
             'namespace': namespace,
             'source': source,
@@ -286,10 +287,10 @@ class SchematizerClient(object):
             'contains_pii': contains_pii,
         }
         if base_schema_id:
-            post_body['base_schema_id'] = base_schema_id
+            request_body['base_schema_id'] = base_schema_id
         response = self._call_api(
             api=self._client.schemas.register_schema,
-            post_body=post_body
+            request_body=request_body
         )
 
         _schema = _AvroSchema.from_response(response)
@@ -360,7 +361,7 @@ class SchematizerClient(object):
             (data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
                 The newly created avro Schema.
         """
-        post_body = {
+        request_body = {
             'namespace': namespace,
             'source': source,
             'new_create_table_stmt': new_create_table_stmt,
@@ -368,12 +369,12 @@ class SchematizerClient(object):
             'contains_pii': contains_pii
         }
         if old_create_table_stmt:
-            post_body['old_create_table_stmt'] = old_create_table_stmt
+            request_body['old_create_table_stmt'] = old_create_table_stmt
         if alter_table_stmt:
-            post_body['alter_table_stmt'] = alter_table_stmt
+            request_body['alter_table_stmt'] = alter_table_stmt
         response = self._call_api(
             api=self._client.schemas.register_schema_from_mysql_stmts,
-            post_body=post_body
+            request_body=request_body
         )
 
         _schema = _AvroSchema.from_response(response)
@@ -429,7 +430,7 @@ class SchematizerClient(object):
         """
         response = self._call_api(
             api=self._client.data_targets.create_data_target,
-            post_body={
+            request_body={
                 'target_type': target_type,
                 'destination': destination
             }
@@ -538,19 +539,19 @@ class SchematizerClient(object):
             (data_pipeline.schematizer_clientlib.models.refresh.Refresh):
                 The newly created Refresh.
         """
-        post_body = {
+        request_body = {
             'offset': offset,
             'batch_size': batch_size,
             'priority': priority.name
         }
         if filter_condition:
-            post_body['filter_condition'] = filter_condition
+            request_body['filter_condition'] = filter_condition
         if avg_rows_per_second_cap is not None:
-            post_body['avg_rows_per_second_cap'] = avg_rows_per_second_cap
+            request_body['avg_rows_per_second_cap'] = avg_rows_per_second_cap
         response = self._call_api(
             api=self._client.sources.create_refresh,
             params={'source_id': source_id},
-            post_body=post_body
+            request_body=request_body
         )
         return self._get_refresh_result_from_response(response)
 
@@ -566,14 +567,14 @@ class SchematizerClient(object):
             (data_pipeline.schematizer_clientlib.models.refresh.Refresh):
                 The updated Refresh.
         """
-        post_body = {
+        request_body = {
             'status': status.value,
             'offset': offset
         }
         response = self._call_api(
             api=self._client.refreshes.update_refresh,
             params={'refresh_id': refresh_id},
-            post_body=post_body
+            request_body=request_body
         )
         return self._get_refresh_result_from_response(response)
 
@@ -624,7 +625,7 @@ class SchematizerClient(object):
         response = self._call_api(
             api=self._client.data_targets.create_consumer_group,
             params={'data_target_id': data_target_id},
-            post_body={'group_name': group_name}
+            request_body={'group_name': group_name}
         )
         _consumer_group = _ConsumerGroup.from_response(response)
         self._set_cache_by_consumer_group(_consumer_group)
@@ -681,7 +682,7 @@ class SchematizerClient(object):
         response = self._call_api(
             api=self._client.consumer_groups.create_consumer_group_data_source,
             params={'consumer_group_id': consumer_group_id},
-            post_body={
+            request_body={
                 'data_source_type': data_source_type.name,
                 'data_source_id': data_source_id
             }
@@ -711,11 +712,23 @@ class SchematizerClient(object):
                 pass
         return pkey_topics
 
-    def _call_api(self, api, params=None, post_body=None):
+    def get_schema_migration(self, new_schema, target_schema_type, old_schema=None):
+        response = self._call_api(
+            api=self._client.schema_migrations.get_schema_migration,
+            request_body={
+                'new_schema': new_schema,
+                'old_schema': old_schema,
+                'target_schema_type': target_table_name
+            }
+        )
+        _schema_migration = _SchemaMigration.from_response(response)
+        return _schema_migration.to_result()
+
+    def _call_api(self, api, params=None, request_body=None):
         # TODO(DATAPIPE-207|joshszep): Include retry strategy support
         request_params = params or {}
-        if post_body:
-            request_params['body'] = post_body
+        if request_body:
+            request_params['body'] = request_body
         request = api(**request_params)
         response = request.result()
         return response
