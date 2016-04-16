@@ -718,7 +718,7 @@ class SchematizerClient(object):
             request_body={
                 'new_schema': new_schema,
                 'old_schema': old_schema,
-                'target_schema_type': target_table_name
+                'target_schema_type': target_schema_type
             }
         )
         _schema_migration = _SchemaMigration.from_response(response)

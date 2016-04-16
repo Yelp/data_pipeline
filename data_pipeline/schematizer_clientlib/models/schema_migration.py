@@ -32,5 +32,5 @@ class _SchemaMigration(BaseModel):
 
     def to_result(self):
         return SchemaMigration(
-            migration_pushplan=migration_pushplan
+            migration_pushplan=self.migration_pushplan
         )
