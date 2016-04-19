@@ -2,16 +2,15 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from collections import namedtuple
-
 import random
-import simplejson
+from collections import namedtuple
 
 import mock
 import pytest
+import simplejson
 
-from data_pipeline.tools.introspector.register_command import RegisterCommand
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+from data_pipeline.tools.introspector.register_command import RegisterCommand
 
 
 class FakeParserError(Exception):
@@ -208,11 +207,11 @@ class TestInfoCommand(object):
         register_command.run(args, parser)
 
         mysql_exclusive_fields = [
-             'mysql_create_table', 'mysql_old_create_table', 'mysql_alter_table'
+            'mysql_create_table', 'mysql_old_create_table', 'mysql_alter_table'
         ]
         register_command.log.warning.assert_called_once_with(
             "Given fields: {} will not be used, since --avro_schema was given".format(
-               mysql_exclusive_fields
+                mysql_exclusive_fields
             )
         )
 

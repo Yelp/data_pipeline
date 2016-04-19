@@ -71,7 +71,8 @@ setup(
         'bin/data_pipeline_refresh_runner',
         'bin/data_pipeline_refresh_manager',
         'bin/data_pipeline_refresh_job',
-        'bin/data_pipeline_compaction_setter'
+        'bin/data_pipeline_compaction_setter',
+        'bin/data_pipeline_introspector'
     ],
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
