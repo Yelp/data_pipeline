@@ -713,12 +713,27 @@ class SchematizerClient(object):
         return pkey_topics
 
     def get_schema_migration(self, new_schema, target_schema_type, old_schema=None):
+        """ Get a list of of SQL statements needed to migrate to a desired schema
+
+        Args:
+            new_schema (str): The avro schema to which we want to migrate
+            target_schema_type (str): The type of schema migration desired
+            old_schema (Optional[str]): The avro schema from which we want to migrate
+
+        Returns:
+            (data_pipeline.schematizer_clientlib.models.schema_migration
+            .SchemaMigration):
+            An object containing the pushplan required to migrate to the desired schema
+        """
+        if old_schema is None:
+            old_schema = {}
+
         response = self._call_api(
             api=self._client.schema_migrations.get_schema_migration,
             request_body={
-                'new_schema': new_schema,
-                'old_schema': old_schema,
-                'target_schema_type': target_schema_type
+                'new_schema': simplejson.dumps(new_schema),
+                'target_schema_type': target_schema_type,
+                'old_schema': simplejson.dumps(old_schema)
             }
         )
         _schema_migration = _SchemaMigration.from_response(response)
