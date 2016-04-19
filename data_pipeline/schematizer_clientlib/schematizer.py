@@ -13,7 +13,6 @@ from data_pipeline.schematizer_clientlib.models.consumer_group_data_source \
     import _ConsumerGroupDataSource
 from data_pipeline.schematizer_clientlib.models.data_target import _DataTarget
 from data_pipeline.schematizer_clientlib.models.refresh import _Refresh
-from data_pipeline.schematizer_clientlib.models.schema_migration import _SchemaMigration
 from data_pipeline.schematizer_clientlib.models.source import _Source
 from data_pipeline.schematizer_clientlib.models.topic import _Topic
 
@@ -668,7 +667,7 @@ class SchematizerClient(object):
         Args:
             consumer_group_id (int): The id of the consumer group.
             data_source_type
-            (data_pipeline.schematizer_client.models.data_source_type_enum.DataSourceTypEnum):
+            (data_pipeline.schematizer_client.models.data_source_type_enum.DataSourceTypeEnum):
                 Type of the data source.
             data_source_id (int): The id of the data source, which could be a
                 namespace id or source id.
@@ -713,12 +712,16 @@ class SchematizerClient(object):
         return pkey_topics
 
     def get_schema_migration(self, new_schema, target_schema_type, old_schema=None):
-        """ Get a list of of SQL statements needed to migrate to a desired schema
+        """ Get a list of of SQL statements needed to migrate to a desired avro schema
+        from an old avro schema. In the absence of an old avro schema, the migration
+        generates a plan to just create the new schema.
 
         Args:
-            new_schema (str): The avro schema to which we want to migrate
-            target_schema_type (str): The type of schema migration desired
-            old_schema (Optional[str]): The avro schema from which we want to migrate
+            new_schema (dict): The avro schema to which we want to migrate
+            target_schema_type
+            (data_pipeline.schematizer_client.models.target_schema_type_enum.TargetSchemaTypeEnum):
+                Type of the target schema.
+            old_schema (Optional[dict]): The avro schema from which we want to migrate
 
         Returns:
             (data_pipeline.schematizer_clientlib.models.schema_migration
@@ -732,12 +735,11 @@ class SchematizerClient(object):
             api=self._client.schema_migrations.get_schema_migration,
             request_body={
                 'new_schema': simplejson.dumps(new_schema),
-                'target_schema_type': target_schema_type,
+                'target_schema_type': target_schema_type.name,
                 'old_schema': simplejson.dumps(old_schema)
             }
         )
-        _schema_migration = _SchemaMigration.from_response(response)
-        return _schema_migration.to_result()
+        return response
 
     def _call_api(self, api, params=None, request_body=None):
         # TODO(DATAPIPE-207|joshszep): Include retry strategy support

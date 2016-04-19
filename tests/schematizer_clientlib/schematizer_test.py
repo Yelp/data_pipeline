@@ -13,6 +13,8 @@ from swaggerpy import exception as swaggerpy_exc
 from data_pipeline.config import get_config
 from data_pipeline.schematizer_clientlib.models.data_source_type_enum import \
     DataSourceTypeEnum
+from data_pipeline.schematizer_clientlib.models.target_schema_type_enum import \
+    TargetSchemaTypeEnum
 from data_pipeline.schematizer_clientlib.schematizer import SchematizerClient
 
 
@@ -1139,7 +1141,7 @@ class TestGetSchemaMigration(SchematizerClientTestBase):
             'fields': [{'type': 'int', 'name': 'test_id'}]
         }
 
-    @pytest.fixture(params=[True,False])
+    @pytest.fixture(params=[True, False])
     def old_schema(self, request, new_schema):
         return new_schema if request.param else None
 
@@ -1155,13 +1157,27 @@ class TestGetSchemaMigration(SchematizerClientTestBase):
         ) as api_spy:
             actual = schematizer.get_schema_migration(
                 new_schema=new_schema,
-                target_schema_type='redshift',
+                target_schema_type=TargetSchemaTypeEnum.redshift,
                 old_schema=old_schema
             )
-            assert isinstance(actual.migration_pushplan, list)
-            assert len(actual.migration_pushplan) > 0
+            assert isinstance(actual, list)
+            assert len(actual) > 0
             assert api_spy.call_count == 1
 
+    def test_invalid_schema(
+        self,
+        schematizer,
+        new_schema
+    ):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer._call_api(
+                api=schematizer._client.schema_migrations.get_schema_migration,
+                request_body={
+                    'new_schema': '{}}',
+                    'target_schema_type': TargetSchemaTypeEnum.redshift.name,
+                }
+            )
+        assert e.value.response.status_code == 422
 
     def test_unsupported_schema_migration(
         self,
@@ -1171,6 +1187,6 @@ class TestGetSchemaMigration(SchematizerClientTestBase):
         with pytest.raises(swaggerpy_exc.HTTPError) as e:
             schematizer.get_schema_migration(
                 new_schema=new_schema,
-                target_schema_type='unsupported_schema_type'
+                target_schema_type=TargetSchemaTypeEnum.unsupported
             )
         assert e.value.response.status_code == 501
