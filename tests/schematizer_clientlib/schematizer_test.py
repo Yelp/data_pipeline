@@ -13,6 +13,7 @@ from swaggerpy import exception as swaggerpy_exc
 from data_pipeline.config import get_config
 from data_pipeline.schematizer_clientlib.models.data_source_type_enum import \
     DataSourceTypeEnum
+from data_pipeline.schematizer_clientlib.models.namespace import Namespace
 from data_pipeline.schematizer_clientlib.schematizer import SchematizerClient
 
 
@@ -152,6 +153,17 @@ class TestGetSchemaById(SchematizerClientTestBase):
             assert schema_api_spy.call_count == 0
             assert topic_api_spy.call_count == 0
             assert source_api_spy.call_count == 0
+
+
+class TestGetNamespaces(SchematizerClientTestBase):
+
+    def test_get_namespaces(self, schematizer, biz_src_resp):
+        actual = schematizer.get_namespaces()
+        partial = Namespace(
+            namespace_id=biz_src_resp.namespace.namespace_id,
+            name=biz_src_resp.namespace.name
+        )
+        assert partial in actual
 
 
 class TestGetSchemaBySchemaJson(SchematizerClientTestBase):

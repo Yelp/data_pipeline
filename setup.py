@@ -48,7 +48,8 @@ setup(
             # implicit dependency of yelp_batch
             'thriftpy<0.2.0',
             'yelp_batch>=0.19.4',
-            'yelp_conn>=7.0.0'
+            'yelp_conn>=7.0.0',
+            'yelp-kafka-tool>=0.8.2'
         ],
         'testing_helpers': [
             'docker-compose==1.5.2',
@@ -69,7 +70,8 @@ setup(
         'bin/data_pipeline_tailer',
         'bin/data_pipeline_refresh_runner',
         'bin/data_pipeline_refresh_manager',
-        'bin/data_pipeline_refresh_job'
+        'bin/data_pipeline_refresh_job',
+        'bin/data_pipeline_compaction_setter'
     ],
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
