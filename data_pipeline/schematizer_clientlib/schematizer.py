@@ -12,6 +12,7 @@ from data_pipeline.schematizer_clientlib.models.consumer_group import _ConsumerG
 from data_pipeline.schematizer_clientlib.models.consumer_group_data_source \
     import _ConsumerGroupDataSource
 from data_pipeline.schematizer_clientlib.models.data_target import _DataTarget
+from data_pipeline.schematizer_clientlib.models.namespace import _Namespace
 from data_pipeline.schematizer_clientlib.models.refresh import _Refresh
 from data_pipeline.schematizer_clientlib.models.source import _Source
 from data_pipeline.schematizer_clientlib.models.topic import _Topic
@@ -172,6 +173,23 @@ class SchematizerClient(object):
         _source = _Source.from_response(response)
         self._set_cache_by_source(_source)
         return _source
+
+    def get_namespaces(self):
+        """Get the list of namespaces registered in the schematizer
+
+        Returns:
+            (List[data_pipeline.schematizer_clientlib.models.namespace.Namespace])
+                The list of namespaces
+        """
+        response = self._call_api(
+            api=self._client.namespaces.list_namespaces,
+            params={}
+        )
+        result = []
+        for resp_item in response:
+            _namespace = _Namespace.from_response(resp_item)
+            result.append(_namespace.to_result())
+        return result
 
     def get_sources_by_namespace(self, namespace_name):
         """Get the list of sources in the specified namespace.
