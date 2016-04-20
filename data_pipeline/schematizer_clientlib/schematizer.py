@@ -746,16 +746,16 @@ class SchematizerClient(object):
             .SchemaMigration):
             An object containing the pushplan required to migrate to the desired schema
         """
-        if old_schema is None:
-            old_schema = {}
+        request_body = {
+            'new_schema': simplejson.dumps(new_schema),
+            'target_schema_type': target_schema_type.name,
+        }
+        if old_schema:
+            request_body['old_schema'] = simplejson.dumps(old_schema)
 
         response = self._call_api(
             api=self._client.schema_migrations.get_schema_migration,
-            request_body={
-                'new_schema': simplejson.dumps(new_schema),
-                'target_schema_type': target_schema_type.name,
-                'old_schema': simplejson.dumps(old_schema)
-            }
+            request_body=request_body
         )
         return response
 
