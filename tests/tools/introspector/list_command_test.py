@@ -13,14 +13,15 @@ from data_pipeline.tools.introspector.list_command import ListCommand
 class FakeParserError(Exception):
     pass
 
-Args = namedtuple("Namespace", [
-    "list_type",
-    "namespace_filter",
-    "source_filter",
-    "sort_by",
-    "descending_order",
-    "verbosity"
-]
+Args = namedtuple(
+    "Namespace", [
+        "list_type",
+        "namespace_filter",
+        "source_filter",
+        "sort_by",
+        "descending_order",
+        "verbosity"
+    ]
 )
 
 

@@ -13,11 +13,12 @@ from data_pipeline.tools.introspector.info_command import InfoCommand
 class FakeParserError(Exception):
     pass
 
-Args = namedtuple("Namespace", [
-    "info_type",
-    "identifier",
-    "verbosity"
-]
+Args = namedtuple(
+    "Namespace", [
+        "info_type",
+        "identifier",
+        "verbosity"
+    ]
 )
 
 

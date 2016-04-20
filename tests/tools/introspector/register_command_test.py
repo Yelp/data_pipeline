@@ -2,8 +2,8 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import random
 from collections import namedtuple
+from uuid import uuid4
 
 import mock
 import pytest
@@ -56,11 +56,11 @@ class TestInfoCommand(object):
 
     @pytest.fixture
     def namespace_name(self):
-        return "schema_check_namespace_{0}".format(random.random())
+        return "schema_check_namespace_{0}".format(uuid4())
 
     @pytest.fixture
     def source_name(self):
-        return "schema_check_source_{0}".format(random.random())
+        return "schema_check_source_{0}".format(uuid4())
 
     @pytest.fixture
     def source_owner_email(self):
@@ -101,7 +101,7 @@ class TestInfoCommand(object):
     def avro_schema_of_new_biz_table(self, source_name):
         return {
             'type': 'record',
-            'name': source_name.split('.')[0],
+            'name': source_name.split('-')[0],
             'namespace': '',
             'fields': [
                 {'name': 'id', 'type': 'int'},

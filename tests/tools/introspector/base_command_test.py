@@ -490,9 +490,7 @@ class TestBaseCommand(object):
             sort_by='name',
             descending_order=True
         )
-        # Can have higher length if the container is
-        # not restarted in between runs
-        assert len(actual_topics) >= 2
+        assert len(actual_topics) == 2
         a_name = topic_one_inactive.name
         b_name = topic_one_inactive_b.name
         a_pos = -1
@@ -666,36 +664,29 @@ class TestBaseCommand(object):
         )
         source_topics = source_dict['topics']
         assert len(source_topics) == 2
-        try:
-            self._assert_topic_equals_topic_dict(
-                topic=topic_one_inactive,
-                topic_dict=source_topics[0],
-                namespace_name=namespace_one,
-                source_name=source_one_inactive,
-                is_active=False
-            )
-            self._assert_topic_equals_topic_dict(
-                topic=topic_one_inactive_b,
-                topic_dict=source_topics[1],
-                namespace_name=namespace_one,
-                source_name=source_one_inactive,
-                is_active=False
-            )
-        except AssertionError:
-            self._assert_topic_equals_topic_dict(
-                topic=topic_one_inactive,
-                topic_dict=source_topics[1],
-                namespace_name=namespace_one,
-                source_name=source_one_inactive,
-                is_active=False
-            )
-            self._assert_topic_equals_topic_dict(
-                topic=topic_one_inactive_b,
-                topic_dict=source_topics[0],
-                namespace_name=namespace_one,
-                source_name=source_one_inactive,
-                is_active=False
-            )
+
+        sorted_expected_topics = sorted(
+            [topic_one_inactive, topic_one_inactive_b],
+            key=lambda topic: topic.topic_id
+        )
+        sorted_actual_topics = sorted(
+            source_topics,
+            key=lambda topic_dict: topic_dict['topic_id']
+        )
+        self._assert_topic_equals_topic_dict(
+            topic=sorted_expected_topics[0],
+            topic_dict=sorted_actual_topics[0],
+            namespace_name=namespace_one,
+            source_name=source_one_inactive,
+            is_active=False
+        )
+        self._assert_topic_equals_topic_dict(
+            topic=sorted_expected_topics[1],
+            topic_dict=sorted_actual_topics[1],
+            namespace_name=namespace_one,
+            source_name=source_one_inactive,
+            is_active=False
+        )
 
     def test_info_source_missing_source_name(
         self,

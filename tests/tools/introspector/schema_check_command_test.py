@@ -2,8 +2,8 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import random
 from collections import namedtuple
+from uuid import uuid4
 
 import mock
 import pytest
@@ -49,11 +49,11 @@ class TestInfoCommand(object):
 
     @pytest.fixture(scope='class')
     def namespace_name(self):
-        return "schema_check_namespace_{0}".format(random.random())
+        return "schema_check_namespace_{0}".format(uuid4())
 
     @pytest.fixture(scope='class')
     def source_name(self):
-        return "schema_check_source_{0}".format(random.random())
+        return "schema_check_source_{0}".format(uuid4())
 
     @pytest.fixture(scope='class')
     def schema_json(self, namespace_name, source_name):

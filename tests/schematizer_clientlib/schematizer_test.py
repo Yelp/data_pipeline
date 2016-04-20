@@ -170,12 +170,12 @@ class TestGetSchemasByTopic(SchematizerClientTestBase):
             actual = schematizer.get_schemas_by_topic(topic_name)
             found_schema = False
             for schema in actual:
-                try:
-                    self._assert_schema_values(schema, biz_schema)
+                # Find the schema in the list of schemas, and then check it's
+                # values against our schema
+                if schema.schema_id == biz_schema.schema_id:
                     found_schema = True
+                    self._assert_schema_values(schema, biz_schema)
                     break
-                except Exception:
-                    pass
             assert found_schema
             assert api_spy.call_count == 1
 
