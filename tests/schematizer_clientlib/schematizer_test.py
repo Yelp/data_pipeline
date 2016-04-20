@@ -13,9 +13,9 @@ from swaggerpy import exception as swaggerpy_exc
 from data_pipeline.config import get_config
 from data_pipeline.schematizer_clientlib.models.data_source_type_enum import \
     DataSourceTypeEnum
+from data_pipeline.schematizer_clientlib.models.namespace import Namespace
 from data_pipeline.schematizer_clientlib.models.target_schema_type_enum import \
     TargetSchemaTypeEnum
-from data_pipeline.schematizer_clientlib.models.namespace import Namespace
 from data_pipeline.schematizer_clientlib.schematizer import SchematizerClient
 
 
