@@ -272,7 +272,7 @@ class TestProducer(TestProducerBase):
             pii_message.timestamp,
             pii_message.message_type.name
         )
-        assert mock_logger.debug.call_args_list[0] == mock.call(call_args)
+        assert mock_logger.info.call_args_list[0] == mock.call(call_args)
 
     def test_publish_pii_message(self, pii_schema, payload, producer_instance):
         with reconfigure(

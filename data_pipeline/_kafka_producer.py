@@ -80,7 +80,7 @@ class KafkaProducer(object):
 
     def publish(self, message):
         if message.contains_pii and self.skip_messages_with_pii:
-            logger.debug(
+            logger.info(
                 "Skipping a PII message - "
                 "uuid hex: {0}, "
                 "schema_id: {1}, "
