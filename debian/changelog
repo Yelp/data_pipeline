@@ -1,3 +1,9 @@
+data-pipeline-tools (0.1.63) lucid; urgency=low
+
+  * Commit: Fix imports ordering.
+
+ -- Chia-Chi Lin <clin@yelp.com>  Wed, 20 Apr 2016 19:19:52 -0700
+
 data-pipeline-tools (0.1.62) lucid; urgency=low
 
   * Commit: bumped kafka-python version to 0.9.5.post2 to resolve
