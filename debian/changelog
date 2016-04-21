@@ -1,3 +1,37 @@
+data-pipeline-tools (0.1.63) lucid; urgency=low
+
+  * Commit: Fix imports ordering.
+
+ -- Chia-Chi Lin <clin@yelp.com>  Wed, 20 Apr 2016 19:19:52 -0700
+
+data-pipeline-tools (0.1.62) lucid; urgency=low
+
+  * Commit: bumped kafka-python version to 0.9.5.post2 to resolve
+    version conflict
+
+ -- Chia-Chi Lin <clin@yelp.com>  Wed, 20 Apr 2016 09:36:53 -0700
+
+data-pipeline-tools (0.1.61) lucid; urgency=low
+
+  * Commit: pin kafka-python to 0.9.5post1 to resolve version conflict
+    with yelp_kafka
+
+ -- Chia-Chi Lin <clin@yelp.com>  Wed, 13 Apr 2016 12:15:40 -0700
+
+data-pipeline-tools (0.1.60) lucid; urgency=low
+
+  * Commit: Merge branch 'keegan_DATAPIPE-798'
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Mon, 04 Apr 2016 15:43:13 -0700
+
+data-pipeline-tools (0.1.59) lucid; urgency=low
+
+  * Commit: Merge branch 'master' of
+    git.yelpcorp.com:clientlibs/data_pipeline into DATAPIPE-615-
+    refactor-consuemr-refresh-topic-to-support-more-source-topic-type
+
+ -- Chia-Chi Lin <clin@yelp.com>  Thu, 31 Mar 2016 17:48:46 -0700
+
 data-pipeline-tools (0.1.58) lucid; urgency=low
 
   * Commit: Merge branch 'datapipe-750_log-when-the-producer-skips-a-

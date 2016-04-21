@@ -94,6 +94,22 @@ Before you submit a pull request, check that it meets these guidelines:
    Run the ``tox`` command and make sure that the tests pass for all supported
    Python versions.
 
+Building Tools
+--------------
+
+Before you submit a pull request, make sure that any new tool meets these guidelines:
+
+1. Your tool is runnable from the commandline 
+   (with python or on it's own) in the data_pipeline/tools folder
+2. Any python libraries your tool requires is in both 
+   requirements-tools.txt and in setup.py in extras_require["tools"]
+3. In bin, create a script that can be run from the commandline that runs your tool.
+   See the others in the folder as an example on what to do with a python batch.
+   Put the path to this new script in setup.py under scripts
+4. In debian/data-pipeline-tools.links create a new link. Use the others there as an exaple.
+5. In yelp_package/itest/ubuntu.sh, add a line to the string SCRIPTS 
+   with the name of the script you put in bin
+
 Tips
 ----
 

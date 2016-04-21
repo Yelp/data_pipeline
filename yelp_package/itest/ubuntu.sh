@@ -5,7 +5,8 @@ set -e
 SCRIPTS="data_pipeline_tailer
 data_pipeline_refresh_runner
 data_pipeline_refresh_manager
-data_pipeline_refresh_job"
+data_pipeline_refresh_job
+data_pipeline_compaction_setter"
 
 if dpkg -i /work/dist/*.deb; then
   echo "Looks like it installed correctly"

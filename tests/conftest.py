@@ -25,7 +25,7 @@ logging.basicConfig(
 )
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope='session')
 def schematizer_client(containers):
     return get_schematizer()
 

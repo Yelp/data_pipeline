@@ -15,22 +15,99 @@ logger = get_config().logger
 
 
 class Consumer(BaseConsumer):
-    """The Consumer uses an iterator to get messages that need to be consumed
+    """
+    The Consumer uses an iterator to get messages that need to be consumed
     from Kafka.
 
-    Note:
-        The Consumer leverages the yelp_kafka ``KafkaConsumerGroup``.
+    Args:
+        consumer_name (str): See parameter `client_name` in
+            :class:`data_pipeline.client.Client`.  The `consumer_name` will
+            be registered with Kafka to commit offsets.
+        team_name (str): See parameter `team_name` in
+            :class:`data_pipeline.client.Client`.
+        expected_frequency_seconds (int, ExpectedFrequency): See parameter
+            `expected_frequency_seconds` in :class:`data_pipeline.client.Client`.
+        topic_to_consumer_topic_state_map ({str:Optional(ConsumerTopicState)}):
+            A map of topic names to `ConsumerTopicState` objects which
+            define the offsets to start from. The ConsumerTopicState of a topic
+            may be `None`, in which case the committed kafka offset for the
+            consumer_name is used. If there is no committed kafka offset for
+            the consumer_name the consumer will begin from the
+            `auto_offset_reset` offset in the topic.
+        auto_offset_reset (str): automatically resets the offset when there is
+            no initial offset in Zookeeper or if an offset is out of range.
+            If 'largest', reset the offset to the latest available message (tail).
+            If 'smallest' reset from the earliest (head).
+        partitioner_cooldown (float): Waiting time (in seconds) for the
+            consumer to acquire the partitions. See
+            yelp_kafka/yelp_kafka/partitioner.py for more details
+        pre_rebalance_callback (Optional[Callable[{str:list[int]}, None]]):
+            Optional callback which is passed a dict of topic as key and list
+            of partitions as value. It's important to note this may be called
+            multiple times in a single repartition, so any actions taken as a
+            result must be idempotent. You are guaranteed that no messages will
+            be consumed between this callback and the post_rebalance_callback.
+        post_rebalance_callback (Optional[Callable[{str:list[int]}, None]]):
+            Optional callback which is passed a dict of topic as key and list
+            of partitions as value which were acquired in a repartition. You
+            are guaranteed that no messages will be consumed between the
+            pre_rebalance_callback and this callback.
 
-    Example:
+    Note:
+        The Consumer leverages the yelp_kafka `KafkaConsumerGroup`.
+
+    **Examples**:
+
+    A simple example can be a consumer with name 'my_consumer' that
+    consumes a message from multiple topics, processes it and
+    commits the offset and this process continues::
+
         with Consumer(
             consumer_name='my_consumer',
-            topic_to_consumer_topic_state_map={'topic_a': None, 'topic_b': None}
+            team_name='bam',
+            expected_frequency_seconds=12345,
+            topic_to_consumer_topic_state_map={
+                'topic_a': None,
+                'topic_b': None
+            }
         ) as consumer:
             while True:
                 message = consumer.get_message()
                 if message is not None:
                     ... do stuff with message ...
                     consumer.commit_message(message)
+
+    Note:
+        Recommended to avoid calling `commit_message(message)` after every
+        message, as it is relatively expensive.
+
+    Another example can be a consumer which consumes multiple messages
+    (with maximum number of messages in batch as `count`) from 2 topics
+    'topic_a' and 'topic_b', processes them and commits them::
+
+        with Consumer(
+            consumer_name='my_consumer',
+            team_name='bam',
+            expected_frequency_seconds=12345,
+            topic_to_consumer_topic_state_map={
+                'topic_a': None,
+                'topic_b': None
+            }
+        ) as consumer:
+            while True:
+                messages = consumer.get_messages(
+                    count=batch_size,
+                    blocking=True,
+                    timeout=batch_timeout
+                )
+                if messages:
+                    ... do stuff with messages ...
+                    consumer.commit_messages(messages)
+
+    Note:
+        It's recommended to retrieve messages in batches via
+        `get_messages(..)`, do your work with them, and then commit them as
+        a group with a single call to `commit_messages(..)`
     """
 
     def _start(self):
@@ -49,6 +126,28 @@ class Consumer(BaseConsumer):
             blocking=False,
             timeout=get_config().consumer_get_messages_timeout_default
     ):
+        """ Retrieve a list of messages from the message buffer, optionally
+        blocking until the requested number of messages has been retrieved.
+
+        Warning:
+            If `blocking` is True and `timeout` is None this will block until
+            the requested number of messages is retrieved, potentially blocking
+            forever. Please be absolutely sure this is what you are intending
+            if you use these options!
+
+        Args:
+            count (int): Number of messages to retrieve
+            blocking (boolean): Set to True to block while waiting for messages
+                if the buffer has been depleted. Otherwise returns immediately
+                if the buffer reaches depletion. Default is False.
+            timeout (double): Maximum time (in seconds) to wait if blocking is
+                set to True. Set to None to wait indefinitely.
+
+        Returns:
+            ([data_pipeline.message.Message]): List of Message objects with
+            maximum size `count`, but may be smaller or empty depending on
+            how many messages were retrieved within the timeout.
+        """
         messages = []
         has_timeout = timeout is not None
         if has_timeout:
