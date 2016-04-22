@@ -261,6 +261,14 @@ class Message(object):
             raise TypeError("upstream_position_info must be None or a dict")
         self._upstream_position_info = upstream_position_info
 
+    @upstream_position_info.setter
+    def upstream_position_info(self, upstream_position_info):
+        # This should be treated as special case for external users to update
+        # this data after the Message class is instantiated. Right now Paastorm
+        # uses this attribute to keep track upstream message offset. Replace
+        # this setter if there is a better alternative.
+        self._set_upstream_position_info(upstream_position_info)
+
     @property
     def kafka_position_info(self):
         """The kafka offset, partition, and key of the message if it
@@ -431,7 +439,12 @@ class Message(object):
         }
 
     @classmethod
-    def create_from_unpacked_message(cls, unpacked_message, kafka_position_info=None):
+    def create_from_unpacked_message(
+        cls,
+        unpacked_message,
+        topic=None,
+        kafka_position_info=None
+    ):
         encryption_type = unpacked_message['encryption_type']
         meta = cls._get_unpacked_meta(unpacked_message)
         payload = cls._get_unpacked_decrypted_payload(
@@ -448,6 +461,8 @@ class Message(object):
             'meta': meta,
             'kafka_position_info': kafka_position_info
         }
+        if topic:
+            message_params['topic'] = topic
         message = cls(**message_params)
         message._manual_set_encryption_type(encryption_type)
         return message
@@ -681,7 +696,12 @@ class UpdateMessage(Message):
         return repr_dict
 
     @classmethod
-    def create_from_unpacked_message(cls, unpacked_message, kafka_position_info=None):
+    def create_from_unpacked_message(
+        cls,
+        unpacked_message,
+        topic=None,
+        kafka_position_info=None
+    ):
         encryption_type = unpacked_message['encryption_type']
         meta = cls._get_unpacked_meta(unpacked_message)
         payload = cls._get_unpacked_decrypted_payload(
@@ -704,6 +724,8 @@ class UpdateMessage(Message):
             'meta': meta,
             'kafka_position_info': kafka_position_info
         }
+        if topic:
+            message_params['topic'] = topic
         message = cls(**message_params)
         message._manual_set_encryption_type(encryption_type)
         return message
@@ -760,17 +782,18 @@ _message_type_to_class_map = {
 
 
 def create_from_kafka_message(
-        topic,
-        kafka_message,
-        force_payload_decoding=True
+    topic,
+    kafka_message,
+    force_payload_decoding=True
 ):
     """ Build a data_pipeline.message.Message from a yelp_kafka message
 
     Args:
         topic (str): The topic name from which the message was received.
-        kafka_message (yelp_kafka.consumer.Message): The message info which
-            has the payload, offset, partition, and key of the received
-            message.
+            This parameter is deprecating and currently not used.
+        kafka_message (kafka.common.KafkaMessage): The message info which
+            has the topic, partition, offset, key, and value(payload) of
+            the received message.
         force_payload_decoding (boolean): If this is set to `True` then
             we will decode the payload/previous_payload immediately.
             Otherwise the decoding will happen whenever the lazy *_data
@@ -785,6 +808,7 @@ def create_from_kafka_message(
         key=kafka_message.key,
     )
     return _create_message_from_packed_message(
+        topic=kafka_message.topic,
         packed_message=kafka_message,
         force_payload_decoding=force_payload_decoding,
         kafka_position_info=kafka_position_info
@@ -792,9 +816,9 @@ def create_from_kafka_message(
 
 
 def create_from_offset_and_message(
-        topic,
-        offset_and_message,
-        force_payload_decoding=True
+    topic,
+    offset_and_message,
+    force_payload_decoding=True
 ):
     """ Build a data_pipeline.message.Message from a kafka.common.OffsetAndMessage
 
@@ -812,19 +836,22 @@ def create_from_offset_and_message(
         The message object
     """
     return _create_message_from_packed_message(
+        topic=topic,
         packed_message=offset_and_message.message,
         force_payload_decoding=force_payload_decoding
     )
 
 
 def _create_message_from_packed_message(
+    topic,
     packed_message,
     force_payload_decoding,
     kafka_position_info=None
 ):
     """ Builds a data_pipeline.message.Message from packed_message
     Args:
-        packed_message (yelp_kafka.consumer.Message or kafka.common.Message):
+        topic (str): the topic name where the message comes from.
+        packed_message (yelp_kafka.consumer.Message or kafka.common.KafkaMessage):
             The message info which has the payload, offset, partition,
             and key of the received message if of type yelp_kafka.consumer.message
             or just payload, uuid, schema_id in case of kafka.common.Message.
@@ -843,6 +870,7 @@ def _create_message_from_packed_message(
     message_class = _message_type_to_class_map[unpacked_message['message_type']]
     message = message_class.create_from_unpacked_message(
         unpacked_message=unpacked_message,
+        topic=topic,
         kafka_position_info=kafka_position_info
     )
     if force_payload_decoding:
