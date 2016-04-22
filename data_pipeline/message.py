@@ -477,15 +477,27 @@ class Message(object):
 
     @property
     def avro_repr(self):
-        return {
-            'uuid': self.uuid,
-            'message_type': self.message_type.name,
-            'schema_id': self.schema_id,
-            'payload': self._encrypt_payload_if_necessary(self.payload),
-            'timestamp': self.timestamp,
-            'meta': self._get_meta_attr_avro_repr(),
-            'encryption_type': self.encryption_type,
-        }
+        if isinstance(self, UpdateMessage):
+            return {
+                'uuid': self.uuid,
+                'message_type': self.message_type.name,
+                'schema_id': self.schema_id,
+                'payload': self._encrypt_payload_if_necessary(self.payload),
+                'previous_payload': self._encrypt_payload_if_necessary(self.previous_payload),
+                'timestamp': self.timestamp,
+                'meta': self._get_meta_attr_avro_repr(),
+                'encryption_type': self.encryption_type,
+            }
+        else:
+            return {
+                'uuid': self.uuid,
+                'message_type': self.message_type.name,
+                'schema_id': self.schema_id,
+                'payload': self._encrypt_payload_if_necessary(self.payload),
+                'timestamp': self.timestamp,
+                'meta': self._get_meta_attr_avro_repr(),
+                'encryption_type': self.encryption_type,
+            }
 
     @classmethod
     def create_from_unpacked_message(cls, unpacked_message, kafka_position_info=None):
