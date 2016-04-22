@@ -1,3 +1,9 @@
+data-pipeline-tools (0.1.64) lucid; urgency=low
+
+  * Commit: removed redundant comments
+
+ -- Chia-Chi Lin <clin@yelp.com>  Thu, 21 Apr 2016 18:56:12 -0700
+
 data-pipeline-tools (0.1.63) lucid; urgency=low
 
   * Commit: Fix imports ordering.
