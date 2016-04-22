@@ -6,12 +6,13 @@ from __future__ import unicode_literals
 class TestSchemaRef(object):
 
     def test_source_to_ref_map_is_complete(
-            self,
-            schema_ref,
-            good_source_ref,
-            bad_source_ref
+        self,
+        schema_ref,
+        good_source_ref,
+        bad_source_ref,
+        source
     ):
-        assert schema_ref.get_source_ref('good_source') == good_source_ref
+        assert schema_ref.get_source_ref(source) == good_source_ref
         assert schema_ref.get_source_ref('bad_source') == bad_source_ref
         assert len(schema_ref._source_to_ref_map) == 2
 

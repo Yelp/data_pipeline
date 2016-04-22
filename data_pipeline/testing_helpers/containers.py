@@ -316,7 +316,8 @@ class Containers(object):
         configure_from_dict(dict(
             schematizer_host_and_port=schematizer_host_and_port,
             kafka_zookeeper=zookeeper_host_and_port,
-            kafka_broker_list=[kafka_host_and_port]
+            kafka_broker_list=[kafka_host_and_port],
+            should_use_testing_containers=True
         ))
 
     def _are_containers_already_running(self):

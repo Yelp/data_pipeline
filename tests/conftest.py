@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 import logging
 import os
+from uuid import uuid4
 
 import pytest
 import simplejson
@@ -32,12 +33,12 @@ def schematizer_client(containers):
 
 @pytest.fixture(scope="module")
 def namespace():
-    return 'test_namespace'
+    return 'test_namespace_{}'.format(uuid4())
 
 
 @pytest.fixture(scope="module")
 def source():
-    return 'good_source'
+    return 'good_source_{}'.format(uuid4())
 
 
 @pytest.fixture(scope="module")
@@ -66,9 +67,9 @@ def registered_schema(schematizer_client, example_schema, namespace, source):
 
 
 @pytest.fixture(scope="module")
-def pii_schema(schematizer_client, example_schema):
+def pii_schema(schematizer_client, example_schema, namespace):
     return schematizer_client.register_schema(
-        namespace='test_namespace',
+        namespace=namespace,
         source='pii_source',
         schema_str=example_schema,
         source_owner_email='test@yelp.com',
@@ -77,9 +78,9 @@ def pii_schema(schematizer_client, example_schema):
 
 
 @pytest.fixture
-def registered_meta_attribute(schematizer_client, example_meta_attr_schema):
+def registered_meta_attribute(schematizer_client, example_meta_attr_schema, namespace):
     return schematizer_client.register_schema(
-        namespace='test_namespace',
+        namespace=namespace,
         source='good_meta_attribute',
         schema_str=example_meta_attr_schema,
         source_owner_email='test_meta@yelp.com',
@@ -88,17 +89,17 @@ def registered_meta_attribute(schematizer_client, example_meta_attr_schema):
 
 
 @pytest.fixture
-def example_meta_attr_schema():
+def example_meta_attr_schema(namespace):
     return '''
     {
         "type":"record",
-        "namespace":"test_namespace",
+        "namespace":"%s",
         "name":"good_meta_attribute",
         "fields":[
             {"type":"int", "name":"good_payload"}
         ]
     }
-    '''
+    ''' % (namespace)
 
 
 @pytest.fixture
@@ -189,7 +190,7 @@ def good_field_ref():
 
 
 @pytest.fixture
-def good_source_ref(good_field_ref, bad_field_ref):
+def good_source_ref(good_field_ref, bad_field_ref, namespace, source):
     return {
         "category": "test_category",
         "file_display": "path/to/test.py",
@@ -198,10 +199,10 @@ def good_source_ref(good_field_ref, bad_field_ref):
             bad_field_ref
         ],
         "owner_email": "test@yelp.com",
-        "namespace": "test_namespace",
+        "namespace": namespace,
         "file_url": "http://www.test.com/",
         "note": "Notes for good_source",
-        "source": "good_source",
+        "source": source,
         "doc": "Docs for good_source",
         "contains_pii": False
     }
@@ -225,11 +226,11 @@ def schema_ref_dict(good_source_ref, bad_source_ref):
 
 
 @pytest.fixture
-def schema_ref_defaults():
+def schema_ref_defaults(namespace):
     return {
         'doc_owner': 'test_doc_owner@yelp.com',
         'owner_email': 'test_owner@yelp.com',
-        'namespace': 'test_namespace',
+        'namespace': namespace,
         'doc': 'test_doc',
         'contains_pii': False,
         'category': 'test_category'
