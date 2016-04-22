@@ -790,7 +790,8 @@ def create_from_kafka_message(
 
     Args:
         topic (str): The topic name from which the message was received.
-            This parameter is deprecating and currently not used.
+            This parameter is deprecating and currently not used. The topic
+            will be retrieved from the given `kafka_message`.
         kafka_message (kafka.common.KafkaMessage): The message info which
             has the topic, partition, offset, key, and value(payload) of
             the received message.
