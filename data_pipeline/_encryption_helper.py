@@ -40,8 +40,7 @@ class EncryptionHelper(object):
         if not encryption_type:
             raise ValueError("Encryption type should be set.")
 
-        # Get the key number to use, allowing for key rotation. encryption_type
-        # must be of the form 'Algorithm_name-{key_id}'
+        # Get the key number to use, allowing for key rotation.
         _, key_id = self._get_algorithm_and_key_id(encryption_type)
 
         with open(key_location.format(key_id), 'r') as f:
