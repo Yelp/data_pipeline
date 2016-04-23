@@ -101,7 +101,7 @@ class BaseConsumerTest(object):
                 consumer_asserter.assert_messages([msg])
             break
 
-    def test_set_cache_kafka_commit_offsets(
+    def test_skip_commit_offset_if_offset_unchanged(
             self,
             publish_messages,
             consumer
@@ -113,28 +113,12 @@ class BaseConsumerTest(object):
             timeout=TIMEOUT
         )
         assert len(msgs) == 2
-        assert not consumer.topic_to_partition_offset_map_cache[msgs[1].topic]
-        consumer.commit_message(msgs[1])
-        assert consumer.topic_to_partition_offset_map_cache[msgs[1].topic]
-
-    def test_do_not_call_kafka_commit_offsets_when_offset_dont_change(
-            self,
-            publish_messages,
-            consumer
-    ):
-        publish_messages(2)
-        msgs = consumer.get_messages(
-            count=2,
-            blocking=True,
-            timeout=TIMEOUT
-        )
-        assert len(msgs) == 2
-        consumer.commit_message(msgs[1])
+        consumer.commit_messages(msgs)
         with mock.patch.object(
             consumer.kafka_client,
             'send_offset_commit_request'
         ) as mock_send_offset_commit_request:
-            consumer.commit_message(msgs[1])
+            consumer.commit_messages(msgs)
             assert not mock_send_offset_commit_request.called
 
     def test_call_kafka_commit_offsets_when_offset_change(
@@ -149,7 +133,7 @@ class BaseConsumerTest(object):
             timeout=TIMEOUT
         )
         assert len(msgs) == 4
-        consumer.commit_message(msgs[1])
+        consumer.commit_messages(msgs)
         with mock.patch.object(
             consumer.kafka_client,
             'send_offset_commit_request'
@@ -163,24 +147,6 @@ class BaseConsumerTest(object):
         # commiting last msg in kafka queue to ensure
         # other tests work fine
         consumer.commit_message(msgs[3])
-
-    def test_cache_kafka_commit_offsets_reset_after_rebalnce(
-            self,
-            publish_messages,
-            consumer
-    ):
-        publish_messages(2)
-        msgs = consumer.get_messages(
-            count=2,
-            blocking=True,
-            timeout=TIMEOUT
-        )
-        assert len(msgs) == 2
-        assert len(consumer.topic_to_partition_offset_map_cache.keys()) == 0
-        consumer.commit_message(msgs[1])
-        assert len(consumer.topic_to_partition_offset_map_cache.keys()) == 1
-        consumer.apply_post_rebalance_callback_to_partition([])
-        assert len(consumer.topic_to_partition_offset_map_cache.keys()) == 0
 
     @pytest.fixture
     def example_prev_payload_data(self, example_schema_obj):

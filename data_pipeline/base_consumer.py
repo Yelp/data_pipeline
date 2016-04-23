@@ -299,7 +299,7 @@ class BaseConsumer(Client):
             topic_to_partition_offset_map (Dict[str, Dict[int, int]]): Maps from
                 topics to a partition and offset map for each topic.
         """
-        topic_to_partition_offset_map = self._filter_offsets_in_topic_to_partition_offset_map(
+        topic_to_partition_offset_map = self._get_offsets_map_to_be_committed(
             topic_to_partition_offset_map
         )
         return self._send_offset_commit_requests(
@@ -314,7 +314,7 @@ class BaseConsumer(Client):
             ]
         )
 
-    def _filter_offsets_in_topic_to_partition_offset_map(
+    def _get_offsets_map_to_be_committed(
         self,
         topic_to_partition_offset_map
     ):
