@@ -21,14 +21,24 @@ logger = get_config().logger
 
 
 class ConsumerTopicState(object):
-    def __init__(self, partition_offset_map, last_seen_schema_id):
-        """Object which holds the state of consumer topic.
+    """
+    ConsumerTopicState object holds the state of a consumer topic with
+    partition_offset_map mapping all the partitions of the topic with their
+    last seen offsets and last_seen_schema_id with the schema id of the
+    latest processed message.
+    Whenever consumer receives a yelp_kafka message for a topic, it builds a
+    data_pipeline.message.Message and updates the topic state map for the
+    topic with updated ConsumerTopicState (updates last_seen_schema_id with
+    the schema_id of the message and partition offset with the offset of
+    the message).
 
-        Args:
-            partition_offset_map ({int:int}): map of partitions to their last
-                seen offsets.
-            last_seen_schema_id: The last seen schema_id.
-        """
+    Args:
+        partition_offset_map ({int:int}): map of partitions to their last
+            seen offsets.
+        last_seen_schema_id: The last seen schema_id.
+    """
+
+    def __init__(self, partition_offset_map, last_seen_schema_id):
         self.partition_offset_map = partition_offset_map
         self.last_seen_schema_id = last_seen_schema_id
 
@@ -40,10 +50,46 @@ class ConsumerTopicState(object):
 
 
 class BaseConsumer(Client):
-    """This is the base interface for the MultiprocessingConsumer and Consumer
-    implementations. It provides a set of methods common to the derived consumer
-    classes and specifies which methods should be overriden. It should not be
-    instantiated and has only been made public to ensure docs are generated."""
+    """
+    This is the base interface for the Consumer implementations. It provides
+    a set of methods common to the derived consumer classes and specifies
+    which methods should be overridden. It should not be instantiated and
+    has only been made public to ensure docs are generated.
+
+    Args:
+        consumer_name (str): See parameter `client_name` in
+            :class:`data_pipeline.client.Client`.  The `consumer_name` will
+            be registered with Kafka to commit offsets.
+        team_name (str): See parameter `team_name` in
+            :class:`data_pipeline.client.Client`.
+        expected_frequency_seconds (int, ExpectedFrequency): See parameter
+            `expected_frequency_seconds` in :class:`data_pipeline.client.Client`.
+        topic_to_consumer_topic_state_map ({str:Optional(ConsumerTopicState)}):
+            A map of topic names to `ConsumerTopicState` objects which define
+            the offsets to start from. The ConsumerTopicState of a topic may be
+            `None`, in which case the committed kafka offset for the
+            consumer_name is used. If there is no committed kafka offset for
+            the consumer_name the consumer will begin from the
+            `auto_offset_reset` offset in the topic.
+        auto_offset_reset (str): automatically resets the offset when there is
+            no initial offset in Zookeeper or if an offset is out of range.
+            If 'largest', reset the offset to the latest available message (tail).
+            If 'smallest' reset from the earliest (head).
+        partitioner_cooldown (float): Waiting time (in seconds) for the
+            consumer to acquire the partitions. See
+            yelp_kafka/yelp_kafka/partitioner.py for more details
+        pre_rebalance_callback (Optional[Callable[{str:list[int]}, None]]):
+            Optional callback which is passed a dict of topic as key and list
+            of partitions as value. It's important to note this may be called
+            multiple times in a single repartition, so any actions taken as a
+            result must be idempotent. You are guaranteed that no messages will
+            be consumed between this callback and the post_rebalance_callback.
+        post_rebalance_callback (Optional[Callable[{str:list[int]}, None]]):
+            Optional callback which is passed a dict of topic as key and list
+            of partitions as value which were acquired in a repartition. You
+            are guaranteed that no messages will be consumed between the
+            pre_rebalance_callback and this callback.
+    """
 
     def __init__(
         self,
@@ -57,36 +103,6 @@ class BaseConsumer(Client):
         pre_rebalance_callback=None,
         post_rebalance_callback=None
     ):
-        """ Creates the base BaseConsumer object
-
-        Args:
-            consumer_name (str): See parameter `client_name` in
-                :class:`data_pipeline.client.Client`.  The `consumer_name` will
-                be registered with Kafka to commit offsets.
-            team_name (str): See parameter `team_name` in
-                :class:`data_pipeline.client.Client`.
-            expected_frequency_seconds (int, ExpectedFrequency): See parameter
-                `expected_frequency_seconds` in :class:`data_pipeline.client.Client`.
-            topic_to_consumer_topic_state_map ({str:Optional(ConsumerTopicState)}):
-                A map of topic names to ``ConsumerTopicState`` objects which
-                define the offsets to start from. These objects may be `None`,
-                in which case the committed kafka offset for the consumer_name is
-                used. If there is no committed kafka offset for the consumer_name
-                the MultiprocessingConsumer will begin from the `auto_offset_reset` offset in
-                the topic.
-            auto_offset_reset (str): Used for offset validation. If 'largest'
-                reset the offset to the latest available message (tail). If
-                'smallest' reset from the earliest (head).
-            partitioner_cooldown (float): Waiting time (in seconds) for the
-                consumer to acquire the partitions. See
-                yelp_kafka/yelp_kafka/partitioner.py for more details
-            pre_rebalance_callback: Optional callback called prior to
-                topic/partition rebalancing.
-                Required args, dict of partitions to offset.
-            post_rebalance_callback: Optional callback called following
-                topic/partition rebalancing.
-                Required args, dict of partitions to offset.
-        """
         super(BaseConsumer, self).__init__(
             consumer_name,
             team_name,
@@ -104,11 +120,12 @@ class BaseConsumer(Client):
 
     @cached_property
     def kafka_client(self):
+        """ Returns the `KafkaClient` object."""
         return KafkaClient(get_config().cluster_config.broker_list)
 
     @property
     def client_type(self):
-        """String identifying the client type."""
+        """ Returns a string identifying the client type. """
         return "consumer"
 
     def __enter__(self):
@@ -287,7 +304,7 @@ class BaseConsumer(Client):
         :meth:`commit_messages` should be used, but this can be useful when paired with
         :meth:`data_pipeline.position_data.PositionData.topic_to_last_position_info_map`.
 
-        Example::
+        **Example**::
             The `topic_to_partition_offset_map` should be formatted like::
 
                 {
@@ -333,15 +350,16 @@ class BaseConsumer(Client):
         ensuring a group of messages are committed even if an error is
         encountered.
 
+        **Example**::
 
-        Example:
             for msg in consumer:
                 if msg is None:
                     continue
                 with consumer.ensure_committed(msg):
                     do_things_with_message(msg)
 
-        Example:
+        **Example**::
+
             with consumer.ensure_committed(consumer.get_messages()) as messages:
                 do_things_with_messages(messages)
 
@@ -363,8 +381,14 @@ class BaseConsumer(Client):
         which are being consumed and/or modifying the offsets of the topics
         already being consumed.
 
-        Example:
-            with Consumer('example', {'topic1': None}) as consumer:
+        **Example**::
+
+            with Consumer(
+                consumer_name='example',
+                team_name='bam',
+                expected_frequency_seconds=12345,
+                topic_to_consumer_topic_state_map={'topic1': None}
+            ) as consumer:
                 while True:
                     messages = consumer.get_messages(
                         count=batch_size,
@@ -382,7 +406,7 @@ class BaseConsumer(Client):
                             topic_map[topic] = None
                     consumer.reset_topics(topic_map)
 
-        Notes:
+        Note:
             This is an expensive operation, roughly equivalent to destroying
             and recreating the Consumer, so make sure you only are calling this
             when absolutely necessary.
@@ -393,12 +417,12 @@ class BaseConsumer(Client):
 
         Args:
             topic_to_consumer_topic_state_map ({str:Optional(ConsumerTopicState)}):
-                A map of topic names to ``ConsumerTopicState`` objects which
-                define the offsets to start from. These objects may be `None`,
-                in which case the committed kafka offset for the consumer_name is
-                used. If there is no committed kafka offset for the consumer_name
-                the Consumer will begin from the `auto_offset_reset` offset in
-                the topic.
+                A map of topic names to `ConsumerTopicState` objects which
+                define the offsets to start from. The ConsumerTopicState of a topic
+                may be `None`, in which case the committed kafka offset for the
+                consumer_name is used. If there is no committed kafka offset
+                for the consumer_name the Consumer will begin from the
+                `auto_offset_reset` offset in the topic.
         """
         self.stop()
         self.topic_to_consumer_topic_state_map = topic_to_consumer_topic_state_map
@@ -442,14 +466,14 @@ class BaseConsumer(Client):
 
     @property
     def _kafka_consumer_config(self):
-        """ The ``KafkaConsumerConfig`` for the Consumer.
+        """ The `KafkaConsumerConfig` for the Consumer.
 
         Notes:
-            This is not a ``@cached_property`` since there is the possibility
+            This is not a `@cached_property` since there is the possibility
             that the cluster_config could change during runtime and users could
             leverage this for responding to topology changes.
 
-            ``auto_commit`` is set to False to ensure clients can determine when
+            `auto_commit` is set to False to ensure clients can determine when
             they want their topic offsets committed via commit_messages(..)
         """
         return KafkaConsumerConfig(
@@ -459,10 +483,10 @@ class BaseConsumer(Client):
             auto_commit=False,
             partitioner_cooldown=self.partitioner_cooldown,
             pre_rebalance_callback=self.pre_rebalance_callback,
-            post_rebalance_callback=self.apply_post_rebalance_callback_to_partition
+            post_rebalance_callback=self._apply_post_rebalance_callback_to_partition
         )
 
-    def apply_post_rebalance_callback_to_partition(self, partitions):
+    def _apply_post_rebalance_callback_to_partition(self, partitions):
         """
         Removes the topics not present in the partitions list
         from the topic_to_consumer_topic_state_map

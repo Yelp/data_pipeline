@@ -2,7 +2,6 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import base64
 import time
 from collections import namedtuple
 from uuid import UUID
@@ -20,13 +19,16 @@ from data_pipeline.message_type import MessageType
 from data_pipeline.meta_attribute import MetaAttribute
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
+
 logger = get_config().logger
+
 
 KafkaPositionInfo = namedtuple('KafkaPositionInfo', [
     'offset',               # Offset of the message in the topic
     'partition',            # Partition of the topic the message was from
     'key'                   # Key of the message, may be `None`
 ])
+
 
 PayloadFieldDiff = namedtuple('PayloadFieldDiff', [
     'old_value',            # Value of the field before update
@@ -125,8 +127,7 @@ class Message(object):
     def topic(self):
         return self._topic
 
-    @topic.setter
-    def topic(self, topic):
+    def _set_topic(self, topic):
         if not isinstance(topic, str):
             raise TypeError("Topic must be a non-empty string")
         if len(topic) == 0:
@@ -137,8 +138,7 @@ class Message(object):
     def schema_id(self):
         return self._schema_id
 
-    @schema_id.setter
-    def schema_id(self, schema_id):
+    def _set_schema_id(self, schema_id):
         if not isinstance(schema_id, int):
             raise TypeError("Schema id should be an int")
         self._schema_id = schema_id
@@ -149,15 +149,10 @@ class Message(object):
         return self._message_type
 
     @property
-    def uuid_base64(self):
-        return base64.b64encode(self.uuid)
-
-    @property
     def uuid(self):
         return self._uuid
 
-    @uuid.setter
-    def uuid(self, uuid):
+    def _set_uuid(self, uuid):
         if uuid is None:
             # UUID generation is expensive.  Using FastUUID instead of the built
             # in UUID methods increases Messages that can be instantiated per
@@ -173,64 +168,75 @@ class Message(object):
         self._uuid = uuid
 
     @property
+    def uuid_hex(self):
+        # TODO: DATAPIPE-848
+        return UUID(bytes=self.uuid).hex
+
+    @property
     def contains_pii(self):
-        if self._contains_pii is None:
-            self._contains_pii = self._schematizer.get_schema_by_id(
-                self.schema_id
-            ).topic.contains_pii
         return self._contains_pii
 
-    @contains_pii.setter
-    def contains_pii(self, contains_pii):
-        self._contains_pii = contains_pii
-        self._encryption_type = None  # force encryption_type to be rechecked
+    def _set_contains_pii(self, schema_id):
+        self._contains_pii = self._schematizer.get_schema_by_id(
+            schema_id
+        ).topic.contains_pii
 
     @property
     def encryption_type(self):
-        if self._encryption_type is None and self._contains_pii:
-            self._encryption_type = get_config().encryption_type
-            if self._encryption_type is None:
-                raise ValueError(
-                    "Encryption type must be set when message contains PII."
-                )
         return self._encryption_type
 
-    def _encryption_type_setter(self, encryption_type):
-        self._encryption_type = encryption_type
+    def _set_encryption_type(self):
+        self._encryption_type = None
+        if not self._should_be_encrypted:
+            return
+
+        config_encryption_type = get_config().encryption_type
+        if config_encryption_type is None:
+            raise ValueError(
+                "Encryption type must be set when message requires to be encrypted."
+            )
+        self._manual_set_encryption_type(config_encryption_type)
 
     @property
-    def _encryption_helper(self):
-        return EncryptionHelper(message=self)
+    def _should_be_encrypted(self):
+        """Whether this message should be encrypted.  So far the criteria used
+        to determine if the message should be encrypted is the pii information.
+        Include additional criteria if necessary.
+        """
+        return self.contains_pii
+
+    def _manual_set_encryption_type(self, encryption_type):
+        """Manually set the encryption type of the message.  It is for the case
+        when not all the criteria used to determine if this message should be
+        encryption is available, such as when constructing the message from a
+        published kafka message.
+        """
+        self._encryption_type = encryption_type
+        if encryption_type:
+            self._encryption_helper = EncryptionHelper(encryption_type)
 
     @property
     def dry_run(self):
         return self._dry_run
 
-    @dry_run.setter
-    def dry_run(self, dry_run):
+    def _set_dry_run(self, dry_run):
         self._dry_run = dry_run
 
     @property
     def meta(self):
         return self._meta
 
-    @meta.setter
-    def meta(self, meta):
-        if meta is None:
-            self._meta = None
-        elif not isinstance(meta, list) or not all(
-            isinstance(meta_attr, MetaAttribute)
-            for meta_attr in meta
-        ):
-            raise TypeError(
-                "Meta must be None or list of MetaAttribute objects."
-            )
+    def _set_meta(self, meta):
+        if (not self._is_valid_optional_type(meta, list) or
+                self._any_invalid_type(meta, MetaAttribute)):
+            raise TypeError("Meta must be None or list of MetaAttribute objects.")
         self._meta = meta
 
     def get_meta_attr_by_type(self, meta, meta_type):
         if meta is not None:
             attributes_with_type = [m for m in meta if m.source == meta_type]
             return unlist(attributes_with_type)
+        return None
 
     def _get_meta_attr_avro_repr(self):
         if self.meta is not None:
@@ -241,8 +247,7 @@ class Message(object):
     def timestamp(self):
         return self._timestamp
 
-    @timestamp.setter
-    def timestamp(self, timestamp):
+    def _set_timestamp(self, timestamp):
         if timestamp is None:
             timestamp = int(time.time())
         self._timestamp = timestamp
@@ -251,15 +256,18 @@ class Message(object):
     def upstream_position_info(self):
         return self._upstream_position_info
 
+    def _set_upstream_position_info(self, upstream_position_info):
+        if not self._is_valid_optional_type(upstream_position_info, dict):
+            raise TypeError("upstream_position_info must be None or a dict")
+        self._upstream_position_info = upstream_position_info
+
     @upstream_position_info.setter
     def upstream_position_info(self, upstream_position_info):
-        # TODO [clin|DATAPIPE-469] re-visit the style when we get a chance
-        if (
-            upstream_position_info is not None and
-            not isinstance(upstream_position_info, dict)
-        ):
-            raise TypeError("upstream_position_info should be None or a dict")
-        self._upstream_position_info = upstream_position_info
+        # This should be treated as special case for external users to update
+        # this data after the Message class is instantiated. Right now Paastorm
+        # uses this attribute to keep track upstream message offset. Replace
+        # this setter if there is a better alternative.
+        self._set_upstream_position_info(upstream_position_info)
 
     @property
     def kafka_position_info(self):
@@ -269,15 +277,10 @@ class Message(object):
         """
         return self._kafka_position_info
 
-    @kafka_position_info.setter
-    def kafka_position_info(self, kafka_position_info):
-        # TODO [clin|DATAPIPE-469] re-visit the style when we get a chance
-        if (
-            kafka_position_info is not None and
-            not isinstance(kafka_position_info, KafkaPositionInfo)
-        ):
+    def _set_kafka_position_info(self, kafka_position_info):
+        if not self._is_valid_optional_type(kafka_position_info, KafkaPositionInfo):
             raise TypeError(
-                "kafka_position_info should be None or a KafkaPositionInfo"
+                "kafka_position_info must be None or a KafkaPositionInfo"
             )
         self._kafka_position_info = kafka_position_info
 
@@ -300,24 +303,21 @@ class Message(object):
 
     @property
     def payload(self):
-        self._encode_payload_data_if_necessary()
+        self._set_payload_if_necessary(self._payload_data)
         return self._payload
 
-    @payload.setter
-    def payload(self, payload):
+    def _set_payload(self, payload):
         if not isinstance(payload, bytes):
             raise TypeError("Payload must be bytes")
-        payload = self._encrypt_payload_if_necessary(payload)
         self._payload = payload
         self._payload_data = None  # force payload_data to be re-decoded
 
     @property
     def payload_data(self):
-        self._decode_payload_if_necessary()
+        self._set_payload_data_if_necessary(self._payload)
         return self._payload_data
 
-    @payload_data.setter
-    def payload_data(self, payload_data):
+    def _set_payload_data(self, payload_data):
         if not isinstance(payload_data, dict):
             raise TypeError("Payload data must be a dict")
         self._payload_data = payload_data
@@ -327,11 +327,10 @@ class Message(object):
     def keys(self):
         return self._keys
 
-    @keys.setter
-    def keys(self, keys):
-        if keys is not None and not isinstance(keys, tuple):
-            raise TypeError("Keys must be a tuple.")
-        if keys and not all(isinstance(key, unicode) for key in keys):
+    def _set_keys(self, keys):
+        if not self._is_valid_optional_type(keys, tuple):
+            raise TypeError("Keys must be None or a tuple.")
+        if self._any_invalid_type(keys, unicode):
             raise TypeError("Element of keys must be unicode.")
         self._keys = keys
 
@@ -355,23 +354,30 @@ class Message(object):
         # does, and in addition, this check is quite a bit faster than
         # serialization.  Finally, if we do it this way, we can lazily
         # serialize the payload in a subclass if necessary.
-        self.schema_id = schema_id
-        self.topic = (topic or
-                      str(self._schematizer.get_schema_by_id(schema_id).topic.name))
-        self.uuid = uuid
-        self.timestamp = timestamp
-        self.upstream_position_info = upstream_position_info
-        self.kafka_position_info = kafka_position_info
-        self.keys = keys
-        self.dry_run = dry_run
-        # TODO(DATAPIPE-416|psuben):
-        # Make it so contains_pii is no longer overrideable.
-        self.contains_pii = contains_pii
-        self.meta = meta
+        self._set_schema_id(schema_id)
+        self._set_topic(
+            topic or str(self._schematizer.get_schema_by_id(schema_id).topic.name)
+        )
+        self._set_uuid(uuid)
+        self._set_timestamp(timestamp)
+        self._set_upstream_position_info(upstream_position_info)
+        self._set_kafka_position_info(kafka_position_info)
+        self._set_keys(keys)
+        self._set_dry_run(dry_run)
+        # TODO(DATAPIPE-416|psuben): Make it so contains_pii is no longer overrideable.
+        self._set_contains_pii(schema_id)
+        self._set_encryption_type()
+        self._set_meta(meta)
         self._set_payload_or_payload_data(payload, payload_data)
         if topic:
-            logger.debug("Overriding message topic: {0} for schema {1}."
-                         .format(topic, schema_id))
+            logger.debug(
+                "Overriding message topic: {} for schema {}.".format(topic, schema_id)
+            )
+        if self.encryption_type:
+            if self._meta is None:
+                self._meta = []
+            if not self.get_encryption_meta(self.encryption_type, self.meta):
+                self.meta.append(self._encryption_helper.encryption_meta)
 
     def _set_payload_or_payload_data(self, payload, payload_data):
         # payload or payload_data are lazily constructed only on request
@@ -381,11 +387,134 @@ class Message(object):
         if is_not_none_payload and is_not_none_payload_data:
             raise TypeError("Cannot pass both payload and payload_data.")
         if is_not_none_payload:
-            self.payload = payload
+            self._set_payload(payload)
         elif is_not_none_payload_data:
-            self.payload_data = payload_data
+            self._set_payload_data(payload_data)
         else:
             raise TypeError("Either payload or payload_data must be provided.")
+
+    def _is_valid_optional_type(self, value, typ):
+        return value is None or isinstance(value, typ)
+
+    def _any_invalid_type(self, value_list, typ):
+        if not value_list:
+            return False
+        return any(not isinstance(value, typ) for value in value_list)
+
+    def _encode_payload_data(self, payload_data):
+        if self.dry_run:
+            return repr(payload_data)
+        return self._avro_string_writer.encode(
+            message_avro_representation=payload_data
+        )
+
+    def _decode_payload(self, payload):
+        return self._avro_string_reader.decode(
+            encoded_message=payload
+        )
+
+    def _encrypt_payload_if_necessary(self, payload):
+        if self.encryption_type is not None:
+            return self._encryption_helper.encrypt_payload(payload)
+        return payload
+
+    def _set_payload_data_if_necessary(self, payload):
+        if self._payload_data is None:
+            self._payload_data = self._decode_payload(payload)
+
+    def _set_payload_if_necessary(self, payload_data):
+        if self._payload is None:
+            self._payload = self._encode_payload_data(payload_data)
+
+    @property
+    def avro_repr(self):
+        return {
+            'uuid': self.uuid,
+            'message_type': self.message_type.name,
+            'schema_id': self.schema_id,
+            'payload': self._encrypt_payload_if_necessary(self.payload),
+            'timestamp': self.timestamp,
+            'meta': self._get_meta_attr_avro_repr(),
+            'encryption_type': self.encryption_type,
+        }
+
+    @classmethod
+    def create_from_unpacked_message(
+        cls,
+        unpacked_message,
+        topic=None,
+        kafka_position_info=None
+    ):
+        encryption_type = unpacked_message['encryption_type']
+        meta = cls._get_unpacked_meta(unpacked_message)
+        payload = cls._get_unpacked_decrypted_payload(
+            unpacked_message['payload'],
+            encryption_type=encryption_type,
+            meta=meta
+        )
+
+        message_params = {
+            'uuid': unpacked_message['uuid'],
+            'schema_id': unpacked_message['schema_id'],
+            'payload': payload,
+            'timestamp': unpacked_message['timestamp'],
+            'meta': meta,
+            'kafka_position_info': kafka_position_info
+        }
+        if topic:
+            message_params['topic'] = topic
+        message = cls(**message_params)
+        message._manual_set_encryption_type(encryption_type)
+        return message
+
+    @classmethod
+    def _get_unpacked_meta(cls, unpacked_message):
+        return [
+            MetaAttribute(schema_id=o['schema_id'], encoded_payload=o['payload'])
+            for o in unpacked_message['meta']
+        ] if unpacked_message['meta'] else None
+
+    @classmethod
+    def _get_unpacked_decrypted_payload(cls, payload, encryption_type, meta):
+        if not encryption_type:
+            return payload
+
+        encryption_meta = cls.get_encryption_meta(encryption_type, meta)
+        encryption_helper = EncryptionHelper(encryption_type, encryption_meta)
+        return encryption_helper.decrypt_payload(payload)
+
+    @classmethod
+    def get_encryption_meta(cls, encryption_type, meta):
+        encryption_meta = EncryptionHelper.get_encryption_meta_by_encryption_type(
+            encryption_type
+        )
+        return next(
+            (m for m in meta if m.schema_id == encryption_meta.schema_id),
+            None
+        )
+
+    def reload_data(self):
+        """Populate the payload data or the payload if it hasn't done so.
+        """
+        self._set_payload_data_if_necessary(self._payload)
+        self._set_payload_if_necessary(self._payload_data)
+
+    @property
+    def _str_repr(self):
+        # TODO [clin|DATAPIPE-849] It should properly handle pii payload data,
+        # especially it shouldn't leak it into the logs if it's used for logging.
+        return {
+            'uuid': self.uuid_hex,
+            'message_type': self.message_type.name,
+            'schema_id': self.schema_id,
+            'payload_data': self.payload_data,
+            'timestamp': self.timestamp,
+            'meta': self._get_meta_attr_avro_repr(),
+            'encryption_type': self.encryption_type
+        }
+
+    def __str__(self):
+        return str(self._str_repr)
 
     def __eq__(self, other):
         return type(self) is type(other) and self._eq_key == other._eq_key
@@ -394,7 +523,6 @@ class Message(object):
         return not self.__eq__(other)
 
     def __hash__(self):
-        # TODO [clin|DATAPIPE-468] Revisit this when we get a chance
         return hash(self._eq_key)
 
     @property
@@ -418,64 +546,6 @@ class Message(object):
             self.dry_run,
             self.encryption_type
         )
-
-    @property
-    def avro_repr(self):
-        return {
-            'uuid': self.uuid,
-            'message_type': self.message_type.name,
-            'payload': self.payload,
-            'schema_id': self.schema_id,
-            'timestamp': self.timestamp,
-            'meta': self._get_meta_attr_avro_repr(),
-            'encryption_type': self.encryption_type,
-        }
-
-    def _encode_payload_data_if_necessary(self):
-        if self._payload is None:
-            self._payload = self._encode_data(self._payload_data)
-
-    def _encode_data(self, data):
-        """Encodes data, returning a repr in dry_run mode"""
-        if self.dry_run:
-            return repr(data)
-        encoded_payload = self._avro_string_writer.encode(message_avro_representation=data)
-        return self._encrypt_payload_if_necessary(encoded_payload)
-
-    def _encrypt_payload_if_necessary(self, payload):
-        """Uses EncryptionHelper to encrypt pii payload."""
-        if self.encryption_type is not None:
-            return self._encryption_helper.encrypt_message_with_pii(payload)
-        return payload
-
-    def _decode_payload_if_necessary(self):
-        if self._payload_data is None:
-            encoded_message = self._decrypt_payload_if_necessary(self._payload)
-            self._payload_data = self._avro_string_reader.decode(
-                encoded_message=encoded_message
-            )
-
-    def _decrypt_payload_if_necessary(self, payload):
-        if self.encryption_type is not None:
-            return self._encryption_helper.decrypt_message_with_pii(payload)
-        return payload
-
-    def reload_data(self):
-        """Encode the payload data or decode the payload if it hasn't done so.
-        """
-        self._encode_payload_data_if_necessary()
-        self._decode_payload_if_necessary()
-
-    @property
-    def _str_repr(self):
-        dict_repr = self.avro_repr
-        dict_repr['uuid'] = UUID(bytes=self.uuid).hex
-        dict_repr['payload_data'] = self.payload_data
-        del dict_repr['payload']
-        return dict_repr
-
-    def __str__(self):
-        return str(self._str_repr)
 
 
 class CreateMessage(Message):
@@ -571,9 +641,9 @@ class UpdateMessage(Message):
                 "Cannot pass both previous_payload and previous_payload_data."
             )
         if is_not_none_previous_payload:
-            self.previous_payload = previous_payload
+            self._set_previous_payload(previous_payload)
         elif is_not_none_previous_payload_data:
-            self.previous_payload_data = previous_payload_data
+            self._set_previous_payload_data(previous_payload_data)
         else:
             raise TypeError(
                 "Either previous_payload or previous_payload_data must be provided."
@@ -596,24 +666,21 @@ class UpdateMessage(Message):
         """Avro-encoded message - encoded with schema identified by
         `schema_id`.  Required when message type is `MessageType.update`.
         """
-        self._encode_previous_payload_data_if_necessary()
+        self._set_previous_payload_if_necessary(self._previous_payload_data)
         return self._previous_payload
 
-    @previous_payload.setter
-    def previous_payload(self, previous_payload):
+    def _set_previous_payload(self, previous_payload):
         if not isinstance(previous_payload, bytes):
             raise TypeError("Previous payload must be bytes")
-        previous_payload = self._encrypt_payload_if_necessary(previous_payload)
         self._previous_payload = previous_payload
         self._previous_payload_data = None  # force previous_payload_data to be re-decoded
 
     @property
     def previous_payload_data(self):
-        self._decode_previous_payload_if_necessary()
+        self._set_previous_payload_data_if_necessary(self._previous_payload)
         return self._previous_payload_data
 
-    @previous_payload_data.setter
-    def previous_payload_data(self, previous_payload_data):
+    def _set_previous_payload_data(self, previous_payload_data):
         if not isinstance(previous_payload_data, dict):
             raise TypeError("Previous payload data must be a dict")
 
@@ -622,36 +689,65 @@ class UpdateMessage(Message):
 
     @property
     def avro_repr(self):
-        return {
-            'uuid': self.uuid,
-            'message_type': self.message_type.name,
-            'schema_id': self.schema_id,
-            'payload': self.payload,
-            'previous_payload': self.previous_payload,
-            'timestamp': self.timestamp,
-            'meta': self._get_meta_attr_avro_repr(),
-            'encryption_type': self.encryption_type
+        repr_dict = super(UpdateMessage, self).avro_repr
+        repr_dict['previous_payload'] = self._encrypt_payload_if_necessary(
+            self.previous_payload
+        )
+        return repr_dict
+
+    @classmethod
+    def create_from_unpacked_message(
+        cls,
+        unpacked_message,
+        topic=None,
+        kafka_position_info=None
+    ):
+        encryption_type = unpacked_message['encryption_type']
+        meta = cls._get_unpacked_meta(unpacked_message)
+        payload = cls._get_unpacked_decrypted_payload(
+            unpacked_message['payload'],
+            encryption_type=encryption_type,
+            meta=meta
+        )
+        previous_payload = cls._get_unpacked_decrypted_payload(
+            unpacked_message['previous_payload'],
+            encryption_type=encryption_type,
+            meta=meta
+        )
+
+        message_params = {
+            'uuid': unpacked_message['uuid'],
+            'schema_id': unpacked_message['schema_id'],
+            'payload': payload,
+            'previous_payload': previous_payload,
+            'timestamp': unpacked_message['timestamp'],
+            'meta': meta,
+            'kafka_position_info': kafka_position_info
         }
+        if topic:
+            message_params['topic'] = topic
+        message = cls(**message_params)
+        message._manual_set_encryption_type(encryption_type)
+        return message
 
-    def _encode_previous_payload_data_if_necessary(self):
+    def _set_previous_payload_if_necessary(self, previous_payload_data):
         if self._previous_payload is None:
-            self._previous_payload = self._encode_data(self._previous_payload_data)
-
-    def _decode_previous_payload_if_necessary(self):
-        if self._previous_payload_data is None:
-            encoded_message = self._decrypt_payload_if_necessary(self._previous_payload)
-            self._previous_payload_data = self._avro_string_reader.decode(
-                encoded_message=encoded_message
+            self._previous_payload = self._encode_payload_data(
+                previous_payload_data
             )
 
+    def _set_previous_payload_data_if_necessary(self, previous_payload):
+        if self._previous_payload_data is None:
+            self._previous_payload_data = self._decode_payload(previous_payload)
+
     def reload_data(self):
-        """Encode the previous payload data or decode the previous payload
+        """Populate the previous payload data or decode the previous payload
         if it hasn't done so. The payload encoding/payload data decoding is
         taken care of by the `Message.reload` function in the parent class.
         """
         super(UpdateMessage, self).reload_data()
-        self._decode_previous_payload_if_necessary()
-        self._encode_previous_payload_data_if_necessary()
+        self._set_previous_payload_data_if_necessary(self._previous_payload)
+        self._set_previous_payload_if_necessary(self._previous_payload_data)
 
     def _has_field_changed(self, field):
         return self.payload_data[field] != self.previous_payload_data[field]
@@ -664,25 +760,21 @@ class UpdateMessage(Message):
 
     @property
     def has_changed(self):
-        return any(
-            self._has_field_changed(field)
-            for field in self.payload_data.iterkeys()
-        )
+        return any(self._has_field_changed(field) for field in self.payload_data)
 
     @property
     def payload_diff(self):
         return {
             field: self._get_field_diff(field)
-            for field in self.payload_data.iterkeys()
-            if self._has_field_changed(field)
+            for field in self.payload_data if self._has_field_changed(field)
         }
 
     @property
     def _str_repr(self):
-        dict_repr = super(UpdateMessage, self)._str_repr
-        dict_repr['previous_payload_data'] = self.previous_payload_data
-        del dict_repr['previous_payload']
-        return dict_repr
+        repr_dict = super(UpdateMessage, self)._str_repr
+        repr_dict['previous_payload_data'] = self.previous_payload_data
+        return repr_dict
+
 
 _message_type_to_class_map = {
     o._message_type.name: o for o in Message.__subclasses__() if o._message_type
@@ -690,17 +782,19 @@ _message_type_to_class_map = {
 
 
 def create_from_kafka_message(
-        topic,
-        kafka_message,
-        force_payload_decoding=True
+    topic,
+    kafka_message,
+    force_payload_decoding=True
 ):
     """ Build a data_pipeline.message.Message from a yelp_kafka message
 
     Args:
         topic (str): The topic name from which the message was received.
-        kafka_message (yelp_kafka.consumer.Message): The message info which
-            has the payload, offset, partition, and key of the received
-            message.
+            This parameter is deprecating and currently not used. The topic
+            will be retrieved from the given `kafka_message`.
+        kafka_message (kafka.common.KafkaMessage): The message info which
+            has the topic, partition, offset, key, and value(payload) of
+            the received message.
         force_payload_decoding (boolean): If this is set to `True` then
             we will decode the payload/previous_payload immediately.
             Otherwise the decoding will happen whenever the lazy *_data
@@ -715,7 +809,7 @@ def create_from_kafka_message(
         key=kafka_message.key,
     )
     return _create_message_from_packed_message(
-        topic=topic,
+        topic=kafka_message.topic,
         packed_message=kafka_message,
         force_payload_decoding=force_payload_decoding,
         kafka_position_info=kafka_position_info
@@ -723,9 +817,9 @@ def create_from_kafka_message(
 
 
 def create_from_offset_and_message(
-        topic,
-        offset_and_message,
-        force_payload_decoding=True
+    topic,
+    offset_and_message,
+    force_payload_decoding=True
 ):
     """ Build a data_pipeline.message.Message from a kafka.common.OffsetAndMessage
 
@@ -757,8 +851,8 @@ def _create_message_from_packed_message(
 ):
     """ Builds a data_pipeline.message.Message from packed_message
     Args:
-        topic (str): The topic name from which the message was received.
-        packed_message (yelp_kafka.consumer.Message or kafka.common.Message):
+        topic (str): the topic name where the message comes from.
+        packed_message (yelp_kafka.consumer.Message or kafka.common.KafkaMessage):
             The message info which has the payload, offset, partition,
             and key of the received message if of type yelp_kafka.consumer.message
             or just payload, uuid, schema_id in case of kafka.common.Message.
@@ -766,34 +860,20 @@ def _create_message_from_packed_message(
             we will decode the payload/previous_payload immediately.
             Otherwise the decoding will happen whenever the lazy *_data
             properties are accessed.
-        append_kafka_position_info (boolean): If this is set to `True` then
-            we will construct kafka_position_info for resulting message
-            from the unpacked_message. Otherwise kafka_position_info will
-            be set to None.
+        kafka_position_info (Optional[KafkaPositionInfo]): The specified kafka
+            position information.  The kafka_position_info may be constructed
+            from the unpacked yelp_kafka message.
 
     Returns (data_pipeline.message.Message):
         The message object
     """
     unpacked_message = Envelope().unpack(packed_message.value)
     message_class = _message_type_to_class_map[unpacked_message['message_type']]
-    message_params = {
-        'topic': topic,
-        'uuid': unpacked_message['uuid'],
-        'schema_id': unpacked_message['schema_id'],
-        'payload': unpacked_message['payload'],
-        'timestamp': unpacked_message['timestamp'],
-        'meta': [
-            MetaAttribute(schema_id=o['schema_id'], encoded_payload=o['payload'])
-            for o in unpacked_message['meta']
-        ] if unpacked_message['meta'] else None,
-        'kafka_position_info': kafka_position_info,
-    }
-    if message_class is UpdateMessage:
-        message_params.update(
-            {'previous_payload': unpacked_message['previous_payload']}
-        )
-    message = message_class(**message_params)
-    message._encryption_type_setter(unpacked_message['encryption_type'])
+    message = message_class.create_from_unpacked_message(
+        unpacked_message=unpacked_message,
+        topic=topic,
+        kafka_position_info=kafka_position_info
+    )
     if force_payload_decoding:
         # Access the cached, but lazily-calculated, properties
         message.reload_data()

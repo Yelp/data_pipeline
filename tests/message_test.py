@@ -2,8 +2,6 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from uuid import UUID
-
 import mock
 import pytest
 from kafka import create_message
@@ -16,6 +14,9 @@ from data_pipeline.message import create_from_offset_and_message
 from data_pipeline.message import MetaAttribute
 from data_pipeline.message import PayloadFieldDiff
 from data_pipeline.message_type import MessageType
+from data_pipeline.schematizer_clientlib.models.avro_schema import AvroSchema
+from data_pipeline.schematizer_clientlib.models.topic import Topic
+from tests.helpers.config import reconfigure
 
 
 @pytest.mark.usefixtures("containers")
@@ -24,13 +25,6 @@ class SharedMessageTest(object):
     @pytest.fixture
     def message(self, valid_message_data):
         return self.message_class(**valid_message_data)
-
-    @pytest.fixture
-    def registered_message(self, registered_schema):
-        return self.message_class(
-            schema_id=registered_schema.schema_id,
-            payload_data={'good_field': 42},
-        )
 
     @pytest.fixture(params=[
         None,
@@ -50,12 +44,38 @@ class SharedMessageTest(object):
     def invalid_payload_data(self, request):
         return request.param
 
+    @pytest.fixture
+    def pii_schema(self, schematizer_client, namespace, source, example_schema):
+        return schematizer_client.register_schema(
+            namespace=namespace,
+            source=source,
+            schema_str=example_schema,
+            source_owner_email='test@yelp.com',
+            contains_pii=True
+        )
+
     def test_rejects_unicode_topic(self, valid_message_data):
         self._assert_invalid_data(valid_message_data, topic=unicode('topic'))
 
-    def test_rejects_empty_topic(self, message):
-        with pytest.raises(ValueError):
-            message.topic = str('')
+    def test_rejects_empty_topic(self, valid_message_data):
+        mock_date = '2015-01-01'
+        mock_topic = Topic(1, str(''), None, False, mock_date, mock_date)
+        mock_schema = AvroSchema(
+            1, 'schema', mock_topic, None, 'RW', None, None, mock_date, mock_date
+        )
+        with mock.patch(
+            'data_pipeline.schematizer_clientlib.schematizer.SchematizerClient'
+            '.get_schema_by_id',
+            return_value=mock_schema
+        ), pytest.raises(ValueError):
+            self._assert_invalid_data(valid_message_data, topic=str(''))
+
+    def test_get_topic_from_schematizer_by_default(
+        self,
+        registered_schema,
+        message
+    ):
+        assert message.topic == str(registered_schema.topic.name)
 
     def test_rejects_non_numeric_schema_id(self, valid_message_data):
         self._assert_invalid_data(valid_message_data, schema_id='123')
@@ -95,6 +115,10 @@ class SharedMessageTest(object):
             payload_data={'data': 'foo'}
         )
 
+    @pytest.mark.parametrize('invalid_keys', [unicode('foo'), [], [str('foo')]])
+    def test_reject_non_unicode_keys(self, valid_message_data, invalid_keys):
+        self._assert_invalid_data(valid_message_data, keys=invalid_keys)
+
     def _assert_invalid_data(self, valid_data, error=TypeError, **data_overrides):
         invalid_data = self._make_message_data(valid_data, **data_overrides)
         with pytest.raises(error):
@@ -119,34 +143,12 @@ class SharedMessageTest(object):
     def test_message_type(self, message):
         assert message.message_type == self.expected_message_type
 
-    def test_message_contains_pii(self, message):
-        assert message.contains_pii is False
+    def test_get_contains_pii_from_schematizer(self, message, registered_schema):
+        assert message.contains_pii == registered_schema.topic.contains_pii
 
-    def test_get_contains_pii_from_schematizer_by_default(
-        self,
-        registered_schema,
-        valid_message_data
-    ):
-        message_data = self._make_message_data(
-            valid_message_data,
-            schema_id=registered_schema.schema_id
-        )
-        message_data.pop('contains_pii')
-        message = self.message_class(**message_data)
-        assert not message.contains_pii
-
-    @pytest.fixture(params=[
-        'not a list',
-        ['not_a_MetaAttribute_object'],
-    ])
-    def invalid_meta_type(self, request):
-        return request.param
-
-    def test_rejects_invalid_meta_type(self, valid_message_data, invalid_meta_type):
-        self._assert_invalid_data(
-            valid_message_data,
-            meta=invalid_meta_type
-        )
+    @pytest.mark.parametrize('invalid_meta', ['not list', ['not_MetaAttribute']])
+    def test_rejects_invalid_meta_type(self, valid_message_data, invalid_meta):
+        self._assert_invalid_data(valid_message_data, meta=invalid_meta)
 
     @pytest.fixture
     def meta_attr_payload(self):
@@ -195,73 +197,58 @@ class SharedMessageTest(object):
         assert dry_run_message.payload == repr(payload_data)
 
     def test_equality(self, valid_message_data):
-        message1 = self._mock_message_without_encode_or_decode(
-            self.message_class(**valid_message_data)
-        )
-        message2 = self._mock_message_without_encode_or_decode(
-            self.message_class(**valid_message_data)
-        )
+        message1 = self.message_class(**valid_message_data)
+        message2 = self.message_class(**valid_message_data)
         assert message1 == message1
         assert message1 == message2
         assert message2 == message2
 
     def test_inequality(self, valid_message_data):
-        message1 = self._mock_message_without_encode_or_decode(
-            self.message_class(**valid_message_data)
+        message1 = self.message_class(**valid_message_data)
+
+        message_data2 = self._make_message_data(
+            valid_message_data,
+            dry_run=not message1.dry_run
         )
-        valid_message_data['topic'] = str('a different topic')
-        message2 = self._mock_message_without_encode_or_decode(
-            self.message_class(**valid_message_data)
-        )
+        message2 = self.message_class(**message_data2)
+
         assert message1 != message2
 
-    def test_hash(self, valid_message_data):
-        message1 = self._mock_message_without_encode_or_decode(
-            self.message_class(**valid_message_data)
-        )
-        message2 = self._mock_message_without_encode_or_decode(
-            self.message_class(**valid_message_data)
-        )
-        test_dict = {message1: 'message1'}
-        assert message2 in test_dict
-        assert test_dict[message2] == 'message1'
+    def test_message_str(self, message):
+        actual = str(message)
+        expected = {
+            'message_type': self.expected_message_type.name,
+            'schema_id': message.schema_id,
+            'timestamp': message.timestamp,
+            'meta': message._get_meta_attr_avro_repr(),
+            'encryption_type': message.encryption_type,
+            'uuid': message.uuid_hex,
+            'payload_data': message.payload_data
+        }
+        # only use eval to get the original dict when the string is trusted
+        assert eval(actual) == expected
 
-    def _mock_message_without_encode_or_decode(self, message):
-        # Short-circuit the communication with schematizer for
-        # decoding/encoding the payload with a schema that isn't actually
-        # registered
-        message._encode_payload_data_if_necessary = mock.Mock()
-        message._decode_payload_if_necessary = mock.Mock()
-        return message
-
-    def test_get_topic_from_schematizer_by_default(
+    def assert_equal_decrypted_payload(
         self,
-        registered_schema,
-        registered_message
+        message,
+        actual_encrypted_payload,
+        expected_decrypted_payload
     ):
-        assert registered_message.topic == str(registered_schema.topic.name)
-
-    def test_str(
-        self,
-        registered_message
-    ):
-        out_str = str(registered_message)
-        assert str(registered_message.payload_data) in out_str
-        assert UUID(bytes=registered_message.uuid).hex in out_str
+        assert message._encryption_helper.decrypt_payload(
+            actual_encrypted_payload
+        ) == expected_decrypted_payload
 
 
 class PayloadOnlyMessageTest(SharedMessageTest):
 
-    @pytest.fixture(params=[(bytes(10), None), (None, {'data': 'test'})])
-    def valid_message_data(self, request):
+    @pytest.fixture(params=[(bytes(10), None), (None, {'good_field': 1})])
+    def valid_message_data(self, request, registered_schema):
         payload, payload_data = request.param
         return {
-            'schema_id': 123,
-            'topic': str('my-topic'),
+            'schema_id': registered_schema.schema_id,
             'payload': payload,
             'payload_data': payload_data,
-            'uuid': FastUUID().uuid4(),
-            'contains_pii': False
+            'uuid': FastUUID().uuid4()
         }
 
     def test_rejects_previous_payload(self, message):
@@ -271,6 +258,36 @@ class PayloadOnlyMessageTest(SharedMessageTest):
     def test_rejects_previous_payload_data(self, message):
         with pytest.raises(AttributeError):
             message.previous_payload_data
+
+    def test_reject_encrypted_message_without_encryption(
+        self,
+        pii_schema,
+        payload,
+        valid_message_data
+    ):
+        self._assert_invalid_data(
+            valid_message_data,
+            error=ValueError,
+            schema_id=pii_schema.schema_id,
+            payload=payload
+        )
+
+    def test_encrypted_message(self, pii_schema, payload, example_payload_data):
+        with reconfigure(encryption_type='AES_MODE_CBC-1'):
+            test_params = [(payload, None), (None, example_payload_data)]
+            for _payload, _payload_data in test_params:
+                message = self.message_class(
+                    schema_id=pii_schema.schema_id,
+                    payload=_payload,
+                    payload_data=_payload_data,
+                )
+                assert message.payload == payload
+                assert message.payload_data == example_payload_data
+                self.assert_equal_decrypted_payload(
+                    message,
+                    actual_encrypted_payload=message.avro_repr['payload'],
+                    expected_decrypted_payload=payload
+                )
 
 
 class TestCreateMessage(PayloadOnlyMessageTest):
@@ -318,17 +335,6 @@ class TestDeleteMessage(PayloadOnlyMessageTest):
 
 class TestUpdateMessage(SharedMessageTest):
 
-    def _mock_message_without_encode_or_decode(self, message):
-        message = super(
-            TestUpdateMessage,
-            self
-        )._mock_message_without_encode_or_decode(
-            message=message
-        )
-        message._encode_previous_payload_data_if_necessary = mock.Mock()
-        message._decode_previous_payload_if_necessary = mock.Mock()
-        return message
-
     @property
     def message_class(self):
         return dp_message.UpdateMessage
@@ -337,29 +343,19 @@ class TestUpdateMessage(SharedMessageTest):
     def expected_message_type(self):
         return MessageType.update
 
-    @pytest.fixture
-    def registered_message(self, registered_schema):
-        return self.message_class(
-            schema_id=registered_schema.schema_id,
-            payload_data={'good_field': 42},
-            previous_payload_data={'good_field': 41}
-        )
-
     @pytest.fixture(params=[
         (bytes(10), None, bytes(100), None),
-        (None, {'data': 'test'}, None, {'foo': 'bar'})
+        (None, {'good_field': 1}, None, {'good_field': 2})
     ])
-    def valid_message_data(self, request):
+    def valid_message_data(self, request, registered_schema):
         payload, payload_data, previous_payload, previous_payload_data = request.param
         return {
-            'schema_id': 123,
-            'topic': str('my-topic'),
+            'schema_id': registered_schema.schema_id,
             'payload': payload,
             'payload_data': payload_data,
             'previous_payload': previous_payload,
             'previous_payload_data': previous_payload_data,
-            'uuid': FastUUID().uuid4(),
-            'contains_pii': False
+            'uuid': FastUUID().uuid4()
         }
 
     def test_rejects_invalid_previous_payload(
@@ -384,62 +380,98 @@ class TestUpdateMessage(SharedMessageTest):
             previous_payload_data=invalid_payload_data
         )
 
-    def test_rejects_both_previous_payload_and_payload_data(self, valid_message_data):
+    def test_rejects_both_previous_payload_and_payload_data(
+        self,
+        valid_message_data
+    ):
         self._assert_invalid_data(
             valid_message_data,
             previous_payload=bytes(10),
             previous_payload_data={'foo': 'bar'}
         )
 
-    def _test_has_changed_and_payload_diff(self, message_data_params, expected_diff):
-        payload_data, previous_payload_data = message_data_params
-        message_data = dict(
-            schema_id=123,
-            topic=str('my-topic'),
-            payload=None,
-            payload_data=payload_data,
-            previous_payload=None,
-            previous_payload_data=previous_payload_data
-        )
-        update_message = self.message_class(**message_data)
-        assert update_message.has_changed == bool(expected_diff)
-        assert update_message.payload_diff == expected_diff
-
-    def test_payload_diff_for_all_fields_changed(self):
-        message_data_params = (
-            {'field1': 'new_value1', 'field2': 'new_value2'},
-            {'field1': 'old_value1', 'field2': 'old_value2'}
-        )
-        expected_diff = {
-            'field1': PayloadFieldDiff(old_value='old_value1', current_value='new_value1'),
-            'field2': PayloadFieldDiff(old_value='old_value2', current_value='new_value2'),
-        }
-        self._test_has_changed_and_payload_diff(message_data_params, expected_diff)
-
-    def test_payload_diff_for_some_fields_changed(self):
-        message_data_params = (
-            {'field1': 'new_value1', 'field2': 'old_value2'},
-            {'field1': 'old_value1', 'field2': 'old_value2'}
-        )
-        expected_diff = {
-            'field1': PayloadFieldDiff(old_value='old_value1', current_value='new_value1'),
-        }
-        self._test_has_changed_and_payload_diff(message_data_params, expected_diff)
-
-    def test_payload_diff_for_no_fields_changed(self):
-        message_data_params = (
-            {'field1': 'same_value1', 'field2': 'same_value2'},
-            {'field1': 'same_value1', 'field2': 'same_value2'}
-        )
-        expected_diff = {}
-        self._test_has_changed_and_payload_diff(message_data_params, expected_diff)
-
-    def test_str_contains_update_specific_data(
+    def test_reject_encrypted_message_without_encryption(
         self,
-        registered_message
+        pii_schema,
+        payload,
+        valid_message_data
     ):
-        out_str = str(registered_message)
-        assert str(registered_message.previous_payload_data) in out_str
+        self._assert_invalid_data(
+            valid_message_data,
+            error=ValueError,
+            schema_id=pii_schema.schema_id,
+            payload=payload,
+            previous_payload=payload
+        )
+
+    def test_encrypted_message(self, pii_schema, payload, example_payload_data):
+        # TODO [clin|DATAPIPE-851] let's see if this can be refactored
+        with reconfigure(encryption_type='AES_MODE_CBC-1'):
+            test_params = [(payload, None), (None, example_payload_data)]
+            for _payload, _payload_data in test_params:
+                message = self.message_class(
+                    schema_id=pii_schema.schema_id,
+                    payload=_payload,
+                    previous_payload=_payload,
+                    payload_data=_payload_data,
+                    previous_payload_data=_payload_data
+                )
+                assert message.payload == payload
+                assert message.previous_payload == payload
+                assert message.payload_data == example_payload_data
+                assert message.previous_payload_data == example_payload_data
+                self.assert_equal_decrypted_payload(
+                    message,
+                    actual_encrypted_payload=message.avro_repr['payload'],
+                    expected_decrypted_payload=payload
+                )
+                self.assert_equal_decrypted_payload(
+                    message,
+                    actual_encrypted_payload=message.avro_repr['previous_payload'],
+                    expected_decrypted_payload=payload
+                )
+
+    def test_payload_diff(self, valid_message_data):
+        valid_message_data.pop('payload', None)
+        valid_message_data.pop('previous_payload', None)
+        message_data = self._make_message_data(
+            valid_message_data,
+            previous_payload_data={'key1': 1, 'key2': 2},
+            payload_data={'key1': 1, 'key2': 20}
+        )
+        message = self.message_class(**message_data)
+
+        expected = {'key2': PayloadFieldDiff(old_value=2, current_value=20)}
+        assert message.payload_diff == expected
+        assert message.has_changed
+
+    def test_no_payload_diff(self, valid_message_data):
+        valid_message_data.pop('payload', None)
+        valid_message_data.pop('previous_payload', None)
+        message_data = self._make_message_data(
+            valid_message_data,
+            previous_payload_data={'key1': 1, 'key2': 2},
+            payload_data={'key1': 1, 'key2': 2}
+        )
+        message = self.message_class(**message_data)
+
+        assert message.payload_diff == {}
+        assert not message.has_changed
+
+    def test_message_str(self, message):
+        actual = str(message)
+        expected = {
+            'message_type': self.expected_message_type.name,
+            'schema_id': message.schema_id,
+            'timestamp': message.timestamp,
+            'meta': message._get_meta_attr_avro_repr(),
+            'encryption_type': message.encryption_type,
+            'uuid': message.uuid_hex,
+            'payload_data': message.payload_data,
+            'previous_payload_data': message.previous_payload_data
+        }
+        # only use eval to get the original dict when the string is trusted
+        assert eval(actual) == expected
 
 
 class TestCreateFromMessageAndOffset(object):

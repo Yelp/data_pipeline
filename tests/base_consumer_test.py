@@ -9,9 +9,6 @@ import time
 
 import mock
 import pytest
-from yelp_avro.avro_string_writer import AvroStringWriter
-from yelp_avro.testing_helpers.generate_payload_data import \
-    generate_payload_data
 
 from data_pipeline.base_consumer import ConsumerTopicState
 from data_pipeline.base_consumer import TopicFilter
@@ -51,55 +48,33 @@ faster and flake-proof
 
 @pytest.mark.usefixtures("configure_teams")
 class BaseConsumerTest(object):
-    @pytest.fixture
-    def producer_name(self):
-        return 'producer_1'
 
-    @pytest.fixture
-    def producer_instance(self, containers, producer_name, team_name):
-        instance = Producer(
-            producer_name=producer_name,
+    @pytest.yield_fixture
+    def producer(self, team_name):
+        with Producer(
+            producer_name='producer_1',
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
             use_work_pool=False
-        )
-        containers.create_kafka_topic(instance.monitor.monitor_topic)
-        return instance
-
-    @pytest.yield_fixture
-    def producer(self, producer_instance):
-        with producer_instance as producer:
+        ) as producer:
             yield producer
 
-    @pytest.yield_fixture
-    def consumer(self, consumer_instance):
-        with consumer_instance as consumer:
-            yield consumer
-
     @pytest.fixture
-    def consumer_asserter(self, consumer, message):
-        return ConsumerAsserter(consumer=consumer, expected_msg=message)
+    def publish_messages(self, producer):
+        def _publish_messages(message, count):
+            assert count > 0
+            for _ in range(count):
+                producer.publish(message)
+            producer.flush()
+        return _publish_messages
 
-    @pytest.fixture(scope='module')
-    def topic(self, containers, topic_name):
-        containers.create_kafka_topic(topic_name)
-        return topic_name
+    @pytest.fixture(scope="module")
+    def topic(self, registered_schema):
+        return str(registered_schema.topic.name)
 
-    def test_get_message_none(self, consumer, topic):
-        message = consumer.get_message(blocking=True, timeout=TIMEOUT)
-        assert message is None
-        assert consumer.topic_to_consumer_topic_state_map[topic] is None
-
-    def test_basic_iteration(
-            self,
-            publish_messages,
-            consumer_asserter
-    ):
-        publish_messages(1)
-        for msg in consumer_asserter.consumer:
-            with consumer_asserter.consumer.ensure_committed(msg):
-                consumer_asserter.assert_messages([msg])
-            break
+    @pytest.fixture(scope="module", autouse=True)
+    def ensure_topic_exist(self, containers, topic):
+        containers.create_kafka_topic(topic)
 
     def test_skip_commit_offset_if_offset_unchanged(
             self,
@@ -148,126 +123,119 @@ class BaseConsumerTest(object):
         # other tests work fine
         consumer.commit_message(msgs[3])
 
-    @pytest.fixture
-    def example_prev_payload_data(self, example_schema_obj):
-        return generate_payload_data(example_schema_obj)
+    def test_get_message_none(self, consumer_instance, topic):
+        with consumer_instance as consumer:
+            _messsage = consumer.get_message(blocking=True, timeout=TIMEOUT)
+            assert _messsage is None
+            assert consumer.topic_to_consumer_topic_state_map[topic] is None
+
+    def test_basic_iteration(self, consumer_instance, publish_messages, message):
+        with consumer_instance as consumer:
+            publish_messages(message, count=1)
+            asserter = ConsumerAsserter(
+                consumer=consumer,
+                expected_message=message
+            )
+            for _message in consumer:
+                asserter.assert_messages([_message], expected_count=1)
+                break
 
     @pytest.fixture
-    def previous_payload(self, example_schema_obj, example_prev_payload_data):
-        return AvroStringWriter(
-            example_schema_obj
-        ).encode(
-            example_prev_payload_data
-        )
-
-    @pytest.fixture
-    def update_message(self, topic, payload, previous_payload, registered_schema,
-                       example_payload_data, example_prev_payload_data):
-        msg = UpdateMessage(
-            topic=topic,
+    def update_message(self, payload, registered_schema):
+        return UpdateMessage(
             schema_id=registered_schema.schema_id,
             payload=payload,
-            previous_payload=previous_payload,
-            timestamp=1500,
-            contains_pii=False
-        )
-        # TODO [DATAPIPE-249|clin] as part of refactoring and cleanup consumer
-        # tests, let's re-visit and see if these assertions are needed.
-        assert msg.topic == topic
-        assert msg.schema_id == registered_schema.schema_id
-        assert msg.payload == payload
-        assert msg.payload_data == example_payload_data
-        assert msg.previous_payload == previous_payload
-        assert msg.previous_payload_data == example_prev_payload_data
-        return msg
-
-    def test_consume_update_message(self, producer, consumer, update_message):
-        producer.publish(update_message)
-        producer.flush()
-
-        consumer_asserter = ConsumerAsserter(
-            consumer=consumer,
-            expected_msg=update_message
-        )
-        consumer_asserter.get_and_assert_messages(
-            count=1,
-            expected_msg_count=1
+            previous_payload=payload
         )
 
-    def test_consume_using_get_message(
-            self,
-            publish_messages,
-            consumer_asserter
+    def test_get_update_message(
+        self,
+        consumer_instance,
+        publish_messages,
+        update_message
     ):
-        publish_messages(1)
-        consumer = consumer_asserter.consumer
-        with consumer.ensure_committed(
-                consumer.get_message(blocking=True, timeout=TIMEOUT)
-        ) as msg:
-            consumer_asserter.assert_messages([msg])
+        with consumer_instance as consumer:
+            publish_messages(update_message, count=1)
+            asserter = ConsumerAsserter(
+                consumer=consumer,
+                expected_message=update_message
+            )
+            messages = consumer.get_messages(
+                count=1,
+                blocking=True,
+                timeout=TIMEOUT
+            )
+            asserter.assert_messages(messages, expected_count=1)
 
-    def test_consume_using_get_messages(
-            self,
-            publish_messages,
-            consumer_asserter
+    def test_get_message(self, consumer_instance, publish_messages, message):
+        with consumer_instance as consumer:
+            publish_messages(message, count=1)
+            asserter = ConsumerAsserter(
+                consumer=consumer,
+                expected_message=message
+            )
+            _message = consumer.get_message(blocking=True, timeout=TIMEOUT)
+            asserter.assert_messages([_message], expected_count=1)
+
+    def test_get_messages(self, consumer_instance, publish_messages, message):
+        with consumer_instance as consumer:
+            publish_messages(message, count=2)
+            asserter = ConsumerAsserter(
+                consumer=consumer,
+                expected_message=message
+            )
+            messages = consumer.get_messages(count=2, blocking=True, timeout=TIMEOUT)
+            asserter.assert_messages(messages, expected_count=2)
+
+    def test_get_messages_then_reset(
+        self,
+        consumer_instance,
+        publish_messages,
+        message
     ):
-        publish_messages(2)
-        consumer_asserter.get_and_assert_messages(
-            count=2,
-            expected_msg_count=2
-        )
+        with consumer_instance as consumer:
+            publish_messages(message, count=2)
+            asserter = ConsumerAsserter(
+                consumer=consumer,
+                expected_message=message
+            )
 
-    def test_basic_publish_retrieve_then_reset(
-            self,
-            publish_messages,
-            consumer_asserter,
-            topic
-    ):
-        publish_messages(2)
+            # Get messages so that the topic_to_consumer_topic_state_map will
+            # have a ConsumerTopicState for the topic.  Getting more messages
+            # than necessary is to verify only two published messages are consumed
+            messages = consumer.get_messages(
+                count=10,
+                blocking=True,
+                timeout=TIMEOUT
+            )
+            asserter.assert_messages(messages, expected_count=2)
 
-        # Get messages so that the topic_to_consumer_topic_state_map will
-        # have a ConsumerTopicState for our topic
-        consumer_asserter.get_and_assert_messages(
-            count=2,
-            expected_msg_count=2
-        )
+            # Set the offset to one previous so we can use reset_topics to
+            # receive the same two messages again
+            topic_map = consumer.topic_to_consumer_topic_state_map
+            topic_map[message.topic].partition_offset_map[0] -= 1
+            consumer.reset_topics(topic_to_consumer_topic_state_map=topic_map)
 
-        # Verify that we are not going to get any new messages
-        consumer_asserter.get_and_assert_messages(
-            count=10,
-            expected_msg_count=0
-        )
-
-        # Set the offset to one previous so we can use reset_topics to
-        # receive the same two messages again
-        consumer = consumer_asserter.consumer
-        topic_map = consumer.topic_to_consumer_topic_state_map
-        topic_map[topic].partition_offset_map[0] -= 1
-        consumer.reset_topics(topic_to_consumer_topic_state_map=topic_map)
-
-        # Verify that we do get the same two messages again
-        consumer_asserter.get_and_assert_messages(
-            count=10,
-            expected_msg_count=2
-        )
+            # Verify that we do get the same two messages again
+            messages = consumer.get_messages(
+                count=10,
+                blocking=True,
+                timeout=TIMEOUT
+            )
+            asserter.assert_messages(messages, expected_count=2)
 
 
 class ConsumerAsserter(object):
     """ Helper class to encapsulate the common assertions in the consumer tests
     """
 
-    def __init__(self, consumer, expected_msg):
+    def __init__(self, consumer, expected_message):
         self.consumer = consumer
-        self.expected_msg = expected_msg
-        self.expected_topic = expected_msg.topic
-        self.expected_schema_id = expected_msg.schema_id
+        self.expected_message = expected_message
+        self.expected_topic = expected_message.topic
+        self.expected_schema_id = expected_message.schema_id
 
-    def get_and_assert_messages(
-            self,
-            count,
-            expected_msg_count,
-            blocking=True
-    ):
+    def get_and_assert_messages(self, count, expected_msg_count, blocking=True):
         with self.consumer.ensure_committed(
             self.consumer.get_messages(
                 count=count,
@@ -279,21 +247,25 @@ class ConsumerAsserter(object):
             self.assert_messages(messages)
         return messages
 
-    def assert_messages(self, actual_msgs):
-        assert isinstance(actual_msgs, list)
-        for actual_msg in actual_msgs:
-            self.assert_single_message(actual_msg, self.expected_msg)
-            self.assert_consumer_state()
+    def assert_messages(self, actual_messages, expected_count):
+        assert isinstance(actual_messages, list)
+        assert len(actual_messages) == expected_count
+        for actual_message in actual_messages:
+            self.assert_equal_message(actual_message, self.expected_message)
+        self.assert_consumer_state()
 
-    def assert_single_message(self, actual_msg, expected_msg):
-        assert actual_msg.message_type == expected_msg.message_type
-        assert actual_msg.payload == expected_msg.payload
-        assert actual_msg.schema_id == expected_msg.schema_id
-        assert actual_msg.topic == expected_msg.topic
-        assert actual_msg.payload_data == expected_msg.payload_data
-        if isinstance(expected_msg, UpdateMessage):
-            assert actual_msg.previous_payload == expected_msg.previous_payload
-            assert actual_msg.previous_payload_data == expected_msg.previous_payload_data
+    def assert_equal_message(self, actual_message, expected_message):
+        assert actual_message.message_type == expected_message.message_type
+        assert actual_message.payload == expected_message.payload
+        assert actual_message.schema_id == expected_message.schema_id
+        assert actual_message.topic == expected_message.topic
+        assert actual_message.payload_data == expected_message.payload_data
+
+        if isinstance(expected_message, UpdateMessage):
+            assert actual_message.previous_payload == \
+                expected_message.previous_payload
+            assert actual_message.previous_payload_data == \
+                expected_message.previous_payload_data
 
     def assert_consumer_state(self):
         consumer_topic_state = self.consumer.topic_to_consumer_topic_state_map[

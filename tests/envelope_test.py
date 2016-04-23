@@ -5,10 +5,15 @@ from __future__ import unicode_literals
 import pytest
 
 from data_pipeline import message as dp_message
+from data_pipeline.envelope import Envelope
 from data_pipeline.meta_attribute import MetaAttribute
 
 
 class TestEnvelope(object):
+
+    @pytest.fixture
+    def envelope(self):
+        return Envelope()
 
     @pytest.fixture(params=[
         None,
@@ -36,19 +41,18 @@ class TestEnvelope(object):
         (dp_message.DeleteMessage, {}),
         (dp_message.UpdateMessage, {'previous_payload': bytes(20)})
     ])
-    def message(self, request, topic_name, payload, meta_attr_param):
+    def message(self, request, registered_schema, payload, meta_attr_param):
         message_class, additional_params = request.param
         if meta_attr_param:
             additional_params.update(meta_attr_param)
         return message_class(
-            schema_id=10,
-            topic=topic_name,
+            schema_id=registered_schema.schema_id,
             payload=payload,
             **additional_params
         )
 
     @pytest.fixture
-    def expected_message(self, message):
+    def expected_unpacked_message(self, message):
         previous_payload = None
         if isinstance(message, dp_message.UpdateMessage):
             previous_payload = message.previous_payload
@@ -69,6 +73,6 @@ class TestEnvelope(object):
     def test_pack_create_bytes(self, message, envelope):
         assert isinstance(envelope.pack(message), bytes)
 
-    def test_pack_unpack(self, message, envelope, expected_message):
+    def test_pack_unpack(self, message, envelope, expected_unpacked_message):
         unpacked = envelope.unpack(envelope.pack(message))
-        assert unpacked == expected_message
+        assert unpacked == expected_unpacked_message

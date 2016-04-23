@@ -13,6 +13,9 @@ from swaggerpy import exception as swaggerpy_exc
 from data_pipeline.config import get_config
 from data_pipeline.schematizer_clientlib.models.data_source_type_enum import \
     DataSourceTypeEnum
+from data_pipeline.schematizer_clientlib.models.namespace import Namespace
+from data_pipeline.schematizer_clientlib.models.target_schema_type_enum import \
+    TargetSchemaTypeEnum
 from data_pipeline.schematizer_clientlib.schematizer import SchematizerClient
 
 
@@ -152,6 +155,17 @@ class TestGetSchemaById(SchematizerClientTestBase):
             assert schema_api_spy.call_count == 0
             assert topic_api_spy.call_count == 0
             assert source_api_spy.call_count == 0
+
+
+class TestGetNamespaces(SchematizerClientTestBase):
+
+    def test_get_namespaces(self, schematizer, biz_src_resp):
+        actual = schematizer.get_namespaces()
+        partial = Namespace(
+            namespace_id=biz_src_resp.namespace.namespace_id,
+            name=biz_src_resp.namespace.name
+        )
+        assert partial in actual
 
 
 class TestGetSchemaBySchemaJson(SchematizerClientTestBase):
@@ -1126,3 +1140,65 @@ class TestGetTopicsByDataTargetId(RegistrationTestBase):
         with pytest.raises(swaggerpy_exc.HTTPError) as e:
             schematizer.get_topics_by_data_target_id(data_target_id=0)
         assert e.value.response.status_code == 404
+
+
+class TestGetSchemaMigration(SchematizerClientTestBase):
+
+    @pytest.fixture
+    def new_schema(self):
+        return {
+            'type': 'record',
+            'name': 'schema_a',
+            'namespace': 'test_namespace',
+            'fields': [{'type': 'int', 'name': 'test_id'}]
+        }
+
+    @pytest.fixture(params=[True, False])
+    def old_schema(self, request, new_schema):
+        return new_schema if request.param else None
+
+    def test_normal_schema_migration(
+        self,
+        schematizer,
+        new_schema,
+        old_schema
+    ):
+        with self.attach_spy_on_api(
+            schematizer._client.schema_migrations,
+            'get_schema_migration'
+        ) as api_spy:
+            actual = schematizer.get_schema_migration(
+                new_schema=new_schema,
+                target_schema_type=TargetSchemaTypeEnum.redshift,
+                old_schema=old_schema
+            )
+            assert isinstance(actual, list)
+            assert len(actual) > 0
+            assert api_spy.call_count == 1
+
+    def test_invalid_schema(
+        self,
+        schematizer,
+        new_schema
+    ):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer._call_api(
+                api=schematizer._client.schema_migrations.get_schema_migration,
+                request_body={
+                    'new_schema': '{}}',
+                    'target_schema_type': TargetSchemaTypeEnum.redshift.name,
+                }
+            )
+        assert e.value.response.status_code == 422
+
+    def test_unsupported_schema_migration(
+        self,
+        schematizer,
+        new_schema
+    ):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.get_schema_migration(
+                new_schema=new_schema,
+                target_schema_type=TargetSchemaTypeEnum.unsupported
+            )
+        assert e.value.response.status_code == 501

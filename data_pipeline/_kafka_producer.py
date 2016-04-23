@@ -81,11 +81,12 @@ class KafkaProducer(object):
     def publish(self, message):
         if message.contains_pii and self.skip_messages_with_pii:
             logger.info(
-                "Skipping a message with PII - uuid_base64: {0}, "
+                "Skipping a PII message - "
+                "uuid hex: {0}, "
                 "schema_id: {1}, "
                 "timestamp: {2}, "
                 "type: {3}".format(
-                    message.uuid_base64,
+                    message.uuid_hex,
                     message.schema_id,
                     message.timestamp,
                     message.message_type.name
@@ -225,8 +226,8 @@ class KafkaProducer(object):
         return _prepare(_EnvelopeAndMessage(envelope=self.envelope, message=message))
 
     def _reset_message_buffer(self):
-        self.producer_position_callback(self.position_data_tracker.get_position_data())
-
+        if not hasattr(self, 'message_buffer_size') or self.message_buffer_size > 0:
+            self.producer_position_callback(self.position_data_tracker.get_position_data())
         self.start_time = time.time()
         self.message_buffer = defaultdict(list)
         self.message_buffer_size = 0
