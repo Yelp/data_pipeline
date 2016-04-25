@@ -2,12 +2,9 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import binascii
-import copy
-import math
 import multiprocessing
 import random
-from uuid import UUID
+import time
 
 import mock
 import pytest
@@ -17,7 +14,6 @@ from kafka.common import ProduceRequest
 from kafka.common import ProduceResponse
 
 import data_pipeline.producer
-from data_pipeline._fast_uuid import FastUUID
 from data_pipeline._kafka_producer import _EnvelopeAndMessage
 from data_pipeline._kafka_producer import _prepare
 from data_pipeline._retry_util import ExpBackoffPolicy
@@ -26,6 +22,7 @@ from data_pipeline._retry_util import RetryPolicy
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
 from data_pipeline.expected_frequency import ExpectedFrequency
+from data_pipeline.message import create_from_offset_and_message
 from data_pipeline.message import CreateMessage
 from data_pipeline.message import Message
 from data_pipeline.message_type import _ProtectedMessageType
@@ -44,7 +41,7 @@ class RandomException(Exception):
 
 @pytest.mark.usefixtures(
     "configure_teams",
-    "patch_monitor_init_start_time_to_zero"
+    "patch_monitor_init_start_time_to_now"
 )
 class TestProducerBase(object):
 
@@ -61,14 +58,12 @@ class TestProducerBase(object):
 
     @pytest.fixture
     def producer_instance(self, containers, producer_name, use_work_pool, team_name):
-        instance = Producer(
+        return Producer(
             producer_name=producer_name,
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
             use_work_pool=use_work_pool
         )
-        containers.create_kafka_topic(instance.monitor.monitor_topic)
-        return instance
 
     @pytest.yield_fixture
     def producer(self, producer_instance):
@@ -76,83 +71,100 @@ class TestProducerBase(object):
             yield producer
         assert len(multiprocessing.active_children()) == 0
 
-    @pytest.fixture(scope='module')
-    def topic_two(self, containers):
-        topic_two_name = str(binascii.hexlify(FastUUID().uuid4()))
-        containers.create_kafka_topic(topic_two_name)
-        return topic_two_name
+    @pytest.fixture(scope="module", autouse=True)
+    def topic(self, registered_schema, containers):
+        topic_name = str(registered_schema.topic.name)
+        containers.create_kafka_topic(topic_name)
+        return topic_name
+
+    @pytest.fixture(scope="module", autouse=True)
+    def pii_topic(self, pii_schema, containers):
+        topic_name = str(pii_schema.topic.name)
+        containers.create_kafka_topic(topic_name)
+        return topic_name
 
     @pytest.yield_fixture
-    def patch_monitor_init_start_time_to_zero(self):
+    def patch_monitor_init_start_time_to_now(self):
         with mock.patch(
             'data_pipeline.client._Monitor.get_monitor_window_start_timestamp',
-            return_value=0
+            return_value=int(time.time())
         ) as patched_start_time:
             yield patched_start_time
+
+    @pytest.fixture(scope='module')
+    def create_new_schema(self, schematizer_client, example_schema):
+        def _create_new_schema(source=None):
+            source = source or 'test_source'
+            new_schema = schematizer_client.register_schema(
+                namespace='test_namespace',
+                source='{}_{}'.format(source, random.random()),
+                schema_str=example_schema,
+                source_owner_email='test@yelp.com',
+                contains_pii=False
+            )
+            return new_schema
+        return _create_new_schema
+
+    @pytest.fixture(scope='module')
+    def another_schema(self, create_new_schema):
+        return create_new_schema(source='another_source')
+
+    @pytest.fixture
+    def another_topic(self, another_schema, containers):
+        topic_name = str(another_schema.topic.name)
+        containers.create_kafka_topic(topic_name)
+        return topic_name
+
+    @pytest.fixture
+    def create_message(self, registered_schema, payload):
+        def _create_message(**overrides):
+            return CreateMessage(
+                schema_id=registered_schema.schema_id,
+                payload=payload,
+                **overrides
+            )
+        return _create_message
+
+    @pytest.fixture
+    def message(self, create_message):
+        return create_message()
 
 
 class TestProducer(TestProducerBase):
 
-    def create_message(self, topic_name, payload, registered_schema, **kwargs):
-        return CreateMessage(
-            topic=topic_name,
-            schema_id=registered_schema.schema_id,
-            payload=payload,
-            timestamp=1500,
-            **kwargs
-        )
+    def test_basic_publish(self, message, producer):
+        self._publish_and_assert_message(message, producer)
 
-    @pytest.mark.parametrize("method, skipped_method, kwargs", [
-        ('record_message', '_get_record', {'message': None}),
-        ('close', 'flush_buffered_info', {}),
-    ])
-    def test_monitoring_system_disabled(
-        self,
-        producer_name,
-        team_name,
-        method,
-        skipped_method,
-        kwargs
-    ):
-        producer = Producer(
-            producer_name=producer_name,
-            team_name=team_name,
-            expected_frequency_seconds=ExpectedFrequency.constantly,
-            monitoring_enabled=False
-        )
-        with mock.patch.object(
-            producer.monitor,
-            skipped_method
-        ) as uncalled_method:
-            getattr(producer.monitor, method)(**kwargs)
-            assert uncalled_method.called == 0
+    def test_publish_payload_data_message(self, payload_data_message, producer):
+        self._publish_and_assert_message(payload_data_message, producer)
 
-    def test_basic_publish(self, topic, message, producer, envelope):
-        self._publish_and_assert_message(topic, message, producer, envelope)
-
-    def _publish_message(self, topic, message, producer):
-        with capture_new_data_pipeline_messages(topic) as get_messages:
-            producer.publish(message)
-            producer.flush()
-
-            return get_messages()
-
-    def _publish_and_assert_message(self, topic, message, producer, envelope):
-        messages = self._publish_message(topic, message, producer)
+    def _publish_and_assert_message(self, message, producer):
+        messages = self._publish_message(message, producer)
 
         assert len(messages) == 1
         assert messages[0].payload == message.payload
         assert messages[0].schema_id == message.schema_id
 
-    def test_messages_not_duplicated(self, topic, message, producer_instance):
-        with capture_new_messages(topic) as get_messages, producer_instance as producer:
+    def _publish_message(self, message, producer):
+        with capture_new_data_pipeline_messages(message.topic) as get_messages:
             producer.publish(message)
             producer.flush()
+            return get_messages()
+
+    def test_messages_not_duplicated(self, message, producer_instance):
+        with capture_new_messages(
+            message.topic
+        ) as get_messages, producer_instance as producer:
+            producer.publish(message)
+            producer.flush()
+
         assert len(multiprocessing.active_children()) == 0
         assert len(get_messages()) == 1
 
-    def test_messages_published_without_flush(self, topic, message, producer_instance):
-        with capture_new_messages(topic) as get_messages, producer_instance as producer:
+    def test_messages_published_without_flush(self, message, producer_instance):
+        with capture_new_messages(
+            message.topic
+        ) as get_messages, producer_instance as producer:
             producer.publish(message)
 
         assert len(multiprocessing.active_children()) == 0
@@ -172,17 +184,24 @@ class TestProducer(TestProducerBase):
             raise RandomException()
         assert len(multiprocessing.active_children()) == 0
 
-    def test_get_position_data(self, topic, message, producer):
+    def test_get_position_data(self, create_message, producer):
         upstream_info = {'offset': 'fake'}
-        message.upstream_position_info = upstream_info
-        with setup_capture_new_messages_consumer(topic) as consumer:
+        message = create_message(upstream_position_info=upstream_info)
+        with setup_capture_new_messages_consumer(message.topic) as consumer:
             producer.publish(message)
             producer.flush()
             position_data = producer.get_checkpoint_position_data()
 
-            self._verify_position_data(position_data, upstream_info, consumer, producer, message, topic)
+            self._verify_position_data(position_data, upstream_info, message.topic)
+            self._verify_topic_kafka_offset(
+                position_data,
+                message.topic,
+                consumer,
+                producer,
+                create_message
+            )
 
-    def test_position_data_callback(self, topic, message, producer_name, team_name):
+    def test_position_data_callback(self, create_message, producer_name, team_name):
         callback = mock.Mock()
         producer = Producer(
             producer_name=producer_name,
@@ -191,27 +210,36 @@ class TestProducer(TestProducerBase):
             position_data_callback=callback
         )
         upstream_info = {'offset': 'fake'}
-        message.upstream_position_info = upstream_info
-        with setup_capture_new_messages_consumer(topic) as consumer:
+        message = create_message(upstream_position_info=upstream_info)
+        with setup_capture_new_messages_consumer(message.topic) as consumer:
             producer.publish(message)
             producer.flush()
             (position_data,), _ = callback.call_args
 
-            self._verify_position_data(position_data, upstream_info, consumer, producer, message, topic)
+            self._verify_position_data(position_data, upstream_info, message.topic)
+            self._verify_topic_kafka_offset(
+                position_data,
+                message.topic,
+                consumer,
+                producer,
+                create_message
+            )
 
-    def _verify_position_data(self, position_data, upstream_info, consumer, producer, message, topic):
-        # Make sure the position data makes sense
+    def _verify_position_data(self, position_data, upstream_info, topic):
         assert position_data.last_published_message_position_info == upstream_info
         assert position_data.topic_to_last_position_info_map == {topic: upstream_info}
-        kafka_offset = position_data.topic_to_kafka_offset_map[topic]
 
-        # The pointer is to the next offset where messages will be
-        # published.  There shouldn't be any messages there yet.
+    def _verify_topic_kafka_offset(
+        self, position_data, topic, consumer, producer, create_message
+    ):
+        # The pointer is to the next offset where messages will be published.
+        # There shouldn't be any messages there yet.
+        kafka_offset = position_data.topic_to_kafka_offset_map[topic]
         consumer.seek(kafka_offset, 0)  # kafka_offset from head
         assert len(consumer.get_messages(count=10)) == 0
 
         # publish another message, so we can seek to it
-        message.upstream_position_info = {'offset': 'fake2'}
+        message = create_message(upstream_position_info={'offset': 'fake2'})
         producer.publish(message)
         producer.flush()
 
@@ -219,149 +247,96 @@ class TestProducer(TestProducerBase):
         consumer.seek(kafka_offset, 0)  # kafka_offset from head
         assert len(consumer.get_messages(count=10)) == 1
 
-    def test_basic_publish_message_with_pii(
-        self,
-        topic,
-        payload,
-        producer,
-        registered_schema
-    ):
-        with reconfigure(encryption_type='AES_MODE_CBC-1'):
-            messages = self._publish_message(
-                topic,
-                self.create_message(
-                    topic,
-                    payload,
-                    registered_schema,
-                    contains_pii=True
-                ),
-                producer
-            )
-
-            assert len(messages) == 0
-
-    def test_basic_publish_message_with_pii_logging(
-        self,
-        topic,
-        payload,
-        producer,
-        registered_schema
-    ):
-        """To test logging when the producer skips a PII message"""
-        with reconfigure(encryption_type='AES_MODE_CBC-1'),\
-            mock.patch.object(
-                data_pipeline._kafka_producer,
-                'logger'
+    def test_skip_publish_pii_message(self, pii_schema, payload, producer_instance):
+        with reconfigure(
+            encryption_type='AES_MODE_CBC-1',
+            skip_messages_with_pii=True
+        ), producer_instance as producer, mock.patch.object(
+            data_pipeline._kafka_producer,
+            'logger'
         ) as mock_logger:
-            message = self.create_message(
-                topic,
-                payload,
-                registered_schema,
-                contains_pii=True
+            pii_message = CreateMessage(
+                schema_id=pii_schema.schema_id,
+                payload=payload
             )
-            messages = self._publish_message(
-                topic,
-                message,
-                producer
-            )
-            call_args = "Skipping a message with PII - uuid_base64: {0}, " \
-                        "schema_id: {1}, " \
-                        "timestamp: {2}, " \
-                        "type: {3}".format(
-                            message.uuid_base64,
-                            message.schema_id,
-                            message.timestamp,
-                            message.message_type.name
-                        )
-            assert len(messages) == 0
-            assert mock_logger.info.call_args_list[0] == mock.call(call_args)
+            messages = self._publish_message(pii_message, producer)
 
-    def test_basic_publish_message_with_payload_data(
-        self,
-        topic,
-        message_with_payload_data,
-        producer,
-        envelope
-    ):
-        self._publish_and_assert_message(
-            topic,
-            message_with_payload_data,
-            producer,
-            envelope
+        assert len(messages) == 0
+        assert len(multiprocessing.active_children()) == 0
+        call_args = (
+            "Skipping a PII message - uuid hex: {}, schema_id: {}, "
+            "timestamp: {}, type: {}"
+        ).format(
+            pii_message.uuid_hex,
+            pii_message.schema_id,
+            pii_message.timestamp,
+            pii_message.message_type.name
         )
+        assert mock_logger.info.call_args_list[0] == mock.call(call_args)
 
-    def test_encrypt_message_with_pii(
-        self,
-        topic,
-        registered_schema
-    ):
-        payload = b'hello world!'
-
-        with reconfigure(encryption_type='AES_MODE_CBC-1'):
-            test_message = self.create_message(
-                topic,
-                payload,
-                registered_schema,
-                contains_pii=True
+    def test_publish_pii_message(self, pii_schema, payload, producer_instance):
+        with reconfigure(
+            encryption_type='AES_MODE_CBC-1',
+            skip_messages_with_pii=False
+        ), producer_instance as producer:
+            pii_message = CreateMessage(
+                schema_id=pii_schema.schema_id,
+                payload=payload
             )
-            assert test_message.payload != payload
+            self._publish_and_assert_pii_message(pii_message, producer)
+        assert len(multiprocessing.active_children()) == 0
 
-    def test_publish_encrypted_message_from_payload_data_with_pii(
-        self,
-        topic,
-        producer_instance,
-        registered_schema,
+    def test_publish_pii_payload_data_message(
+        self, pii_schema, example_payload_data, producer_instance
     ):
-        payload_data = {'good_field': 20}
-        with reconfigure(encryption_type='AES_MODE_CBC-1'), reconfigure(skip_messages_with_pii=False):
-            with producer_instance as producer:
-                test_message = CreateMessage(
-                    topic=topic,
-                    payload_data=payload_data,
-                    schema_id=registered_schema.schema_id,
-                    timestamp=1500,
-                    contains_pii=True
-                )
-                messages = self._publish_message(
-                    topic,
-                    test_message,
-                    producer
-                )
-                assert len(messages) == 1
-                assert messages[0].payload_data == test_message.payload_data
-
-    def test_basic_publish_message_with_primary_keys(
-        self,
-        topic,
-        payload,
-        producer,
-        registered_schema,
-        envelope
-    ):
-        sample_keys = (u'key1=\'', u'key2=\\', u'key3=哎ù\x1f')
-        with capture_new_messages(topic) as get_messages:
-            producer.publish(
-                self.create_message(
-                    topic,
-                    payload,
-                    registered_schema,
-                    keys=sample_keys,
-                    contains_pii=False
-                )
+        with reconfigure(
+            encryption_type='AES_MODE_CBC-1',
+            skip_messages_with_pii=False
+        ), producer_instance as producer:
+            pii_message = CreateMessage(
+                schema_id=pii_schema.schema_id,
+                payload_data=example_payload_data
             )
+            self._publish_and_assert_pii_message(pii_message, producer)
+        assert len(multiprocessing.active_children()) == 0
+
+    def _publish_and_assert_pii_message(self, message, producer):
+        with capture_new_messages(message.topic) as get_messages:
+            producer.publish(message)
             producer.flush()
-            assert get_messages()[0].message.key == '\'key1=\\\'\'\x1f\'key2=\\\\\'\x1f\'key3=哎ù\x1f\''.encode('utf-8')
+            offsets_and_messages = get_messages()
+
+        assert len(offsets_and_messages) == 1
+
+        unpacked_message = Envelope().unpack(offsets_and_messages[0].message.value)
+        encrypted_payload = message._encryption_helper.encrypt_payload(
+            message.payload
+        )
+        assert unpacked_message['payload'] == encrypted_payload
+
+        dp_message = create_from_offset_and_message(
+            message.topic,
+            offsets_and_messages[0]
+        )
+        assert dp_message.payload == message.payload
+        assert dp_message.payload_data == message.payload_data
+        assert dp_message.schema_id == message.schema_id
+
+    def test_publish_message_with_keys(self, create_message, producer):
+        sample_keys = (u'key1=\'', u'key2=\\', u'key3=哎ù\x1f')
+        expected_keys = '\'key1=\\\'\'\x1f\'key2=\\\\\'\x1f\'key3=哎ù\x1f\''.encode('utf-8')
+        message = create_message(keys=sample_keys)
+
+        with capture_new_messages(message.topic) as get_messages:
+            producer.publish(message)
+            producer.flush()
+            offsets_and_messages = get_messages()
+
+        assert len(offsets_and_messages) == 1
+        assert offsets_and_messages[0].message.key == expected_keys
 
 
 class TestPublishMonitorMessage(TestProducerBase):
-
-    def create_message(self, message, topic=None, timestamp=None):
-        new_message = copy.deepcopy(message)
-        if topic:
-            new_message.topic = topic
-        if timestamp:
-            new_message.timestamp = int(timestamp)
-        return new_message
 
     @property
     def monitor_window_in_sec(self):
@@ -373,19 +348,15 @@ class TestPublishMonitorMessage(TestProducerBase):
         producer.flush()
         producer.monitor.flush_buffered_info()
 
-    def get_messages(self, topic, expected_message_count):
-        with setup_capture_new_messages_consumer(topic) as consumer:
-            consumer.seek(-expected_message_count, 2)
-            return consumer.get_messages(count=100)
-
     def assert_equal_monitor_messages(
         self,
         actual_raw_messages,
         expected_topic,
         expected_messages_counts,
-        envelope
+        expected_start_timestamp=0
     ):
-        expected_start_timestamp = 0
+        envelope = Envelope()
+
         expected_count_idx = 0
         for msg in actual_raw_messages:
             actual_message = self._get_actual_message(msg.message.value, envelope)
@@ -407,7 +378,6 @@ class TestPublishMonitorMessage(TestProducerBase):
     def _get_actual_message(self, raw_message, envelope):
         unpacked_message = envelope.unpack(raw_message)
         actual_message = Message(
-            topic=str('__monitor_topic__'),
             schema_id=unpacked_message['schema_id'],
             payload=unpacked_message['payload'],
             uuid=unpacked_message['uuid'],
@@ -428,102 +398,121 @@ class TestPublishMonitorMessage(TestProducerBase):
         assert actual_payload_data['start_timestamp'] == expected_start_timestamp
         assert actual_payload_data['topic'] == expected_topic
 
-    def test_monitoring_message_basic(self, message, topic, producer, envelope):
+    def get_timestamp(self, monitor_start_time, timeslot):
+        return monitor_start_time + self.monitor_window_in_sec * timeslot
+
+    @pytest.fixture
+    def create_message(self, payload, producer):
+        def _create_message(schema, timeslot):
+            monitor_start_time = producer.monitor.start_time
+            return CreateMessage(
+                schema.schema_id,
+                payload=payload,
+                timestamp=int(self.get_timestamp(monitor_start_time, timeslot))
+            )
+        return _create_message
+
+    def test_monitoring_message_basic(
+        self, producer, create_message, registered_schema
+    ):
+        message = create_message(registered_schema, timeslot=2.5)
         messages_to_publish = [message] * 10
-        self.publish_messages(messages_to_publish, producer)
+        topic = message.topic
 
-        messages = self.get_messages(topic, len(messages_to_publish))
-        assert len(messages) == len(messages_to_publish)
+        with setup_capture_new_messages_consumer(
+            topic
+        ) as consumer, setup_capture_new_messages_consumer(
+            producer.monitor.monitor_topic
+        ) as monitor_consumer:
+            self.publish_messages(messages_to_publish, producer)
 
-        expected_monitor_message_count = 3
-        monitor_messages = self.get_messages(
-            producer.monitor.monitor_topic,
-            expected_monitor_message_count
-        )
-        assert len(monitor_messages) == expected_monitor_message_count
+            messages = consumer.get_messages(count=100)
+            assert len(messages) == len(messages_to_publish)
 
-        expected_messages_counts = [0] * int(math.floor(
-            message.timestamp / self.monitor_window_in_sec
-        )) + [len(messages_to_publish)]
-        self.assert_equal_monitor_messages(
-            actual_raw_messages=monitor_messages,
-            expected_topic=topic,
-            expected_messages_counts=expected_messages_counts,
-            envelope=envelope
-        )
+            monitor_messages = monitor_consumer.get_messages(count=100)
+            assert len(monitor_messages) == 3
 
-    def test_publish_messages_with_diff_timestamps(self, topic, message,
-                                                   producer, envelope):
+            self.assert_equal_monitor_messages(
+                actual_raw_messages=monitor_messages,
+                expected_topic=topic,
+                expected_messages_counts=[0, 0, 10],
+                expected_start_timestamp=producer.monitor.start_time
+            )
+
+    def test_publish_messages_with_diff_timestamps(
+        self, producer, create_message, registered_schema
+    ):
         messages_to_publish = [
-            self.create_message(message, timestamp=self.monitor_window_in_sec * 0.5),
-            self.create_message(message, timestamp=self.monitor_window_in_sec * 1.5),
-            self.create_message(message, timestamp=self.monitor_window_in_sec * 3.5),
+            create_message(registered_schema, timeslot=0.5),
+            create_message(registered_schema, timeslot=1.5),
+            create_message(registered_schema, timeslot=3.5)
         ]
-        self.publish_messages(messages_to_publish, producer)
+        topic = messages_to_publish[0].topic
 
-        messages = self.get_messages(topic, len(messages_to_publish))
-        assert len(messages) == len(messages_to_publish)
+        with setup_capture_new_messages_consumer(
+            topic
+        ) as consumer, setup_capture_new_messages_consumer(
+            producer.monitor.monitor_topic
+        ) as monitor_consumer:
+            self.publish_messages(messages_to_publish, producer)
 
-        expected_monitor_message_count = 4
-        monitor_messages = self.get_messages(
-            producer.monitor.monitor_topic,
-            expected_monitor_message_count
-        )
-        assert len(monitor_messages) == expected_monitor_message_count
+            messages = consumer.get_messages(count=100)
+            assert len(messages) == len(messages_to_publish)
 
-        expected_messages_counts = [1, 1, 0, 1]
-        self.assert_equal_monitor_messages(
-            actual_raw_messages=monitor_messages,
-            expected_topic=topic,
-            expected_messages_counts=expected_messages_counts,
-            envelope=envelope
-        )
+            monitor_messages = monitor_consumer.get_messages(count=100)
+            assert len(monitor_messages) == 4
+
+            self.assert_equal_monitor_messages(
+                actual_raw_messages=monitor_messages,
+                expected_topic=topic,
+                expected_messages_counts=[1, 1, 0, 1],
+                expected_start_timestamp=producer.monitor.start_time
+            )
 
     def test_publish_messages_with_diff_topic_and_timestamp(
         self,
+        registered_schema,
+        another_schema,
         topic,
-        topic_two,
-        message,
+        another_topic,
         producer,
-        envelope
+        create_message
     ):
-        message_topic_and_timestamp = [
-            (topic, self.monitor_window_in_sec * 0.5),
-            (topic_two, self.monitor_window_in_sec * 0.8),
-            (topic, self.monitor_window_in_sec * 3.5),
-            (topic_two, self.monitor_window_in_sec * 4),
-            (topic_two, self.monitor_window_in_sec * 6),
-        ]
         messages_to_publish = [
-            self.create_message(message, topic=msg_topic, timestamp=msg_timestamp)
-            for msg_topic, msg_timestamp in message_topic_and_timestamp
+            create_message(registered_schema, timeslot=0.5),
+            create_message(another_schema, timeslot=0.8),
+            create_message(registered_schema, timeslot=3.5),
+            create_message(another_schema, timeslot=4),
+            create_message(another_schema, timeslot=6),
         ]
-        self.publish_messages(messages_to_publish, producer)
 
-        assert len(self.get_messages(topic, 2)) == 2
-        assert len(self.get_messages(topic_two, 3)) == 3
+        with setup_capture_new_messages_consumer(
+            topic
+        ) as consumer, setup_capture_new_messages_consumer(
+            another_topic
+        ) as another_consumer, setup_capture_new_messages_consumer(
+            producer.monitor.monitor_topic
+        ) as monitor_consumer:
+            self.publish_messages(messages_to_publish, producer)
 
-        expected_monitor_message_count = 14
-        monitor_messages = self.get_messages(
-            producer.monitor.monitor_topic,
-            expected_monitor_message_count
-        )
-        assert len(monitor_messages) == expected_monitor_message_count
+            assert len(consumer.get_messages(count=100)) == 2
+            assert len(another_consumer.get_messages(count=100)) == 3
 
-        expected_messages_counts = [1, 0, 0, 1, 0, 0, 0]
-        self.assert_equal_monitor_messages(
-            actual_raw_messages=monitor_messages,
-            expected_topic=topic,
-            expected_messages_counts=expected_messages_counts,
-            envelope=envelope
-        )
-        expected_messages_counts = [1, 0, 0, 0, 1, 0, 1]
-        self.assert_equal_monitor_messages(
-            actual_raw_messages=monitor_messages,
-            expected_topic=topic_two,
-            expected_messages_counts=expected_messages_counts,
-            envelope=envelope
-        )
+            monitor_messages = monitor_consumer.get_messages(count=100)
+            assert len(monitor_messages) == 14
+
+            self.assert_equal_monitor_messages(
+                actual_raw_messages=monitor_messages,
+                expected_topic=topic,
+                expected_messages_counts=[1, 0, 0, 1, 0, 0, 0],
+                expected_start_timestamp=producer.monitor.start_time
+            )
+            self.assert_equal_monitor_messages(
+                actual_raw_messages=monitor_messages,
+                expected_topic=another_topic,
+                expected_messages_counts=[1, 0, 0, 0, 1, 0, 1],
+                expected_start_timestamp=producer.monitor.start_time
+            )
 
     def test_monitoring_system_dry_run(self, producer_name, team_name):
         producer = Producer(
@@ -539,76 +528,94 @@ class TestEnsureMessagesPublished(TestProducerBase):
     number_of_messages = 5
 
     @pytest.fixture
-    def topic(self, containers):
-        uuid = binascii.hexlify(FastUUID().uuid4())
-        topic_name = str("ensure-published-{0}".format(uuid))
-        containers.create_kafka_topic(topic_name)
-        return topic_name
-
-    @pytest.fixture(params=[True, False])
-    def topic_offsets(self, topic, request, producer, message):
-        is_fresh_topic = request.param
-        if is_fresh_topic:
-            return {}
-        else:
-            message = copy.copy(message)
-            message.topic = topic
-            message.payload = str("-1")
-
-            producer.publish(message)
-            producer.flush()
-            return producer.get_checkpoint_position_data().topic_to_kafka_offset_map
+    def random_schema(self, create_new_schema):
+        return create_new_schema(source='ensure_published_source')
 
     @pytest.fixture
-    def messages(self, message, topic):
-        messages = [copy.copy(message) for _ in xrange(self.number_of_messages)]
-        for i, message in enumerate(messages):
-            message.topic = topic
-            message.payload = str(i)
-        return messages
+    def topic(self, random_schema):
+        return str(random_schema.topic.name)
 
-    def test_ensure_messages_published_without_message(self, topic, producer, topic_offsets):
+    @pytest.fixture(params=[True, False])
+    def topic_offsets(self, request, producer, random_schema, containers):
+        is_fresh_topic = request.param
+        if is_fresh_topic:
+            containers.create_kafka_topic(str(random_schema.topic.name))
+            return {}
+
+        message = CreateMessage(random_schema.schema_id, payload=str('-1'))
+        producer.publish(message)
+        producer.flush()
+        return producer.get_checkpoint_position_data().topic_to_kafka_offset_map
+
+    @pytest.fixture
+    def messages(self, random_schema):
+        return [CreateMessage(random_schema.schema_id, payload=str(i))
+                for i in range(self.number_of_messages)]
+
+    def test_ensure_messages_published_without_message(
+        self, topic, producer, topic_offsets
+    ):
         with setup_capture_new_messages_consumer(topic) as consumer:
             producer.ensure_messages_published([], topic_offsets)
-            assert len(consumer.get_messages(count=self.number_of_messages * 2)) == 0
+            self._assert_all_messages_published(consumer, expected_payloads=[])
 
     def test_ensure_messages_published_when_unpublished(
-        self, topic, messages, producer, envelope, topic_offsets
+        self, topic, messages, producer, topic_offsets
     ):
-        with setup_capture_new_messages_consumer(topic) as consumer:
-            with mock.patch.object(data_pipeline.producer, 'logger') as mock_logger:
-                producer.ensure_messages_published(messages, topic_offsets)
-            self._assert_all_messages_published(consumer, envelope)
-            self._assert_logged_info_correct(mock_logger, 0, topic, topic_offsets)
+        self._test_success_ensure_messages_published(
+            topic,
+            messages,
+            producer,
+            topic_offsets,
+            unpublished_count=len(messages)
+        )
 
     def test_ensure_messages_published_when_partially_published(
-        self, topic, messages, producer, envelope, topic_offsets
+        self, topic, messages, producer, topic_offsets
     ):
-        with setup_capture_new_messages_consumer(topic) as consumer:
-            for message in messages[:2]:
-                producer.publish(message)
-            producer.flush()
-            with mock.patch.object(data_pipeline.producer, 'logger') as mock_logger:
-                producer.ensure_messages_published(messages, topic_offsets)
-            self._assert_all_messages_published(consumer, envelope)
-            self._assert_logged_info_correct(
-                mock_logger,
-                len(messages[:2]),
-                topic,
-                topic_offsets
-            )
+        self._test_success_ensure_messages_published(
+            topic,
+            messages,
+            producer,
+            topic_offsets,
+            unpublished_count=2
+        )
 
     def test_ensure_messages_published_when_all_published(
-        self, topic, messages, producer, envelope, topic_offsets
+        self, topic, messages, producer, topic_offsets
     ):
-        with setup_capture_new_messages_consumer(topic) as consumer:
-            for message in messages:
+        self._test_success_ensure_messages_published(
+            topic,
+            messages,
+            producer,
+            topic_offsets,
+            unpublished_count=0
+        )
+
+    def _test_success_ensure_messages_published(
+        self, topic, messages, producer, topic_offsets, unpublished_count
+    ):
+        messages_published_first = messages[:unpublished_count]
+
+        with setup_capture_new_messages_consumer(
+            topic
+        ) as consumer, mock.patch.object(
+            data_pipeline.producer,
+            'logger'
+        ) as mock_logger:
+            for message in messages_published_first:
                 producer.publish(message)
             producer.flush()
-            with mock.patch.object(data_pipeline.producer, 'logger') as mock_logger:
-                producer.ensure_messages_published(messages, topic_offsets)
-            self._assert_all_messages_published(consumer, envelope)
-            self._assert_logged_info_correct(mock_logger, len(messages), topic, topic_offsets)
+
+            producer.ensure_messages_published(messages, topic_offsets)
+            self._assert_all_messages_published(consumer)
+            self._assert_logged_info_correct(
+                mock_logger,
+                messages_already_published=len(messages_published_first),
+                topic=topic,
+                topic_offsets=topic_offsets,
+                message_count=len(messages)
+            )
 
     def test_ensure_messages_published_fails_when_overpublished(
         self, topic, messages, producer, topic_offsets
@@ -617,27 +624,39 @@ class TestEnsureMessagesPublished(TestProducerBase):
             producer.publish(message)
         producer.flush()
 
-        with pytest.raises(PublicationUnensurableError):
-            with mock.patch.object(data_pipeline.producer, 'logger') as mock_logger:
-                producer.ensure_messages_published(messages[:2], topic_offsets)
+        with pytest.raises(
+            PublicationUnensurableError
+        ), mock.patch.object(
+            data_pipeline.producer,
+            'logger'
+        ) as mock_logger:
+            producer.ensure_messages_published(messages[:2], topic_offsets)
 
-        self._assert_logged_info_correct(
-            mock_logger,
-            len(messages),
-            topic,
-            topic_offsets,
-            message_count=len(messages[:2])
-        )
+            self._assert_logged_info_correct(
+                mock_logger,
+                len(messages),
+                topic,
+                topic_offsets,
+                message_count=len(messages[:2])
+            )
 
-    def test_ensure_messages_published_on_new_topic(self, message, producer):
+    def test_ensure_messages_published_on_new_topic(
+        self, create_new_schema, producer
+    ):
         """When a topic doesn't exist, all of the messages on that topic should
         be published.
         """
-        topic = str(UUID(bytes=FastUUID().uuid4()).hex)
-        message.topic = topic
-        with mock.patch.object(producer, 'publish') as mock_publish:
+        new_schema = create_new_schema(source='ensure_published_source_two')
+        message = CreateMessage(new_schema.schema_id, payload=str('1'))
+        topic = str(new_schema.topic.name)
+
+        with attach_spy_on_func(producer, 'publish') as func_spy:
             producer.ensure_messages_published([message], {})
-            assert mock_publish.call_count == 1
+            assert func_spy.call_count == 1
+        with setup_capture_new_messages_consumer(topic) as consumer:
+            kafka_offset = 0
+            consumer.seek(kafka_offset, 0)  # kafka_offset from head
+            self._assert_all_messages_published(consumer, expected_payloads=[1])
 
     def _assert_logged_info_correct(
         self,
@@ -645,10 +664,8 @@ class TestEnsureMessagesPublished(TestProducerBase):
         messages_already_published,
         topic,
         topic_offsets,
-        message_count=None
+        message_count
     ):
-        if message_count is None:
-            message_count = self.number_of_messages
         assert mock_logger.info.call_count == 1
         (log_line,), _ = mock_logger.info.call_args
         logged_info = json.loads(log_line)
@@ -661,23 +678,23 @@ class TestEnsureMessagesPublished(TestProducerBase):
             topic_offsets.get(topic, 0) + messages_already_published
         )
 
-    def _assert_all_messages_published(self, consumer, envelope):
+    def _assert_all_messages_published(self, consumer, expected_payloads=None):
         messages = consumer.get_messages(count=self.number_of_messages * 2)
-        assert len(messages) == self.number_of_messages
+        expected_payloads = (expected_payloads if expected_payloads is not None
+                             else range(self.number_of_messages))
+        envelope = Envelope()
         payloads = [
             int(envelope.unpack(message.message.value)['payload'])
             for message in messages
         ]
-        assert payloads == range(self.number_of_messages)
+        assert payloads == expected_payloads
 
 
 class TestPublishMessagesWithRetry(TestProducerBase):
 
     @pytest.fixture
-    def another_message(self, topic_two, message):
-        new_message = copy.deepcopy(message)
-        new_message.topic = topic_two
-        return new_message
+    def another_message(self, another_schema, payload):
+        return CreateMessage(another_schema.schema_id, payload=payload)
 
     @property
     def max_retry_count(self):
@@ -695,14 +712,10 @@ class TestPublishMessagesWithRetry(TestProducerBase):
         producer._kafka_producer._publish_retry_policy = self.retry_policy
 
     @pytest.fixture(autouse=True)
-    def topic_offsets(self, topic, producer, message):
-        message = copy.copy(message)
-        message.topic = topic
-        message.payload = str("-1")
-
+    def set_topic_offsets_to_latest(self, producer, message, another_message):
         producer.publish(message)
+        producer.publish(another_message)
         producer.flush()
-        return producer.get_checkpoint_position_data().topic_to_kafka_offset_map
 
     @pytest.yield_fixture(autouse=True)
     def setup_flush_time_limit(self):
@@ -741,8 +754,9 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             assert len(messages) == 0
             assert mock_send_request.call_count == self.max_retry_count
 
-    def test_publish_to_new_topic(self, message, producer):
-        message.topic = self.generate_new_topic_name()
+    def test_publish_to_new_topic(self, create_new_schema, producer):
+        new_schema = create_new_schema(source='retry_source')
+        message = CreateMessage(new_schema.schema_id, payload=str('1'))
 
         with attach_spy_on_func(
             producer._kafka_producer.kafka_client,
@@ -767,8 +781,6 @@ class TestPublishMessagesWithRetry(TestProducerBase):
         producer
     ):
         # TODO(DATAPIPE-606|clin) investigate better way than mocking response
-        self._refresh_topic_two_tracked_offset(producer, another_message)
-
         mock_response = ProduceResponse(topic, partition=0, error=0, offset=1)
         fail_response = FailedPayloadsError(payload=mock.Mock())
         side_effect = ([[mock_response, fail_response]] +
@@ -840,9 +852,6 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             messages = get_messages()
             assert len(messages) == 0
 
-    def generate_new_topic_name(self):
-        return str('retry.{}'.format(random.random()))
-
     def get_messages_from_start(self, topic_name):
         with setup_capture_new_messages_consumer(topic_name) as consumer:
             consumer.seek(0, 0)  # set to the first message
@@ -856,8 +865,9 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             expected_payload = expected.payload
             assert actual_payload == expected_payload
 
-    def assert_last_retry_result(self, last_retry_result, message,
-                                 expected_published_msgs_count):
+    def assert_last_retry_result(
+        self, last_retry_result, message, expected_published_msgs_count
+    ):
         expected_requests = [ProduceRequest(
             topic=message.topic,
             partition=0,
@@ -865,9 +875,3 @@ class TestPublishMessagesWithRetry(TestProducerBase):
         )]
         assert last_retry_result.unpublished_requests == expected_requests
         assert last_retry_result.total_published_message_count == expected_published_msgs_count
-
-    def _refresh_topic_two_tracked_offset(self, producer, topic_two_message):
-        """Get latest offset of topic_two by publishing one to it.
-        """
-        producer.publish(topic_two_message)
-        producer.flush()

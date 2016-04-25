@@ -4,14 +4,37 @@ from __future__ import unicode_literals
 
 from collections import defaultdict
 
+import mock
 import pytest
 
 from data_pipeline._position_data_tracker import PositionDataTracker
 from data_pipeline.message import CreateMessage
+from data_pipeline.schematizer_clientlib.models.avro_schema import AvroSchema
+from data_pipeline.schematizer_clientlib.models.topic import Topic
+from data_pipeline.schematizer_clientlib.schematizer import SchematizerClient
 from tests.helpers.config import reconfigure
 
 
 class BasePositionDataTrackerTest(object):
+
+    @pytest.yield_fixture(scope="module", autouse=True)
+    def patch_contains_pii(self):
+        mock_date = '2015-01-01'
+        mock_topic = Topic(1, str(''), None, False, mock_date, mock_date)
+        mock_schema = AvroSchema(
+            1, 'schema', mock_topic, None, 'RW', None, None, mock_date, mock_date
+        )
+        mock_schematizer_client = mock.Mock(spec=SchematizerClient)
+        with mock.patch(
+            'data_pipeline.schematizer_clientlib.schematizer.SchematizerClient',
+            return_value=mock_schematizer_client
+        ), mock.patch.object(
+            mock_schematizer_client,
+            'get_schema_by_id',
+            return_value=mock_schema
+        ):
+            yield
+
     @property
     def valid_message_data(self):
         return {

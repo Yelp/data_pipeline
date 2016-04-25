@@ -46,6 +46,14 @@ class Config(object):
 
     @property
     def should_use_testing_containers(self):
+        """Used as a config that will not be overwritten in tests where
+        something like load_schematizer_host_and_port_from_smartstack may be.
+
+        Overwrite this configuration for testing purposes only.
+
+        You may also set this configuration manually when starting a test run
+        similarly to how it's done in testing_helpers.containers
+        """
         return data_pipeline_conf.read_string(
             'should_use_testing_containers',
             default=None

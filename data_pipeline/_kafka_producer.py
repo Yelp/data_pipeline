@@ -81,11 +81,12 @@ class KafkaProducer(object):
     def publish(self, message):
         if message.contains_pii and self.skip_messages_with_pii:
             logger.info(
-                "Skipping a message with PII - uuid_base64: {0}, "
+                "Skipping a PII message - "
+                "uuid hex: {0}, "
                 "schema_id: {1}, "
                 "timestamp: {2}, "
                 "type: {3}".format(
-                    message.uuid_base64,
+                    message.uuid_hex,
                     message.schema_id,
                     message.timestamp,
                     message.message_type.name

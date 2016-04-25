@@ -1,3 +1,21 @@
+data-pipeline-tools (0.1.65) lucid; urgency=low
+
+  * Commit: add more docstring
+
+ -- Chia-Chi Lin <clin@yelp.com>  Fri, 22 Apr 2016 14:51:27 -0700
+
+data-pipeline-tools (0.1.64) lucid; urgency=low
+
+  * Commit: removed redundant comments
+
+ -- Chia-Chi Lin <clin@yelp.com>  Thu, 21 Apr 2016 18:56:12 -0700
+
+data-pipeline-tools (0.1.63) lucid; urgency=low
+
+  * Commit: Fix imports ordering.
+
+ -- Chia-Chi Lin <clin@yelp.com>  Wed, 20 Apr 2016 19:19:52 -0700
+
 data-pipeline-tools (0.1.62) lucid; urgency=low
 
   * Commit: bumped kafka-python version to 0.9.5.post2 to resolve
