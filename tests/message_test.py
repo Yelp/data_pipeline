@@ -513,7 +513,7 @@ class TestUpdateMessage(SharedMessageTest):
             payload_data={'key1': 1, 'key2': 2}
         )
         message = self.message_class(**message_data)
-        
+
         assert message.payload_diff == {}
         assert not message.has_changed
 
