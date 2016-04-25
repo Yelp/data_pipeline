@@ -38,6 +38,14 @@ PayloadFieldDiff = namedtuple('PayloadFieldDiff', [
 
 
 class FieldValue(Enum):
+    """Enum that specifies the content of the field in the payload data or
+    previous payload data.
+
+    Attributes:
+      DATA_NOT_AVAILABLE: No information is available for the field.
+      EMPTY_DATA: field value is None.
+    """
+
     DATA_NOT_AVAILABLE = "DATA_NOT_AVAILABLE"
     EMPTY_DATA = "EMPTY_DATA"
 
@@ -332,6 +340,24 @@ class Message(object):
             raise TypeError("Element of keys must be unicode.")
         self._keys = keys
 
+    @property
+    def payload_diff(self):
+        return {
+            field: self._get_field_diff(field)
+            for field in self.payload_data if self._has_field_changed(field)
+        }
+
+    @property
+    def has_changed(self):
+        return any(self._has_field_changed(field) for field in self.payload_data)
+
+    def _has_field_changed(self, field):
+        return (
+            not hasattr(self,'previous_payload_data') or
+            field not in self.previous_payload_data or
+            self.payload_data[field] != self.previous_payload_data[field]
+        )
+
     def __init__(
         self,
         schema_id,
@@ -544,12 +570,6 @@ class CreateMessage(Message):
 
     _message_type = MessageType.create
 
-    @property
-    def payload_diff(self):
-        return {
-            field: self._get_field_diff(field) for field in self.payload_data
-        }
-
     def _get_field_diff(self, field):
         return PayloadFieldDiff(
             old_value=FieldValue.EMPTY_DATA,
@@ -561,28 +581,16 @@ class DeleteMessage(Message):
 
     _message_type = MessageType.delete
 
-    @property
-    def payload_diff(self):
-        return {
-            field: self._get_field_diff(field) for field in self.payload_data
-        }
-
     def _get_field_diff(self, field):
         return PayloadFieldDiff(
-            old_value=FieldValue.DATA_NOT_AVAILABLE,
-            current_value=self.payload_data[field]
+            old_value=self.payload_data[field],
+            current_value=FieldValue.DATA_NOT_AVAILABLE
         )
 
 
 class RefreshMessage(Message):
 
     _message_type = MessageType.refresh
-
-    @property
-    def payload_diff(self):
-        return {
-            field: self._get_field_diff(field) for field in self.payload_data
-        }
 
     def _get_field_diff(self, field):
         return PayloadFieldDiff(
@@ -594,9 +602,21 @@ class RefreshMessage(Message):
 class LogMessage(Message):
     _message_type = MessageType.log
 
+    def _get_field_diff(self, field):
+        return PayloadFieldDiff(
+            old_value=self.payload_data[field],
+            current_value=FieldValue.DATA_NOT_AVAILABLE
+        )
+
 
 class MonitorMessage(Message):
     _message_type = _ProtectedMessageType.monitor
+
+    def _get_field_diff(self, field):
+        return PayloadFieldDiff(
+            old_value=self.payload_data[field],
+            current_value=FieldValue.DATA_NOT_AVAILABLE
+        )
 
 
 class UpdateMessage(Message):
@@ -770,25 +790,11 @@ class UpdateMessage(Message):
         self._set_previous_payload_data_if_necessary(self._previous_payload)
         self._set_previous_payload_if_necessary(self._previous_payload_data)
 
-    def _has_field_changed(self, field):
-        return self.payload_data[field] != self.previous_payload_data[field]
-
     def _get_field_diff(self, field):
         return PayloadFieldDiff(
             old_value=self.previous_payload_data[field],
             current_value=self.payload_data[field]
         )
-
-    @property
-    def has_changed(self):
-        return any(self._has_field_changed(field) for field in self.payload_data)
-
-    @property
-    def payload_diff(self):
-        return {
-            field: self._get_field_diff(field)
-            for field in self.payload_data if self._has_field_changed(field)
-        }
 
     @property
     def _str_repr(self):

@@ -8,7 +8,6 @@ from kafka import create_message
 from kafka.common import OffsetAndMessage
 
 from data_pipeline import message as dp_message
-
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import create_from_offset_and_message
@@ -170,12 +169,6 @@ class SharedMessageTest(object):
         )
         return self.message_class(**message_data)
 
-    def _test_payload_diff(self, valid_message_data, payload_data=None):
-        valid_message_data.pop('payload', None)
-        valid_message_data.pop('previous_payload', None)
-        valid_message_data['payload_data'] = payload_data
-        return self.message_class(**valid_message_data)
-
     def test_accepts_no_meta(self, valid_message_data):
         dry_run_message = self._get_dry_run_message_with_meta(valid_message_data)
         assert dry_run_message.meta is None
@@ -309,8 +302,14 @@ class TestCreateMessage(PayloadOnlyMessageTest):
         return MessageType.create
 
     def test_payload_diff(self, valid_message_data):
-        payload_data={'key1': 1, 'key2': 20}
-        message = self._test_payload_diff(valid_message_data, payload_data)
+        valid_message_data.pop('payload', None)
+        valid_message_data.pop('previous_payload', None)
+        message_data = self._make_message_data(
+            valid_message_data,
+            payload_data={'key1': 1, 'key2': 20}
+        )
+        message = self.message_class(**message_data)
+
         expected = {
             'key1': PayloadFieldDiff(
                 old_value=FieldValue.EMPTY_DATA,
@@ -322,6 +321,7 @@ class TestCreateMessage(PayloadOnlyMessageTest):
             )
         }
         assert message.payload_diff == expected
+        assert message.has_changed
 
 
 class TestLogMessage(PayloadOnlyMessageTest):
@@ -333,10 +333,59 @@ class TestLogMessage(PayloadOnlyMessageTest):
     def expected_message_type(self):
         return MessageType.log
 
-    def test_should_not_have_payload_diff_field(self, message):
-        with pytest.raises(AttributeError):
-            message.payload_diff
+    def test_payload_diff(self, valid_message_data):
+        valid_message_data.pop('payload', None)
+        valid_message_data.pop('previous_payload', None)
+        message_data = self._make_message_data(
+            valid_message_data,
+            payload_data={'key1': 1, 'key2': 20}
+        )
+        message = self.message_class(**message_data)
 
+        expected = {
+            'key1': PayloadFieldDiff(
+                old_value=1,
+                current_value=FieldValue.DATA_NOT_AVAILABLE
+            ),
+            'key2': PayloadFieldDiff(
+                old_value=20,
+                current_value=FieldValue.DATA_NOT_AVAILABLE
+            )
+        }
+        assert message.payload_diff == expected
+        assert message.has_changed
+
+
+class TestMonitorMessage(PayloadOnlyMessageTest):
+    @property
+    def message_class(self):
+        return dp_message.LogMessage
+
+    @property
+    def expected_message_type(self):
+        return MessageType.log
+
+    def test_payload_diff(self, valid_message_data):
+        valid_message_data.pop('payload', None)
+        valid_message_data.pop('previous_payload', None)
+        message_data = self._make_message_data(
+            valid_message_data,
+            payload_data={'key1': 1, 'key2': 20}
+        )
+        message = self.message_class(**message_data)
+
+        expected = {
+            'key1': PayloadFieldDiff(
+                old_value=1,
+                current_value=FieldValue.DATA_NOT_AVAILABLE
+            ),
+            'key2': PayloadFieldDiff(
+                old_value=20,
+                current_value=FieldValue.DATA_NOT_AVAILABLE
+            )
+        }
+        assert message.payload_diff == expected
+        assert message.has_changed
 
 class TestRefreshMessage(PayloadOnlyMessageTest):
 
@@ -349,8 +398,13 @@ class TestRefreshMessage(PayloadOnlyMessageTest):
         return MessageType.refresh
 
     def test_payload_diff(self, valid_message_data):
-        payload_data={'key1': 1, 'key2': 20}
-        message = self._test_payload_diff(valid_message_data, payload_data)
+        valid_message_data.pop('payload', None)
+        valid_message_data.pop('previous_payload', None)
+        message_data = self._make_message_data(
+            valid_message_data,
+            payload_data={'key1': 1, 'key2': 20}
+        )
+        message = self.message_class(**message_data)
 
         expected = {
             'key1': PayloadFieldDiff(
@@ -363,7 +417,7 @@ class TestRefreshMessage(PayloadOnlyMessageTest):
             )
         }
         assert message.payload_diff == expected
-
+        assert message.has_changed
 
 class TestDeleteMessage(PayloadOnlyMessageTest):
 
@@ -376,21 +430,26 @@ class TestDeleteMessage(PayloadOnlyMessageTest):
         return MessageType.delete
 
     def test_payload_diff(self, valid_message_data):
-        payload_data={'key1': 1, 'key2': 20}
-        message = self._test_payload_diff(valid_message_data, payload_data)
+        valid_message_data.pop('payload', None)
+        valid_message_data.pop('previous_payload', None)
+        message_data = self._make_message_data(
+            valid_message_data,
+            payload_data={'key1': 1, 'key2': 20}
+        )
+        message = self.message_class(**message_data)
 
         expected = {
             'key1': PayloadFieldDiff(
-                old_value=FieldValue.DATA_NOT_AVAILABLE,
-                current_value=1
+                old_value=1,
+                current_value=FieldValue.DATA_NOT_AVAILABLE
             ),
             'key2': PayloadFieldDiff(
-                old_value=FieldValue.DATA_NOT_AVAILABLE,
-                current_value=20
+                old_value=20,
+                current_value=FieldValue.DATA_NOT_AVAILABLE
             )
         }
         assert message.payload_diff == expected
-
+        assert message.has_changed
 
 class TestUpdateMessage(SharedMessageTest):
 
