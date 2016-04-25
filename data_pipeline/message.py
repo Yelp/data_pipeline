@@ -392,56 +392,6 @@ class Message(object):
         else:
             raise TypeError("Either payload or payload_data must be provided.")
 
-
-    def _set_previous_payload_or_payload_data(
-        self,
-        previous_payload,
-        previous_payload_data
-    ):
-        # previous_payload or previous_payload_data are lazily constructed
-        # only on request
-        is_not_none_previous_payload = previous_payload is not None
-        is_not_none_previous_payload_data = previous_payload_data is not None
-
-        if is_not_none_previous_payload and is_not_none_previous_payload_data:
-            raise TypeError(
-                "Cannot pass both previous_payload and previous_payload_data."
-            )
-        if is_not_none_previous_payload:
-            self._set_previous_payload(previous_payload)
-        elif is_not_none_previous_payload_data:
-            self._set_previous_payload_data(previous_payload_data)
-        else:
-            raise TypeError(
-                "Either previous_payload or previous_payload_data must be provided."
-            )
-
-    def _set_previous_payload(self, previous_payload):
-        if not isinstance(previous_payload, bytes):
-            raise TypeError("Previous payload must be bytes")
-        self._previous_payload = previous_payload
-        self._previous_payload_data = None  # force previous_payload_data to be re-decoded
-
-    def _set_previous_payload_data(self, previous_payload_data):
-        if not isinstance(previous_payload_data, dict):
-            raise TypeError("Previous payload data must be a dict")
-
-        self._previous_payload_data = previous_payload_data
-        self._previous_payload = None  # force previous_payload to be re-encoded
-
-    def _set_previous_payload_if_necessary(self, previous_payload_data):
-        if self._previous_payload is None:
-            self._previous_payload = self._encode_payload_data(
-                previous_payload_data
-            )
-
-    def _set_previous_payload_data_if_necessary(self, previous_payload):
-        if self._previous_payload_data is None:
-            self._previous_payload_data = self._decode_payload(previous_payload)
-
-    def _has_field_changed(self, field):
-        return field not in self.previous_payload_data or self.payload_data[field] != self.previous_payload_data[field]
-
     def _is_valid_optional_type(self, value, typ):
         return value is None or isinstance(value, typ)
 
@@ -477,27 +427,15 @@ class Message(object):
 
     @property
     def avro_repr(self):
-        if isinstance(self, UpdateMessage):
-            return {
-                'uuid': self.uuid,
-                'message_type': self.message_type.name,
-                'schema_id': self.schema_id,
-                'payload': self._encrypt_payload_if_necessary(self.payload),
-                'previous_payload': self._encrypt_payload_if_necessary(self.previous_payload),
-                'timestamp': self.timestamp,
-                'meta': self._get_meta_attr_avro_repr(),
-                'encryption_type': self.encryption_type,
-            }
-        else:
-            return {
-                'uuid': self.uuid,
-                'message_type': self.message_type.name,
-                'schema_id': self.schema_id,
-                'payload': self._encrypt_payload_if_necessary(self.payload),
-                'timestamp': self.timestamp,
-                'meta': self._get_meta_attr_avro_repr(),
-                'encryption_type': self.encryption_type,
-            }
+        return {
+            'uuid': self.uuid,
+            'message_type': self.message_type.name,
+            'schema_id': self.schema_id,
+            'payload': self._encrypt_payload_if_necessary(self.payload),
+            'timestamp': self.timestamp,
+            'meta': self._get_meta_attr_avro_repr(),
+            'encryption_type': self.encryption_type,
+        }
 
     @classmethod
     def create_from_unpacked_message(cls, unpacked_message, kafka_position_info=None):
@@ -546,10 +484,6 @@ class Message(object):
             (m for m in meta if m.schema_id == encryption_meta.schema_id),
             None
         )
-
-    @property
-    def has_changed(self):
-        return any(self._has_field_changed(field) for field in self.payload_data)
 
     def reload_data(self):
         """Populate the payload data or the payload if it hasn't done so.
@@ -610,60 +544,10 @@ class CreateMessage(Message):
 
     _message_type = MessageType.create
 
-    def __init__(
-        self,
-        schema_id,
-        topic=None,
-        payload=None,
-        payload_data=None,
-        previous_payload=None,
-        previous_payload_data=None,
-        uuid=None,
-        contains_pii=None,
-        timestamp=None,
-        upstream_position_info=None,
-        kafka_position_info=None,
-        keys=None,
-        dry_run=False,
-        meta=None,
-    ):
-        super(CreateMessage, self).__init__(
-            schema_id,
-            topic=topic,
-            payload=payload,
-            payload_data=payload_data,
-            uuid=uuid,
-            contains_pii=contains_pii,
-            timestamp=timestamp,
-            upstream_position_info=upstream_position_info,
-            kafka_position_info=kafka_position_info,
-            keys=keys,
-            dry_run=dry_run,
-            meta=meta,
-        )
-        self._set_previous_payload_or_payload_data(
-            previous_payload,
-            {}
-        )
-
-    @property
-    def previous_payload(self):
-        """Avro-encoded message - encoded with schema identified by
-        `schema_id`.  Required when message type is `MessageType.update`.
-        """
-        self._set_previous_payload_if_necessary(self._previous_payload_data)
-        return self._previous_payload
-
-    @property
-    def previous_payload_data(self):
-        self._set_previous_payload_data_if_necessary(self._previous_payload)
-        return self._previous_payload_data
-
     @property
     def payload_diff(self):
         return {
-            field: self._get_field_diff(field)
-            for field in self.payload_data if self._has_field_changed(field)
+            field: self._get_field_diff(field) for field in self.payload_data
         }
 
     def _get_field_diff(self, field):
@@ -677,60 +561,10 @@ class DeleteMessage(Message):
 
     _message_type = MessageType.delete
 
-    def __init__(
-        self,
-        schema_id,
-        topic=None,
-        payload=None,
-        payload_data=None,
-        previous_payload=None,
-        previous_payload_data=None,
-        uuid=None,
-        contains_pii=None,
-        timestamp=None,
-        upstream_position_info=None,
-        kafka_position_info=None,
-        keys=None,
-        dry_run=False,
-        meta=None,
-    ):
-        super(DeleteMessage, self).__init__(
-            schema_id,
-            topic=topic,
-            payload=payload,
-            payload_data=payload_data,
-            uuid=uuid,
-            contains_pii=contains_pii,
-            timestamp=timestamp,
-            upstream_position_info=upstream_position_info,
-            kafka_position_info=kafka_position_info,
-            keys=keys,
-            dry_run=dry_run,
-            meta=meta,
-        )
-        self._set_previous_payload_or_payload_data(
-            previous_payload,
-            {}
-        )
-
-    @property
-    def previous_payload(self):
-        """Avro-encoded message - encoded with schema identified by
-        `schema_id`.  Required when message type is `MessageType.update`.
-        """
-        self._set_previous_payload_if_necessary(self._previous_payload_data)
-        return self._previous_payload
-
-    @property
-    def previous_payload_data(self):
-        self._set_previous_payload_data_if_necessary(self._previous_payload)
-        return self._previous_payload_data
-
     @property
     def payload_diff(self):
         return {
-            field: self._get_field_diff(field)
-            for field in self.payload_data if self._has_field_changed(field)
+            field: self._get_field_diff(field) for field in self.payload_data
         }
 
     def _get_field_diff(self, field):
@@ -744,60 +578,10 @@ class RefreshMessage(Message):
 
     _message_type = MessageType.refresh
 
-    def __init__(
-        self,
-        schema_id,
-        topic=None,
-        payload=None,
-        payload_data=None,
-        previous_payload=None,
-        previous_payload_data=None,
-        uuid=None,
-        contains_pii=None,
-        timestamp=None,
-        upstream_position_info=None,
-        kafka_position_info=None,
-        keys=None,
-        dry_run=False,
-        meta=None,
-    ):
-        super(RefreshMessage, self).__init__(
-            schema_id,
-            topic=topic,
-            payload=payload,
-            payload_data=payload_data,
-            uuid=uuid,
-            contains_pii=contains_pii,
-            timestamp=timestamp,
-            upstream_position_info=upstream_position_info,
-            kafka_position_info=kafka_position_info,
-            keys=keys,
-            dry_run=dry_run,
-            meta=meta,
-        )
-        self._set_previous_payload_or_payload_data(
-            previous_payload,
-            {}
-        )
-
-    @property
-    def previous_payload(self):
-        """Avro-encoded message - encoded with schema identified by
-        `schema_id`.  Required when message type is `MessageType.update`.
-        """
-        self._set_previous_payload_if_necessary(self._previous_payload_data)
-        return self._previous_payload
-
-    @property
-    def previous_payload_data(self):
-        self._set_previous_payload_data_if_necessary(self._previous_payload)
-        return self._previous_payload_data
-
     @property
     def payload_diff(self):
         return {
-            field: self._get_field_diff(field)
-            for field in self.payload_data if self._has_field_changed(field)
+            field: self._get_field_diff(field) for field in self.payload_data
         }
 
     def _get_field_diff(self, field):
@@ -870,25 +654,28 @@ class UpdateMessage(Message):
             previous_payload_data
         )
 
-    @property
-    def previous_payload(self):
-        """Avro-encoded message - encoded with schema identified by
-        `schema_id`.  Required when message type is `MessageType.update`.
-        """
-        self._set_previous_payload_if_necessary(self._previous_payload_data)
-        return self._previous_payload
+    def _set_previous_payload_or_payload_data(
+        self,
+        previous_payload,
+        previous_payload_data
+    ):
+        # previous_payload or previous_payload_data are lazily constructed
+        # only on request
+        is_not_none_previous_payload = previous_payload is not None
+        is_not_none_previous_payload_data = previous_payload_data is not None
 
-    @property
-    def previous_payload_data(self):
-        self._set_previous_payload_data_if_necessary(self._previous_payload)
-        return self._previous_payload_data
-
-    @property
-    def payload_diff(self):
-        return {
-            field: self._get_field_diff(field)
-            for field in self.payload_data if self._has_field_changed(field)
-        }
+        if is_not_none_previous_payload and is_not_none_previous_payload_data:
+            raise TypeError(
+                "Cannot pass both previous_payload and previous_payload_data."
+            )
+        if is_not_none_previous_payload:
+            self._set_previous_payload(previous_payload)
+        elif is_not_none_previous_payload_data:
+            self._set_previous_payload_data(previous_payload_data)
+        else:
+            raise TypeError(
+                "Either previous_payload or previous_payload_data must be provided."
+            )
 
     @property
     def _eq_key(self):
@@ -902,11 +689,39 @@ class UpdateMessage(Message):
         """
         return super(UpdateMessage, self)._eq_key + (self.previous_payload,)
 
-    def _get_field_diff(self, field):
-        return PayloadFieldDiff(
-            old_value=self.previous_payload_data[field],
-            current_value=self.payload_data[field]
+    @property
+    def previous_payload(self):
+        """Avro-encoded message - encoded with schema identified by
+        `schema_id`.  Required when message type is `MessageType.update`.
+        """
+        self._set_previous_payload_if_necessary(self._previous_payload_data)
+        return self._previous_payload
+
+    def _set_previous_payload(self, previous_payload):
+        if not isinstance(previous_payload, bytes):
+            raise TypeError("Previous payload must be bytes")
+        self._previous_payload = previous_payload
+        self._previous_payload_data = None  # force previous_payload_data to be re-decoded
+
+    @property
+    def previous_payload_data(self):
+        self._set_previous_payload_data_if_necessary(self._previous_payload)
+        return self._previous_payload_data
+
+    def _set_previous_payload_data(self, previous_payload_data):
+        if not isinstance(previous_payload_data, dict):
+            raise TypeError("Previous payload data must be a dict")
+
+        self._previous_payload_data = previous_payload_data
+        self._previous_payload = None  # force previous_payload to be re-encoded
+
+    @property
+    def avro_repr(self):
+        repr_dict = super(UpdateMessage, self).avro_repr
+        repr_dict['previous_payload'] = self._encrypt_payload_if_necessary(
+            self.previous_payload
         )
+        return repr_dict
 
     @classmethod
     def create_from_unpacked_message(cls, unpacked_message, kafka_position_info=None):
@@ -936,24 +751,15 @@ class UpdateMessage(Message):
         message._manual_set_encryption_type(encryption_type)
         return message
 
-    @property
-    def _str_repr(self):
-        repr_dict = super(UpdateMessage, self)._str_repr
-        repr_dict['previous_payload_data'] = self.previous_payload_data
-        return repr_dict
+    def _set_previous_payload_if_necessary(self, previous_payload_data):
+        if self._previous_payload is None:
+            self._previous_payload = self._encode_payload_data(
+                previous_payload_data
+            )
 
-    @property
-    def avro_repr(self):
-        return {
-            'uuid': self.uuid,
-            'message_type': self.message_type.name,
-            'schema_id': self.schema_id,
-            'payload': self._encrypt_payload_if_necessary(self.payload),
-            'previous_payload': self._encrypt_payload_if_necessary(self.previous_payload),
-            'timestamp': self.timestamp,
-            'meta': self._get_meta_attr_avro_repr(),
-            'encryption_type': self.encryption_type,
-        }
+    def _set_previous_payload_data_if_necessary(self, previous_payload):
+        if self._previous_payload_data is None:
+            self._previous_payload_data = self._decode_payload(previous_payload)
 
     def reload_data(self):
         """Populate the previous payload data or decode the previous payload
@@ -963,6 +769,32 @@ class UpdateMessage(Message):
         super(UpdateMessage, self).reload_data()
         self._set_previous_payload_data_if_necessary(self._previous_payload)
         self._set_previous_payload_if_necessary(self._previous_payload_data)
+
+    def _has_field_changed(self, field):
+        return self.payload_data[field] != self.previous_payload_data[field]
+
+    def _get_field_diff(self, field):
+        return PayloadFieldDiff(
+            old_value=self.previous_payload_data[field],
+            current_value=self.payload_data[field]
+        )
+
+    @property
+    def has_changed(self):
+        return any(self._has_field_changed(field) for field in self.payload_data)
+
+    @property
+    def payload_diff(self):
+        return {
+            field: self._get_field_diff(field)
+            for field in self.payload_data if self._has_field_changed(field)
+        }
+
+    @property
+    def _str_repr(self):
+        repr_dict = super(UpdateMessage, self)._str_repr
+        repr_dict['previous_payload_data'] = self.previous_payload_data
+        return repr_dict
 
 
 _message_type_to_class_map = {
