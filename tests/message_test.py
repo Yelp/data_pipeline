@@ -502,7 +502,6 @@ class TestUpdateMessage(SharedMessageTest):
 
         expected = {'key2': PayloadFieldDiff(old_value=2, current_value=20)}
         assert message.payload_diff == expected
-        assert message.has_changed
 
     def test_no_payload_diff(self, valid_message_data):
         valid_message_data.pop('payload', None)
@@ -513,7 +512,7 @@ class TestUpdateMessage(SharedMessageTest):
             payload_data={'key1': 1, 'key2': 2}
         )
         message = self.message_class(**message_data)
-        
+
         assert message.payload_diff == {}
         assert not message.has_changed
 
