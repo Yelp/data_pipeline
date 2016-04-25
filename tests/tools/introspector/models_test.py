@@ -1,0 +1,170 @@
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import
+from __future__ import unicode_literals
+
+import mock
+import pytest
+
+from tests.tools.introspector.base import TestIntrospectorBase
+from data_pipeline.tools.introspector.base import IntrospectorCommand
+from data_pipeline.tools.introspector.models.namespace import IntrospectorNamespace
+from data_pipeline.tools.introspector.models.topic import IntrospectorTopic
+from data_pipeline.tools.introspector.models.schema import IntrospectorSchema
+from data_pipeline.tools.introspector.models.source import IntrospectorSource
+
+@pytest.mark.usefixtures('containers')
+class TestIntrospectorModels(TestIntrospectorBase):
+
+    @pytest.fixture
+    def base_command(self, containers):
+        command = IntrospectorCommand("data_pipeline_introspector_base")
+        command.log.debug = mock.Mock()
+        command.log.info = mock.Mock()
+        command.log.warning = mock.Mock()
+        return command
+
+    def test_introspector_schema(
+        self,
+        schematizer,
+        schema_one_active,
+        topic_one_active
+    ):
+        topic_schema = schematizer.get_latest_schema_by_topic_name(
+            topic_one_active.name
+        )
+        actual_schema_dict = IntrospectorSchema(
+            topic_schema
+        ).to_ordered_dict()
+        self._assert_schema_equals_schema_dict(
+            topic_schema=topic_schema,
+            schema_obj=schema_one_active,
+            schema_dict=actual_schema_dict
+        )
+
+    def test_introspector_schema_with_topic_info(
+        self,
+        base_command,
+        schematizer,
+        schema_one_active,
+        topic_one_active
+    ):
+        topic_schema = schematizer.get_latest_schema_by_topic_name(
+            topic_one_active.name
+        )
+        actual_schema_dict = IntrospectorSchema(
+            topic_schema,
+            include_topic_info=True
+        ).to_ordered_dict()
+        self._assert_schema_equals_schema_dict(
+            topic_schema=topic_schema,
+            schema_obj=schema_one_active,
+            schema_dict=actual_schema_dict,
+            topic_to_check=topic_one_active
+        )
+
+    def test_introspector_topic(
+        self,
+        base_command,
+        topic_one_active,
+        topic_two_inactive,
+        namespace_one,
+        namespace_two,
+        source_one_active,
+        source_two_inactive
+    ):
+        dict_one = IntrospectorTopic(
+            topic_one_active,
+            kafka_topics=base_command._kafka_topics,
+            topics_to_range_map=base_command._topics_with_messages_to_range_map
+        ).to_ordered_dict()
+        dict_two = IntrospectorTopic(
+            topic_two_inactive,
+            kafka_topics=base_command._kafka_topics,
+            topics_to_range_map=base_command._topics_with_messages_to_range_map
+        ).to_ordered_dict()
+        self._assert_topic_equals_topic_dict(
+            topic=topic_one_active,
+            topic_dict=dict_one,
+            namespace_name=namespace_one,
+            source_name=source_one_active,
+            is_active=True
+        )
+        self._assert_topic_equals_topic_dict(
+            topic=topic_two_inactive,
+            topic_dict=dict_two,
+            namespace_name=namespace_two,
+            source_name=source_two_inactive,
+            is_active=False
+        )
+
+    def _test_topic_to_dict_no_kafka_info(
+        self,
+        base_command,
+        topic_one_active,
+        namespace_one,
+        source_one_active,
+    ):
+        topic_dict = base_command.topic_to_dict(
+            topic_one_active,
+            include_kafka_info=False
+        )
+        self._assert_topic_equals_topic_dict(
+            topic=topic_one_active,
+            topic_dict=topic_dict,
+            namespace_name=namespace_one,
+            source_name=source_one_active,
+            is_active=True,
+            include_kafka_info=False
+        )
+
+    def _test_source_to_dict(
+        self,
+        base_command,
+        source_one_active,
+        source_two_inactive,
+        topic_one_active,
+        topic_two_inactive,
+        namespace_one,
+        namespace_two
+    ):
+        source_one_obj = topic_one_active.source
+        source_two_obj = topic_two_inactive.source
+        source_one_dict = base_command.source_to_dict(source_one_obj)
+        source_two_dict = base_command.source_to_dict(source_two_obj)
+        self._assert_source_equals_source_dict(
+            source=source_one_obj,
+            source_dict=source_one_dict,
+            namespace_name=namespace_one,
+            source_name=source_one_active,
+            active_topic_count=1
+        )
+        self._assert_source_equals_source_dict(
+            source=source_two_obj,
+            source_dict=source_two_dict,
+            namespace_name=namespace_two,
+            source_name=source_two_inactive,
+            active_topic_count=0
+        )
+
+    def _test_namespace_to_dict(
+        self,
+        base_command,
+        topic_one_active,
+        topic_two_active,
+        namespace_one,
+        namespace_two
+    ):
+        namespace_one_obj = topic_one_active.source.namespace
+        namespace_two_obj = topic_two_active.source.namespace
+        namespace_one_dict = base_command.namespace_to_dict(namespace_one_obj)
+        namespace_two_dict = base_command.namespace_to_dict(namespace_two_obj)
+        self._assert_namespace_equals_namespace_dict(
+            namespace=namespace_one_obj,
+            namespace_dict=namespace_one_dict,
+            namespace_name=namespace_one
+        )
+        self._assert_namespace_equals_namespace_dict(
+            namespace=namespace_two_obj,
+            namespace_dict=namespace_two_dict,
+            namespace_name=namespace_two
+        )

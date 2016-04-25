@@ -62,7 +62,6 @@ class TestTailer(object):
             source=source,
             contains_pii=False,
             primary_keys=[],
-            contains_pii=True,
             created_at=time.time() + 10000,
             updated_at=time.time() + 10000
         )]

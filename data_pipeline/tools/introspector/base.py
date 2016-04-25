@@ -17,7 +17,7 @@ from data_pipeline.config import get_config
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 
-class IntrospectorBatch(object):
+class IntrospectorCommand(object):
     """The Data Pipeline Introspector provides information in to the current
     state of the data pipeline using the schematizer, zookeeper, and kafka.
 

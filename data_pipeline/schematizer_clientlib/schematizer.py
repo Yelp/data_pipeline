@@ -750,7 +750,7 @@ class SchematizerClient(object):
             (boolean): If the given schema is compatible with all enabled schemas of the source."""
         response = self._call_api(
             api=self._client.compatibility.is_avro_schema_compatible,
-            post_body={
+            request_body={
                 'source': source_name,
                 'namespace': namespace_name,
                 'schema': avro_schema

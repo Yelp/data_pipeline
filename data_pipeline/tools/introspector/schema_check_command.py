@@ -2,10 +2,10 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from data_pipeline.tools.introspector.base import IntrospectorBatch
+from data_pipeline.tools.introspector.base import IntrospectorCommand
 
 
-class SchemaCheckCommand(IntrospectorBatch):
+class SchemaCheckCommand(IntrospectorCommand):
     @classmethod
     def add_parser(cls, subparsers):
         schema_check_command_parser = subparsers.add_parser(

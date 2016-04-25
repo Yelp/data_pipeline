@@ -4,10 +4,10 @@ from __future__ import unicode_literals
 
 import simplejson
 
-from data_pipeline.tools.introspector.base import IntrospectorBatch
+from data_pipeline.tools.introspector.base import IntrospectorCommand
 
 
-class InfoCommand(IntrospectorBatch):
+class InfoCommand(IntrospectorCommand):
     @classmethod
     def add_parser(cls, subparsers):
         info_command_parser = subparsers.add_parser(

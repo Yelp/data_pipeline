@@ -17,7 +17,7 @@ from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import CreateMessage
 from data_pipeline.producer import Producer
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
-from data_pipeline.tools.introspector.base import IntrospectorBatch
+from data_pipeline.tools.introspector.base import IntrospectorCommand
 
 
 class FakeParserError(Exception):
@@ -82,7 +82,7 @@ class TestBaseCommand(object):
 
     @pytest.fixture
     def batch(self, containers):
-        batch = IntrospectorBatch("data_pipeline_introspector_base")
+        batch = IntrospectorCommand("data_pipeline_introspector_base")
         batch.log.debug = mock.Mock()
         batch.log.info = mock.Mock()
         batch.log.warning = mock.Mock()

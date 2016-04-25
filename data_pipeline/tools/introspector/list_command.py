@@ -7,10 +7,10 @@ import pprint
 
 import simplejson
 
-from data_pipeline.tools.introspector.base import IntrospectorBatch
+from data_pipeline.tools.introspector.base import IntrospectorCommand
 
 
-class ListCommand(IntrospectorBatch):
+class ListCommand(IntrospectorCommand):
 
     list_type_to_fields_map = {
         'topics': [
