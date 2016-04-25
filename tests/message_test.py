@@ -170,15 +170,11 @@ class SharedMessageTest(object):
         )
         return self.message_class(**message_data)
 
-    def _test_payload_diff(self, valid_message_data, payload_data=None, previous_payload_data=None):
+    def _test_payload_diff(self, valid_message_data, payload_data=None):
         valid_message_data.pop('payload', None)
         valid_message_data.pop('previous_payload', None)
-        message_data = self._make_message_data(
-            valid_message_data,
-            payload_data=payload_data,
-            previous_payload_data=previous_payload_data
-        )
-        return self.message_class(**message_data)
+        valid_message_data['payload_data'] = payload_data
+        return self.message_class(**valid_message_data)
 
     def test_accepts_no_meta(self, valid_message_data):
         dry_run_message = self._get_dry_run_message_with_meta(valid_message_data)
@@ -307,11 +303,17 @@ class TestCreateMessage(PayloadOnlyMessageTest):
     def test_payload_diff(self, valid_message_data):
         payload_data={'key1': 1, 'key2': 20}
         message = self._test_payload_diff(valid_message_data, payload_data)
-
-
-        expected = {'key1': PayloadFieldDiff(old_value=FieldValue.EMPTY_DATA, current_value=1), 'key2': PayloadFieldDiff(old_value=FieldValue.EMPTY_DATA, current_value=20)}
+        expected = {
+            'key1': PayloadFieldDiff(
+                old_value=FieldValue.EMPTY_DATA,
+                current_value=1
+            ),
+            'key2': PayloadFieldDiff(
+                old_value=FieldValue.EMPTY_DATA,
+                current_value=20
+            )
+        }
         assert message.payload_diff == expected
-        assert message.has_changed
 
 
 class TestLogMessage(PayloadOnlyMessageTest):
@@ -350,9 +352,17 @@ class TestRefreshMessage(PayloadOnlyMessageTest):
         payload_data={'key1': 1, 'key2': 20}
         message = self._test_payload_diff(valid_message_data, payload_data)
 
-        expected = {'key1': PayloadFieldDiff(old_value=FieldValue.EMPTY_DATA, current_value=1), 'key2': PayloadFieldDiff(old_value=FieldValue.EMPTY_DATA, current_value=20)}
+        expected = {
+            'key1': PayloadFieldDiff(
+                old_value=FieldValue.EMPTY_DATA,
+                current_value=1
+            ),
+            'key2': PayloadFieldDiff(
+                old_value=FieldValue.EMPTY_DATA,
+                current_value=20
+            )
+        }
         assert message.payload_diff == expected
-        assert message.has_changed
 
 
 class TestDeleteMessage(PayloadOnlyMessageTest):
@@ -369,9 +379,17 @@ class TestDeleteMessage(PayloadOnlyMessageTest):
         payload_data={'key1': 1, 'key2': 20}
         message = self._test_payload_diff(valid_message_data, payload_data)
 
-        expected = {'key1': PayloadFieldDiff(old_value=FieldValue.DATA_NOT_AVAILABLE, current_value=1), 'key2': PayloadFieldDiff(old_value=FieldValue.DATA_NOT_AVAILABLE, current_value=20)}
+        expected = {
+            'key1': PayloadFieldDiff(
+                old_value=FieldValue.DATA_NOT_AVAILABLE,
+                current_value=1
+            ),
+            'key2': PayloadFieldDiff(
+                old_value=FieldValue.DATA_NOT_AVAILABLE,
+                current_value=20
+            )
+        }
         assert message.payload_diff == expected
-        assert message.has_changed
 
 
 class TestUpdateMessage(SharedMessageTest):
@@ -473,19 +491,26 @@ class TestUpdateMessage(SharedMessageTest):
                 )
 
     def test_payload_diff(self, valid_message_data):
-        previous_payload_data={'key1': 1, 'key2': 2}
-        payload_data={'key1': 1, 'key2': 20}
-        message = self._test_payload_diff(valid_message_data, payload_data, previous_payload_data)
-
+        valid_message_data.pop('payload', None)
+        valid_message_data.pop('previous_payload', None)
+        message_data = self._make_message_data(
+            valid_message_data,
+            previous_payload_data={'key1': 1, 'key2': 2},
+            payload_data={'key1': 1, 'key2': 20}
+        )
+        message = self.message_class(**message_data)
         expected = {'key2': PayloadFieldDiff(old_value=2, current_value=20)}
         assert message.payload_diff == expected
-        assert message.has_changed
 
     def test_no_payload_diff(self, valid_message_data):
-        previous_payload_data={'key1': 1, 'key2': 2}
-        payload_data={'key1': 1, 'key2': 2}
-        message = self._test_payload_diff(valid_message_data, payload_data, previous_payload_data)
-
+        valid_message_data.pop('payload', None)
+        valid_message_data.pop('previous_payload', None)
+        message_data = self._make_message_data(
+            valid_message_data,
+            previous_payload_data={'key1': 1, 'key2': 2},
+            payload_data={'key1': 1, 'key2': 2}
+        )
+        message = self.message_class(**message_data)
         assert message.payload_diff == {}
         assert not message.has_changed
 
