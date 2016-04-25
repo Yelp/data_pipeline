@@ -49,7 +49,9 @@ class Config(object):
         """Used as a config that will not be overwritten in tests where
         something like load_schematizer_host_and_port_from_smartstack may be.
 
-        Do not overwrite this in your config file, it should only be set manually,
+        Overwrite this configuration for testing purposes only.
+
+        You may also set this configuration manually when starting a test run
         similarly to how it's done in testing_helpers.containers
         """
         return data_pipeline_conf.read_string(
