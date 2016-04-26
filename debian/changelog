@@ -1,3 +1,9 @@
+data-pipeline-tools (0.1.66) lucid; urgency=low
+
+  * Commit: Update to documentation of use_testing_containers config
+
+ -- Justin Cunningham <justinc@yelp.com>  Mon, 25 Apr 2016 17:31:44 -0700
+
 data-pipeline-tools (0.1.65) lucid; urgency=low
 
   * Commit: add more docstring
