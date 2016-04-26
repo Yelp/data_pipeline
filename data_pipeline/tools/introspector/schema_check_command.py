@@ -2,7 +2,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from data_pipeline.tools.introspector.base import IntrospectorCommand
+from data_pipeline.tools.introspector.base_command import IntrospectorCommand
 
 
 class SchemaCheckCommand(IntrospectorCommand):
@@ -10,8 +10,11 @@ class SchemaCheckCommand(IntrospectorCommand):
     def add_parser(cls, subparsers):
         schema_check_command_parser = subparsers.add_parser(
             "schema-check",
-            description="Checks the compatibility of an avro schema with a namespace"
-                        " and source (If given schmea is backward and forward compatible).",
+            description="Checks the compatibility of an avro schema and all"
+                        " given avro_schemas within the given namespace"
+                        " and source. Compatibility means that the schema can"
+                        " deserialize data serialized by existing schemas within"
+                        " all topics and vice-versa.",
             add_help=False
         )
 
@@ -47,7 +50,7 @@ class SchemaCheckCommand(IntrospectorCommand):
 
     def process_args(self, args, parser):
         super(SchemaCheckCommand, self).process_args(args, parser)
-        self.schema = str(args.schema)
+        self.schema = args.schema
         self.process_source_and_namespace_args(args, parser)
 
     def retrieve_names_from_source_id(self, source_id):
@@ -57,7 +60,7 @@ class SchemaCheckCommand(IntrospectorCommand):
 
     def is_compatible(self):
         is_compatible = self.schematizer.is_avro_schema_compatible(
-            avro_schema=self.schema,
+            avro_schema_str=self.schema,
             source_name=self.source_name,
             namespace_name=self.namespace
         )

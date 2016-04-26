@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 from data_pipeline.tools.introspector.models.base import BaseIntrospectorModel
 
+
 class IntrospectorNamespace(BaseIntrospectorModel):
     def __init__(self, namespace_obj, active_namespaces=None):
         super(IntrospectorNamespace, self).__init__(
@@ -22,5 +23,3 @@ class IntrospectorNamespace(BaseIntrospectorModel):
             if active_namespace:
                 self.active_source_count = active_namespace['active_source_count']
                 self.active_topic_count = active_namespace['active_topic_count']
-
-

@@ -26,7 +26,8 @@ Args:
 """
 Topic = namedtuple(
     'Topic',
-    ['topic_id', 'name', 'source', 'contains_pii', 'primary_keys', 'created_at', 'updated_at']
+    ['topic_id', 'name', 'source', 'contains_pii', 'primary_keys',
+     'created_at', 'updated_at']
 )
 
 
@@ -38,9 +39,9 @@ class _Topic(BaseModel):
         self.name = name
         self.source = source
         self.contains_pii = contains_pii
+        self.primary_keys = primary_keys
         self.created_at = created_at
         self.updated_at = updated_at
-        self.primary_keys = primary_keys
 
     @classmethod
     def from_response(cls, response):

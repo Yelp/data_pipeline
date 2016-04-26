@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 from data_pipeline.tools.introspector.models.base import BaseIntrospectorModel
 from data_pipeline.tools.introspector.models.topic import IntrospectorTopic
 
+
 class IntrospectorSchema(BaseIntrospectorModel):
     def __init__(self, schema_obj, include_topic_info=False):
         super(IntrospectorSchema, self).__init__(

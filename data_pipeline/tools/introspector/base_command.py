@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 import datetime
 import logging
 from collections import OrderedDict
+from contextlib import contextmanager
 
 from kafka import KafkaClient
 from swaggerpy.exception import HTTPError
@@ -15,6 +16,10 @@ from yelp_servlib.config_util import load_package_config
 
 from data_pipeline.config import get_config
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+from data_pipeline.tools.introspector.models import IntrospectorNamespace
+from data_pipeline.tools.introspector.models import IntrospectorSchema
+from data_pipeline.tools.introspector.models import IntrospectorSource
+from data_pipeline.tools.introspector.models import IntrospectorTopic
 
 
 class IntrospectorCommand(object):
@@ -30,7 +35,6 @@ class IntrospectorCommand(object):
         self.config = get_config()
         self.log = logging.getLogger(self.log_name)
         self._setup_logging()
-        self.kafka_client = KafkaClient(self.config.cluster_config.broker_list)
         self.schematizer = get_schematizer()
 
     @classmethod
@@ -65,10 +69,19 @@ class IntrospectorCommand(object):
     @cached_property
     def _all_topic_watermarks(self):
         topics = self._kafka_topics
-        return offsets.get_topics_watermarks(
-            self.kafka_client,
-            topics
-        )
+        with self._kafka_client() as kafka_client:
+            return offsets.get_topics_watermarks(
+                kafka_client,
+                topics
+            )
+
+    @contextmanager
+    def _kafka_client(self):
+        kafka_client = KafkaClient(self.config.cluster_config.broker_list)
+        try:
+            yield kafka_client
+        finally:
+            kafka_client.close()
 
     def _retrieve_names_from_source_id(self, source_id):
         """Returns (source_name, namespace_name) of source with given source_id"""
@@ -117,7 +130,7 @@ class IntrospectorCommand(object):
                 output.append(topic_result)
             except HTTPError as e:
                 if e.response.status_code != 404:
-                    raise e
+                    raise
         return output
 
     @cached_property
@@ -134,7 +147,8 @@ class IntrospectorCommand(object):
 
     @cached_property
     def active_topics(self):
-        """A cached list of active topics, meaning that they are in both kafka and the schematizer,
+        """A cached list of active topics,
+        meaning that they are in both kafka and the schematizer,
         and have at least one message.
 
         Each topic include all returned values from the schematizer,
@@ -145,9 +159,11 @@ class IntrospectorCommand(object):
 
     @cached_property
     def active_sources(self):
-        """A cached dictionary of active sources, meaning that they are a source with an active topic.
+        """A cached dictionary of active sources, meaning that they are
+        a source with an active topic.
 
-        Output is dictionary of source_ids to dict of namespace_name and active_topic_count.
+        Output is dictionary of source_ids to
+        dict of namespace_name and active_topic_count.
         """
         self.log.info("Loading active sources...")
         active_sources = {}
@@ -164,9 +180,11 @@ class IntrospectorCommand(object):
 
     @cached_property
     def active_namespaces(self):
-        """A cached dictionary of active namespaces, which are namespaces with at least one active source.
+        """A cached dictionary of active namespaces, which are namespaces
+        with at least one active source.
 
-        Output is a dictionnary of namespace_name to dict of active_source_count and active_topic_count in the namespace.
+        Output is a dictionnary of namespace_name to dict of active_source_count
+        and active_topic_count in the namespace.
         """
         self.log.info("Loading active namespaces...")
         active_namespaces = {}
@@ -201,65 +219,12 @@ class IntrospectorCommand(object):
             return message_count
         return 0
 
-    def schema_to_dict(self, schema, include_topic_info=False):
-        result_dict = self._create_serializable_ordered_dict_from_object_and_fields(
-            schema,
-            ['schema_id', 'base_schema_id', 'status', 'primary_keys', 'created_at',
-             'note', 'schema_json']
-        )
-        if include_topic_info:
-            result_dict['topic'] = self.topic_to_dict(
-                schema.topic,
-                include_kafka_info=False
-            )
-        return result_dict
-
-    def topic_to_dict(self, topic, include_kafka_info=True):
-        result_dict = self._create_serializable_ordered_dict_from_object_and_fields(
-            topic,
-            ['name', 'topic_id', 'primary_keys', 'contains_pii', 'created_at', 'updated_at']
-        )
-        result_dict['source_name'] = topic.source.name
-        result_dict['source_id'] = topic.source.source_id
-        result_dict['namespace'] = topic.source.namespace.name
-        if include_kafka_info:
-            result_dict['in_kafka'] = topic.name in self._kafka_topics
-            result_dict['message_count'] = self._get_topic_message_count(topic)
-        return result_dict
-
-    def source_to_dict(self, source, get_active_topic_count=True):
-        result_dict = self._create_serializable_ordered_dict_from_object_and_fields(
-            source,
-            ['name', 'source_id', 'owner_email']
-        )
-        if get_active_topic_count:
-            active_source = self.active_sources.get(source.source_id, None)
-            result_dict['active_topic_count'] = 0 if (
-                not active_source
-            ) else active_source['active_topic_count']
-        result_dict['namespace'] = source.namespace.name
-        return result_dict
-
-    def namespace_to_dict(self, namespace):
-        result_dict = self._create_serializable_ordered_dict_from_object_and_fields(
-            namespace,
-            ['name', 'namespace_id']
-        )
-        active_namespace = self.active_namespaces.get(namespace.name, None)
-        if active_namespace:
-            result_dict['active_source_count'] = active_namespace['active_source_count']
-            result_dict['active_topic_count'] = active_namespace['active_topic_count']
-        else:
-            result_dict['active_source_count'] = 0
-            result_dict['active_topic_count'] = 0
-        return result_dict
-
     def list_schemas(
         self,
         topic_name
     ):
         schemas = self.schematizer.get_schemas_by_topic(topic_name)
-        schemas = [self.schema_to_dict(schema) for schema in schemas]
+        schemas = [IntrospectorSchema(schema).to_ordered_dict() for schema in schemas]
         schemas.sort(key=lambda schema: schema['created_at'], reverse=True)
         return schemas
 
@@ -280,7 +245,13 @@ class IntrospectorCommand(object):
                 namespace_name=namespace_name,
                 source_name=source_name
             )
-        topics = [self.topic_to_dict(topic) for topic in topics]
+        topics = [
+            IntrospectorTopic(
+                topic,
+                kafka_topics=self._kafka_topics,
+                topics_to_range_map=self._topics_with_messages_to_range_map
+            ).to_ordered_dict() for topic in topics
+        ]
         topics.sort(key=lambda topic: topic['updated_at'], reverse=True)
         if sort_by:
             topics.sort(key=lambda topic: topic[sort_by], reverse=descending_order)
@@ -301,7 +272,12 @@ class IntrospectorCommand(object):
             self.log.info("Getting all sources for each namespace...")
             for namespace in namespaces:
                 sources += self.schematizer.get_sources_by_namespace(namespace.name)
-        sources = [self.source_to_dict(source) for source in sources]
+        sources = [
+            IntrospectorSource(
+                source,
+                active_sources=self.active_sources
+            ).to_ordered_dict() for source in sources
+        ]
         sources.sort(key=lambda source: source['source_id'], reverse=True)
         if sort_by:
             sources.sort(key=lambda source: source[sort_by], reverse=descending_order)
@@ -313,7 +289,12 @@ class IntrospectorCommand(object):
         descending_order=False
     ):
         namespaces = self.schematizer.get_namespaces()
-        namespaces = [self.namespace_to_dict(namespace) for namespace in namespaces]
+        namespaces = [
+            IntrospectorNamespace(
+                namespace,
+                active_namespaces=self.active_namespaces
+            ).to_ordered_dict() for namespace in namespaces
+        ]
         namespaces.sort(key=lambda namespace: namespace['namespace_id'], reverse=True)
         if sort_by:
             namespaces.sort(key=lambda namespace: namespace[sort_by], reverse=descending_order)
@@ -321,7 +302,11 @@ class IntrospectorCommand(object):
 
     def info_topic(self, name):
         topic = self.schematizer.get_topic_by_name(name)
-        topic = self.topic_to_dict(topic)
+        topic = IntrospectorTopic(
+            topic,
+            kafka_topics=self._kafka_topics,
+            topics_to_range_map=self._topics_with_messages_to_range_map
+        ).to_ordered_dict()
         topic['schemas'] = self.list_schemas(name)
         return topic
 
@@ -342,10 +327,9 @@ class IntrospectorCommand(object):
                     break
             if not info_source:
                 raise ValueError("Given SOURCE_NAME|NAMESPACE_NAME doesn't exist")
-        info_source = self.source_to_dict(
-            info_source,
-            get_active_topic_count=False
-        )
+        info_source = IntrospectorSource(
+            info_source
+        ).to_ordered_dict()
         topics = self.list_topics(
             source_id=info_source["source_id"]
         )
@@ -363,7 +347,10 @@ class IntrospectorCommand(object):
                 info_namespace = namespace
                 break
         if info_namespace:
-            namespace = self.namespace_to_dict(namespace)
+            namespace = IntrospectorNamespace(
+                namespace,
+                active_namespaces=self.active_namespaces
+            ).to_ordered_dict()
             namespace['sources'] = self.list_sources(
                 namespace_name=namespace['name']
             )
@@ -378,8 +365,6 @@ class IntrospectorCommand(object):
         handler.setFormatter(logging.Formatter(CONSOLE_FORMAT))
         handler.setLevel(logging.DEBUG)
         self.log.addHandler(handler)
-
-        self.log.setLevel(logging.DEBUG)
 
     def process_args(self, args, parser):
         self.log.setLevel(max(logging.WARNING - (args.verbosity * 10), logging.DEBUG))

@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 from data_pipeline.tools.introspector.models.base import BaseIntrospectorModel
 
+
 class IntrospectorSource(BaseIntrospectorModel):
     def __init__(self, source_obj, active_sources=None):
         super(IntrospectorSource, self).__init__(
@@ -20,4 +21,3 @@ class IntrospectorSource(BaseIntrospectorModel):
             self.active_topic_count = 0 if (
                 not active_source
             ) else active_source['active_topic_count']
-

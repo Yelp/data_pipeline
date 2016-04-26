@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 from data_pipeline.tools.introspector.models.base import BaseIntrospectorModel
 
+
 class IntrospectorTopic(BaseIntrospectorModel):
     def __init__(self, topic_obj, kafka_topics=None, topics_to_range_map=None):
         super(IntrospectorTopic, self).__init__(

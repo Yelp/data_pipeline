@@ -730,7 +730,7 @@ class SchematizerClient(object):
 
     def is_avro_schema_compatible(
         self,
-        avro_schema,
+        avro_schema_str,
         source_name,
         namespace_name
     ):
@@ -741,7 +741,7 @@ class SchematizerClient(object):
             by existing schemas within the same topic and vice versa.
 
         Args:
-            avro_schema (str): json string representing avro_schema to check compatiblity on.
+            avro_schema_str (str): json string representing avro_schema to check compatiblity on.
             source_name (str): name of the source that contains the schemas to check compatibiliy
                 against.
             namespace_name (str): name of namespace containing the given source
@@ -753,7 +753,7 @@ class SchematizerClient(object):
             request_body={
                 'source': source_name,
                 'namespace': namespace_name,
-                'schema': avro_schema
+                'schema': avro_schema_str
             }
         )
         return response

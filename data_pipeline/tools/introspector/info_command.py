@@ -4,7 +4,7 @@ from __future__ import unicode_literals
 
 import simplejson
 
-from data_pipeline.tools.introspector.base import IntrospectorCommand
+from data_pipeline.tools.introspector.base_command import IntrospectorCommand
 
 
 class InfoCommand(IntrospectorCommand):

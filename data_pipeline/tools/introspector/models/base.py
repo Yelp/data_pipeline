@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 import datetime
 from collections import OrderedDict
 
+
 class BaseIntrospectorModel(object):
     def __init__(self, model_obj, excluded_fields=None):
         if not excluded_fields:

@@ -5,12 +5,13 @@ from __future__ import unicode_literals
 import mock
 import pytest
 
-from tests.tools.introspector.base import TestIntrospectorBase
-from data_pipeline.tools.introspector.base import IntrospectorCommand
-from data_pipeline.tools.introspector.models.namespace import IntrospectorNamespace
-from data_pipeline.tools.introspector.models.topic import IntrospectorTopic
-from data_pipeline.tools.introspector.models.schema import IntrospectorSchema
-from data_pipeline.tools.introspector.models.source import IntrospectorSource
+from data_pipeline.tools.introspector.base_command import IntrospectorCommand
+from data_pipeline.tools.introspector.models import IntrospectorNamespace
+from data_pipeline.tools.introspector.models import IntrospectorSchema
+from data_pipeline.tools.introspector.models import IntrospectorSource
+from data_pipeline.tools.introspector.models import IntrospectorTopic
+from tests.tools.introspector.base_test import TestIntrospectorBase
+
 
 @pytest.mark.usefixtures('containers')
 class TestIntrospectorModels(TestIntrospectorBase):
@@ -97,17 +98,15 @@ class TestIntrospectorModels(TestIntrospectorBase):
             is_active=False
         )
 
-    def _test_topic_to_dict_no_kafka_info(
+    def test_introspector_topic_no_kafka_info(
         self,
-        base_command,
         topic_one_active,
         namespace_one,
         source_one_active,
     ):
-        topic_dict = base_command.topic_to_dict(
-            topic_one_active,
-            include_kafka_info=False
-        )
+        topic_dict = IntrospectorTopic(
+            topic_one_active
+        ).to_ordered_dict()
         self._assert_topic_equals_topic_dict(
             topic=topic_one_active,
             topic_dict=topic_dict,
@@ -117,7 +116,7 @@ class TestIntrospectorModels(TestIntrospectorBase):
             include_kafka_info=False
         )
 
-    def _test_source_to_dict(
+    def test_introspector_source(
         self,
         base_command,
         source_one_active,
@@ -129,8 +128,14 @@ class TestIntrospectorModels(TestIntrospectorBase):
     ):
         source_one_obj = topic_one_active.source
         source_two_obj = topic_two_inactive.source
-        source_one_dict = base_command.source_to_dict(source_one_obj)
-        source_two_dict = base_command.source_to_dict(source_two_obj)
+        source_one_dict = IntrospectorSource(
+            source_one_obj,
+            active_sources=base_command.active_sources
+        ).to_ordered_dict()
+        source_two_dict = IntrospectorSource(
+            source_two_obj,
+            active_sources=base_command.active_sources
+        ).to_ordered_dict()
         self._assert_source_equals_source_dict(
             source=source_one_obj,
             source_dict=source_one_dict,
@@ -146,7 +151,22 @@ class TestIntrospectorModels(TestIntrospectorBase):
             active_topic_count=0
         )
 
-    def _test_namespace_to_dict(
+    def test_introspector_source_no_active_sources(
+        self,
+        source_one_active,
+        topic_one_active,
+        namespace_one
+    ):
+        source_obj = topic_one_active.source
+        source_dict = IntrospectorSource(source_obj).to_ordered_dict()
+        self._assert_source_equals_source_dict(
+            source=source_obj,
+            source_dict=source_dict,
+            namespace_name=namespace_one,
+            source_name=source_one_active
+        )
+
+    def test_introspector_namespace(
         self,
         base_command,
         topic_one_active,
@@ -156,8 +176,14 @@ class TestIntrospectorModels(TestIntrospectorBase):
     ):
         namespace_one_obj = topic_one_active.source.namespace
         namespace_two_obj = topic_two_active.source.namespace
-        namespace_one_dict = base_command.namespace_to_dict(namespace_one_obj)
-        namespace_two_dict = base_command.namespace_to_dict(namespace_two_obj)
+        namespace_one_dict = IntrospectorNamespace(
+            namespace_one_obj,
+            active_namespaces=base_command.active_namespaces
+        ).to_ordered_dict()
+        namespace_two_dict = IntrospectorNamespace(
+            namespace_two_obj,
+            active_namespaces=base_command.active_namespaces
+        ).to_ordered_dict()
         self._assert_namespace_equals_namespace_dict(
             namespace=namespace_one_obj,
             namespace_dict=namespace_one_dict,
@@ -167,4 +193,20 @@ class TestIntrospectorModels(TestIntrospectorBase):
             namespace=namespace_two_obj,
             namespace_dict=namespace_two_dict,
             namespace_name=namespace_two
+        )
+
+    def test_introspector_namespace_no_active_namespaces(
+        self,
+        topic_one_active,
+        namespace_one
+    ):
+        namespace_obj = topic_one_active.source.namespace
+        namespace_dict = IntrospectorNamespace(
+            namespace_obj
+        ).to_ordered_dict()
+        self._assert_namespace_equals_namespace_dict(
+            namespace=namespace_obj,
+            namespace_dict=namespace_dict,
+            namespace_name=namespace_one,
+            assert_active_counts=False
         )

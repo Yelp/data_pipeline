@@ -2,7 +2,6 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from collections import namedtuple
 from uuid import uuid4
 
 import mock
@@ -13,16 +12,15 @@ from yelp_avro.testing_helpers.generate_payload_data import \
     generate_payload_data
 from yelp_avro.util import get_avro_schema_object
 
-from data_pipeline.config import get_config
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import CreateMessage
 from data_pipeline.producer import Producer
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
-from data_pipeline.tools.introspector.base import IntrospectorCommand
 
 
 class FakeParserError(Exception):
     pass
+
 
 @pytest.mark.usefixtures('containers')
 class TestIntrospectorBase(object):
@@ -299,7 +297,7 @@ class TestIntrospectorBase(object):
         source_dict,
         namespace_name,
         source_name,
-        active_topic_count
+        active_topic_count=None
     ):
         fields = [
             'name',
@@ -308,7 +306,8 @@ class TestIntrospectorBase(object):
         ]
         for field in fields:
             assert source_dict[field] == getattr(source, field)
-        assert source_dict['active_topic_count'] == active_topic_count
+        if active_topic_count is not None:
+            assert source_dict['active_topic_count'] == active_topic_count
         assert source_dict['namespace'] == namespace_name
         assert source_dict['name'] == source_name
 
@@ -316,9 +315,11 @@ class TestIntrospectorBase(object):
         self,
         namespace,
         namespace_dict,
-        namespace_name
+        namespace_name,
+        assert_active_counts=True
     ):
         assert namespace_dict['namespace_id'] == namespace.namespace_id
         assert namespace_dict['name'] == namespace_name
-        assert namespace_dict['active_topic_count'] == 1
-        assert namespace_dict['active_source_count'] == 1
+        if assert_active_counts:
+            assert namespace_dict['active_topic_count'] == 1
+            assert namespace_dict['active_source_count'] == 1

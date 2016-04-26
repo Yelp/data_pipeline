@@ -889,12 +889,12 @@ class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
         schema_str_incompatible
     ):
         assert schematizer.is_avro_schema_compatible(
-            avro_schema=schema_str,
+            avro_schema_str=schema_str,
             namespace_name=yelp_namespace,
             source_name=biz_src_name
         )
         assert not schematizer.is_avro_schema_compatible(
-            avro_schema=schema_str_incompatible,
+            avro_schema_str=schema_str_incompatible,
             namespace_name=yelp_namespace,
             source_name=biz_src_name
         )
