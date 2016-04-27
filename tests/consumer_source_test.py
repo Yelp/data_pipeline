@@ -9,11 +9,11 @@ import pytest
 
 from data_pipeline.consumer_source import FixedTopics
 from data_pipeline.consumer_source import NewTopicOnlyInDataTarget
-from data_pipeline.consumer_source import NewTopicOnlyInNamespace
+from data_pipeline.consumer_source import NewTopicsOnlyInFixedNamespaces
 from data_pipeline.consumer_source import NewTopicOnlyInSource
 from data_pipeline.consumer_source import SingleSchema
 from data_pipeline.consumer_source import TopicInDataTarget
-from data_pipeline.consumer_source import TopicInNamespace
+from data_pipeline.consumer_source import TopicsInFixedNamespaces
 from data_pipeline.consumer_source import TopicInSource
 from data_pipeline.schematizer_clientlib.models.data_source_type_enum \
     import DataSourceTypeEnum
@@ -49,16 +49,32 @@ class ConsumerSourceTestBase(object):
         return self.random_name('foo_ns')
 
     @pytest.fixture
+    def baz_namespace(self):
+        return self.random_name('baz_ns')
+
+    @pytest.fixture
     def foo_src(self):
         return self.random_name('foo_src')
+
+    @pytest.fixture
+    def baz_src(self):
+        return self.random_name('baz_src')
 
     @pytest.fixture
     def foo_schema(self, foo_namespace, foo_src, _register_schema):
         return _register_schema(foo_namespace, foo_src)
 
     @pytest.fixture
+    def baz_schema(self, baz_namespace, baz_src, _register_schema):
+        return _register_schema(baz_namespace, baz_src)
+
+    @pytest.fixture
     def foo_topic(self, foo_schema):
         return foo_schema.topic.name
+
+    @pytest.fixture
+    def baz_topic(self, baz_schema):
+        return baz_schema.topic.name
 
     @pytest.fixture
     def bar_schema(self, foo_namespace, foo_src, _register_schema):
@@ -71,8 +87,22 @@ class ConsumerSourceTestBase(object):
         return _register_schema(foo_namespace, foo_src, new_schema)
 
     @pytest.fixture
+    def taz_schema(self, baz_namespace, baz_src, _register_schema):
+        new_schema = {
+            'type': 'record',
+            'name': baz_src,
+            'namespace': baz_namespace,
+            'fields': [{'type': 'string', 'name': 'memo'}]
+        }
+        return _register_schema(baz_namespace, baz_src, new_schema)
+
+    @pytest.fixture
     def bar_topic(self, bar_schema):
         return bar_schema.topic.name
+
+    @pytest.fixture
+    def taz_topic(self, taz_schema):
+        return taz_schema.topic.name
 
 
 @pytest.mark.usefixtures('foo_schema', 'bar_schema')
@@ -152,12 +182,16 @@ class TestSingleSchema(FixedTopicsSourceTestBase):
 class NamespaceSrcSetupMixin(ConsumerSourceTestBase):
 
     @pytest.fixture
-    def consumer_source(self, foo_namespace, consumer_source_cls):
-        return consumer_source_cls(namespace_name=foo_namespace)
+    def consumer_source(self, foo_namespace, baz_namespace, consumer_source_cls):
+        return consumer_source_cls(namespace_names=[foo_namespace, baz_namespace])
+
+    @pytest.fixture
+    def consumer_source_topics(self, foo_topic, baz_topic):
+        return [foo_topic, baz_topic]
 
     @pytest.fixture
     def bad_consumer_source(self, consumer_source_cls):
-        return consumer_source_cls(namespace_name='bad namespace')
+        return consumer_source_cls(namespace_names=['bad namespace'])
 
 
 class SourceSrcSetupMixin(ConsumerSourceTestBase):
@@ -169,6 +203,10 @@ class SourceSrcSetupMixin(ConsumerSourceTestBase):
             namespace_name=src.namespace.name,
             source_name=src.name
         )
+
+    @pytest.fixture
+    def consumer_source_topics(self, foo_topic):
+        return [foo_topic]
 
     @pytest.fixture
     def bad_consumer_source(self, foo_src, consumer_source_cls):
@@ -207,6 +245,10 @@ class DataTargetSetupMixin(ConsumerSourceTestBase):
         return consumer_source_cls(data_target.data_target_id)
 
     @pytest.fixture
+    def consumer_source_topics(self, foo_topic):
+        return [foo_topic]
+
+    @pytest.fixture
     def bad_consumer_source(self, schematizer_client, consumer_source_cls):
         bad_data_target = schematizer_client.create_data_target(
             target_type='bad target type',
@@ -215,45 +257,45 @@ class DataTargetSetupMixin(ConsumerSourceTestBase):
         return consumer_source_cls(bad_data_target.data_target_id)
 
 
-@pytest.mark.usefixtures('foo_schema')
+@pytest.mark.usefixtures('foo_schema', 'baz_schema')
 class DynamicTopicSrcTests(ConsumerSourceTestBase):
 
-    def test_get_topics_first_time(self, consumer_source, foo_topic):
-        assert consumer_source.get_topics() == [foo_topic]
+    def test_get_topics_first_time(self, consumer_source, consumer_source_topics):
+        assert consumer_source.get_topics() == consumer_source_topics
 
     def test_get_topics_multiple_times_with_no_new_topics(
         self,
         consumer_source,
-        foo_topic,
+        consumer_source_topics,
     ):
-        assert consumer_source.get_topics() == [foo_topic]
-        assert consumer_source.get_topics() == [foo_topic]
+        assert consumer_source.get_topics() == consumer_source_topics
+        assert consumer_source.get_topics() == consumer_source_topics
 
     def test_pick_up_new_topics(
         self,
         consumer_source,
-        foo_topic,
+        consumer_source_topics,
         foo_src,
         foo_namespace,
         _register_schema,
     ):
-        assert consumer_source.get_topics() == [foo_topic]
+        assert consumer_source.get_topics() == consumer_source_topics
         new_schema = {
             'type': 'record',
             'name': foo_src,
             'namespace': foo_namespace,
             'fields': [{'type': 'bytes', 'name': 'md5'}]
         }
-        new_topic = _register_schema(foo_namespace, foo_src, new_schema).topic.name
-        assert set(consumer_source.get_topics()) == {foo_topic, new_topic}
+        consumer_source_topics.append(_register_schema(foo_namespace, foo_src, new_schema).topic.name)
+        assert set(consumer_source.get_topics()) == set(consumer_source_topics)
 
     def test_not_pick_up_new_topics_in_diff_source(
         self,
         consumer_source,
-        foo_topic,
+        consumer_source_topics,
         _register_schema,
     ):
-        assert consumer_source.get_topics() == [foo_topic]
+        assert consumer_source.get_topics() == consumer_source_topics
         new_schema = {
             'type': 'record',
             'name': 'src_two',
@@ -261,7 +303,7 @@ class DynamicTopicSrcTests(ConsumerSourceTestBase):
             'fields': [{'type': 'bytes', 'name': 'md5'}]
         }
         _register_schema('namespace_two', 'src_two', new_schema)
-        assert consumer_source.get_topics() == [foo_topic]
+        assert consumer_source.get_topics() == consumer_source_topics
 
     def test_bad_consuemr_source(self, bad_consumer_source):
         assert bad_consumer_source.get_topics() == []
@@ -269,15 +311,19 @@ class DynamicTopicSrcTests(ConsumerSourceTestBase):
         assert bad_consumer_source.get_topics() == []
 
 
-class TestTopicsInNamespace(DynamicTopicSrcTests, NamespaceSrcSetupMixin):
+class TestTopicsInFixedNamespaces(DynamicTopicSrcTests, NamespaceSrcSetupMixin):
 
     @pytest.fixture
     def consumer_source_cls(self):
-        return TopicInNamespace
+        return TopicsInFixedNamespaces
+
+    def test_empty_namespace(self):
+        with pytest.raises(ValueError):
+            TopicsInFixedNamespaces(namespace_names=[])
 
     def test_invalid_namespace(self):
         with pytest.raises(ValueError):
-            TopicInNamespace(namespace_name='')
+            TopicsInFixedNamespaces(namespace_names='')
 
 
 class TestTopicsInSource(DynamicTopicSrcTests, SourceSrcSetupMixin):
@@ -372,15 +418,15 @@ class NewTopicOnlySrcTests(ConsumerSourceTestBase):
         assert bad_consumer_source.get_topics() == []
 
 
-class TestNewTopicOnlyInNamespace(NewTopicOnlySrcTests, NamespaceSrcSetupMixin):
+class TestNewTopicsOnlyInFixedNamespaces(NewTopicOnlySrcTests, NamespaceSrcSetupMixin):
 
     @pytest.fixture
     def consumer_source_cls(self):
-        return NewTopicOnlyInNamespace
+        return NewTopicsOnlyInFixedNamespaces
 
     def test_invalid_namespace(self):
         with pytest.raises(ValueError):
-            NewTopicOnlyInNamespace(namespace_name='')
+            NewTopicsOnlyInFixedNamespaces(namespace_names=[])
 
 
 class TestNewTopicOnlyInSource(NewTopicOnlySrcTests, SourceSrcSetupMixin):

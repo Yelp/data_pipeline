@@ -22,7 +22,7 @@ from tests.base_consumer_test import SingleSchemaSetupMixin
 from tests.base_consumer_test import SingleTopicSetupMixin
 from tests.base_consumer_test import TIMEOUT
 from tests.base_consumer_test import TopicInDataTargetSetupMixin
-from tests.base_consumer_test import TopicInNamespaceSetupMixin
+from tests.base_consumer_test import TopicsInFixedNamespacesSetupMixin
 from tests.base_consumer_test import TopicInSourceSetupMixin
 from tests.helpers.config import reconfigure
 
@@ -222,9 +222,9 @@ class ConsumerRefreshDynamicTopicTests(RefreshDynamicTopicTests):
         )
 
 
-class TestRefreshTopicInNamespace(
+class TestRefreshTopicsInFixedNamespaces(
     ConsumerRefreshDynamicTopicTests,
-    TopicInNamespaceSetupMixin
+    TopicsInFixedNamespacesSetupMixin
 ):
     pass
 

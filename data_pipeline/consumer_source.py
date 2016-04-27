@@ -48,23 +48,27 @@ class FixedTopics(ConsumerSource):
         return self.topics
 
 
-class TopicInNamespace(ConsumerSource):
+class TopicsInFixedNamespaces(ConsumerSource):
     """Consumer tails the topics in the specified namespace.
 
     Args:
         namespace_name (str): Namespace name in which all the topics will be
             tailed by the consumer.
     """
+    #ToDo: I'll update the docstring before the final review.
 
-    def __init__(self, namespace_name):
-        if not namespace_name:
-            raise ValueError("namespace_name must be specified.")
-        self.namespace_name = namespace_name
+    def __init__(self, namespace_names):
+        if not any(namespace_names):
+            raise ValueError("At least one namespace must be specified.")
+        self.namespace_names = namespace_names
 
     def get_topics(self):
-        topics = self.schematizer.get_topics_by_criteria(
-            namespace_name=self.namespace_name
-        )
+        topics = [
+            topics for namespace_name in self.namespace_names
+            for topics in self.schematizer.get_topics_by_criteria(
+                namespace_name=namespace_name
+            )
+        ]
         return [topic.name for topic in topics]
 
 
@@ -131,7 +135,7 @@ class TopicInDataTarget(ConsumerSource):
         return [topic.name for topic in topics]
 
 
-class NewTopicOnlyInNamespace(TopicInNamespace):
+class NewTopicsOnlyInFixedNamespaces(TopicsInFixedNamespaces):
     """Consumer tails the topics in the specified namespace, but it internally
     keeps track the previous query timestamp and only returns the topics created
     after the last query timestamp, including the topics created at the last
@@ -142,16 +146,20 @@ class NewTopicOnlyInNamespace(TopicInNamespace):
         namespace_name (str): Namespace name in which all the topics will be
             tailed by the consumer.
     """
+    #ToDo: I'll update the docstring before the final review.
 
-    def __init__(self, namespace_name):
-        super(NewTopicOnlyInNamespace, self).__init__(namespace_name)
+    def __init__(self, namespace_names):
+        super(NewTopicsOnlyInFixedNamespaces, self).__init__(namespace_names)
         self.last_query_timestamp = None
 
     def get_topics(self):
-        topics = self.schematizer.get_topics_by_criteria(
-            namespace_name=self.namespace_name,
-            created_after=self.last_query_timestamp
-        )
+        topics = [
+            topics for namespace_name in self.namespace_names
+            for topics in self.schematizer.get_topics_by_criteria(
+                namespace_name=namespace_name,
+                created_after=self.last_query_timestamp
+            )
+        ]
         self.last_query_timestamp = long(time.time())
         return [topic.name for topic in topics]
 
