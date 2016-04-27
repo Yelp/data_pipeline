@@ -109,16 +109,17 @@ class TestFileBootstrapperBase(object):
         ]
 
     def test_register_schema_docs_fills_all_docs(
-            self,
-            schema_ref,
-            mock_schema_result,
-            bootstrapper,
-            good_source_ref,
-            good_field_ref
+        self,
+        schema_ref,
+        mock_schema_result,
+        bootstrapper,
+        good_source_ref,
+        good_field_ref,
+        source
     ):
         bootstrapper.register_schema_docs(
             schema_result=mock_schema_result,
-            source_ref=schema_ref.get_source_ref('good_source')
+            source_ref=schema_ref.get_source_ref(source)
         )
         expected_schema_obj = json.loads(mock_schema_result.schema)
         expected_schema_obj['doc'] = good_source_ref['doc']
@@ -351,7 +352,7 @@ class TestAVSCBootstrapper(object):
                 bootstrapper.api.schemas.register_schema,
                 body={
                     'schema': example_schema,
-                    'namespace': 'test_namespace',
+                    'namespace': good_source_ref['namespace'],
                     'source': good_source_ref['source'],
                     'source_owner_email': good_source_ref['owner_email'],
                     'contains_pii': good_source_ref['contains_pii']
