@@ -150,18 +150,24 @@ class NewTopicsOnlyInFixedNamespaces(TopicsInFixedNamespaces):
 
     def __init__(self, namespace_names):
         super(NewTopicsOnlyInFixedNamespaces, self).__init__(namespace_names)
-        self.last_query_timestamp = None
+        self.last_query_timestamp = {}
+        for namespace in self.namespace_names:
+            self.last_query_timestamp[namespace] = None
 
     def get_topics(self):
-        topics = [
-            topics for namespace_name in self.namespace_names
-            for topics in self.schematizer.get_topics_by_criteria(
-                namespace_name=namespace_name,
-                created_after=self.last_query_timestamp
+        topic_names = []
+        for namespace_name in self.namespace_names:
+            topic_names.extend(
+                [
+                    topic.name
+                    for topic in self.schematizer.get_topics_by_criteria(
+                        namespace_name=namespace_name,
+                        created_after=self.last_query_timestamp[namespace_name]
+                    )
+                ]
             )
-        ]
-        self.last_query_timestamp = long(time.time())
-        return [topic.name for topic in topics]
+            self.last_query_timestamp[namespace_name] = long(time.time())
+        return topic_names
 
 
 class NewTopicOnlyInSource(TopicInSource):

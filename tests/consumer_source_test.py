@@ -338,21 +338,21 @@ class TestTopicsInDataTarget(DynamicTopicSrcTests, DataTargetSetupMixin):
             TopicInDataTarget(data_target_id=0)
 
 
-@pytest.mark.usefixtures('foo_schema')
+@pytest.mark.usefixtures('foo_schema','baz_schema')
 class NewTopicOnlySrcTests(ConsumerSourceTestBase):
 
-    def test_get_topics_first_time(self, consumer_source, foo_topic):
-        assert consumer_source.get_topics() == [foo_topic]
+    def test_get_topics_first_time(self, consumer_source, consumer_source_topics):
+        assert consumer_source.get_topics() == consumer_source_topics
 
     def test_get_topics_multiple_times_with_no_new_topics(
         self,
         consumer_source,
-        foo_topic,
+        consumer_source_topics
     ):
         # Wait some time so that the 1st query time is at least 1 second apart
         # from `foo_topic` creation timestamp to avoid flaky test
         time.sleep(1)
-        assert consumer_source.get_topics() == [foo_topic]
+        assert consumer_source.get_topics() == consumer_source_topics
         # Because the timestamp is rounded up to seconds, here it makes the 2nd
         # query time is at least 1 second after the 1st query to avoid flaky test
         time.sleep(1)
@@ -361,13 +361,13 @@ class NewTopicOnlySrcTests(ConsumerSourceTestBase):
     def test_pick_up_new_topics(
         self,
         consumer_source,
-        foo_topic,
+        consumer_source_topics,
         foo_src,
         foo_namespace,
         _register_schema,
     ):
         time.sleep(1)
-        assert consumer_source.get_topics() == [foo_topic]
+        assert consumer_source.get_topics() == consumer_source_topics
 
         time.sleep(1)
         new_schema = {
@@ -382,11 +382,11 @@ class NewTopicOnlySrcTests(ConsumerSourceTestBase):
     def test_not_pick_up_new_topics_in_diff_source(
         self,
         consumer_source,
-        foo_topic,
+        consumer_source_topics,
         _register_schema,
     ):
         time.sleep(1)
-        assert consumer_source.get_topics() == [foo_topic]
+        assert consumer_source.get_topics() == consumer_source_topics
 
         time.sleep(1)
         new_schema = {
