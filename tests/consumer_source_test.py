@@ -87,8 +87,22 @@ class ConsumerSourceTestBase(object):
         return _register_schema(foo_namespace, foo_src, new_schema)
 
     @pytest.fixture
+    def taz_schema(self, baz_namespace, baz_src, _register_schema):
+        new_schema = {
+            'type': 'record',
+            'name': baz_src,
+            'namespace': baz_namespace,
+            'fields': [{'type': 'string', 'name': 'memo'}]
+        }
+        return _register_schema(baz_namespace, baz_src, new_schema)
+
+    @pytest.fixture
     def bar_topic(self, bar_schema):
         return bar_schema.topic.name
+
+    @pytest.fixture
+    def taz_topic(self, taz_schema):
+        return taz_schema.topic.name
 
 
 @pytest.mark.usefixtures('foo_schema', 'bar_schema')
