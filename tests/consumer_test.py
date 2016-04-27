@@ -107,6 +107,55 @@ class TestConsumer(BaseConsumerTest):
             post_rebalance_callback=post_rebalance_callback
         )
 
+    def test_offset_cache_cleared_after_rebalance(
+        self,
+        topic,
+        pii_topic,
+        publish_messages,
+        consumer_instance,
+        consumer_two_instance,
+        message,
+        pii_message
+    ):
+        """
+        This test starts a consumer (consumer_one) with two topics and
+        retrieves a message and starts another consumer (consumer_two)
+        with the same name in a separate process. This test asserts that
+        everytime a consumer under goes rebalance
+        topic_to_partition_offset_map_cache is reset.
+        """
+        consumer_one_rebalanced_event = Event()
+        with consumer_instance as consumer_one:
+            # publishing messages on two topics
+            publish_messages(message, count=10)
+            publish_messages(pii_message, count=10)
+
+            consumer_two_process = Process(
+                target=self._run_consumer_two,
+                args=(consumer_two_instance, consumer_one_rebalanced_event)
+            )
+            consumer_two_process.start()
+            for _ in range(2):
+                consumer_one.commit_message(
+                    consumer_one.get_message(blocking=True, timeout=TIMEOUT)
+                )
+            assert len(consumer_one.topic_to_partition_offset_map_cache) > 0
+
+            consumer_one_rebalanced_event.set()
+            consumer_two_process.join()
+
+            consumer_one_msgs = []
+            # post rebalance callback is not called untill consumer
+            # talks to kafka
+            for _ in range(8):
+                consumer_one_msgs.append(consumer_one.get_message(
+                    blocking=True, timeout=TIMEOUT
+                ))
+            assert len(consumer_one.topic_to_partition_offset_map_cache) == 0
+
+            consumer_one.commit_messages(consumer_one_msgs)
+            assert len(consumer_one.topic_to_partition_offset_map_cache) > 0
+
     def test_sync_topic_consumer_map(
         self,
         topic,
@@ -128,7 +177,6 @@ class TestConsumer(BaseConsumerTest):
         the original topics have been reassigned to consumer one.
         """
         consumer_one_rebalanced_event = Event()
-
         with consumer_instance as consumer_one:
             # publishing messages on two topics
             publish_messages(message, count=10)
@@ -151,7 +199,7 @@ class TestConsumer(BaseConsumerTest):
             consumer_one_rebalanced_event.set()
             consumer_two_process.join()
 
-            for _ in range(6):
+            for _ in range(8):
                 consumer_one.get_message(blocking=True, timeout=TIMEOUT)
             assert len(consumer_one.topic_to_consumer_topic_state_map) == 2
 
@@ -161,7 +209,7 @@ class TestConsumer(BaseConsumerTest):
             another_consumer.get_message(blocking=True, timeout=TIMEOUT)
             rebalanced_event.wait()
 
-            for _ in range(8):
+            for _ in range(9):
                 another_consumer.get_message(blocking=True, timeout=TIMEOUT)
 
 

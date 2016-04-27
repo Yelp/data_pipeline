@@ -79,49 +79,72 @@ class BaseConsumerTest(object):
     def test_skip_commit_offset_if_offset_unchanged(
             self,
             publish_messages,
-            consumer
+            message,
+            consumer_instance
     ):
-        publish_messages(2)
-        msgs = consumer.get_messages(
-            count=2,
-            blocking=True,
-            timeout=TIMEOUT
-        )
-        assert len(msgs) == 2
-        consumer.commit_messages(msgs)
-        with mock.patch.object(
-            consumer.kafka_client,
-            'send_offset_commit_request'
-        ) as mock_send_offset_commit_request:
+        with consumer_instance as consumer:
+            publish_messages(message, 2)
+            msgs = consumer.get_messages(
+                count=2,
+                blocking=True,
+                timeout=TIMEOUT
+            )
+            assert len(msgs) == 2
             consumer.commit_messages(msgs)
-            assert not mock_send_offset_commit_request.called
+            with mock.patch.object(
+                consumer.kafka_client,
+                'send_offset_commit_request'
+            ) as mock_send_offset_commit_request:
+                consumer.commit_messages(msgs)
+                assert not mock_send_offset_commit_request.called
 
     def test_call_kafka_commit_offsets_when_offset_change(
             self,
             publish_messages,
-            consumer
+            message,
+            consumer_instance
     ):
-        publish_messages(4)
-        msgs = consumer.get_messages(
-            count=4,
-            blocking=True,
-            timeout=TIMEOUT
-        )
-        assert len(msgs) == 4
-        consumer.commit_messages(msgs)
-        with mock.patch.object(
-            consumer.kafka_client,
-            'send_offset_commit_request'
-        ) as mock_send_offset_commit_request:
-            consumer.commit_message(msgs[0])
-            assert mock_send_offset_commit_request.called
+        with consumer_instance as consumer:
+            publish_messages(message, 4)
+            msgs = consumer.get_messages(
+                count=4,
+                blocking=True,
+                timeout=TIMEOUT
+            )
+            assert len(msgs) == 4
+            consumer.commit_messages(msgs)
+            with mock.patch.object(
+                consumer.kafka_client,
+                'send_offset_commit_request'
+            ) as mock_send_offset_commit_request:
+                consumer.commit_message(msgs[0])
+                assert mock_send_offset_commit_request.called
 
-            consumer.commit_message(msgs[2])
-            assert mock_send_offset_commit_request.called
+                consumer.commit_message(msgs[2])
+                assert mock_send_offset_commit_request.called
 
-        # commiting last msg in kafka queue to ensure
-        # other tests work fine
-        consumer.commit_message(msgs[3])
+    def test_offset_cache_reset_on_topic_reset(
+            self,
+            publish_messages,
+            message,
+            consumer_instance
+    ):
+        with consumer_instance as consumer:
+            publish_messages(message, 4)
+            msgs = consumer.get_messages(
+                count=4,
+                blocking=True,
+                timeout=TIMEOUT
+            )
+            assert len(msgs) == 4
+
+            assert len(consumer.topic_to_partition_offset_map_cache) == 0
+            consumer.commit_messages(msgs)
+            assert len(consumer.topic_to_partition_offset_map_cache) > 0
+
+            topic_map = consumer.topic_to_consumer_topic_state_map
+            consumer.reset_topics(topic_to_consumer_topic_state_map=topic_map)
+            assert len(consumer.topic_to_partition_offset_map_cache) == 0
 
     def test_get_message_none(self, consumer_instance, topic):
         with consumer_instance as consumer:
