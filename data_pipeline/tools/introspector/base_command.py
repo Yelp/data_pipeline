@@ -69,7 +69,7 @@ class IntrospectorCommand(object):
 
         parser.add_argument(
             "--source-name",
-            type=int,
+            type=str,
             required=False,
             default=None,
             help="Source name of source to check against. "

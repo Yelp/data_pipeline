@@ -27,8 +27,8 @@ class SourcesListCommand(_BaseListCommand):
 
         list_command_parser.add_argument(
             "--namespace",
-            required=True,
             type=str,
+            default=None,
             help="Namespace name that contains a source of source name given. "
                  "If --source-id is given, then this will be ignored."
         )
