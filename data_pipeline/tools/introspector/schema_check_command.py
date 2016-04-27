@@ -19,27 +19,12 @@ class SchemaCheckCommand(IntrospectorCommand):
         )
 
         cls.add_base_arguments(schema_check_command_parser)
+        cls.add_source_and_namespace_arguments(schema_check_command_parser)
 
         schema_check_command_parser.add_argument(
             "schema",
             type=str,
             help="The avro schema to check."
-        )
-
-        schema_check_command_parser.add_argument(
-            "source",
-            type=str,
-            help="Source id or name of source to check against. If a name is given, "
-                 "then --namespace must be provided"
-        )
-
-        schema_check_command_parser.add_argument(
-            "--namespace",
-            required=False,
-            type=str,
-            default=None,
-            help="Namespace name that contains a source of source name given. "
-                 "If a source id is given, then this will be ignored."
         )
 
         schema_check_command_parser.set_defaults(
@@ -50,13 +35,8 @@ class SchemaCheckCommand(IntrospectorCommand):
 
     def process_args(self, args, parser):
         super(SchemaCheckCommand, self).process_args(args, parser)
-        self.schema = args.schema
         self.process_source_and_namespace_args(args, parser)
-
-    def retrieve_names_from_source_id(self, source_id):
-        """Returns (source_name, namespace_name) of source with given source_id"""
-        source = self.schematizer.get_source_by_id(source_id)
-        return (source.name, source.namespace.name)
+        self.schema = args.schema
 
     def is_compatible(self):
         is_compatible = self.schematizer.is_avro_schema_compatible(

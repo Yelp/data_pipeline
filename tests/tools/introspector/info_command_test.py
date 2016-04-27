@@ -2,201 +2,212 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from collections import namedtuple
-
 import mock
 import pytest
 
-from data_pipeline.tools.introspector.info_command import InfoCommand
+from data_pipeline.tools.introspector.info.namespace import NamespaceInfoCommand
+from data_pipeline.tools.introspector.info.source import SourceInfoCommand
+from data_pipeline.tools.introspector.info.topic import TopicInfoCommand
+from tests.tools.introspector.base_test import TestIntrospectorBase
 
 
-class FakeParserError(Exception):
-    pass
-
-Args = namedtuple(
-    "Namespace", [
-        "info_type",
-        "identifier",
-        "verbosity"
-    ]
-)
-
-
-class TestInfoCommand(object):
+class TestTopicInfoCommand(TestIntrospectorBase):
 
     @pytest.fixture
-    def info_command(self):
-        info_command = InfoCommand("data_pipeline_introspector_info")
-        info_command.log = mock.Mock()
-        info_command.log.info = mock.Mock()
-        info_command.log.debug = mock.Mock()
-        info_command.log.warning = mock.Mock()
-        # Need to have return_values since we won't mock simplejson if
-        # we don't have to
-        info_command.info_topic = mock.Mock(return_value={})
-        info_command.info_source = mock.Mock(return_value={})
-        info_command.info_namespace = mock.Mock(return_value={})
-        return info_command
+    def command(self, containers):
+        command = TopicInfoCommand("data_pipeline_introspector_info_topic")
+        command.log.debug = mock.Mock()
+        command.log.info = mock.Mock()
+        command.log.warning = mock.Mock()
+        return command
 
-    @pytest.fixture
-    def parser(self):
-        parser = mock.Mock()
-        parser.error = FakeParserError
-        return parser
-
-    @pytest.fixture
-    def namespace_name(self):
-        return "test_namespace"
-
-    @pytest.fixture
-    def source_name(self):
-        return "test_source"
-
-    @pytest.fixture
-    def compacted_names(self, source_name, namespace_name):
-        return "|".join([source_name, namespace_name])
-
-    @pytest.fixture(params=["too_few_names", "too|many|names"])
-    def bad_name(self, request):
-        return request.param
-
-    @pytest.fixture
-    def source_id(self):
-        return "42"
-
-    @pytest.fixture
-    def topic_name(self):
-        return "test_topic"
-
-    def _create_fake_args(
+    def test_list_schemas(
         self,
-        info_type,
-        identifier
+        command,
+        schematizer,
+        topic_one_active,
+        schema_one_active
     ):
-        return Args(
-            info_type=info_type,
-            identifier=identifier,
-            verbosity=0
+        actual_schemas = command.list_schemas(topic_one_active.name)
+        topic_schema = schematizer.get_latest_schema_by_topic_name(
+            topic_one_active.name
+        )
+        assert len(actual_schemas) == 1
+        self._assert_schema_equals_schema_dict(
+            topic_schema=topic_schema,
+            schema_obj=schema_one_active,
+            schema_dict=actual_schemas[0]
         )
 
-    def _assert_info_command_values(
+    def test_info_topic(
         self,
-        info_command,
-        info_type,
-        identifier,
-        namespace_name=None,
-        source_id=None,
-        source_name=None
+        command,
+        schematizer,
+        schema_one_active,
+        namespace_one,
+        source_one_active,
+        topic_one_active
     ):
-        assert info_command.info_type == info_type
-        assert info_command.identifier == identifier
-        if info_type == "source":
-            assert info_command.namespace_name == namespace_name
-            assert info_command.source_id == source_id
-            assert info_command.source_name == source_name
-
-    def test_topic(self, info_command, parser, topic_name):
-        args = self._create_fake_args(
-            info_type="topic",
-            identifier=topic_name
+        topic_schema = schematizer.get_latest_schema_by_topic_name(
+            topic_one_active.name
         )
-        info_command.run(args, parser)
-        self._assert_info_command_values(
-            info_command,
-            info_type="topic",
-            identifier=topic_name
+        topic_dict = command.info_topic(topic_one_active.name)
+        self._assert_topic_equals_topic_dict(
+            topic=topic_one_active,
+            topic_dict=topic_dict,
+            namespace_name=namespace_one,
+            source_name=source_one_active,
+            is_active=True
         )
-        info_command.info_topic.assert_called_once_with(topic_name)
-        assert info_command.info_source.call_count == 0
-        assert info_command.info_namespace.call_count == 0
+        actual_schemas = topic_dict['schemas']
+        assert len(actual_schemas) == 1
+        self._assert_schema_equals_schema_dict(
+            topic_schema=topic_schema,
+            schema_obj=schema_one_active,
+            schema_dict=actual_schemas[0]
+        )
 
-    def test_source_name(
+
+class TestSourceInfoCommand(TestIntrospectorBase):
+
+    @pytest.fixture
+    def command(self, containers):
+        command = SourceInfoCommand("data_pipeline_introspector_info_source")
+        command.log.debug = mock.Mock()
+        command.log.info = mock.Mock()
+        command.log.warning = mock.Mock()
+        return command
+
+    def test_info_source_id(
         self,
-        info_command,
-        parser,
-        source_name,
-        namespace_name,
-        compacted_names
+        command,
+        topic_one_inactive,
+        topic_one_inactive_b,
+        source_one_inactive,
+        namespace_one
     ):
-        args = self._create_fake_args(
-            info_type="source",
-            identifier=compacted_names
-        )
-        info_command.run(args, parser)
-        self._assert_info_command_values(
-            info_command,
-            info_type="source",
-            identifier=compacted_names,
-            namespace_name=namespace_name,
-            source_name=source_name
-        )
-        info_command.info_source.assert_called_once_with(
-            source_id=None,
-            source_name=source_name,
-            namespace_name=namespace_name
-        )
-        assert info_command.info_topic.call_count == 0
-        assert info_command.info_namespace.call_count == 0
-
-    def test_source_id(
-        self,
-        info_command,
-        parser,
-        source_id
-    ):
-        args = self._create_fake_args(
-            info_type="source",
-            identifier=source_id
-        )
-        info_command.run(args, parser)
-        self._assert_info_command_values(
-            info_command,
-            info_type="source",
-            identifier=source_id,
-            source_id=int(source_id)
-        )
-        info_command.info_source.assert_called_once_with(
-            source_id=int(source_id),
+        source_obj = topic_one_inactive.source
+        source_dict = command.info_source(
+            source_id=source_obj.source_id,
             source_name=None,
             namespace_name=None
         )
-        assert info_command.info_topic.call_count == 0
-        assert info_command.info_namespace.call_count == 0
+        self._assert_source_equals_source_dict(
+            source=source_obj,
+            source_dict=source_dict,
+            namespace_name=namespace_one,
+            source_name=source_one_inactive,
+            active_topic_count=0
+        )
+        source_topics = source_dict['topics']
+        assert len(source_topics) == 2
 
-    def test_namespace(
-        self,
-        info_command,
-        parser,
-        namespace_name
-    ):
-        args = self._create_fake_args(
-            info_type="namespace",
-            identifier=namespace_name
+        sorted_expected_topics = sorted(
+            [topic_one_inactive, topic_one_inactive_b],
+            key=lambda topic: topic.topic_id
         )
-        info_command.run(args, parser)
-        self._assert_info_command_values(
-            info_command,
-            info_type="namespace",
-            identifier=namespace_name,
-            namespace_name=namespace_name
+        sorted_actual_topics = sorted(
+            source_topics,
+            key=lambda topic_dict: topic_dict['topic_id']
         )
-        info_command.info_namespace.assert_called_once_with(
-            namespace_name
+        self._assert_topic_equals_topic_dict(
+            topic=sorted_expected_topics[0],
+            topic_dict=sorted_actual_topics[0],
+            namespace_name=namespace_one,
+            source_name=source_one_inactive,
+            is_active=False
         )
-        assert info_command.info_topic.call_count == 0
-        assert info_command.info_source.call_count == 0
+        self._assert_topic_equals_topic_dict(
+            topic=sorted_expected_topics[1],
+            topic_dict=sorted_actual_topics[1],
+            namespace_name=namespace_one,
+            source_name=source_one_inactive,
+            is_active=False
+        )
 
-    def test_bad_source_names(
+    def test_info_source_missing_source_name(
         self,
-        info_command,
-        parser,
-        bad_name
+        command,
+        namespace_one
     ):
-        args = self._create_fake_args(
-            info_type="source",
-            identifier=bad_name
-        )
-        with pytest.raises(FakeParserError) as e:
-            info_command.run(args, parser)
+        with pytest.raises(ValueError) as e:
+            command.info_source(
+                source_id=None,
+                source_name="this_source_will_not_exist",
+                namespace_name=namespace_one
+            )
         assert e.value.args
-        assert "Source identifier must be" in e.value.args[0]
+        assert "Given SOURCE_NAME|NAMESPACE_NAME doesn't exist" in e.value.args[0]
+
+    def test_info_source_name_pair(
+        self,
+        command,
+        topic_one_active,
+        source_one_active,
+        namespace_one
+    ):
+        source_dict = command.info_source(
+            source_id=None,
+            source_name=source_one_active,
+            namespace_name=namespace_one
+        )
+        source_obj = topic_one_active.source
+        self._assert_source_equals_source_dict(
+            source=source_obj,
+            source_dict=source_dict,
+            namespace_name=namespace_one,
+            source_name=source_one_active,
+            active_topic_count=1
+        )
+        source_topics = source_dict['topics']
+        assert len(source_topics) == 1
+        self._assert_topic_equals_topic_dict(
+            topic=topic_one_active,
+            topic_dict=source_topics[0],
+            namespace_name=namespace_one,
+            source_name=source_one_active,
+            is_active=True
+        )
+
+
+class TestNamespaceInfoCommand(TestIntrospectorBase):
+
+    @pytest.fixture
+    def command(self, containers):
+        command = NamespaceInfoCommand("data_pipeline_introspector_info_namespace")
+        command.log.debug = mock.Mock()
+        command.log.info = mock.Mock()
+        command.log.warning = mock.Mock()
+        return command
+
+    def test_info_namespace_missing(
+        self,
+        command
+    ):
+        with pytest.raises(ValueError) as e:
+            command.info_namespace("not_a_namespace")
+        assert e.value.args
+        assert "Given namespace doesn't exist" in e.value.args[0]
+
+    def test_info_namespace(
+        self,
+        command,
+        namespace_two,
+        source_two_inactive,
+        source_two_active,
+        topic_two_active
+    ):
+        namespace_obj = topic_two_active.source.namespace
+        namespace_dict = command.info_namespace(namespace_two)
+        self._assert_namespace_equals_namespace_dict(
+            namespace=namespace_obj,
+            namespace_dict=namespace_dict,
+            namespace_name=namespace_two
+        )
+        namespace_sources = namespace_dict['sources']
+        assert len(namespace_sources) == 2
+        if namespace_sources[0]['name'] == source_two_active:
+            assert namespace_sources[1]['name'] == source_two_inactive
+        else:
+            assert namespace_sources[0]['name'] == source_two_inactive
+            assert namespace_sources[1]['name'] == source_two_active

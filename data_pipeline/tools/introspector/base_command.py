@@ -17,7 +17,6 @@ from yelp_servlib.config_util import load_package_config
 from data_pipeline.config import get_config
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.tools.introspector.models import IntrospectorNamespace
-from data_pipeline.tools.introspector.models import IntrospectorSchema
 from data_pipeline.tools.introspector.models import IntrospectorSource
 from data_pipeline.tools.introspector.models import IntrospectorTopic
 
@@ -58,6 +57,34 @@ class IntrospectorCommand(object):
             help="Adjust log level"
         )
 
+    @classmethod
+    def add_source_and_namespace_arguments(cls, parser):
+        parser.add_argument(
+            "--source-id",
+            type=int,
+            required=False,
+            default=None,
+            help="Source id of source to check against"
+        )
+
+        parser.add_argument(
+            "--source-name",
+            type=int,
+            required=False,
+            default=None,
+            help="Source name of source to check against. "
+                 "Must be used with --namespace"
+        )
+
+        parser.add_argument(
+            "--namespace",
+            required=False,
+            type=str,
+            default=None,
+            help="Namespace name that contains a source of source name given. "
+                 "If --source-id is given, then this will be ignored."
+        )
+
     @cached_property
     def _kafka_topics(self):
         with ZK(self.config.cluster_config) as zk:
@@ -89,11 +116,10 @@ class IntrospectorCommand(object):
         return (source.name, source.namespace.name)
 
     def process_source_and_namespace_args(self, args, parser):
-        self.source_id = None
-        self.source_name = None
-        self.namespace = None
-        if args.source.isdigit():
-            self.source_id = int(args.source)
+        self.source_id = args.source_id
+        self.source_name = args.source_name
+        self.namespace = args.namespace
+        if self.source_id:
             self.source_name, self.namespace = self._retrieve_names_from_source_id(
                 self.source_id
             )
@@ -102,12 +128,10 @@ class IntrospectorCommand(object):
                     "Since source id was given, --namespace will be ignored"
                 )
         else:
-            self.source_name = args.source
-            if not args.namespace:
+            if not self.namespace:
                 raise parser.error(
                     "--namespace must be provided when given a source name as source identifier."
                 )
-            self.namespace = args.namespace
 
     def _does_topic_range_map_have_messages(self, range_map):
         range_sum = 0
@@ -219,15 +243,6 @@ class IntrospectorCommand(object):
             return message_count
         return 0
 
-    def list_schemas(
-        self,
-        topic_name
-    ):
-        schemas = self.schematizer.get_schemas_by_topic(topic_name)
-        schemas = [IntrospectorSchema(schema).to_ordered_dict() for schema in schemas]
-        schemas.sort(key=lambda schema: schema['created_at'], reverse=True)
-        return schemas
-
     def list_topics(
         self,
         source_id=None,
@@ -299,64 +314,6 @@ class IntrospectorCommand(object):
         if sort_by:
             namespaces.sort(key=lambda namespace: namespace[sort_by], reverse=descending_order)
         return namespaces
-
-    def info_topic(self, name):
-        topic = self.schematizer.get_topic_by_name(name)
-        topic = IntrospectorTopic(
-            topic,
-            kafka_topics=self._kafka_topics,
-            topics_to_range_map=self._topics_with_messages_to_range_map
-        ).to_ordered_dict()
-        topic['schemas'] = self.list_schemas(name)
-        return topic
-
-    def info_source(
-        self,
-        source_id,
-        source_name,
-        namespace_name
-    ):
-        info_source = None
-        if source_id:
-            info_source = self.schematizer.get_source_by_id(source_id)
-        else:
-            sources = self.schematizer.get_sources_by_namespace(namespace_name)
-            for source in sources:
-                if source.name == source_name:
-                    info_source = source
-                    break
-            if not info_source:
-                raise ValueError("Given SOURCE_NAME|NAMESPACE_NAME doesn't exist")
-        info_source = IntrospectorSource(
-            info_source
-        ).to_ordered_dict()
-        topics = self.list_topics(
-            source_id=info_source["source_id"]
-        )
-        info_source['active_topic_count'] = len(
-            [topic for topic in topics if topic['message_count']]
-        )
-        info_source['topics'] = topics
-        return info_source
-
-    def info_namespace(self, name):
-        namespaces = self.schematizer.get_namespaces()
-        info_namespace = None
-        for namespace in namespaces:
-            if namespace.name == name:
-                info_namespace = namespace
-                break
-        if info_namespace:
-            namespace = IntrospectorNamespace(
-                namespace,
-                active_namespaces=self.active_namespaces
-            ).to_ordered_dict()
-            namespace['sources'] = self.list_sources(
-                namespace_name=namespace['name']
-            )
-            return namespace
-        else:
-            raise ValueError("Given namespace doesn't exist")
 
     def _setup_logging(self):
         CONSOLE_FORMAT = '%(asctime)s - %(name)-12s: %(levelname)-8s %(message)s'

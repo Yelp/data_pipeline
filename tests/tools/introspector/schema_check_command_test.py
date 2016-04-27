@@ -19,7 +19,8 @@ class FakeParserError(Exception):
 Args = namedtuple(
     "Namespace", [
         "schema",
-        "source",
+        "source_id",
+        "source_name",
         "namespace",
         "verbosity"
     ]
@@ -96,7 +97,7 @@ class TestInfoCommand(object):
 
     @pytest.fixture
     def source_id(self, schema):
-        return str(schema.topic.source.source_id)
+        return schema.topic.source.source_id
 
     @pytest.fixture(params=['names', 'id'])
     def compatible_args(
@@ -110,12 +111,12 @@ class TestInfoCommand(object):
         return {
             'names': self._create_fake_args(
                 schema=schema_str,
-                source=source_name,
+                source_name=source_name,
                 namespace=namespace_name
             ),
             'id': self._create_fake_args(
                 schema=schema_str,
-                source=source_id
+                source_id=source_id
             )
         }[request.param]
 
@@ -131,24 +132,26 @@ class TestInfoCommand(object):
         return {
             'names': self._create_fake_args(
                 schema=schema_str_incompatible,
-                source=source_name,
+                source_name=source_name,
                 namespace=namespace_name
             ),
             'id': self._create_fake_args(
                 schema=schema_str_incompatible,
-                source=source_id
+                source_id=source_id
             )
         }[request.param]
 
     def _create_fake_args(
         self,
         schema,
-        source,
+        source_id=None,
+        source_name=None,
         namespace=None
     ):
         return Args(
             schema=schema,
-            source=source,
+            source_id=source_id,
+            source_name=source_name,
             namespace=namespace,
             verbosity=0
         )
@@ -196,7 +199,7 @@ class TestInfoCommand(object):
             schema_check_command.process_args(
                 self._create_fake_args(
                     schema="{}",
-                    source=source_name
+                    source_name=source_name
                 ),
                 parser
             )
@@ -213,7 +216,7 @@ class TestInfoCommand(object):
         schema_check_command.process_args(
             self._create_fake_args(
                 schema="{}",
-                source=source_id,
+                source_id=source_id,
                 namespace=namespace_name
             ),
             parser

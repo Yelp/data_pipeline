@@ -16,7 +16,8 @@ from tests.tools.introspector.base_test import TestIntrospectorBase
 
 AvroArgs = namedtuple(
     "Namespace", [
-        "source",
+        "source_id",
+        "source_name",
         "namespace",
         "source_owner_email",
         "pii",
@@ -28,7 +29,8 @@ AvroArgs = namedtuple(
 
 MysqlArgs = namedtuple(
     "Namespace", [
-        "source",
+        "source_id",
+        "source_name",
         "namespace",
         "source_owner_email",
         "pii",
@@ -94,14 +96,16 @@ class TestRegisterAvroCommand(BaseTestRegister):
 
     def _create_fake_args(
         self,
-        source,
+        source_id=None,
+        source_name=None,
         namespace=None,
         avro_schema=None,
         base_schema_id=None,
         pii=False
     ):
         return AvroArgs(
-            source=source,
+            source_id=source_id,
+            source_name=source_name,
             source_owner_email=self.source_owner_email,
             namespace=namespace,
             avro_schema=avro_schema,
@@ -120,7 +124,7 @@ class TestRegisterAvroCommand(BaseTestRegister):
         schema_json
     ):
         args = self._create_fake_args(
-            source=source_name,
+            source_name=source_name,
             namespace=namespace_name,
             avro_schema=schema_str
         )
@@ -146,7 +150,7 @@ class TestRegisterAvroCommand(BaseTestRegister):
         schema_json
     ):
         args = self._create_fake_args(
-            source=source_name,
+            source_name=source_name,
             namespace=namespace_name,
             avro_schema=schema_str,
             base_schema_id=1,
@@ -174,7 +178,7 @@ class TestRegisterAvroCommand(BaseTestRegister):
         schema_str
     ):
         args = self._create_fake_args(
-            source=source_name,
+            source_name=source_name,
             namespace=None,
             avro_schema=schema_str
         )
@@ -229,7 +233,8 @@ class TestRegisterMysqlCommand(BaseTestRegister):
 
     def _create_fake_args(
         self,
-        source,
+        source_id=None,
+        source_name=None,
         namespace=None,
         create_table=None,
         old_create_table=None,
@@ -237,7 +242,8 @@ class TestRegisterMysqlCommand(BaseTestRegister):
         pii=False
     ):
         return MysqlArgs(
-            source=source,
+            source_id=source_id,
+            source_name=source_name,
             source_owner_email=self.source_owner_email,
             namespace=namespace,
             create_table=create_table,
@@ -257,7 +263,7 @@ class TestRegisterMysqlCommand(BaseTestRegister):
         avro_schema_of_new_biz_table
     ):
         args = self._create_fake_args(
-            source=source_name,
+            source_name=source_name,
             namespace=namespace_name,
             create_table=new_create_biz_table_stmt
         )
@@ -285,7 +291,7 @@ class TestRegisterMysqlCommand(BaseTestRegister):
         avro_schema_of_new_biz_table
     ):
         args = self._create_fake_args(
-            source=source_name,
+            source_name=source_name,
             namespace=namespace_name,
             create_table=new_create_biz_table_stmt,
             old_create_table=old_create_biz_table_stmt,
@@ -313,12 +319,12 @@ class TestRegisterMysqlCommand(BaseTestRegister):
         avro_schema_of_new_biz_table
     ):
         non_pii_args = self._create_fake_args(
-            source=source_name,
+            source_name=source_name,
             namespace=namespace_name,
             create_table=new_create_biz_table_stmt
         )
         pii_args = self._create_fake_args(
-            source=source_name,
+            source_name=source_name,
             namespace=namespace_name,
             create_table=new_create_biz_table_stmt,
             pii=True

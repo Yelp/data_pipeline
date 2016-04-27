@@ -13,21 +13,7 @@ class _BaseRegisterCommand(IntrospectorCommand):
     @classmethod
     def add_base_arguments(cls, parser):
         super(_BaseRegisterCommand, cls).add_base_arguments(parser)
-        parser.add_argument(
-            "--source",
-            type=str,
-            required=True,
-            help="Source id or name of source to check against. If a name is given, "
-                 "then --namespace must be provided"
-        )
-
-        parser.add_argument(
-            "--namespace",
-            type=str,
-            default=None,
-            help="Namespace name that contains a source of source name given. "
-                 "If a source id is given, then this will be ignored."
-        )
+        cls.add_source_and_namespace_arguments(parser)
 
         parser.add_argument(
             "--source_owner_email",
