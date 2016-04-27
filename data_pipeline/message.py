@@ -263,10 +263,11 @@ class Message(object):
 
     @upstream_position_info.setter
     def upstream_position_info(self, upstream_position_info):
-        # This should be treated as special case for external users to update
-        # this data after the Message class is instantiated. Right now Paastorm
-        # uses this attribute to keep track upstream message offset. Replace
-        # this setter if there is a better alternative.
+        # This should be the only exception that users can update the data after
+        # the message is created. The `upstream_position_info` is not used in
+        # the data pipeline and the data is up to the application, so it should
+        # be ok. It is more efficient and simpler to allow application updating
+        # the data than creating new instance with new data each time.
         self._set_upstream_position_info(upstream_position_info)
 
     @property
