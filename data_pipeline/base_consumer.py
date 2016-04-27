@@ -495,9 +495,6 @@ class BaseConsumer(Client):
             partitions: List of current partitions the kafka
             broker holds
         """
-        import os
-        with open("test.txt", "a") as myfile:
-            myfile.write("{0}\n".format(os.getpid()))
         self.topic_to_consumer_topic_state_map = {
             key: self.topic_to_consumer_topic_state_map.get(key)
             for key in partitions
