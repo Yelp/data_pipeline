@@ -161,7 +161,7 @@ class BaseConsumer(Client):
             raise RuntimeError("Consumer '{0}' is already running".format(
                 self.client_name
             ))
-        self.topic_to_partition_offset_map_cache = defaultdict(dict)
+        self.reset_topic_to_partition_offset_cache()
         self._commit_topic_map_offsets()
         self._start()
         self.running = True
@@ -179,7 +179,7 @@ class BaseConsumer(Client):
         if self.running:
             self._stop()
         self.kafka_client.close()
-        self.topic_to_partition_offset_map_cache = defaultdict(dict)
+        self.reset_topic_to_partition_offset_cache()
         self.running = False
         logger.info("Consumer '{0}' stopped".format(self.client_name))
 
@@ -189,6 +189,9 @@ class BaseConsumer(Client):
                 blocking=True,
                 timeout=get_config().consumer_get_messages_timeout_default
             )
+
+    def reset_topic_to_partition_offset_cache(self):
+        self.topic_to_partition_offset_map_cache = defaultdict(dict)
 
     def get_message(
         self,
@@ -500,7 +503,7 @@ class BaseConsumer(Client):
             for key in partitions
         }
 
-        self.topic_to_partition_offset_map_cache = defaultdict(dict)
+        self.reset_topic_to_partition_offset_cache()
 
         if self.post_rebalance_callback:
             return self.post_rebalance_callback(partitions)

@@ -25,6 +25,7 @@ from tests.base_consumer_test import TopicInDataTargetSetupMixin
 from tests.base_consumer_test import TopicInNamespaceSetupMixin
 from tests.base_consumer_test import TopicInSourceSetupMixin
 from tests.helpers.config import reconfigure
+from tests.helpers.mock_utils import attach_spy_on_func
 
 
 class TestConsumer(BaseConsumerTest):
@@ -107,7 +108,7 @@ class TestConsumer(BaseConsumerTest):
             post_rebalance_callback=post_rebalance_callback
         )
 
-    def test_offset_cache_cleared_after_rebalance(
+    def test_offset_cache_cleared_at_rebalance(
         self,
         topic,
         pii_topic,
@@ -122,7 +123,7 @@ class TestConsumer(BaseConsumerTest):
         retrieves a message and starts another consumer (consumer_two)
         with the same name in a separate process. This test asserts that
         everytime a consumer under goes rebalance
-        topic_to_partition_offset_map_cache is reset.
+        topic_to_partition_offset_map_cache is reset on rebalance.
         """
         consumer_one_rebalanced_event = Event()
         with consumer_instance as consumer_one:
@@ -135,11 +136,15 @@ class TestConsumer(BaseConsumerTest):
                 args=(consumer_two_instance, consumer_one_rebalanced_event)
             )
             consumer_two_process.start()
-            for _ in range(2):
-                consumer_one.commit_message(
-                    consumer_one.get_message(blocking=True, timeout=TIMEOUT)
-                )
-            assert len(consumer_one.topic_to_partition_offset_map_cache) > 0
+            with attach_spy_on_func(
+                consumer_one.kafka_client,
+                'send_offset_commit_request'
+            ) as func_spy:
+                for _ in range(2):
+                    consumer_one.commit_message(
+                        consumer_one.get_message(blocking=True, timeout=TIMEOUT)
+                    )
+                assert func_spy.call_count == 2
 
             consumer_one_rebalanced_event.set()
             consumer_two_process.join()
@@ -147,14 +152,23 @@ class TestConsumer(BaseConsumerTest):
             consumer_one_msgs = []
             # post rebalance callback is not called untill consumer
             # talks to kafka
-            for _ in range(8):
-                consumer_one_msgs.append(consumer_one.get_message(
-                    blocking=True, timeout=TIMEOUT
-                ))
-            assert len(consumer_one.topic_to_partition_offset_map_cache) == 0
+            with attach_spy_on_func(
+                consumer_one.kafka_client,
+                'send_offset_commit_request'
+            ) as func_spy:
+                for _ in range(8):
+                    consumer_one_msgs.append(consumer_one.get_message(
+                        blocking=True, timeout=TIMEOUT
+                    ))
+                assert func_spy.call_count == 0
 
-            consumer_one.commit_messages(consumer_one_msgs)
-            assert len(consumer_one.topic_to_partition_offset_map_cache) > 0
+            # asserts that newly consumed msgs offsets are reported to kafka
+            with attach_spy_on_func(
+                consumer_one.kafka_client,
+                'send_offset_commit_request'
+            ) as func_spy:
+                consumer_one.commit_messages(consumer_one_msgs)
+                assert func_spy.call_count == 1
 
     def test_sync_topic_consumer_map(
         self,
