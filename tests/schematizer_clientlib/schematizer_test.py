@@ -826,6 +826,9 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
                 page_size=1
             )
             self._assert_topics_values(actual, expected_topics=yelp_topics)
+            # Since we have a page size of 1, we should need to fetch len(yelp_topics) + 1 pages
+            # before we get a page with #items less than our page_size (0 items)
+            # Thus, we should call the api len(yelp_topic) + 1 times
             assert topic_api_spy.call_count == len(yelp_topics) + 1
 
     def test_topic_min_id(
