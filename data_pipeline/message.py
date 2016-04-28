@@ -393,7 +393,6 @@ class Message(object):
         self._set_encryption_type()
         self._set_meta(meta)
         self._set_payload_or_payload_data(payload, payload_data)
-
         if topic:
             logger.debug(
                 "Overriding message topic: {} for schema {}.".format(topic, schema_id)
@@ -594,7 +593,7 @@ class RefreshMessage(Message):
 
     def _get_field_diff(self, field):
         return PayloadFieldDiff(
-            old_value=FieldValue.EMPTY_DATA,
+            old_value=FieldValue.DATA_NOT_AVAILABLE,
             current_value=self.payload_data[field]
         )
 
