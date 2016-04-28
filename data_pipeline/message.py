@@ -343,20 +343,8 @@ class Message(object):
     @property
     def payload_diff(self):
         return {
-            field: self._get_field_diff(field)
-            for field in self.payload_data if self._has_field_changed(field)
+            field: self._get_field_diff(field) for field in self.payload_data
         }
-
-    @property
-    def has_changed(self):
-        return any(self._has_field_changed(field) for field in self.payload_data)
-
-    def _has_field_changed(self, field):
-        return (
-            not hasattr(self,'previous_payload_data') or
-            field not in self.previous_payload_data or
-            self.payload_data[field] != self.previous_payload_data[field]
-        )
 
     def __init__(
         self,
@@ -603,8 +591,8 @@ class LogMessage(Message):
 
     def _get_field_diff(self, field):
         return PayloadFieldDiff(
-            old_value=self.payload_data[field],
-            current_value=FieldValue.DATA_NOT_AVAILABLE
+            old_value=FieldValue.DATA_NOT_AVAILABLE,
+            current_value=self.payload_data[field]
         )
 
 
@@ -613,8 +601,8 @@ class MonitorMessage(Message):
 
     def _get_field_diff(self, field):
         return PayloadFieldDiff(
-            old_value=self.payload_data[field],
-            current_value=FieldValue.DATA_NOT_AVAILABLE
+            old_value=FieldValue.DATA_NOT_AVAILABLE,
+            current_value=self.payload_data[field]
         )
 
 
@@ -733,6 +721,23 @@ class UpdateMessage(Message):
 
         self._previous_payload_data = previous_payload_data
         self._previous_payload = None  # force previous_payload to be re-encoded
+
+    @property
+    def payload_diff(self):
+        return {
+            field: self._get_field_diff(field)
+            for field in self.payload_data if self._has_field_changed(field)
+        }
+
+    @property
+    def has_changed(self):
+        return any(self._has_field_changed(field) for field in self.payload_data)
+
+    def _has_field_changed(self, field):
+        return (
+            field not in self.previous_payload_data or
+            self.payload_data[field] != self.previous_payload_data[field]
+        )
 
     @property
     def avro_repr(self):

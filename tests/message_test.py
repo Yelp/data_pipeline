@@ -291,17 +291,6 @@ class PayloadOnlyMessageTest(SharedMessageTest):
                     expected_decrypted_payload=payload
                 )
 
-    def test_no_payload_diff_with_empty_payload(self, valid_message_data):
-        valid_message_data.pop('payload', None)
-        valid_message_data.pop('previous_payload', None)
-        message_data = self._make_message_data(
-            valid_message_data,
-            payload_data={}
-        )
-        message = self.message_class(**message_data)
-        assert message.payload_diff == {}
-        assert not message.has_changed
-
 
 class TestCreateMessage(PayloadOnlyMessageTest):
 
@@ -333,7 +322,6 @@ class TestCreateMessage(PayloadOnlyMessageTest):
             )
         }
         assert message.payload_diff == expected
-        assert message.has_changed
 
 
 class TestLogMessage(PayloadOnlyMessageTest):
@@ -356,16 +344,15 @@ class TestLogMessage(PayloadOnlyMessageTest):
 
         expected = {
             'key1': PayloadFieldDiff(
-                old_value=1,
-                current_value=FieldValue.DATA_NOT_AVAILABLE
+                old_value=FieldValue.DATA_NOT_AVAILABLE,
+                current_value=1
             ),
             'key2': PayloadFieldDiff(
-                old_value=20,
-                current_value=FieldValue.DATA_NOT_AVAILABLE
+                old_value=FieldValue.DATA_NOT_AVAILABLE,
+                current_value=20
             )
         }
         assert message.payload_diff == expected
-        assert message.has_changed
 
 
 class TestMonitorMessage(PayloadOnlyMessageTest):
@@ -388,16 +375,15 @@ class TestMonitorMessage(PayloadOnlyMessageTest):
 
         expected = {
             'key1': PayloadFieldDiff(
-                old_value=1,
-                current_value=FieldValue.DATA_NOT_AVAILABLE
+                old_value=FieldValue.DATA_NOT_AVAILABLE,
+                current_value=1
             ),
             'key2': PayloadFieldDiff(
-                old_value=20,
-                current_value=FieldValue.DATA_NOT_AVAILABLE
+                old_value=FieldValue.DATA_NOT_AVAILABLE,
+                current_value=20
             )
         }
         assert message.payload_diff == expected
-        assert message.has_changed
 
 
 class TestRefreshMessage(PayloadOnlyMessageTest):
@@ -430,7 +416,6 @@ class TestRefreshMessage(PayloadOnlyMessageTest):
             )
         }
         assert message.payload_diff == expected
-        assert message.has_changed
 
 
 class TestDeleteMessage(PayloadOnlyMessageTest):
@@ -463,7 +448,6 @@ class TestDeleteMessage(PayloadOnlyMessageTest):
             )
         }
         assert message.payload_diff == expected
-        assert message.has_changed
 
 
 class TestUpdateMessage(SharedMessageTest):
