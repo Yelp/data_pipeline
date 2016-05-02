@@ -14,8 +14,8 @@ from data_pipeline.message import create_from_offset_and_message
 from data_pipeline.message import FieldValue
 from data_pipeline.message import MetaAttribute
 from data_pipeline.message import PayloadFieldDiff
-from data_pipeline.message_type import MessageType
 from data_pipeline.message_type import _ProtectedMessageType
+from data_pipeline.message_type import MessageType
 from data_pipeline.schematizer_clientlib.models.avro_schema import AvroSchema
 from data_pipeline.schematizer_clientlib.models.topic import Topic
 from tests.helpers.config import reconfigure
@@ -313,11 +313,11 @@ class TestCreateMessage(PayloadOnlyMessageTest):
 
         expected = {
             'key1': PayloadFieldDiff(
-                old_value=FieldValue.EMPTY_DATA,
+                old_value=FieldValue.DATA_NOT_AVAILABLE,
                 current_value=1
             ),
             'key2': PayloadFieldDiff(
-                old_value=FieldValue.EMPTY_DATA,
+                old_value=FieldValue.DATA_NOT_AVAILABLE,
                 current_value=20
             )
         }

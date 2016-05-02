@@ -4,9 +4,9 @@ from __future__ import unicode_literals
 
 import time
 from collections import namedtuple
-from enum import Enum
 from uuid import UUID
 
+from enum import Enum
 from yelp_avro.avro_string_reader import AvroStringReader
 from yelp_avro.avro_string_writer import AvroStringWriter
 from yelp_lib.containers.lists import unlist
@@ -559,7 +559,7 @@ class CreateMessage(Message):
 
     def _get_field_diff(self, field):
         return PayloadFieldDiff(
-            old_value=FieldValue.EMPTY_DATA,
+            old_value=FieldValue.DATA_NOT_AVAILABLE,
             current_value=self.payload_data[field]
         )
 
