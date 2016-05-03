@@ -313,11 +313,11 @@ class TestCreateMessage(PayloadOnlyMessageTest):
 
         expected = {
             'key1': PayloadFieldDiff(
-                old_value=FieldValue.DATA_NOT_AVAILABLE,
+                old_value=FieldValue.EMPTY_DATA,
                 current_value=1
             ),
             'key2': PayloadFieldDiff(
-                old_value=FieldValue.DATA_NOT_AVAILABLE,
+                old_value=FieldValue.EMPTY_DATA,
                 current_value=20
             )
         }

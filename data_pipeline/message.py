@@ -559,7 +559,7 @@ class CreateMessage(Message):
 
     def _get_field_diff(self, field):
         return PayloadFieldDiff(
-            old_value=FieldValue.DATA_NOT_AVAILABLE,
+            old_value=FieldValue.EMPTY_DATA,
             current_value=self.payload_data[field]
         )
 
