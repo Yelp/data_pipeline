@@ -123,7 +123,7 @@ class TestConsumer(BaseConsumerTest):
         retrieves a message and starts another consumer (consumer_two)
         with the same name in a separate process. This test asserts that
         everytime a consumer under goes rebalance
-        topic_to_partition_offset_map_cache is reset on rebalance.
+        topic_to_partition_offset_map_cache is reset.
         """
 
         consumer_one_rebalanced_event = Event()
@@ -144,12 +144,12 @@ class TestConsumer(BaseConsumerTest):
                 consumer_one_msgs.append(msg)
                 time.sleep(1)
 
-            # consumer_one.commit_messages(consumer_one_msgs)
             consumer_one_rebalanced_event.set()
             consumer_two_process.join()
 
-            for _ in range(5):
-                consumer_one.get_message(blocking=True, timeout=TIMEOUT)
+            # force consumer rebalance, consumer rebalance is defered 
+            # until get_message
+            consumer_one.get_message(blocking=True, timeout=TIMEOUT)
 
             # post rebalance callback is not called untill consumer
             # talks to kafka
