@@ -46,8 +46,8 @@ class FieldValue(Enum):
       EMPTY_DATA: field value is None.
     """
 
-    DATA_NOT_AVAILABLE = "DATA_NOT_AVAILABLE"
-    EMPTY_DATA = "EMPTY_DATA"
+    UNKNOWN_DATA = "UNKNOWN_DATA"
+    NO_ENTRY = "NO_ENTRY"
 
 
 class Message(object):
@@ -559,7 +559,7 @@ class CreateMessage(Message):
 
     def _get_field_diff(self, field):
         return PayloadFieldDiff(
-            old_value=FieldValue.EMPTY_DATA,
+            old_value=FieldValue.NO_ENTRY,
             current_value=self.payload_data[field]
         )
 
@@ -571,7 +571,7 @@ class DeleteMessage(Message):
     def _get_field_diff(self, field):
         return PayloadFieldDiff(
             old_value=self.payload_data[field],
-            current_value=FieldValue.DATA_NOT_AVAILABLE
+            current_value=FieldValue.UNKNOWN_DATA
         )
 
 
@@ -581,7 +581,7 @@ class RefreshMessage(Message):
 
     def _get_field_diff(self, field):
         return PayloadFieldDiff(
-            old_value=FieldValue.DATA_NOT_AVAILABLE,
+            old_value=FieldValue.UNKNOWN_DATA,
             current_value=self.payload_data[field]
         )
 
@@ -591,7 +591,7 @@ class LogMessage(Message):
 
     def _get_field_diff(self, field):
         return PayloadFieldDiff(
-            old_value=FieldValue.DATA_NOT_AVAILABLE,
+            old_value=FieldValue.UNKNOWN_DATA,
             current_value=self.payload_data[field]
         )
 
@@ -601,7 +601,7 @@ class MonitorMessage(Message):
 
     def _get_field_diff(self, field):
         return PayloadFieldDiff(
-            old_value=FieldValue.DATA_NOT_AVAILABLE,
+            old_value=FieldValue.UNKNOWN_DATA,
             current_value=self.payload_data[field]
         )
 

@@ -313,11 +313,11 @@ class TestCreateMessage(PayloadOnlyMessageTest):
 
         expected = {
             'key1': PayloadFieldDiff(
-                old_value=FieldValue.EMPTY_DATA,
+                old_value=FieldValue.NO_ENTRY,
                 current_value=1
             ),
             'key2': PayloadFieldDiff(
-                old_value=FieldValue.EMPTY_DATA,
+                old_value=FieldValue.NO_ENTRY,
                 current_value=20
             )
         }
@@ -344,11 +344,11 @@ class TestLogMessage(PayloadOnlyMessageTest):
 
         expected = {
             'key1': PayloadFieldDiff(
-                old_value=FieldValue.DATA_NOT_AVAILABLE,
+                old_value=FieldValue.UNKNOWN_DATA,
                 current_value=1
             ),
             'key2': PayloadFieldDiff(
-                old_value=FieldValue.DATA_NOT_AVAILABLE,
+                old_value=FieldValue.UNKNOWN_DATA,
                 current_value=20
             )
         }
@@ -375,11 +375,11 @@ class TestMonitorMessage(PayloadOnlyMessageTest):
 
         expected = {
             'key1': PayloadFieldDiff(
-                old_value=FieldValue.DATA_NOT_AVAILABLE,
+                old_value=FieldValue.UNKNOWN_DATA,
                 current_value=1
             ),
             'key2': PayloadFieldDiff(
-                old_value=FieldValue.DATA_NOT_AVAILABLE,
+                old_value=FieldValue.UNKNOWN_DATA,
                 current_value=20
             )
         }
@@ -407,11 +407,11 @@ class TestRefreshMessage(PayloadOnlyMessageTest):
 
         expected = {
             'key1': PayloadFieldDiff(
-                old_value=FieldValue.DATA_NOT_AVAILABLE,
+                old_value=FieldValue.UNKNOWN_DATA,
                 current_value=1
             ),
             'key2': PayloadFieldDiff(
-                old_value=FieldValue.DATA_NOT_AVAILABLE,
+                old_value=FieldValue.UNKNOWN_DATA,
                 current_value=20
             )
         }
@@ -440,11 +440,11 @@ class TestDeleteMessage(PayloadOnlyMessageTest):
         expected = {
             'key1': PayloadFieldDiff(
                 old_value=1,
-                current_value=FieldValue.DATA_NOT_AVAILABLE
+                current_value=FieldValue.UNKNOWN_DATA
             ),
             'key2': PayloadFieldDiff(
                 old_value=20,
-                current_value=FieldValue.DATA_NOT_AVAILABLE
+                current_value=FieldValue.UNKNOWN_DATA
             )
         }
         assert message.payload_diff == expected
