@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 import time
 from collections import namedtuple
+from enum import Enum
 from uuid import UUID
 
 from yelp_avro.avro_string_reader import AvroStringReader
@@ -34,6 +35,19 @@ PayloadFieldDiff = namedtuple('PayloadFieldDiff', [
     'old_value',            # Value of the field before update
     'current_value'         # Value of the field after update
 ])
+
+
+class FieldValue(Enum):
+    """Enum that specifies the content of the field in the payload data or
+    previous payload data.
+
+    Attributes:
+      DATA_NOT_AVAILABLE: No information is available for the field.
+      EMPTY_DATA: field value is None.
+    """
+
+    DATA_NOT_AVAILABLE = "DATA_NOT_AVAILABLE"
+    EMPTY_DATA = "EMPTY_DATA"
 
 
 class Message(object):
@@ -335,6 +349,12 @@ class Message(object):
             raise TypeError("Element of keys must be unicode.")
         self._keys = keys
 
+    @property
+    def payload_diff(self):
+        return {
+            field: self._get_field_diff(field) for field in self.payload_data
+        }
+
     def __init__(
         self,
         schema_id,
@@ -553,23 +573,53 @@ class CreateMessage(Message):
 
     _message_type = MessageType.create
 
+    def _get_field_diff(self, field):
+        return PayloadFieldDiff(
+            old_value=FieldValue.EMPTY_DATA,
+            current_value=self.payload_data[field]
+        )
+
 
 class DeleteMessage(Message):
 
     _message_type = MessageType.delete
+
+    def _get_field_diff(self, field):
+        return PayloadFieldDiff(
+            old_value=self.payload_data[field],
+            current_value=FieldValue.DATA_NOT_AVAILABLE
+        )
 
 
 class RefreshMessage(Message):
 
     _message_type = MessageType.refresh
 
+    def _get_field_diff(self, field):
+        return PayloadFieldDiff(
+            old_value=FieldValue.DATA_NOT_AVAILABLE,
+            current_value=self.payload_data[field]
+        )
+
 
 class LogMessage(Message):
     _message_type = MessageType.log
 
+    def _get_field_diff(self, field):
+        return PayloadFieldDiff(
+            old_value=FieldValue.DATA_NOT_AVAILABLE,
+            current_value=self.payload_data[field]
+        )
+
 
 class MonitorMessage(Message):
     _message_type = _ProtectedMessageType.monitor
+
+    def _get_field_diff(self, field):
+        return PayloadFieldDiff(
+            old_value=FieldValue.DATA_NOT_AVAILABLE,
+            current_value=self.payload_data[field]
+        )
 
 
 class UpdateMessage(Message):
