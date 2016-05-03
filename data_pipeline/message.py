@@ -4,9 +4,9 @@ from __future__ import unicode_literals
 
 import time
 from collections import namedtuple
-from enum import Enum
 from uuid import UUID
 
+from enum import Enum
 from yelp_avro.avro_string_reader import AvroStringReader
 from yelp_avro.avro_string_writer import AvroStringWriter
 from yelp_lib.containers.lists import unlist
