@@ -121,9 +121,6 @@ class BaseConsumerTest(object):
                 )
                 asserter.assert_messages(msgs_r2, 2)
 
-                assert (msgs_r1[1].kafka_position_info.offset + 1 ==
-                        msgs_r2[0].kafka_position_info.offset)
-
     def test_call_kafka_commit_offsets_when_offset_change(
             self,
             publish_messages,
@@ -172,9 +169,6 @@ class BaseConsumerTest(object):
                 )
                 assert len(msgs_r2) == 1
                 asserter.assert_messages(msgs_r2, 1)
-
-                assert (msgs_r1[2].kafka_position_info.offset + 1 ==
-                        msgs_r2[0].kafka_position_info.offset)
 
     def test_offset_cache_reset_on_topic_reset(
             self,
