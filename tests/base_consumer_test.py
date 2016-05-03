@@ -26,9 +26,11 @@ from data_pipeline.producer import Producer
 from data_pipeline.schematizer_clientlib.models.data_source_type_enum \
     import DataSourceTypeEnum
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+from tests.helpers.mock_utils import attach_spy_on_func
 
 
 TIMEOUT = 1.0
+MULTI_CONSUMER_TIMEOUT = 10.0
 """ TIMEOUT is used for all 'get_messages' calls in these tests. It's
 essential that this value is large enough for the background workers
 to have a chance to retrieve the messages, but otherwise as small
@@ -75,6 +77,136 @@ class BaseConsumerTest(object):
     @pytest.fixture(scope="module", autouse=True)
     def ensure_topic_exist(self, containers, topic):
         containers.create_kafka_topic(topic)
+
+    def test_skip_commit_offset_if_offset_unchanged(
+            self,
+            publish_messages,
+            message,
+            consumer_instance
+    ):
+        asserter = ConsumerAsserter(
+            consumer=consumer_instance,
+            expected_message=message
+        )
+        with consumer_instance as consumer:
+            publish_messages(message, 4)
+
+            with attach_spy_on_func(
+                consumer.kafka_client,
+                'send_offset_commit_request'
+            ) as func_spy:
+                msgs_r1 = consumer.get_messages(
+                    count=2,
+                    blocking=True,
+                    timeout=TIMEOUT
+                )
+                asserter.assert_messages(msgs_r1, 2)
+
+                consumer.commit_messages(msgs_r1)
+                assert func_spy.call_count == 1
+
+                func_spy.reset_mock()
+
+                # call_count does not increase
+                # when no new msgs are commited
+                consumer.commit_messages(msgs_r1)
+                assert func_spy.call_count == 0
+
+                # assert that next call to get_message should
+                # get message from next offset
+                msgs_r2 = consumer.get_messages(
+                    count=2,
+                    blocking=True,
+                    timeout=TIMEOUT
+                )
+                asserter.assert_messages(msgs_r2, 2)
+
+    def test_call_kafka_commit_offsets_when_offset_change(
+            self,
+            publish_messages,
+            message,
+            consumer_instance
+    ):
+        asserter = ConsumerAsserter(
+            consumer=consumer_instance,
+            expected_message=message
+        )
+        with consumer_instance as consumer:
+            publish_messages(message, 4)
+
+            with attach_spy_on_func(
+                consumer.kafka_client,
+                'send_offset_commit_request'
+            ) as func_spy:
+                msgs_r1 = consumer.get_messages(
+                    count=3,
+                    blocking=True,
+                    timeout=TIMEOUT
+                )
+                asserter.assert_messages(msgs_r1, 3)
+
+                consumer.commit_messages(msgs_r1)
+                assert func_spy.call_count == 1
+
+                func_spy.reset_mock()
+
+                # call_count increases
+                # when offset is different from last commited offset
+                consumer.commit_message(msgs_r1[0])
+                assert func_spy.call_count == 1
+
+                func_spy.reset_mock()
+
+                consumer.commit_message(msgs_r1[2])
+                assert func_spy.call_count == 1
+
+                # assert that next call to get_message should
+                # get message from next offset
+                msgs_r2 = consumer.get_messages(
+                    count=1,
+                    blocking=True,
+                    timeout=TIMEOUT
+                )
+                assert len(msgs_r2) == 1
+                asserter.assert_messages(msgs_r2, 1)
+
+    def test_offset_cache_reset_on_topic_reset(
+            self,
+            publish_messages,
+            message,
+            consumer_instance
+    ):
+        asserter = ConsumerAsserter(
+            consumer=consumer_instance,
+            expected_message=message
+        )
+        with consumer_instance as consumer:
+            publish_messages(message, 4)
+            with attach_spy_on_func(
+                consumer.kafka_client,
+                'send_offset_commit_request'
+            ) as func_spy:
+                msgs = consumer.get_messages(
+                    count=4,
+                    blocking=True,
+                    timeout=TIMEOUT
+                )
+                assert len(msgs) == 4
+                asserter.assert_messages(msgs, 4)
+
+                consumer.commit_messages(msgs)
+                assert func_spy.call_count == 1
+                topic_map = consumer.topic_to_consumer_topic_state_map
+
+                consumer.reset_topics(topic_to_consumer_topic_state_map=topic_map)
+
+                func_spy.reset_mock()
+
+                # on commiting messages with same offset
+                # send_offset_commit_request should get called
+                # because cache is reset on consumer.reset_topics
+                consumer.commit_messages(msgs)
+                assert func_spy.call_count == 1
 
     def test_get_message_none(self, consumer_instance, topic):
         with consumer_instance as consumer:
