@@ -14,6 +14,7 @@ from data_pipeline.consumer import Consumer
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import CreateMessage
 from tests.base_consumer_test import BaseConsumerTest
+from tests.base_consumer_test import MULTI_CONSUMER_TIMEOUT
 from tests.base_consumer_test import MultiTopicsSetupMixin
 from tests.base_consumer_test import RefreshDynamicTopicTests
 from tests.base_consumer_test import RefreshFixedTopicTests
@@ -139,7 +140,7 @@ class TestConsumer(BaseConsumerTest):
             consumer_two_process.start()
             consumer_one_msgs = []
             for _ in range(2):
-                msg = consumer_one.get_message(blocking=True, timeout=TIMEOUT)
+                msg = consumer_one.get_message(blocking=True, timeout=MULTI_CONSUMER_TIMEOUT)
                 consumer_one.commit_message(msg)
                 consumer_one_msgs.append(msg)
                 time.sleep(1)
@@ -147,9 +148,10 @@ class TestConsumer(BaseConsumerTest):
             consumer_one_rebalanced_event.set()
             consumer_two_process.join()
 
-            # force consumer rebalance, consumer rebalance is defered 
+            # force consumer rebalance, consumer rebalance is defered
             # until get_message
-            consumer_one.get_message(blocking=True, timeout=TIMEOUT)
+            for _ in range(8):
+                consumer_one.get_message(blocking=True, timeout=MULTI_CONSUMER_TIMEOUT)
 
             # post rebalance callback is not called untill consumer
             # talks to kafka

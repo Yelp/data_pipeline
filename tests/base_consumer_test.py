@@ -30,6 +30,7 @@ from tests.helpers.mock_utils import attach_spy_on_func
 
 
 TIMEOUT = 1.0
+MULTI_CONSUMER_TIMEOUT = 10.0
 """ TIMEOUT is used for all 'get_messages' calls in these tests. It's
 essential that this value is large enough for the background workers
 to have a chance to retrieve the messages, but otherwise as small
@@ -83,6 +84,10 @@ class BaseConsumerTest(object):
             message,
             consumer_instance
     ):
+        asserter = ConsumerAsserter(
+            consumer=consumer_instance,
+            expected_message=message
+        )
         with consumer_instance as consumer:
             publish_messages(message, 4)
 
@@ -95,7 +100,8 @@ class BaseConsumerTest(object):
                     blocking=True,
                     timeout=TIMEOUT
                 )
-                assert len(msgs_r1) == 2
+                asserter.assert_messages(msgs_r1, 2)
+
                 consumer.commit_messages(msgs_r1)
                 assert func_spy.call_count == 1
 
@@ -113,7 +119,8 @@ class BaseConsumerTest(object):
                     blocking=True,
                     timeout=TIMEOUT
                 )
-                assert len(msgs_r2) == 2
+                asserter.assert_messages(msgs_r2, 2)
+
                 assert (msgs_r1[1].kafka_position_info.offset + 1 ==
                         msgs_r2[0].kafka_position_info.offset)
 
@@ -123,6 +130,10 @@ class BaseConsumerTest(object):
             message,
             consumer_instance
     ):
+        asserter = ConsumerAsserter(
+            consumer=consumer_instance,
+            expected_message=message
+        )
         with consumer_instance as consumer:
             publish_messages(message, 4)
 
@@ -135,7 +146,7 @@ class BaseConsumerTest(object):
                     blocking=True,
                     timeout=TIMEOUT
                 )
-                assert len(msgs_r1) == 3
+                asserter.assert_messages(msgs_r1, 3)
 
                 consumer.commit_messages(msgs_r1)
                 assert func_spy.call_count == 1
@@ -160,6 +171,8 @@ class BaseConsumerTest(object):
                     timeout=TIMEOUT
                 )
                 assert len(msgs_r2) == 1
+                asserter.assert_messages(msgs_r2, 1)
+
                 assert (msgs_r1[2].kafka_position_info.offset + 1 ==
                         msgs_r2[0].kafka_position_info.offset)
 
@@ -169,6 +182,10 @@ class BaseConsumerTest(object):
             message,
             consumer_instance
     ):
+        asserter = ConsumerAsserter(
+            consumer=consumer_instance,
+            expected_message=message
+        )
         with consumer_instance as consumer:
             publish_messages(message, 4)
             with attach_spy_on_func(
@@ -181,6 +198,8 @@ class BaseConsumerTest(object):
                     timeout=TIMEOUT
                 )
                 assert len(msgs) == 4
+                asserter.assert_messages(msgs, 4)
+
                 consumer.commit_messages(msgs)
                 assert func_spy.call_count == 1
                 topic_map = consumer.topic_to_consumer_topic_state_map
