@@ -48,27 +48,9 @@ class CompactionSetter(Batch):
         self.dry_run = self.options.dry_run
         self.schematizer = get_schematizer()
 
-    def _get_all_topics(self):
-        namespaces = self.schematizer.get_namespaces()
-        namespace_to_source_map = {
-            namespace.name: self.schematizer.get_sources_by_namespace(
-                namespace.name
-            )
-            for namespace in namespaces
-        }
-        topics = []
-        for namespace, sources in namespace_to_source_map.iteritems():
-            for source in sources:
-                topics += self.schematizer.get_topics_by_criteria(
-                    namespace_name=namespace,
-                    source_name=source.name
-                )
-        return topics
-
     def _get_all_topics_to_compact(self):
-        topics = self._get_all_topics()
+        topics = self.schematizer.get_topics_by_criteria()
         topics = [topic.name for topic in topics]
-        self.log.debug("Found {} topics to filter".format(len(topics)))
         return self.schematizer.filter_topics_by_pkeys(topics)
 
     def apply_log_compaction(self, topics):
