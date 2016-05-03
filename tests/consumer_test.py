@@ -125,6 +125,7 @@ class TestConsumer(BaseConsumerTest):
         everytime a consumer under goes rebalance
         topic_to_partition_offset_map_cache is reset on rebalance.
         """
+
         consumer_one_rebalanced_event = Event()
         with consumer_instance as consumer_one:
             # publishing messages on two topics
@@ -136,33 +137,22 @@ class TestConsumer(BaseConsumerTest):
                 args=(consumer_two_instance, consumer_one_rebalanced_event)
             )
             consumer_two_process.start()
-            with attach_spy_on_func(
-                consumer_one.kafka_client,
-                'send_offset_commit_request'
-            ) as func_spy:
-                for _ in range(2):
-                    consumer_one.commit_message(
-                        consumer_one.get_message(blocking=True, timeout=TIMEOUT)
-                    )
-                assert func_spy.call_count == 2
+            consumer_one_msgs = []
+            for _ in range(2):
+                msg = consumer_one.get_message(blocking=True, timeout=TIMEOUT)
+                consumer_one.commit_message(msg)
+                consumer_one_msgs.append(msg)
+                time.sleep(1)
 
+            # consumer_one.commit_messages(consumer_one_msgs)
             consumer_one_rebalanced_event.set()
             consumer_two_process.join()
 
-            consumer_one_msgs = []
+            for _ in range(5):
+                consumer_one.get_message(blocking=True, timeout=TIMEOUT)
+
             # post rebalance callback is not called untill consumer
             # talks to kafka
-            with attach_spy_on_func(
-                consumer_one.kafka_client,
-                'send_offset_commit_request'
-            ) as func_spy:
-                for _ in range(8):
-                    consumer_one_msgs.append(consumer_one.get_message(
-                        blocking=True, timeout=TIMEOUT
-                    ))
-                assert func_spy.call_count == 0
-
-            # asserts that newly consumed msgs offsets are reported to kafka
             with attach_spy_on_func(
                 consumer_one.kafka_client,
                 'send_offset_commit_request'
