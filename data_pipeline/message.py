@@ -38,6 +38,7 @@ PayloadFieldDiff = namedtuple('PayloadFieldDiff', [
 
 
 class NoEntryPayload(object):
+    """ This class denotes that no previous value exists for the field. """
     pass
 
 
