@@ -305,7 +305,6 @@ class TestCreateMessage(PayloadOnlyMessageTest):
 
     def test_payload_diff(self, valid_message_data):
         valid_message_data.pop('payload', None)
-        valid_message_data.pop('previous_payload', None)
         message_data = self._make_message_data(
             valid_message_data,
             payload_data={'key1': 1, 'key2': 20}
@@ -336,7 +335,6 @@ class TestLogMessage(PayloadOnlyMessageTest):
 
     def test_payload_diff_raises_exception(self, valid_message_data):
         valid_message_data.pop('payload', None)
-        valid_message_data.pop('previous_payload', None)
         message_data = self._make_message_data(
             valid_message_data,
             payload_data={'key1': 1, 'key2': 20}
@@ -357,7 +355,6 @@ class TestMonitorMessage(PayloadOnlyMessageTest):
 
     def test_payload_diff_raises_exception(self, valid_message_data):
         valid_message_data.pop('payload', None)
-        valid_message_data.pop('previous_payload', None)
         message_data = self._make_message_data(
             valid_message_data,
             payload_data={'key1': 1, 'key2': 20}
@@ -379,7 +376,6 @@ class TestRefreshMessage(PayloadOnlyMessageTest):
 
     def test_payload_diff_raises_exception(self, valid_message_data):
         valid_message_data.pop('payload', None)
-        valid_message_data.pop('previous_payload', None)
         message_data = self._make_message_data(
             valid_message_data,
             payload_data={'key1': 1, 'key2': 20}
@@ -402,7 +398,6 @@ class TestDeleteMessage(PayloadOnlyMessageTest):
 
     def test_payload_diff(self, valid_message_data):
         valid_message_data.pop('payload', None)
-        valid_message_data.pop('previous_payload', None)
         message_data = self._make_message_data(
             valid_message_data,
             payload_data={'key1': 1, 'key2': 20}
