@@ -196,7 +196,6 @@ class SharedMessageTest(object):
             payload_data=payload_data,
             dry_run=True
         )
-        import ipdb;ipdb.set_trace();
         dry_run_message = self.message_class(**message_data)
         assert dry_run_message.payload == repr(payload_data)
 
