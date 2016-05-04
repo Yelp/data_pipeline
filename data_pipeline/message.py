@@ -37,17 +37,12 @@ PayloadFieldDiff = namedtuple('PayloadFieldDiff', [
 ])
 
 
-class FieldValue(Enum):
-    """Enum that specifies the content of the field in the payload data or
-    previous payload data.
+class NoEntryPayload(object):
+    pass
 
-    Attributes:
-      DATA_NOT_AVAILABLE: No information is available for the field.
-      EMPTY_DATA: field value is None.
-    """
 
-    UNKNOWN_DATA = "UNKNOWN_DATA"
-    NO_ENTRY = "NO_ENTRY"
+class InvalidOperation(Exception):
+    pass
 
 
 class Message(object):
@@ -559,7 +554,7 @@ class CreateMessage(Message):
 
     def _get_field_diff(self, field):
         return PayloadFieldDiff(
-            old_value=FieldValue.NO_ENTRY,
+            old_value=NoEntryPayload,
             current_value=self.payload_data[field]
         )
 
@@ -571,7 +566,7 @@ class DeleteMessage(Message):
     def _get_field_diff(self, field):
         return PayloadFieldDiff(
             old_value=self.payload_data[field],
-            current_value=FieldValue.UNKNOWN_DATA
+            current_value=NoEntryPayload
         )
 
 
@@ -580,30 +575,21 @@ class RefreshMessage(Message):
     _message_type = MessageType.refresh
 
     def _get_field_diff(self, field):
-        return PayloadFieldDiff(
-            old_value=FieldValue.UNKNOWN_DATA,
-            current_value=self.payload_data[field]
-        )
+        raise InvalidOperation()
 
 
 class LogMessage(Message):
     _message_type = MessageType.log
 
     def _get_field_diff(self, field):
-        return PayloadFieldDiff(
-            old_value=FieldValue.UNKNOWN_DATA,
-            current_value=self.payload_data[field]
-        )
+        raise InvalidOperation()
 
 
 class MonitorMessage(Message):
     _message_type = _ProtectedMessageType.monitor
 
     def _get_field_diff(self, field):
-        return PayloadFieldDiff(
-            old_value=FieldValue.UNKNOWN_DATA,
-            current_value=self.payload_data[field]
-        )
+        raise InvalidOperation()
 
 
 class UpdateMessage(Message):
