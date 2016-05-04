@@ -12,11 +12,11 @@ import pytest
 
 from data_pipeline.base_consumer import ConsumerTopicState
 from data_pipeline.base_consumer import TopicFilter
+from data_pipeline.consumer_source import FixedSchemas
 from data_pipeline.consumer_source import FixedTopics
 from data_pipeline.consumer_source import NewTopicOnlyInDataTarget
 from data_pipeline.consumer_source import NewTopicOnlyInNamespace
 from data_pipeline.consumer_source import NewTopicOnlyInSource
-from data_pipeline.consumer_source import SingleSchema
 from data_pipeline.consumer_source import TopicInDataTarget
 from data_pipeline.consumer_source import TopicInNamespace
 from data_pipeline.consumer_source import TopicInSource
@@ -649,6 +649,10 @@ class RefreshTopicsTestBase(object):
         return _register_schema(foo_namespace, foo_src)
 
     @pytest.fixture
+    def test_schemas(self, foo_namespace, foo_src, _register_schema):
+        return _register_schema(foo_namespace, foo_src)
+
+    @pytest.fixture
     def foo_topic(self, foo_schema):
         return foo_schema.topic.name
 
@@ -828,19 +832,32 @@ class MultiTopicsSetupMixin(RefreshFixedTopicTests):
         return FixedTopics('bad_topic_1', 'bad_topic_2')
 
 
-class SingleSchemaSetupMixin(RefreshFixedTopicTests):
+class FixedSchemasSetupMixin(RefreshFixedTopicTests):
 
     @pytest.fixture
-    def expected_topics(self, foo_schema):
-        return [foo_schema.topic.name]
+    def consumer_source(self, foo_schemas):
+        return FixedSchemas(
+            [
+                foo_schemas[0].schema_id,
+                foo_schemas[1].schema_id,
+                foo_schemas[2].schema_id,
+                foo_schemas[3].schema_id
+            ]
+        )
 
     @pytest.fixture
-    def consumer_source(self, foo_schema):
-        return SingleSchema(schema_id=foo_schema.schema_id)
+    def expected_topics(self, foo_schemas):
+        topics = {
+            foo_schemas[0].topic.name,
+            foo_schemas[1].topic.name,
+            foo_schemas[2].topic.name,
+            foo_schemas[3].topic.name
+        }
+        return list(topics)
 
     @pytest.fixture
     def bad_consumer_source(self, schema_with_bad_topic):
-        return SingleSchema(schema_id=schema_with_bad_topic.schema_id)
+        return FixedSchemas(schema_ids=[schema_with_bad_topic.schema_id])
 
 
 class RefreshDynamicTopicTests(RefreshTopicsTestBase):

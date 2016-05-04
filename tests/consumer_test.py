@@ -14,12 +14,12 @@ from data_pipeline.consumer import Consumer
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import CreateMessage
 from tests.base_consumer_test import BaseConsumerTest
+from tests.base_consumer_test import FixedSchemasSetupMixin
 from tests.base_consumer_test import MULTI_CONSUMER_TIMEOUT
 from tests.base_consumer_test import MultiTopicsSetupMixin
 from tests.base_consumer_test import RefreshDynamicTopicTests
 from tests.base_consumer_test import RefreshFixedTopicTests
 from tests.base_consumer_test import RefreshNewTopicsTest
-from tests.base_consumer_test import SingleSchemaSetupMixin
 from tests.base_consumer_test import SingleTopicSetupMixin
 from tests.base_consumer_test import TIMEOUT
 from tests.base_consumer_test import TopicInDataTargetSetupMixin
@@ -257,9 +257,9 @@ class TestRefreshMultiTopics(
     pass
 
 
-class TestRefreshSingleSchema(
+class TestRefreshFixedSchemas(
     ConsumerRefreshFixedTopicTests,
-    SingleSchemaSetupMixin
+    FixedSchemasSetupMixin
 ):
     pass
 

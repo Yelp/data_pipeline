@@ -597,6 +597,20 @@ class TestCreateFromMessageAndOffset(object):
     def offset_and_message(self, message):
         return OffsetAndMessage(0, create_message(Envelope().pack(message)))
 
+    @pytest.fixture
+    def offset_and_message_with_latest_compatible_schema(
+            self,
+            message_encoded_with_latest_schema_having_multiple_compatible_schemas
+    ):
+        return OffsetAndMessage(
+            0,
+            create_message(
+                Envelope().pack(
+                    message_encoded_with_latest_schema_having_multiple_compatible_schemas
+                )
+            )
+        )
+
     def test_create_from_offset_and_message(self, offset_and_message, message):
         extracted_message = create_from_offset_and_message(
             topic=message.topic,
@@ -609,3 +623,43 @@ class TestCreateFromMessageAndOffset(object):
         assert extracted_message.timestamp == message.timestamp
         assert extracted_message.topic == message.topic
         assert extracted_message.uuid == message.uuid
+
+    def test_create_from_offset_and_message_with_schemas_speficied_and_multiple_compatible_schemas(
+            self,
+            offset_and_message_with_latest_compatible_schema,
+            message_encoded_with_latest_schema_having_multiple_compatible_schemas,
+            expected_message_having_multiple_compatible_schemas
+    ):
+        schema_ids = [1, 2, 3, 4]
+        schema_ids.append(expected_message_having_multiple_compatible_schemas.schema_id)
+        extracted_message = create_from_offset_and_message(
+            topic=message_encoded_with_latest_schema_having_multiple_compatible_schemas.topic,
+            offset_and_message=offset_and_message_with_latest_compatible_schema,
+            schema_ids=schema_ids
+        )
+        self._compare_messages_helper(extracted_message, expected_message_having_multiple_compatible_schemas)
+        assert extracted_message.schema_id == message_encoded_with_latest_schema_having_multiple_compatible_schemas.schema_id
+        assert extracted_message.uuid == message_encoded_with_latest_schema_having_multiple_compatible_schemas.uuid
+
+    def test_create_from_offset_and_message_with_no_schemas_speficied_and_multiple_compatible_schemas(
+            self,
+            offset_and_message_with_latest_compatible_schema,
+            message_encoded_with_latest_schema_having_multiple_compatible_schemas
+    ):
+        schema_ids = [1, 2, 3, 4]
+        extracted_message = create_from_offset_and_message(
+            topic=message_encoded_with_latest_schema_having_multiple_compatible_schemas.topic,
+            offset_and_message=offset_and_message_with_latest_compatible_schema,
+            schema_ids=schema_ids
+        )
+        self._compare_messages_helper(extracted_message, message_encoded_with_latest_schema_having_multiple_compatible_schemas)
+        assert extracted_message.schema_id == message_encoded_with_latest_schema_having_multiple_compatible_schemas.schema_id
+        assert extracted_message.uuid == message_encoded_with_latest_schema_having_multiple_compatible_schemas.uuid
+
+    def _compare_messages_helper(self, extracted_message, expected_message):
+        assert extracted_message.message_type == expected_message.message_type
+        assert extracted_message.payload == expected_message.payload
+        assert extracted_message.payload_data == expected_message.payload_data
+        assert extracted_message.reader_schema_id == expected_message.reader_schema_id
+        assert extracted_message.timestamp == expected_message.timestamp
+        assert extracted_message.topic == expected_message.topic

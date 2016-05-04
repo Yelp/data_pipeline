@@ -9,6 +9,7 @@ from yelp_kafka.consumer_group import KafkaConsumerGroup
 
 from data_pipeline.base_consumer import BaseConsumer
 from data_pipeline.config import get_config
+from data_pipeline.consumer_source import FixedSchemas
 from data_pipeline.message import create_from_kafka_message
 
 logger = get_config().logger
@@ -152,6 +153,7 @@ class Consumer(BaseConsumer):
         has_timeout = timeout is not None
         if has_timeout:
             max_time = time() + timeout
+        schema_ids = self.consumer_source.schema_ids if isinstance(self.consumer_source, FixedSchemas) else []
         while len(messages) < count:
             try:
                 default_iter_timeout = self.consumer_group.iter_timeout
@@ -165,7 +167,8 @@ class Consumer(BaseConsumer):
             message = create_from_kafka_message(
                 message.topic,
                 message,
-                self.force_payload_decode
+                self.force_payload_decode,
+                schema_ids
             )
             self._update_topic_map(message)
             messages.append(message)

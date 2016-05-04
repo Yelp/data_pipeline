@@ -49,7 +49,7 @@ def example_schema(namespace, source):
         "namespace": "%s",
         "name": "%s",
         "fields":[
-            {"type":"int", "name":"good_field"}
+            {"type":"int", "name":"good_field", "default": 1}
         ]
     }
     ''' % (namespace, source)
@@ -64,6 +64,52 @@ def registered_schema(schematizer_client, example_schema, namespace, source):
         source_owner_email='test@yelp.com',
         contains_pii=False
     )
+
+
+@pytest.fixture(scope='module')
+def registered_schema_two(schematizer_client, example_compatible_schema, namespace, source):
+    return schematizer_client.register_schema(
+        namespace=namespace,
+        source=source,
+        schema_str=example_compatible_schema,
+        source_owner_email='test@yelp.com',
+        contains_pii=False
+    )
+
+
+@pytest.fixture(scope='module')
+def registered_multiple_schemas_with_same_topic(schematizer_client, example_schema, example_compatible_schema, namespace, source):
+    schema1 = schematizer_client.register_schema(
+        namespace=namespace,
+        source=source,
+        schema_str=example_schema,
+        source_owner_email='test@yelp.com',
+        contains_pii=False
+    )
+
+    schema2 = schematizer_client.register_schema(
+        namespace=namespace,
+        source=source,
+        schema_str=example_compatible_schema,
+        source_owner_email='test@yelp.com',
+        contains_pii=False
+    )
+
+    return schema1, schema2
+
+
+@pytest.fixture(scope='module')
+def example_compatible_schema(namespace, source):
+    return '''
+    {
+        "type":"record",
+        "namespace": "%s",
+        "name": "%s",
+        "fields":[
+            {"type":"int", "name":"good_field_two", "default": 1}
+        ]
+    }
+    ''' % (namespace, source)
 
 
 @pytest.fixture(scope="module")
@@ -103,13 +149,63 @@ def example_meta_attr_schema(namespace):
 
 
 @pytest.fixture
+def avro_schema2(foo_src, foo_namespace):
+    return {
+        'type': 'record',
+        'name': foo_src,
+        'namespace': foo_namespace,
+        'fields': [{'type': 'int', 'name': 'id1', 'default': 1}]
+    }
+
+
+@pytest.fixture
+def avro_schema3(foo_src, foo_namespace):
+    return {
+        'type': 'record',
+        'name': foo_src,
+        'namespace': foo_namespace,
+        'fields': [{'type': 'int', 'name': 'id', 'default': 1}, {'type': 'int', 'name': 'id1', 'default': 1}]
+    }
+
+
+@pytest.fixture
+def avro_schema4(foo_src, foo_namespace):
+    return {
+        'type': 'record',
+        'name': foo_src,
+        'namespace': foo_namespace,
+        'fields': [{'type': 'int', 'name': 'id', 'default': 1}, {'type': 'int', 'name': 'id2', 'default': 1}]
+    }
+
+
+@pytest.fixture
+def foo_schemas(foo_namespace, foo_src, _register_schema, avro_schema2, avro_schema3, avro_schema4):
+    return (
+        _register_schema(foo_namespace, foo_src),
+        _register_schema(foo_namespace, foo_src, avro_schema2),
+        _register_schema(foo_namespace, foo_src, avro_schema3),
+        _register_schema(foo_namespace, foo_src, avro_schema4)
+    )
+
+
+@pytest.fixture
 def example_schema_obj(example_schema):
     return get_avro_schema_object(example_schema)
 
 
 @pytest.fixture
+def example_latest_compatible_schema_obj(example_compatible_schema):
+    return get_avro_schema_object(example_compatible_schema)
+
+
+@pytest.fixture
 def example_payload_data(example_schema_obj):
     return generate_payload_data(example_schema_obj)
+
+
+@pytest.fixture
+def example_payload_data_with_latest_schema(example_latest_compatible_schema_obj):
+    return generate_payload_data(example_latest_compatible_schema_obj)
 
 
 @pytest.fixture
@@ -120,8 +216,49 @@ def payload(example_schema, example_payload_data):
 
 
 @pytest.fixture
+def payload_with_latest_schema(example_latest_compatible_schema_obj, example_payload_data_with_latest_schema):
+    return AvroStringWriter(example_latest_compatible_schema_obj).encode(example_payload_data_with_latest_schema)
+
+
+@pytest.fixture
 def example_previous_payload_data(example_schema_obj):
     return generate_payload_data(example_schema_obj)
+
+
+@pytest.fixture
+def topic_name_with_registered_schema(registered_schema):
+    return registered_schema.topic.name.encode('utf-8')
+
+
+@pytest.fixture(scope='module')
+def topic_name_of_latest_schema_having_multiple_compatible_schemas(registered_multiple_schemas_with_same_topic):
+    return str(registered_multiple_schemas_with_same_topic[1].topic.name)
+
+
+@pytest.fixture(scope='module')
+def topic_name_of_expected_schema_having_multiple_compatible_schemas(registered_multiple_schemas_with_same_topic):
+    return str(registered_multiple_schemas_with_same_topic[0].topic.name)
+
+
+@pytest.fixture
+def topic_with_registered_schema(containers, topic_name_with_registered_schema):
+    containers.create_kafka_topic(topic_name_with_registered_schema)
+    return topic_name_with_registered_schema
+
+
+@pytest.fixture
+def topic_name_two_with_registered_schema(registered_schema_two):
+    return registered_schema_two.topic.name.encode('utf-8')
+
+
+@pytest.fixture(scope='module')
+def topic_name(registered_schema):
+    return str(registered_schema.topic.name)
+
+
+@pytest.fixture(scope='module')
+def topic_two_name(registered_schema_two):
+    return str(registered_schema_two.topic.name)
 
 
 @pytest.fixture
@@ -141,6 +278,104 @@ def message(registered_schema, payload):
     return CreateMessage(
         schema_id=registered_schema.schema_id,
         payload=payload
+    )
+
+
+@pytest.fixture
+def messages_with_multiple_compatible_schemas_for_same_topic(
+        topic_name_of_latest_schema_having_multiple_compatible_schemas,
+        topic_name_of_expected_schema_having_multiple_compatible_schemas,
+        registered_multiple_schemas_with_same_topic,
+        payload,
+        payload_with_latest_schema,
+        example_payload_data,
+        example_payload_data_with_latest_schema
+):
+    registered_schema, registered_schema_two = registered_multiple_schemas_with_same_topic
+    msg = CreateMessage(
+        topic=str(registered_schema.topic.name),
+        schema_id=registered_schema.schema_id,
+        payload=payload,
+        timestamp=1500,
+        contains_pii=False
+    )
+
+    msg_latest = CreateMessage(
+        topic=str(registered_schema_two.topic.name),
+        schema_id=registered_schema_two.schema_id,
+        payload=payload_with_latest_schema,
+        timestamp=1500,
+        contains_pii=False
+    )
+    assert msg.topic == topic_name_of_expected_schema_having_multiple_compatible_schemas
+    assert msg.schema_id == registered_schema.schema_id
+    assert msg.reader_schema_id == registered_schema.schema_id
+    assert msg.payload == payload
+    assert msg.payload_data == example_payload_data
+
+    assert msg_latest.topic == topic_name_of_latest_schema_having_multiple_compatible_schemas
+    assert msg_latest.schema_id == registered_schema_two.schema_id
+    assert msg_latest.reader_schema_id == registered_schema_two.schema_id
+    assert msg_latest.payload == payload_with_latest_schema
+    assert msg_latest.payload_data == example_payload_data_with_latest_schema
+
+    return msg, msg_latest
+
+
+@pytest.fixture
+def message_encoded_with_latest_schema_having_multiple_compatible_schemas(
+        topic_name_of_latest_schema_having_multiple_compatible_schemas,
+        registered_multiple_schemas_with_same_topic,
+        payload_with_latest_schema,
+        example_payload_data_with_latest_schema
+):
+    msg = CreateMessage(
+        topic=str(registered_multiple_schemas_with_same_topic[1].topic.name),
+        schema_id=registered_multiple_schemas_with_same_topic[1].schema_id,
+        payload=payload_with_latest_schema,
+        timestamp=1500,
+        contains_pii=False
+    )
+
+    assert msg.topic == topic_name_of_latest_schema_having_multiple_compatible_schemas
+    assert msg.schema_id == registered_multiple_schemas_with_same_topic[1].schema_id
+    assert msg.reader_schema_id == registered_multiple_schemas_with_same_topic[1].schema_id
+    assert msg.payload == payload_with_latest_schema
+    assert msg.payload_data == example_payload_data_with_latest_schema
+    return msg
+
+
+@pytest.fixture
+def expected_message_having_multiple_compatible_schemas(
+        topic_name_of_expected_schema_having_multiple_compatible_schemas,
+        registered_multiple_schemas_with_same_topic,
+        payload,
+        example_payload_data,
+):
+    msg = CreateMessage(
+        topic=str(registered_multiple_schemas_with_same_topic[0].topic.name),
+        schema_id=registered_multiple_schemas_with_same_topic[0].schema_id,
+        payload=payload,
+        timestamp=1500,
+        contains_pii=False
+    )
+
+    assert msg.topic == topic_name_of_expected_schema_having_multiple_compatible_schemas
+    assert msg.schema_id == registered_multiple_schemas_with_same_topic[0].schema_id
+    assert msg.reader_schema_id == registered_multiple_schemas_with_same_topic[0].schema_id
+    assert msg.payload == payload
+    assert msg.payload_data == example_payload_data
+    return msg
+
+
+@pytest.fixture
+def message_with_payload_data(topic_name_with_registered_schema, registered_schema):
+    return CreateMessage(
+        topic=topic_name_with_registered_schema,
+        schema_id=registered_schema.schema_id,
+        payload_data={'good_field': 100},
+        timestamp=1500,
+        contains_pii=False
     )
 
 

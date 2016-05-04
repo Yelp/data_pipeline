@@ -71,6 +71,8 @@ class BaseConsumer(Client):
             consumer_name is used. If there is no committed kafka offset for
             the consumer_name the consumer will begin from the
             `auto_offset_reset` offset in the topic.
+        consumer_source (ConsumerSource): The source of topics to tail.
+                see :class: `data_pipeline.consumer_source.ConsumerSource
         auto_offset_reset (str): automatically resets the offset when there is
             no initial offset in Zookeeper or if an offset is out of range.
             If 'largest', reset the offset to the latest available message (tail).
@@ -96,7 +98,8 @@ class BaseConsumer(Client):
         consumer_name,
         team_name,
         expected_frequency_seconds,
-        topic_to_consumer_topic_state_map,
+        topic_to_consumer_topic_state_map=None,
+        consumer_source=None,
         force_payload_decode=True,
         auto_offset_reset='smallest',
         partitioner_cooldown=get_config().consumer_partitioner_cooldown_default,
@@ -109,6 +112,11 @@ class BaseConsumer(Client):
             expected_frequency_seconds,
             monitoring_enabled=False
         )
+        if (topic_to_consumer_topic_state_map and consumer_source or
+                not topic_to_consumer_topic_state_map and not consumer_source):
+            raise ValueError("Consumer source or topic state map must be specified")
+
+        self.consumer_source = self.update_topic_state_map(consumer_source, topic_to_consumer_topic_state_map)
         self.topic_to_consumer_topic_state_map = topic_to_consumer_topic_state_map
         self.force_payload_decode = force_payload_decode
         self.auto_offset_reset = auto_offset_reset
@@ -117,6 +125,12 @@ class BaseConsumer(Client):
         self.consumer_group = None
         self.pre_rebalance_callback = pre_rebalance_callback
         self.post_rebalance_callback = post_rebalance_callback
+
+    def update_topic_state_map(self, consumer_source, topic_to_consumer_topic_state_map):
+        if consumer_source:
+            for topic in consumer_source.get_topics():
+                topic_to_consumer_topic_state_map[topic] = None
+        return consumer_source
 
     @cached_property
     def kafka_client(self):

@@ -158,6 +158,15 @@ class Message(object):
         self._schema_id = schema_id
 
     @property
+    def reader_schema_id(self):
+        return self._reader_schema_id
+
+    def _set_reader_schema_id(self, reader_schema_id):
+        if reader_schema_id and not isinstance(reader_schema_id, int):
+            raise TypeError("Reader schema id should be an int")
+        self._reader_schema_id = reader_schema_id if reader_schema_id else self.schema_id
+
+    @property
     def message_type(self):
         """Identifies the nature of the message."""
         return self._message_type
@@ -304,6 +313,10 @@ class Message(object):
         return self._schematizer.get_schema_by_id(self.schema_id).schema_json
 
     @property
+    def _avro_reader_schema(self):
+        return self._schematizer.get_schema_by_id(self._reader_schema_id).schema_json
+
+    @property
     def _avro_string_writer(self):
         return AvroStringWriter(
             schema=self._avro_schema
@@ -312,7 +325,7 @@ class Message(object):
     @property
     def _avro_string_reader(self):
         return AvroStringReader(
-            reader_schema=self._avro_schema,
+            reader_schema=self._avro_reader_schema,
             writer_schema=self._avro_schema
         )
 
@@ -358,6 +371,7 @@ class Message(object):
     def __init__(
         self,
         schema_id,
+        reader_schema_id=None,
         topic=None,
         payload=None,
         payload_data=None,
@@ -376,6 +390,7 @@ class Message(object):
         # serialization.  Finally, if we do it this way, we can lazily
         # serialize the payload in a subclass if necessary.
         self._set_schema_id(schema_id)
+        self._set_reader_schema_id(reader_schema_id)
         self._set_topic(
             topic or str(self._schematizer.get_schema_by_id(schema_id).topic.name)
         )
@@ -464,7 +479,8 @@ class Message(object):
         cls,
         unpacked_message,
         topic=None,
-        kafka_position_info=None
+        kafka_position_info=None,
+        schema_ids=None
     ):
         encryption_type = unpacked_message['encryption_type']
         meta = cls._get_unpacked_meta(unpacked_message)
@@ -474,9 +490,11 @@ class Message(object):
             meta=meta
         )
 
+        schema_id = cls._get_compatible_reader_schema_id(topic, schema_ids, unpacked_message)
         message_params = {
             'uuid': unpacked_message['uuid'],
             'schema_id': unpacked_message['schema_id'],
+            'reader_schema_id': schema_id,
             'payload': payload,
             'timestamp': unpacked_message['timestamp'],
             'meta': meta,
@@ -494,6 +512,30 @@ class Message(object):
             MetaAttribute(schema_id=o['schema_id'], encoded_payload=o['payload'])
             for o in unpacked_message['meta']
         ] if unpacked_message['meta'] else None
+
+    @classmethod
+    def _get_compatible_reader_schema_id(cls, topic, schema_ids, unpacked_message):
+        """ Returns the highest reader schema_id from the `schema_ids` for
+        `topic` that is compatible is writer schema id.
+
+        Note:
+            In case the `schema_ids` contains multiple schema ids for the same
+            topic, compatible schema with the highest schema_id is returned.
+        """
+
+        schema_id = unpacked_message['schema_id']
+        if schema_ids:
+            schemas = get_schematizer().get_schemas_by_topic_name(topic)
+            # schema_id is always incremental. so sort by schema_id
+            schemas = sorted(schemas, key=lambda avro_schema: avro_schema.schema_id, reverse=True)
+            for schema in schemas:
+                # Ensures that the message is always decoded with an earlier schema
+                # than the schema the message was encoded with (backward compatibility)
+                # and exists in the user specified schema_ids
+                if schema.schema_id in schema_ids and schema.schema_id < unpacked_message['schema_id']:
+                    schema_id = schema.schema_id
+                    break
+        return schema_id
 
     @classmethod
     def _get_unpacked_decrypted_payload(cls, payload, encryption_type, meta):
@@ -644,6 +686,7 @@ class UpdateMessage(Message):
     def __init__(
         self,
         schema_id,
+        reader_schema_id=None,
         topic=None,
         payload=None,
         payload_data=None,
@@ -660,6 +703,7 @@ class UpdateMessage(Message):
     ):
         super(UpdateMessage, self).__init__(
             schema_id,
+            reader_schema_id,
             topic=topic,
             payload=payload,
             payload_data=payload_data,
@@ -751,7 +795,8 @@ class UpdateMessage(Message):
         cls,
         unpacked_message,
         topic=None,
-        kafka_position_info=None
+        kafka_position_info=None,
+        schema_ids=None
     ):
         encryption_type = unpacked_message['encryption_type']
         meta = cls._get_unpacked_meta(unpacked_message)
@@ -766,9 +811,11 @@ class UpdateMessage(Message):
             meta=meta
         )
 
+        schema_id = cls._get_compatible_reader_schema_id(topic, schema_ids, unpacked_message)
         message_params = {
             'uuid': unpacked_message['uuid'],
             'schema_id': unpacked_message['schema_id'],
+            'reader_schema_id': schema_id,
             'payload': payload,
             'previous_payload': previous_payload,
             'timestamp': unpacked_message['timestamp'],
@@ -835,9 +882,13 @@ _message_type_to_class_map = {
 def create_from_kafka_message(
     topic,
     kafka_message,
-    force_payload_decoding=True
+    force_payload_decoding=True,
+    schema_ids=None
 ):
     """ Build a data_pipeline.message.Message from a yelp_kafka message
+    and uses the highest compatible schema id from the schema_ids list. If no
+    compatible schema id exists then uses the schema id, the kafka message
+    was encoded with.
 
     Args:
         topic (str): The topic name from which the message was received.
@@ -850,6 +901,8 @@ def create_from_kafka_message(
             we will decode the payload/previous_payload immediately.
             Otherwise the decoding will happen whenever the lazy *_data
             properties are accessed.
+        schema_ids (list): The list of schema ids to build
+            data_pipeline.message.Message
 
     Returns (class:`data_pipeline.message.Message`):
         The message object
@@ -863,16 +916,21 @@ def create_from_kafka_message(
         topic=kafka_message.topic,
         packed_message=kafka_message,
         force_payload_decoding=force_payload_decoding,
-        kafka_position_info=kafka_position_info
+        kafka_position_info=kafka_position_info,
+        schema_ids=schema_ids
     )
 
 
 def create_from_offset_and_message(
     topic,
     offset_and_message,
-    force_payload_decoding=True
+    force_payload_decoding=True,
+    schema_ids=None
 ):
     """ Build a data_pipeline.message.Message from a kafka.common.OffsetAndMessage
+    and uses the highest compatible schema id from the schema_ids list. If no
+    compatible schema id exists then uses the schema id, the packed message
+    was encoded with.
 
     Args:
         topic (str): The topic name from which the message was received.
@@ -883,6 +941,8 @@ def create_from_offset_and_message(
             we will decode the payload/previous_payload immediately.
             Otherwise the decoding will happen whenever the lazy *_data
             properties are accessed.
+        schema_ids (list): The list of schema ids to build
+            data_pipeline.message.Message
 
     Returns (data_pipeline.message.Message):
         The message object
@@ -890,7 +950,8 @@ def create_from_offset_and_message(
     return _create_message_from_packed_message(
         topic=topic,
         packed_message=offset_and_message.message,
-        force_payload_decoding=force_payload_decoding
+        force_payload_decoding=force_payload_decoding,
+        schema_ids=schema_ids
     )
 
 
@@ -898,9 +959,14 @@ def _create_message_from_packed_message(
     topic,
     packed_message,
     force_payload_decoding,
-    kafka_position_info=None
+    kafka_position_info=None,
+    schema_ids=None
 ):
-    """ Builds a data_pipeline.message.Message from packed_message
+    """ Builds a data_pipeline.message.Message from packed_message and uses
+    the highest compatible schema id from the schema_ids list. If no
+    compatible schema id exists then uses the schema id, the packed message
+    was encoded with.
+
     Args:
         topic (str): the topic name where the message comes from.
         packed_message (yelp_kafka.consumer.Message or kafka.common.KafkaMessage):
@@ -914,6 +980,8 @@ def _create_message_from_packed_message(
         kafka_position_info (Optional[KafkaPositionInfo]): The specified kafka
             position information.  The kafka_position_info may be constructed
             from the unpacked yelp_kafka message.
+        schema_ids (list): The list of schema ids to build
+            data_pipeline.message.Message
 
     Returns (data_pipeline.message.Message):
         The message object
@@ -923,7 +991,8 @@ def _create_message_from_packed_message(
     message = message_class.create_from_unpacked_message(
         unpacked_message=unpacked_message,
         topic=topic,
-        kafka_position_info=kafka_position_info
+        kafka_position_info=kafka_position_info,
+        schema_ids=schema_ids
     )
     if force_payload_decoding:
         # Access the cached, but lazily-calculated, properties
