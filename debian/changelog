@@ -1,3 +1,9 @@
+data-pipeline-tools (0.1.69) lucid; urgency=low
+
+  * Commit: Merge remote-tracking branch 'origin/DATAPIPE-797'
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Thu, 05 May 2016 16:51:21 -0700
+
 data-pipeline-tools (0.1.68) lucid; urgency=low
 
   * Commit: re-write the flaky test of offset cache cleared after
