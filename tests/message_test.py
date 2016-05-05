@@ -385,7 +385,6 @@ class TestRefreshMessage(PayloadOnlyMessageTest):
             message.payload_diff
 
 
-
 class TestDeleteMessage(PayloadOnlyMessageTest):
 
     @property
