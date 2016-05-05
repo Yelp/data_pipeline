@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+from collections import defaultdict
 from contextlib import contextmanager
 
 from cached_property import cached_property
@@ -160,6 +161,7 @@ class BaseConsumer(Client):
             raise RuntimeError("Consumer '{0}' is already running".format(
                 self.client_name
             ))
+        self.reset_topic_to_partition_offset_cache()
         self._commit_topic_map_offsets()
         self._start()
         self.running = True
@@ -177,6 +179,7 @@ class BaseConsumer(Client):
         if self.running:
             self._stop()
         self.kafka_client.close()
+        self.reset_topic_to_partition_offset_cache()
         self.running = False
         logger.info("Consumer '{0}' stopped".format(self.client_name))
 
@@ -186,6 +189,9 @@ class BaseConsumer(Client):
                 blocking=True,
                 timeout=get_config().consumer_get_messages_timeout_default
             )
+
+    def reset_topic_to_partition_offset_cache(self):
+        self.topic_to_partition_offset_map_cache = defaultdict(dict)
 
     def get_message(
         self,
@@ -313,6 +319,9 @@ class BaseConsumer(Client):
             topic_to_partition_offset_map (Dict[str, Dict[int, int]]): Maps from
                 topics to a partition and offset map for each topic.
         """
+        topic_to_partition_offset_map = self._get_offsets_map_to_be_committed(
+            topic_to_partition_offset_map
+        )
         return self._send_offset_commit_requests(
             offset_commit_request_list=[
                 OffsetCommitRequest(
@@ -324,6 +333,19 @@ class BaseConsumer(Client):
                 for partition, offset in partition_map.iteritems()
             ]
         )
+
+    def _get_offsets_map_to_be_committed(
+        self,
+        topic_to_partition_offset_map
+    ):
+        filtered_topic_to_partition_offset_map = defaultdict(dict)
+        for topic, partition_map in topic_to_partition_offset_map.items():
+            for partition, offset in partition_map.items():
+                if (partition not in self.topic_to_partition_offset_map_cache[topic] or
+                        self.topic_to_partition_offset_map_cache[topic][partition] != offset):
+                    self.topic_to_partition_offset_map_cache[topic][partition] = offset
+                    filtered_topic_to_partition_offset_map[topic][partition] = offset
+        return filtered_topic_to_partition_offset_map
 
     @contextmanager
     def ensure_committed(self, messages):
@@ -480,6 +502,8 @@ class BaseConsumer(Client):
             key: self.topic_to_consumer_topic_state_map.get(key)
             for key in partitions
         }
+
+        self.reset_topic_to_partition_offset_cache()
 
         if self.post_rebalance_callback:
             return self.post_rebalance_callback(partitions)

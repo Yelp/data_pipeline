@@ -11,8 +11,11 @@ from data_pipeline import message as dp_message
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import create_from_offset_and_message
+from data_pipeline.message import InvalidOperation
 from data_pipeline.message import MetaAttribute
+from data_pipeline.message import NoEntryPayload
 from data_pipeline.message import PayloadFieldDiff
+from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
 from data_pipeline.schematizer_clientlib.models.avro_schema import AvroSchema
 from data_pipeline.schematizer_clientlib.models.topic import Topic
@@ -300,6 +303,26 @@ class TestCreateMessage(PayloadOnlyMessageTest):
     def expected_message_type(self):
         return MessageType.create
 
+    def test_payload_diff(self, valid_message_data):
+        valid_message_data.pop('payload', None)
+        message_data = self._make_message_data(
+            valid_message_data,
+            payload_data={'key1': 1, 'key2': 20}
+        )
+        message = self.message_class(**message_data)
+
+        expected = {
+            'key1': PayloadFieldDiff(
+                old_value=NoEntryPayload,
+                current_value=1
+            ),
+            'key2': PayloadFieldDiff(
+                old_value=NoEntryPayload,
+                current_value=20
+            )
+        }
+        assert message.payload_diff == expected
+
 
 class TestLogMessage(PayloadOnlyMessageTest):
     @property
@@ -309,6 +332,36 @@ class TestLogMessage(PayloadOnlyMessageTest):
     @property
     def expected_message_type(self):
         return MessageType.log
+
+    def test_payload_diff_raises_exception(self, valid_message_data):
+        valid_message_data.pop('payload', None)
+        message_data = self._make_message_data(
+            valid_message_data,
+            payload_data={'key1': 1, 'key2': 20}
+        )
+        message = self.message_class(**message_data)
+        with pytest.raises(InvalidOperation):
+            message.payload_diff
+
+
+class TestMonitorMessage(PayloadOnlyMessageTest):
+    @property
+    def message_class(self):
+        return dp_message.MonitorMessage
+
+    @property
+    def expected_message_type(self):
+        return _ProtectedMessageType.monitor
+
+    def test_payload_diff_raises_exception(self, valid_message_data):
+        valid_message_data.pop('payload', None)
+        message_data = self._make_message_data(
+            valid_message_data,
+            payload_data={'key1': 1, 'key2': 20}
+        )
+        message = self.message_class(**message_data)
+        with pytest.raises(InvalidOperation):
+            message.payload_diff
 
 
 class TestRefreshMessage(PayloadOnlyMessageTest):
@@ -321,6 +374,16 @@ class TestRefreshMessage(PayloadOnlyMessageTest):
     def expected_message_type(self):
         return MessageType.refresh
 
+    def test_payload_diff_raises_exception(self, valid_message_data):
+        valid_message_data.pop('payload', None)
+        message_data = self._make_message_data(
+            valid_message_data,
+            payload_data={'key1': 1, 'key2': 20}
+        )
+        message = self.message_class(**message_data)
+        with pytest.raises(InvalidOperation):
+            message.payload_diff
+
 
 class TestDeleteMessage(PayloadOnlyMessageTest):
 
@@ -331,6 +394,26 @@ class TestDeleteMessage(PayloadOnlyMessageTest):
     @property
     def expected_message_type(self):
         return MessageType.delete
+
+    def test_payload_diff(self, valid_message_data):
+        valid_message_data.pop('payload', None)
+        message_data = self._make_message_data(
+            valid_message_data,
+            payload_data={'key1': 1, 'key2': 20}
+        )
+        message = self.message_class(**message_data)
+
+        expected = {
+            'key1': PayloadFieldDiff(
+                old_value=1,
+                current_value=NoEntryPayload
+            ),
+            'key2': PayloadFieldDiff(
+                old_value=20,
+                current_value=NoEntryPayload
+            )
+        }
+        assert message.payload_diff == expected
 
 
 class TestUpdateMessage(SharedMessageTest):

@@ -14,6 +14,7 @@ from data_pipeline.consumer import Consumer
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import CreateMessage
 from tests.base_consumer_test import BaseConsumerTest
+from tests.base_consumer_test import MULTI_CONSUMER_TIMEOUT
 from tests.base_consumer_test import MultiTopicsSetupMixin
 from tests.base_consumer_test import RefreshDynamicTopicTests
 from tests.base_consumer_test import RefreshFixedTopicTests
@@ -25,6 +26,7 @@ from tests.base_consumer_test import TopicInDataTargetSetupMixin
 from tests.base_consumer_test import TopicsInFixedNamespacesSetupMixin
 from tests.base_consumer_test import TopicInSourceSetupMixin
 from tests.helpers.config import reconfigure
+from tests.helpers.mock_utils import attach_spy_on_func
 
 
 class TestConsumer(BaseConsumerTest):
@@ -107,6 +109,59 @@ class TestConsumer(BaseConsumerTest):
             post_rebalance_callback=post_rebalance_callback
         )
 
+    def test_offset_cache_cleared_at_rebalance(
+        self,
+        topic,
+        pii_topic,
+        publish_messages,
+        consumer_instance,
+        consumer_two_instance,
+        message,
+        pii_message
+    ):
+        """
+        This test starts a consumer (consumer_one) with two topics and
+        retrieves a message and starts another consumer (consumer_two)
+        with the same name in a separate process. This test asserts that
+        everytime a consumer under goes rebalance
+        topic_to_partition_offset_map_cache is reset.
+        """
+
+        consumer_one_rebalanced_event = Event()
+        with consumer_instance as consumer_one:
+            # publishing messages on two topics
+            publish_messages(message, count=10)
+            publish_messages(pii_message, count=10)
+
+            consumer_two_process = Process(
+                target=self._run_consumer_two,
+                args=(consumer_two_instance, consumer_one_rebalanced_event)
+            )
+            consumer_two_process.start()
+            consumer_one_msgs = []
+            for _ in range(2):
+                msg = consumer_one.get_message(blocking=True, timeout=MULTI_CONSUMER_TIMEOUT)
+                consumer_one.commit_message(msg)
+                consumer_one_msgs.append(msg)
+                time.sleep(1)
+
+            consumer_one_rebalanced_event.set()
+            consumer_two_process.join()
+
+            # force consumer rebalance, consumer rebalance is defered
+            # until get_message
+            for _ in range(8):
+                consumer_one.get_message(blocking=True, timeout=MULTI_CONSUMER_TIMEOUT)
+
+            # post rebalance callback is not called untill consumer
+            # talks to kafka
+            with attach_spy_on_func(
+                consumer_one.kafka_client,
+                'send_offset_commit_request'
+            ) as func_spy:
+                consumer_one.commit_messages(consumer_one_msgs)
+                assert func_spy.call_count == 1
+
     def test_sync_topic_consumer_map(
         self,
         topic,
@@ -128,7 +183,6 @@ class TestConsumer(BaseConsumerTest):
         the original topics have been reassigned to consumer one.
         """
         consumer_one_rebalanced_event = Event()
-
         with consumer_instance as consumer_one:
             # publishing messages on two topics
             publish_messages(message, count=10)
@@ -151,7 +205,7 @@ class TestConsumer(BaseConsumerTest):
             consumer_one_rebalanced_event.set()
             consumer_two_process.join()
 
-            for _ in range(6):
+            for _ in range(8):
                 consumer_one.get_message(blocking=True, timeout=TIMEOUT)
             assert len(consumer_one.topic_to_consumer_topic_state_map) == 2
 
@@ -161,7 +215,7 @@ class TestConsumer(BaseConsumerTest):
             another_consumer.get_message(blocking=True, timeout=TIMEOUT)
             rebalanced_event.wait()
 
-            for _ in range(8):
+            for _ in range(9):
                 another_consumer.get_message(blocking=True, timeout=TIMEOUT)
 
 
