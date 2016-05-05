@@ -6,6 +6,7 @@ import time
 from collections import namedtuple
 from uuid import UUID
 
+from enum import Enum
 from yelp_avro.avro_string_reader import AvroStringReader
 from yelp_avro.avro_string_writer import AvroStringWriter
 from yelp_lib.containers.lists import unlist
@@ -34,6 +35,19 @@ PayloadFieldDiff = namedtuple('PayloadFieldDiff', [
     'old_value',            # Value of the field before update
     'current_value'         # Value of the field after update
 ])
+
+
+class FieldValue(Enum):
+    """Enum that specifies the content of the field in the payload data or
+    previous payload data.
+
+    Attributes:
+      DATA_NOT_AVAILABLE: No information is available for the field.
+      EMPTY_DATA: field value is None.
+    """
+
+    DATA_NOT_AVAILABLE = "DATA_NOT_AVAILABLE"
+    EMPTY_DATA = "EMPTY_DATA"
 
 
 class Message(object):
@@ -263,10 +277,11 @@ class Message(object):
 
     @upstream_position_info.setter
     def upstream_position_info(self, upstream_position_info):
-        # This should be treated as special case for external users to update
-        # this data after the Message class is instantiated. Right now Paastorm
-        # uses this attribute to keep track upstream message offset. Replace
-        # this setter if there is a better alternative.
+        # This should be the only exception that users can update the data after
+        # the message is created. The `upstream_position_info` is not used in
+        # the data pipeline and the data is up to the application, so it should
+        # be ok. It is more efficient and simpler to allow application updating
+        # the data than creating new instance with new data each time.
         self._set_upstream_position_info(upstream_position_info)
 
     @property
@@ -333,6 +348,12 @@ class Message(object):
         if self._any_invalid_type(keys, unicode):
             raise TypeError("Element of keys must be unicode.")
         self._keys = keys
+
+    @property
+    def payload_diff(self):
+        return {
+            field: self._get_field_diff(field) for field in self.payload_data
+        }
 
     def __init__(
         self,
@@ -552,23 +573,53 @@ class CreateMessage(Message):
 
     _message_type = MessageType.create
 
+    def _get_field_diff(self, field):
+        return PayloadFieldDiff(
+            old_value=FieldValue.EMPTY_DATA,
+            current_value=self.payload_data[field]
+        )
+
 
 class DeleteMessage(Message):
 
     _message_type = MessageType.delete
+
+    def _get_field_diff(self, field):
+        return PayloadFieldDiff(
+            old_value=self.payload_data[field],
+            current_value=FieldValue.DATA_NOT_AVAILABLE
+        )
 
 
 class RefreshMessage(Message):
 
     _message_type = MessageType.refresh
 
+    def _get_field_diff(self, field):
+        return PayloadFieldDiff(
+            old_value=FieldValue.DATA_NOT_AVAILABLE,
+            current_value=self.payload_data[field]
+        )
+
 
 class LogMessage(Message):
     _message_type = MessageType.log
 
+    def _get_field_diff(self, field):
+        return PayloadFieldDiff(
+            old_value=FieldValue.DATA_NOT_AVAILABLE,
+            current_value=self.payload_data[field]
+        )
+
 
 class MonitorMessage(Message):
     _message_type = _ProtectedMessageType.monitor
+
+    def _get_field_diff(self, field):
+        return PayloadFieldDiff(
+            old_value=FieldValue.DATA_NOT_AVAILABLE,
+            current_value=self.payload_data[field]
+        )
 
 
 class UpdateMessage(Message):

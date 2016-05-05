@@ -423,7 +423,9 @@ class SchematizerClient(object):
         self,
         namespace_name=None,
         source_name=None,
-        created_after=None
+        created_after=None,
+        min_id=0,
+        page_size=1
     ):
         """Get all the topics that match specified criteria.  If no criterion
         is specified, it returns all the topics.
@@ -434,24 +436,34 @@ class SchematizerClient(object):
             created_after (Optional[int]): Epoch timestamp the topics should be
                 created after.  The topics created at the same timestamp are
                 also included.
+            min_id (Optional[int]): Limits results to those topics with an id
+                greater than or equal to given min_id (default: 0)
+            page_size (Optional[int]): Maximum number of topics to retrieve per page.
+                (default: 1 - see DATAPIPE-935 for reason why)
 
         Returns:
             (List[data_pipeline.schematizer_clientlib.models.topic.Topic]):
                 list of topics that match given criteria.
         """
-        response = self._call_api(
-            api=self._client.topics.get_topics_by_criteria,
-            params={
-                'namespace': namespace_name,
-                'source': source_name,
-                'created_after': created_after
-            }
-        )
+        last_page_size = page_size
         result = []
-        for resp_item in response:
-            _topic = _Topic.from_response(resp_item)
-            result.append(_topic.to_result())
-            self._set_cache_by_topic(_topic)
+        while last_page_size == page_size:
+            response = self._call_api(
+                api=self._client.topics.get_topics_by_criteria,
+                params={
+                    'namespace': namespace_name,
+                    'source': source_name,
+                    'created_after': created_after,
+                    'min_id': min_id,
+                    'count': page_size
+                }
+            )
+            for resp_item in response:
+                _topic = _Topic.from_response(resp_item)
+                result.append(_topic.to_result())
+                self._set_cache_by_topic(_topic)
+                min_id = _topic.topic_id + 1
+            last_page_size = len(response)
         return result
 
     def create_data_target(self, target_type, destination):

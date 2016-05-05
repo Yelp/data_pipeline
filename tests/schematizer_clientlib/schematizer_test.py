@@ -838,6 +838,40 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
             assert topic_api_spy.call_count == 0
             assert source_api_spy.call_count == 0
 
+    def test_topic_page_size(
+        self,
+        schematizer,
+        yelp_namespace,
+        yelp_topics
+    ):
+        with self.attach_spy_on_api(
+            schematizer._client.topics,
+            'get_topics_by_criteria'
+        ) as topic_api_spy:
+            actual = schematizer.get_topics_by_criteria(
+                namespace_name=yelp_namespace,
+                page_size=1
+            )
+            self._assert_topics_values(actual, expected_topics=yelp_topics)
+            # Since we have a page size of 1, we should need to fetch len(yelp_topics) + 1 pages
+            # before we get a page with #items less than our page_size (0 items)
+            # Thus, we should call the api len(yelp_topic) + 1 times
+            assert topic_api_spy.call_count == len(yelp_topics) + 1
+
+    def test_topic_min_id(
+        self,
+        schematizer,
+        yelp_namespace,
+        yelp_topics
+    ):
+        sorted_yelp_topics = sorted(yelp_topics, key=lambda topic: topic.topic_id)
+        actual = schematizer.get_topics_by_criteria(
+            namespace_name=yelp_namespace,
+            min_id=sorted_yelp_topics[0].topic_id + 1
+        )
+        assert len(actual) == len(sorted_yelp_topics) - 1
+        self._assert_topics_values(actual, expected_topics=sorted_yelp_topics[1:])
+
 
 class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
 
