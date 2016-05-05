@@ -567,7 +567,7 @@ class BaseConsumer(Client):
 
         Args:
             consumer_source (data_pipeline.consumer_source.ConsumerSource): one
-                of ConsumerSource types, such as SingleTopic, TopicInNamespace.
+            of ConsumerSource types, such as SingleTopic, TopicsInFixedNamespaces.
 
         Returns:
             List[str]: A list of new topic names that this consumer starts to

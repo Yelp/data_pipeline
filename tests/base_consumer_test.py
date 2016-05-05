@@ -14,12 +14,12 @@ from data_pipeline.base_consumer import ConsumerTopicState
 from data_pipeline.base_consumer import TopicFilter
 from data_pipeline.consumer_source import FixedTopics
 from data_pipeline.consumer_source import NewTopicOnlyInDataTarget
-from data_pipeline.consumer_source import NewTopicsOnlyInFixedNamespaces
 from data_pipeline.consumer_source import NewTopicOnlyInSource
+from data_pipeline.consumer_source import NewTopicsOnlyInFixedNamespaces
 from data_pipeline.consumer_source import SingleSchema
 from data_pipeline.consumer_source import TopicInDataTarget
-from data_pipeline.consumer_source import TopicsInFixedNamespaces
 from data_pipeline.consumer_source import TopicInSource
+from data_pipeline.consumer_source import TopicsInFixedNamespaces
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import UpdateMessage
 from data_pipeline.producer import Producer
@@ -940,11 +940,11 @@ class TopicsInFixedNamespacesSetupMixin(RefreshDynamicTopicTests):
 
     @pytest.fixture
     def consumer_source(self, consumer_source_cls, foo_namespace):
-        return consumer_source_cls(namespace_names=[foo_namespace])
+        return consumer_source_cls(foo_namespace)
 
     @pytest.fixture
     def bad_consumer_source(self, consumer_source_cls):
-        return consumer_source_cls(namespace_names=['bad_namespace'])
+        return consumer_source_cls('bad_namespace')
 
     @pytest.fixture
     def consumer_source_with_bad_topic(
@@ -953,7 +953,7 @@ class TopicsInFixedNamespacesSetupMixin(RefreshDynamicTopicTests):
         schema_with_bad_topic
     ):
         return consumer_source_cls(
-            namespace_names=[schema_with_bad_topic.topic.source.namespace.name]
+            schema_with_bad_topic.topic.source.namespace.name
         )
 
 

@@ -9,12 +9,12 @@ import pytest
 
 from data_pipeline.consumer_source import FixedTopics
 from data_pipeline.consumer_source import NewTopicOnlyInDataTarget
-from data_pipeline.consumer_source import NewTopicsOnlyInFixedNamespaces
 from data_pipeline.consumer_source import NewTopicOnlyInSource
+from data_pipeline.consumer_source import NewTopicsOnlyInFixedNamespaces
 from data_pipeline.consumer_source import SingleSchema
 from data_pipeline.consumer_source import TopicInDataTarget
-from data_pipeline.consumer_source import TopicsInFixedNamespaces
 from data_pipeline.consumer_source import TopicInSource
+from data_pipeline.consumer_source import TopicsInFixedNamespaces
 from data_pipeline.schematizer_clientlib.models.data_source_type_enum \
     import DataSourceTypeEnum
 
@@ -169,7 +169,7 @@ class NamespaceSrcSetupMixin(ConsumerSourceTestBase):
 
     @pytest.fixture
     def consumer_source(self, foo_namespace, baz_namespace, consumer_source_cls):
-        return consumer_source_cls(namespace_names=[foo_namespace, baz_namespace])
+        return consumer_source_cls(foo_namespace, baz_namespace)
 
     @pytest.fixture
     def consumer_source_topics(self, foo_topic, baz_topic):
@@ -177,7 +177,7 @@ class NamespaceSrcSetupMixin(ConsumerSourceTestBase):
 
     @pytest.fixture
     def bad_consumer_source(self, consumer_source_cls):
-        return consumer_source_cls(namespace_names=['bad namespace'])
+        return consumer_source_cls('bad namespace')
 
 
 class SourceSrcSetupMixin(ConsumerSourceTestBase):
@@ -305,11 +305,11 @@ class TestTopicsInFixedNamespaces(DynamicTopicSrcTests, NamespaceSrcSetupMixin):
 
     def test_empty_namespace(self):
         with pytest.raises(ValueError):
-            TopicsInFixedNamespaces(namespace_names=[])
+            TopicsInFixedNamespaces()
 
     def test_invalid_namespace(self):
         with pytest.raises(ValueError):
-            TopicsInFixedNamespaces(namespace_names='')
+            TopicsInFixedNamespaces('')
 
 
 class TestTopicsInSource(DynamicTopicSrcTests, SourceSrcSetupMixin):
@@ -338,7 +338,7 @@ class TestTopicsInDataTarget(DynamicTopicSrcTests, DataTargetSetupMixin):
             TopicInDataTarget(data_target_id=0)
 
 
-@pytest.mark.usefixtures('foo_schema','baz_schema')
+@pytest.mark.usefixtures('foo_schema', 'baz_schema')
 class NewTopicOnlySrcTests(ConsumerSourceTestBase):
 
     def test_get_topics_first_time(self, consumer_source, consumer_source_topics):
@@ -412,7 +412,7 @@ class TestNewTopicsOnlyInFixedNamespaces(NewTopicOnlySrcTests, NamespaceSrcSetup
 
     def test_invalid_namespace(self):
         with pytest.raises(ValueError):
-            NewTopicsOnlyInFixedNamespaces(namespace_names=[])
+            NewTopicsOnlyInFixedNamespaces()
 
 
 class TestNewTopicOnlyInSource(NewTopicOnlySrcTests, SourceSrcSetupMixin):

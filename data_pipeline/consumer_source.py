@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import time
+from collections import defaultdict
 from datetime import datetime
 
 from cached_property import cached_property
@@ -49,27 +50,30 @@ class FixedTopics(ConsumerSource):
 
 
 class TopicsInFixedNamespaces(ConsumerSource):
-    """Consumer tails the topics in the specified namespace.
+    """Consumer tails all the topics in specified namespaces.
 
     Args:
-        namespace_name (str): Namespace name in which all the topics will be
-            tailed by the consumer.
+        namespace_names: Variable number of namespace names in which all the
+        topics will be tailed by the consumer.
     """
-    #ToDo: I'll update the docstring before the final review.
 
-    def __init__(self, namespace_names):
+    def __init__(self, *namespace_names):
         if not any(namespace_names):
             raise ValueError("At least one namespace must be specified.")
         self.namespace_names = namespace_names
 
     def get_topics(self):
-        topics = [
-            topics for namespace_name in self.namespace_names
-            for topics in self.schematizer.get_topics_by_criteria(
-                namespace_name=namespace_name
+        topic_names = []
+        for namespace_name in self.namespace_names:
+            topic_names.extend(
+                [
+                    topic.name
+                    for topic in self.schematizer.get_topics_by_criteria(
+                        namespace_name=namespace_name
+                    )
+                ]
             )
-        ]
-        return [topic.name for topic in topics]
+        return topic_names
 
 
 class TopicInSource(ConsumerSource):
@@ -136,27 +140,26 @@ class TopicInDataTarget(ConsumerSource):
 
 
 class NewTopicsOnlyInFixedNamespaces(TopicsInFixedNamespaces):
-    """Consumer tails the topics in the specified namespace, but it internally
-    keeps track the previous query timestamp and only returns the topics created
-    after the last query timestamp, including the topics created at the last
-    query timestamp.  It means the same topics returned previously may be included
-    again if their created_at timestamp is right at previous query timestamp.
+    """Consumer tails all the topics in specified namespaces, but
+    it internally keeps track the previous query timestamp for the namespace
+    and only returns the topics created after the last query timestamp,
+    including the topics created at the last query timestamp for the namespace.
+    It means the same topics returned previously may be included again if
+    their created_at timestamp is right at previous query timestamp.
 
     Args:
-        namespace_name (str): Namespace name in which all the topics will be
-            tailed by the consumer.
+        namespace_names: Variable number of namespace names in which all the
+        topics will be tailed by the consumer.
     """
-    #ToDo: I'll update the docstring before the final review.
 
-    def __init__(self, namespace_names):
-        super(NewTopicsOnlyInFixedNamespaces, self).__init__(namespace_names)
-        self.last_query_timestamp = {}
-        for namespace in self.namespace_names:
-            self.last_query_timestamp[namespace] = None
+    def __init__(self, *namespace_names):
+        super(NewTopicsOnlyInFixedNamespaces, self).__init__(*namespace_names)
+        self.last_query_timestamp = defaultdict(lambda: None)
 
     def get_topics(self):
         topic_names = []
         for namespace_name in self.namespace_names:
+            created_after_timestamp = long(time.time())
             topic_names.extend(
                 [
                     topic.name
@@ -166,7 +169,7 @@ class NewTopicsOnlyInFixedNamespaces(TopicsInFixedNamespaces):
                     )
                 ]
             )
-            self.last_query_timestamp[namespace_name] = long(time.time())
+            self.last_query_timestamp[namespace_name] = created_after_timestamp
         return topic_names
 
 
