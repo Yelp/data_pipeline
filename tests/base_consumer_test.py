@@ -483,6 +483,7 @@ class RefreshNewTopicsTest(object):
         test_schema,
     ):
         self._publish_then_consume_message(consumer, test_schema)
+
         topic = test_schema.topic
         expected = self._get_expected_value(
             original_states=consumer.topic_to_consumer_topic_state_map
@@ -812,10 +813,6 @@ class TopicInNamespaceReaderSchemaMapSetupMixin(object):
     def expected_topic_reader_schema_map(self):
         return {}
 
-    # @pytest.fixture
-    # def expected_topic_to_consumer_topic_state_map(self, test_schema):
-    #     return {test_schema.topic.name: None}
-    #
     @pytest.fixture
     def expected_topic_to_consumer_topic_state_map(self, topic):
         return {topic: None}

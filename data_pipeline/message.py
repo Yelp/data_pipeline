@@ -862,9 +862,8 @@ def create_from_kafka_message(
     reader_schema_id=None
 ):
     """ Build a data_pipeline.message.Message from a yelp_kafka message
-    and uses the highest compatible schema id from the schema_ids list. If no
-    compatible schema id exists then uses the schema id, the kafka message
-    was encoded with.
+    and uses the reader schema id to decode the message. If no reader schema
+    id exists then uses the schema id, the kafka message was encoded with.
 
     Args:
         topic (str): The topic name from which the message was received.
@@ -904,9 +903,8 @@ def create_from_offset_and_message(
     reader_schema_id=None
 ):
     """ Build a data_pipeline.message.Message from a kafka.common.OffsetAndMessage
-    and uses the highest compatible schema id from the schema_ids list. If no
-    compatible schema id exists then uses the schema id, the packed message
-    was encoded with.
+    and uses the reader schema id to decode the message. If no reader schema
+    id exists then uses the schema id, the message was encoded with.
 
     Args:
         topic (str): The topic name from which the message was received.
@@ -939,9 +937,8 @@ def _create_message_from_packed_message(
     reader_schema_id=None
 ):
     """ Builds a data_pipeline.message.Message from packed_message and uses
-    the highest compatible schema id from the schema_ids list. If no
-    compatible schema id exists then uses the schema id, the packed message
-    was encoded with.
+    and uses the reader schema id to decode the message. If no reader schema
+    id exists then uses the schema id, the packed message was encoded with.
 
     Args:
         topic (str): the topic name where the message comes from.
