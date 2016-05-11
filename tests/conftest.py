@@ -66,6 +66,17 @@ def registered_schema(schematizer_client, example_schema, namespace, source):
     )
 
 
+@pytest.fixture(scope="module")
+def registered_non_compatible_schema(schematizer_client, example_non_compatible_schema, namespace, source):
+    return schematizer_client.register_schema(
+        namespace=namespace,
+        source=source,
+        schema_str=example_non_compatible_schema,
+        source_owner_email='test@yelp.com',
+        contains_pii=False
+    )
+
+
 @pytest.fixture(scope='module')
 def registered_schema_two(schematizer_client, example_compatible_schema, namespace, source):
     return schematizer_client.register_schema(
@@ -111,6 +122,19 @@ def example_compatible_schema(namespace, source):
     }
     ''' % (namespace, source)
 
+@pytest.fixture(scope='module')
+def example_non_compatible_schema(namespace, source):
+    return '''
+    {
+        "type":"record",
+        "namespace": "%s",
+        "name": "%s",
+        "fields":[
+            {"type":"string", "name":"good_not_compatible_field"}
+        ]
+    }
+    ''' % (namespace, source)
+
 
 @pytest.fixture(scope="module")
 def pii_schema(schematizer_client, example_schema, namespace):
@@ -146,46 +170,6 @@ def example_meta_attr_schema(namespace):
         ]
     }
     ''' % (namespace)
-
-
-@pytest.fixture
-def avro_schema2(foo_src, foo_namespace):
-    return {
-        'type': 'record',
-        'name': foo_src,
-        'namespace': foo_namespace,
-        'fields': [{'type': 'int', 'name': 'id1', 'default': 1}]
-    }
-
-
-@pytest.fixture
-def avro_schema3(foo_src, foo_namespace):
-    return {
-        'type': 'record',
-        'name': foo_src,
-        'namespace': foo_namespace,
-        'fields': [{'type': 'int', 'name': 'id', 'default': 1}, {'type': 'int', 'name': 'id1', 'default': 1}]
-    }
-
-
-@pytest.fixture
-def avro_schema4(foo_src, foo_namespace):
-    return {
-        'type': 'record',
-        'name': foo_src,
-        'namespace': foo_namespace,
-        'fields': [{'type': 'int', 'name': 'id', 'default': 1}, {'type': 'int', 'name': 'id2', 'default': 1}]
-    }
-
-
-@pytest.fixture
-def foo_schemas(foo_namespace, foo_src, _register_schema, avro_schema2, avro_schema3, avro_schema4):
-    return (
-        _register_schema(foo_namespace, foo_src),
-        _register_schema(foo_namespace, foo_src, avro_schema2),
-        _register_schema(foo_namespace, foo_src, avro_schema3),
-        _register_schema(foo_namespace, foo_src, avro_schema4)
-    )
 
 
 @pytest.fixture

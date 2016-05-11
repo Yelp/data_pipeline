@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 import mock
 import pytest
+import random
 from kafka import create_message
 from kafka.common import OffsetAndMessage
 
@@ -624,33 +625,30 @@ class TestCreateFromMessageAndOffset(object):
         assert extracted_message.topic == message.topic
         assert extracted_message.uuid == message.uuid
 
-    def test_create_from_offset_and_message_with_schemas_speficied_and_multiple_compatible_schemas(
+    def test_create_from_offset_and_message_with_reader_schema_speficied_and_multiple_compatible_schemas(
             self,
             offset_and_message_with_latest_compatible_schema,
             message_encoded_with_latest_schema_having_multiple_compatible_schemas,
             expected_message_having_multiple_compatible_schemas
     ):
-        schema_ids = [1, 2, 3, 4]
-        schema_ids.append(expected_message_having_multiple_compatible_schemas.schema_id)
         extracted_message = create_from_offset_and_message(
             topic=message_encoded_with_latest_schema_having_multiple_compatible_schemas.topic,
             offset_and_message=offset_and_message_with_latest_compatible_schema,
-            schema_ids=schema_ids
+            reader_schema_id=expected_message_having_multiple_compatible_schemas.schema_id
         )
         self._compare_messages_helper(extracted_message, expected_message_having_multiple_compatible_schemas)
         assert extracted_message.schema_id == message_encoded_with_latest_schema_having_multiple_compatible_schemas.schema_id
         assert extracted_message.uuid == message_encoded_with_latest_schema_having_multiple_compatible_schemas.uuid
 
-    def test_create_from_offset_and_message_with_no_schemas_speficied_and_multiple_compatible_schemas(
+    def test_create_from_offset_and_message_with_no_reader_schema_speficied_and_multiple_compatible_schemas(
             self,
             offset_and_message_with_latest_compatible_schema,
             message_encoded_with_latest_schema_having_multiple_compatible_schemas
     ):
-        schema_ids = [1, 2, 3, 4]
         extracted_message = create_from_offset_and_message(
             topic=message_encoded_with_latest_schema_having_multiple_compatible_schemas.topic,
             offset_and_message=offset_and_message_with_latest_compatible_schema,
-            schema_ids=schema_ids
+            reader_schema_id=None
         )
         self._compare_messages_helper(extracted_message, message_encoded_with_latest_schema_having_multiple_compatible_schemas)
         assert extracted_message.schema_id == message_encoded_with_latest_schema_having_multiple_compatible_schemas.schema_id

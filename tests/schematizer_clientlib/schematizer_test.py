@@ -467,15 +467,6 @@ class TestGetSchemasByTopicName(SchematizerClientTestBase):
             schema=simplejson.dumps(new_schema)
         )
 
-    @pytest.fixture(autouse=True, scope='class')
-    def biz_schema_three(self, biz_schema_two):
-        new_schema = simplejson.loads(biz_schema_two.schema)
-        new_schema['fields'].append({'type': 'int', 'name': 'bar_three', 'default': 0})
-        return self._register_avro_schema(
-            namespace=biz_schema_two.topic.source.namespace.name,
-            source=biz_schema_two.topic.source.name,
-            schema=simplejson.dumps(new_schema)
-        )
 
     def test_get_schemas_of_biz_topic(
         self,
@@ -483,9 +474,8 @@ class TestGetSchemasByTopicName(SchematizerClientTestBase):
         biz_topic,
         biz_schema,
         biz_schema_two,
-        biz_schema_three
     ):
-        expected = [biz_schema, biz_schema_two, biz_schema_three]
+        expected = [biz_schema, biz_schema_two]
         actual = schematizer.get_schemas_by_topic_name(biz_topic.name)
         assert len(expected) == len(actual)
         for actual_schema, expected_schema in izip(actual, expected):
@@ -496,24 +486,16 @@ class TestGetSchemasByTopicName(SchematizerClientTestBase):
             schematizer.get_schemas_by_topic_name('bad_topic')
         assert e.value.response.status_code == 404
 
-    def test_schemas_should_be_cached(self, schematizer, biz_topic):
+    def test_schemas_should_readebe_cached(self, schematizer, biz_topic):
         schemas = schematizer.get_schemas_by_topic_name(biz_topic.name)
         with self.attach_spy_on_api(
             schematizer._client.schemas,
             'get_schema_by_id'
-        ) as schema_api_spy, self.attach_spy_on_api(
-            schematizer._client.topics,
-            'get_topic_by_topic_name'
-        ) as topic_api_spy, self.attach_spy_on_api(
-            schematizer._client.sources,
-            'get_source_by_id'
-        ) as source_api_spy:
+        ) as schema_api_spy:
             for schema in schemas:
                 actual = schematizer.get_schema_by_id(schema.schema_id)
                 assert actual == schema
                 assert schema_api_spy.call_count == 0
-                assert topic_api_spy.call_count == 0
-                assert source_api_spy.call_count == 0
 
 
 class TestRegisterSchema(SchematizerClientTestBase):
