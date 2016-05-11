@@ -11,42 +11,39 @@ from data_pipeline.helpers.singleton import Singleton
 
 
 class AvroStringStore(object):
-	"""Singleton instance of store that caches 
-	AvroStringsWriter and AvroStringReader objects perticularly 
-	used my message class to encode and decode messages respectively.
+    """Singleton instance of store that caches 
+    AvroStringsWriter and AvroStringReader objects perticularly 
+    used by message class to encode and decode messages respectively.
 
-	This aids significant performance improvements in data pipeline.
-	"""
+    This class was added for performance enhancements
+    before : https://pb.yelpcorp.com/199097
+    after : https://pb.yelpcorp.com/199143
+    """
     __metaclass__ = Singleton
 
     def __init__(self):
-        self._cache_writer = {}
-        self._cache_reader = {}
+        self._writer_cache = {}
+        self._reader_cache = {}
 
-    def _make_avro_schema_key(self, avro_schema):
-        return simplejson.dumps(avro_schema, sort_keys=True)
-
-    def get_writer(self, avro_schema):
-        key = self._make_avro_schema_key(avro_schema)
-        if key in self._cache_writer:
-            return self._cache_writer[key]
+    def get_writer(self, schema_id, avro_schema):
+        key = schema_id
+        if key in self._writer_cache:
+            return self._writer_cache[key]
         else:
             avro_string_writer = AvroStringWriter(
                 schema=avro_schema
             )
-            self._cache_writer[key] = avro_string_writer
+            self._writer_cache[key] = avro_string_writer
             return avro_string_writer
 
-    def get_reader(self, reader_schema, writer_schema):
-        key1 = self._make_avro_schema_key(reader_schema)
-        key2 = self._make_avro_schema_key(writer_schema)
-        key = "{0}_{1}".format(key1, key2)
-        if key in self._cache_reader:
-            return self._cache_reader[key]
+    def get_reader(self, schema_id, reader_schema, writer_schema):
+        key = schema_id
+        if key in self._reader_cache:
+            return self._reader_cache[key]
         else:
             avro_string_reader = AvroStringReader(
                 reader_schema=reader_schema,
                 writer_schema=writer_schema
             )
-            self._cache_reader[key] = avro_string_reader
+            self._reader_cache[key] = avro_string_reader
             return avro_string_reader

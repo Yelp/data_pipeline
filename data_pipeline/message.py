@@ -303,6 +303,7 @@ class Message(object):
     def _avro_string_writer(self):
         """get the writer from store if already exists"""
         return AvroStringStore().get_writer(
+            self.schema_id,
             self._avro_schema
         )
 
@@ -310,6 +311,7 @@ class Message(object):
     def _avro_string_reader(self):
         """get the reader from store if already exists"""
         return AvroStringStore().get_reader(
+            schema_id=self.schema_id,
             reader_schema=self._avro_schema,
             writer_schema=self._avro_schema
         )
