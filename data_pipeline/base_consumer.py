@@ -13,11 +13,16 @@ from yelp_kafka.config import KafkaConsumerConfig
 
 from data_pipeline.client import Client
 from data_pipeline.config import get_config
+from data_pipeline.consumer_source import FixedSchemas
 from data_pipeline.message import Message
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 
 logger = get_config().logger
+
+
+class DataException(Exception):
+    pass
 
 
 class ConsumerTopicState(object):
@@ -113,11 +118,17 @@ class BaseConsumer(Client):
             monitoring_enabled=False
         )
         if (topic_to_consumer_topic_state_map and consumer_source or
-                not topic_to_consumer_topic_state_map and not consumer_source):
-            raise ValueError("Consumer source or topic state map must be specified")
-
-        self.consumer_source = self.update_topic_state_map(consumer_source, topic_to_consumer_topic_state_map)
-        self.topic_to_consumer_topic_state_map = topic_to_consumer_topic_state_map
+            not topic_to_consumer_topic_state_map and not consumer_source):
+            raise ValueError("Exactly one of topic_to_consumer_topic_state_map "
+                             "or consumer_source must be specified")
+        self.topic_to_consumer_topic_state_map = (
+            topic_to_consumer_topic_state_map
+            if topic_to_consumer_topic_state_map else {}
+        )
+        self.update_topic_state_map(consumer_source)
+        self.topic_to_reader_schema_map = self.create_reader_schema_map(
+            consumer_source
+        )
         self.force_payload_decode = force_payload_decode
         self.auto_offset_reset = auto_offset_reset
         self.partitioner_cooldown = partitioner_cooldown
@@ -126,11 +137,26 @@ class BaseConsumer(Client):
         self.pre_rebalance_callback = pre_rebalance_callback
         self.post_rebalance_callback = post_rebalance_callback
 
-    def update_topic_state_map(self, consumer_source, topic_to_consumer_topic_state_map):
+    def create_reader_schema_map(self, consumer_source):
+        topic_reader_schema_map = defaultdict(lambda: None)
+        if isinstance(consumer_source, FixedSchemas):
+            for schema_id in consumer_source.schema_ids:
+                topic_name = get_schematizer().get_schema_by_id(schema_id).topic.name
+                if topic_name not in topic_reader_schema_map:
+                    topic_reader_schema_map[topic_name] = schema_id
+                else:
+                    raise DataException(
+                        'Multiple reader schemas exist for topic: {topic}'.format(
+                            topic=topic_name
+                        )
+                    )
+        return topic_reader_schema_map
+
+    def update_topic_state_map(self, consumer_source):
         if consumer_source:
-            for topic in consumer_source.get_topics():
-                topic_to_consumer_topic_state_map[topic] = None
-        return consumer_source
+            for topic_name in set(consumer_source.get_topics()):
+                if topic_name not in self.topic_to_consumer_topic_state_map:
+                    self.topic_to_consumer_topic_state_map[topic_name] = None
 
     @cached_property
     def kafka_client(self):
@@ -587,6 +613,9 @@ class BaseConsumer(Client):
             List[str]: A list of new topic names that this consumer starts to
             consume.
         """
+        self.topic_to_reader_schema_map.update(
+            self.create_reader_schema_map(consumer_source)
+        )
         topics = consumer_source.get_topics()
         new_topics = [topic for topic in topics
                       if topic not in self.topic_to_consumer_topic_state_map]
@@ -602,8 +631,17 @@ class BaseConsumer(Client):
             # In such case, the non-existent topics are removed from the new_topics.
             new_topics = [topic for topic in new_topics
                           if topic in self.topic_to_consumer_topic_state_map]
+            self._sync_reader_schema_map()
 
         return new_topics
+
+    def _sync_reader_schema_map(self):
+        redundant_topics = [
+            topic_name for topic_name in self.topic_to_reader_schema_map
+            if topic_name not in self.topic_to_consumer_topic_state_map
+            ]
+        for topic_name in redundant_topics:
+            self.topic_to_reader_schema_map.pop(topic_name)
 
 
 class TopicFilter(object):

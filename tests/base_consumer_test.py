@@ -422,7 +422,7 @@ class RefreshNewTopicsTest(object):
 
     @pytest.fixture(scope='class')
     def test_schema(self, containers):
-        return self._register_schema('test_namespace', 'test_src', containers)
+        return self._register_schema('test_refresh_namespace', 'test_refresh_src', containers)
 
     @pytest.fixture(scope='class')
     def topic(self, containers, test_schema):
@@ -483,7 +483,6 @@ class RefreshNewTopicsTest(object):
         test_schema,
     ):
         self._publish_then_consume_message(consumer, test_schema)
-
         topic = test_schema.topic
         expected = self._get_expected_value(
             original_states=consumer.topic_to_consumer_topic_state_map
@@ -688,7 +687,7 @@ class RefreshTopicsTestBase(object):
 
     @pytest.fixture(scope='class')
     def test_schema(self, _register_schema):
-        return _register_schema('test_namespace', 'test_src')
+        return _register_schema('test_refresh_namespace', 'test_refresh_src')
 
     @pytest.fixture(scope='class')
     def topic(self, test_schema):
@@ -742,7 +741,7 @@ class RefreshTopicsTestBase(object):
 
 class RefreshFixedTopicTests(RefreshTopicsTestBase):
 
-    def test_get_toipcs(self, consumer, consumer_source, expected_topics, topic):
+    def test_get_topics(self, consumer, consumer_source, expected_topics, topic):
         expected_map = {topic: None}
         expected_map.update({topic: None for topic in expected_topics})
 
@@ -786,6 +785,132 @@ class RefreshFixedTopicTests(RefreshTopicsTestBase):
             actual_map=consumer.topic_to_consumer_topic_state_map,
             expected_map={topic: None}
         )
+
+
+class FixedTopicsReaderSchemaMapSetupMixin(object):
+
+    @pytest.fixture
+    def consumer_source(self, topic):
+        return FixedTopics(topic)
+
+    @pytest.fixture
+    def expected_topic_reader_schema_map(self):
+        return {}
+
+    @pytest.fixture
+    def expected_topic_to_consumer_topic_state_map(self, topic):
+        return {topic: None}
+
+
+class TopicInNamespaceReaderSchemaMapSetupMixin(object):
+
+    @pytest.fixture
+    def consumer_source(self, test_schema):
+        return TopicInNamespace(namespace_name=test_schema.topic.source.namespace.name)
+
+    @pytest.fixture
+    def expected_topic_reader_schema_map(self):
+        return {}
+
+    # @pytest.fixture
+    # def expected_topic_to_consumer_topic_state_map(self, test_schema):
+    #     return {test_schema.topic.name: None}
+    #
+    @pytest.fixture
+    def expected_topic_to_consumer_topic_state_map(self, topic):
+        return {topic: None}
+
+
+class TopicInSourceReaderSchemaMapSetupMixin(object):
+
+    @pytest.fixture
+    def consumer_source(self, test_schema):
+        return TopicInSource(namespace_name=test_schema.topic.source.namespace.name, source_name=test_schema.topic.source.name)
+
+    @pytest.fixture
+    def expected_topic_reader_schema_map(self):
+        return {}
+
+    @pytest.fixture
+    def expected_topic_to_consumer_topic_state_map(self, topic):
+        return {topic: None}
+
+
+class FixedSchemasReaderSchemaMapSetupMixin(object):
+
+    @pytest.fixture
+    def consumer_source(self, test_schema, registered_non_compatible_schema):
+        return FixedSchemas(
+            test_schema.schema_id,
+            registered_non_compatible_schema.schema_id
+        )
+
+    @pytest.fixture
+    def expected_topic_reader_schema_map(
+        self,
+        test_schema,
+        registered_non_compatible_schema
+    ):
+        return {
+            test_schema.topic.name: test_schema.schema_id,
+            registered_non_compatible_schema.topic.name:
+                registered_non_compatible_schema.schema_id
+        }
+
+    @pytest.fixture
+    def expected_topic_to_consumer_topic_state_map(self, topic, registered_non_compatible_schema):
+        return {topic: None, registered_non_compatible_schema.topic.name: None}
+
+
+class TopicInDataTargetReaderSchemaMapSetupMixin(object):
+
+    @property
+    def target_type(self):
+        return 'redshift'
+
+    @property
+    def destination(self):
+        return 'dw.redshift.destination'
+
+    def random_name(self, prefix=None):
+        suffix = random.random()
+        return '{}_{}'.format(prefix, suffix) if prefix else '{}'.format(suffix)
+
+    @pytest.fixture
+    def data_target(self, schematizer_client):
+        return schematizer_client.create_data_target(
+            target_type=self.target_type,
+            destination=self.destination
+        )
+
+    @pytest.fixture
+    def consumer_group(self, data_target, schematizer_client):
+        return schematizer_client.create_consumer_group(
+            group_name=self.random_name('test_group'),
+            data_target_id=data_target.data_target_id
+        )
+
+    @pytest.fixture
+    def data_source(self, test_schema, consumer_group, schematizer_client):
+        return schematizer_client.create_consumer_group_data_source(
+            consumer_group_id=consumer_group.consumer_group_id,
+            data_source_type=DataSourceTypeEnum.Source,
+            data_source_id=test_schema.topic.source.source_id
+        )
+
+
+    @pytest.fixture
+    def consumer_source(self, data_target, data_source):
+        return TopicInDataTarget(data_target.data_target_id)
+
+
+    @pytest.fixture
+    def expected_topic_reader_schema_map(self):
+        return {}
+
+    @pytest.fixture
+    def expected_topic_to_consumer_topic_state_map(self, topic):
+        return {topic: None}
 
 
 class SingleTopicSetupMixin(RefreshFixedTopicTests):
@@ -837,12 +962,35 @@ class FixedSchemasSetupMixin(RefreshFixedTopicTests):
     @pytest.fixture
     def consumer_source(self, foo_schemas):
         return FixedSchemas(
-            [
-                foo_schemas[0].schema_id,
-                foo_schemas[1].schema_id,
-                foo_schemas[2].schema_id,
-                foo_schemas[3].schema_id
-            ]
+            foo_schemas[0].schema_id,
+            foo_schemas[1].schema_id,
+            foo_schemas[2].schema_id,
+        )
+
+    @pytest.fixture
+    def avro_schema2(self, foo_src, foo_namespace):
+        return {
+            'type': 'record',
+            'name': foo_src,
+            'namespace': foo_namespace,
+            'fields': [{'type': 'int', 'name': 'id1'}]
+        }
+
+    @pytest.fixture
+    def avro_schema3(self, foo_src, foo_namespace):
+        return {
+            'type': 'record',
+            'name': foo_src,
+            'namespace': foo_namespace,
+            'fields': [{'type': 'int', 'name': 'id'}, {'type': 'int', 'name': 'id1'}]
+        }
+
+    @pytest.fixture
+    def foo_schemas(self, foo_namespace, foo_src, _register_schema, avro_schema2, avro_schema3):
+        return (
+            _register_schema(foo_namespace, foo_src),
+            _register_schema(foo_namespace, foo_src, avro_schema2),
+            _register_schema(foo_namespace, foo_src, avro_schema3),
         )
 
     @pytest.fixture
@@ -850,14 +998,13 @@ class FixedSchemasSetupMixin(RefreshFixedTopicTests):
         topics = {
             foo_schemas[0].topic.name,
             foo_schemas[1].topic.name,
-            foo_schemas[2].topic.name,
-            foo_schemas[3].topic.name
+            foo_schemas[2].topic.name
         }
         return list(topics)
 
     @pytest.fixture
     def bad_consumer_source(self, schema_with_bad_topic):
-        return FixedSchemas(schema_ids=[schema_with_bad_topic.schema_id])
+        return FixedSchemas(schema_with_bad_topic.schema_id)
 
 
 class RefreshDynamicTopicTests(RefreshTopicsTestBase):

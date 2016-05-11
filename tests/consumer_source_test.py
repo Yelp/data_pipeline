@@ -137,14 +137,38 @@ class TestMultiTopics(FixedTopicsSourceTestBase):
 class TestFixedSchemasSource(FixedTopicsSourceTestBase):
 
     @pytest.fixture
+    def avro_schema2(self, foo_src, foo_namespace):
+        return {
+            'type': 'record',
+            'name': foo_src,
+            'namespace': foo_namespace,
+            'fields': [{'type': 'int', 'name': 'id1', 'default': 1}]
+        }
+
+
+    @pytest.fixture
+    def avro_schema3(self, foo_src, foo_namespace):
+        return {
+            'type': 'record',
+            'name': foo_src,
+            'namespace': foo_namespace,
+            'fields': [{'type': 'int', 'name': 'id', 'default': 1}, {'type': 'int', 'name': 'id1', 'default': 1}]
+        }
+
+    @pytest.fixture
+    def foo_schemas(self, foo_namespace, foo_src, _register_schema, avro_schema2, avro_schema3):
+        return (
+            _register_schema(foo_namespace, foo_src),
+            _register_schema(foo_namespace, foo_src, avro_schema2),
+            _register_schema(foo_namespace, foo_src, avro_schema3)
+        )
+
+    @pytest.fixture
     def consumer_source(self, foo_schemas):
         return FixedSchemas(
-            [
-                foo_schemas[0].schema_id,
-                foo_schemas[1].schema_id,
-                foo_schemas[2].schema_id,
-                foo_schemas[3].schema_id
-            ]
+            foo_schemas[0].schema_id,
+            foo_schemas[1].schema_id,
+            foo_schemas[2].schema_id
         )
 
     @pytest.fixture
@@ -152,13 +176,12 @@ class TestFixedSchemasSource(FixedTopicsSourceTestBase):
         return {
             foo_schemas[0].topic.name,
             foo_schemas[1].topic.name,
-            foo_schemas[2].topic.name,
-            foo_schemas[3].topic.name
+            foo_schemas[2].topic.name
         }
 
     def test_empty_schema_list(self):
         with pytest.raises(ValueError):
-            FixedSchemas([])
+            FixedSchemas()
 
 
 class NamespaceSrcSetupMixin(ConsumerSourceTestBase):

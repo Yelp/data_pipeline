@@ -105,7 +105,7 @@ class FixedSchemas(ConsumerSource):
         schema_ids (list): the list of IDs of the avro schemas registered in the Schematizer.
     """
 
-    def __init__(self, schema_ids):
+    def __init__(self, *schema_ids):
         if not any(schema_ids):
             raise ValueError("At least one schema id must be specified.")
         self.schema_ids = schema_ids

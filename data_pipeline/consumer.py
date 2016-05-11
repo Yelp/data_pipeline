@@ -153,7 +153,6 @@ class Consumer(BaseConsumer):
         has_timeout = timeout is not None
         if has_timeout:
             max_time = time() + timeout
-        schema_ids = self.consumer_source.schema_ids if isinstance(self.consumer_source, FixedSchemas) else []
         while len(messages) < count:
             try:
                 default_iter_timeout = self.consumer_group.iter_timeout
@@ -168,7 +167,7 @@ class Consumer(BaseConsumer):
                 message.topic,
                 message,
                 self.force_payload_decode,
-                schema_ids
+                self.topic_to_reader_schema_map[message.topic]
             )
             self._update_topic_map(message)
             messages.append(message)
