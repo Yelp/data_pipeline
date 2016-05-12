@@ -6,15 +6,13 @@ import time
 from collections import namedtuple
 from uuid import UUID
 
-from yelp_avro.avro_string_reader import AvroStringReader
-from yelp_avro.avro_string_writer import AvroStringWriter
 from yelp_lib.containers.lists import unlist
 
 from data_pipeline._encryption_helper import EncryptionHelper
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
-from data_pipeline.helpers.yelp_avro_store import AvroStringStore
+from data_pipeline.helpers.yelp_avro_store import _AvroStringStore
 from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
 from data_pipeline.meta_attribute import MetaAttribute
@@ -302,7 +300,7 @@ class Message(object):
     @property
     def _avro_string_writer(self):
         """get the writer from store if already exists"""
-        return AvroStringStore().get_writer(
+        return _AvroStringStore().get_writer(
             self.schema_id,
             self._avro_schema
         )
@@ -310,8 +308,9 @@ class Message(object):
     @property
     def _avro_string_reader(self):
         """get the reader from store if already exists"""
-        return AvroStringStore().get_reader(
-            schema_id=self.schema_id,
+        return _AvroStringStore().get_reader(
+            reader_schema_id=self.schema_id,
+            writer_schema_id=self.schema_id,
             reader_schema=self._avro_schema,
             writer_schema=self._avro_schema
         )
