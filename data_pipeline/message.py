@@ -294,10 +294,6 @@ class Message(object):
         self._kafka_position_info = kafka_position_info
 
     @property
-    def _avro_schema(self):
-        return self._schematizer.get_schema_by_id(self.schema_id).schema_json
-
-    @property
     def _avro_string_writer(self):
         """get the writer from store if already exists"""
         return _AvroStringStore().get_writer(self.schema_id)
