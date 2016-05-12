@@ -93,22 +93,14 @@ class MetaAttribute(object):
         return schema_info.schema_id
 
     def _get_decoded_payload(self, encoded_payload):
-        reader = _AvroStringStore().get_reader(
-            reader_schema_id=self.schema_id,
-            writer_schema_id=self.schema_id,
-            reader_schema=self.avro_schema,
-            writer_schema=self.avro_schema
-        )
+        reader = _AvroStringStore().get_reader(self.schema_id, self.schema_id)
         return reader.decode(
             encoded_message=encoded_payload
         )
 
     @cached_property
     def encoded_payload(self):
-        writer = _AvroStringStore().get_writer(
-            self.schema_id,
-            self.avro_schema
-        )
+        writer = _AvroStringStore().get_writer(self.schema_id)
         return writer.encode(self.payload)
 
     @property
