@@ -3,9 +3,8 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 from cached_property import cached_property
-from yelp_avro.avro_string_reader import AvroStringReader
-from yelp_avro.avro_string_writer import AvroStringWriter
 
+from data_pipeline.helpers.yelp_avro_store import _AvroStringStore
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 
@@ -94,13 +93,23 @@ class MetaAttribute(object):
         return schema_info.schema_id
 
     def _get_decoded_payload(self, encoded_payload):
-        return AvroStringReader(self.avro_schema, self.avro_schema).decode(
+        reader = _AvroStringStore().get_reader(
+            reader_schema_id=self.schema_id,
+            writer_schema_id=self.schema_id,
+            reader_schema=self.avro_schema,
+            writer_schema=self.avro_schema
+        )
+        return reader.decode(
             encoded_message=encoded_payload
         )
 
     @cached_property
     def encoded_payload(self):
-        return AvroStringWriter(self.avro_schema).encode(self.payload)
+        writer = _AvroStringStore().get_writer(
+            self.schema_id,
+            self.avro_schema
+        )
+        return writer.encode(self.payload)
 
     @property
     def avro_repr(self):
