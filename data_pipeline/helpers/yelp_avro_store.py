@@ -39,7 +39,7 @@ class _AvroStringStore(object):
         reader_schema,
         writer_schema
     ):
-        key = "{0}_{1}".format(reader_schema_id, writer_schema_id)
+        key = (reader_schema_id, writer_schema_id)
         avro_string_reader = self._reader_cache.get(key)
         if not avro_string_reader:
             avro_string_reader = AvroStringReader(
