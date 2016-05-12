@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 import time
 from collections import defaultdict
 from collections import namedtuple
+from contextlib import contextmanager
 
 from cached_property import cached_property
 from kafka import create_message
@@ -70,6 +71,18 @@ class KafkaProducer(object):
             ExpBackoffPolicy(with_jitter=True),
             max_retry_count=get_config().producer_max_publish_retry_count
         )
+        self._automatic_flush_enabled = True
+
+    @contextmanager
+    def disable_automatic_flushing(self):
+        """Prevents the producer from flushing automatically (e.g. for timeouts
+        or batch size) while the context manager is open.
+        """
+        try:
+            self._automatic_flush_enabled = False
+            yield
+        finally:
+            self._automatic_flush_enabled = True
 
     def wake(self):
         """Should be called periodically if we're not otherwise waking up by
@@ -197,10 +210,10 @@ class KafkaProducer(object):
 
     def _is_ready_to_flush(self):
         time_limit = get_config().kafka_producer_flush_time_limit_seconds
-        return (
+        return (self._automatic_flush_enabled and (
             (time.time() - self.start_time) >= time_limit or
             self.message_buffer_size >= get_config().kafka_producer_buffer_size
-        )
+        ))
 
     def _flush_if_necessary(self):
         if self._is_ready_to_flush():

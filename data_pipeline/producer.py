@@ -225,7 +225,11 @@ class Producer(Client):
             )
         )
 
-        for topic, messages in topic_messages_map.iteritems():
+        # TODO(justinc|DATAPIPE-995): This can't be a set at this time, because
+        # some data pipeline message fields aren't hashable - primarily the
+        # upstream_position_info, which is a dict.
+        already_published_messages = list()
+        for topic, topic_messages in topic_messages_map.iteritems():
             # `get_actual_published_messages_count` only returns the message
             # count for topics that exist, so for non-existent topics, here it
             # sets the actual published message count to 0, i.e. high watermark
@@ -238,18 +242,60 @@ class Producer(Client):
                 topic=topic,
                 saved_offset=saved_offset,
                 high_watermark=already_published_count + saved_offset,
-                message_count=len(messages),
+                message_count=len(topic_messages),
                 already_published_count=already_published_count
             )
 
             logger.info(json.dumps(info_to_log))
 
-            if already_published_count < 0 or already_published_count > len(messages):
-                raise PublicationUnensurableError()
-            for message in messages[already_published_count:]:
-                self.publish(message)
+            if (
+                already_published_count < 0 or
+                already_published_count > len(topic_messages)
+            ):
+                # This is here primarily as a convenience to allow recovery
+                # after logical errors.  It will result in breaking the
+                # delivery guarantees.
+                if get_config().force_recovery_from_publication_unensurable_error:
+                    logger.critical(
+                        "Forcing recovery from PublicationUnensurableError - "
+                        "Intentionally Breaking Delivery Guarantees. "
+                        "Turn force_recovery_from_publication_unensurable_error "
+                        "off after recovery."
+                    )
+                    already_published_count = 0
+                else:
+                    raise PublicationUnensurableError()
+            already_published_messages.extend(
+                topic_messages[:already_published_count]
+            )
 
-        self.flush()
+        # Automatic flushing must be disabled while we're recovering, since
+        # any partial flushing will result in state-saving callbacks being
+        # triggered, which can cause downstream applications to update state
+        # that really shouldn't be updated until all messages are published
+        # successfully.
+        with self._kafka_producer.disable_automatic_flushing():
+            for message in messages:
+                # We're recording already published messages here so that if
+                # there's any ordering dependency related to state saving, we're
+                # able to capture that.
+                #
+                # Concretely, imagine the last message has already been
+                # published, and that messages come from a serial source like
+                # db replication.  If we don't record the last message, even
+                # though we're not actually publishing it, the state in the
+                # producer will indicate the last message hasn't been published,
+                # when we know that it has.  This breaks things if the
+                # application crashes after this procedure, but before saving
+                # again.
+                if message in already_published_messages:
+                    self._kafka_producer.position_data_tracker.record_message(
+                        message
+                    )
+                else:
+                    self.publish(message)
+
+            self.flush()
 
     def flush(self):
         """Block until all data pipeline messages have been

@@ -35,11 +35,22 @@ class _PositionDataTracker(object):
         self.merged_upstream_position_info_map = {}
         self._setup_position_info()
 
-    def record_message_buffered(self, message):
-        logger.debug("Message buffered: %s" % repr(message))
+    def record_message(self, message):
+        """In general, `record_message_buffered` should be preferred over
+        `record_message`.  `record_message` is useful for recording messages
+        that will never be published, but should still be recorded.  This use
+        case is important for recovery procedures, that need to record already
+        published messages alongside unpublished messages, so that state
+        is saved correctly.  Don't call this method unless you're positive
+        you need to.
+        """
         if self._should_update_position_info(message):
             self._update_position_info(message)
         self._update_merged_upstream_position_info(message)
+
+    def record_message_buffered(self, message):
+        logger.debug("Message buffered: %s" % repr(message))
+        self.record_message(message)
         self.unpublished_messages += 1
 
     def record_messages_published(self, topic, offset, message_count):

@@ -90,6 +90,9 @@ class TestConfigDefaults(TestConfigBase):
     def test_merge_position_info_update(self, config):
         assert not config.merge_position_info_update
 
+    def test_force_recovery_from_publication_unensurable_error(self, config):
+        assert not config.force_recovery_from_publication_unensurable_error
+
 
 class TestConfigurationOverrides(TestConfigBase):
     @classmethod
@@ -197,3 +200,7 @@ class TestConfigurationOverrides(TestConfigBase):
     def test_merge_position_info_update(self, config):
         with reconfigure(merge_position_info_update=True):
             assert config.merge_position_info_update
+
+    def test_force_recovery_from_publication_unensurable_error(self, config):
+        with reconfigure(force_recovery_from_publication_unensurable_error=True):
+            assert config.force_recovery_from_publication_unensurable_error
