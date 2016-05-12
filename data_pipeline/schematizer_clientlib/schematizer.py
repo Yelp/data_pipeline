@@ -124,6 +124,27 @@ class SchematizerClient(object):
             # Schema object given a schema_json
             return None
 
+    def get_schemas_by_topic(self, topic_name):
+        """Get the list of schemas in the specified topic.
+
+        Args:
+            topic_name (str): name of the topic to look up
+
+        Returns:
+            (List[data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
+                List of schemas in the given topic
+        """
+        response = self._call_api(
+            api=self._client.topics.list_schemas_by_topic_name,
+            params={"topic_name": topic_name}
+        )
+        result = []
+        for resp_item in response:
+            _schema = _AvroSchema.from_response(resp_item)
+            result.append(_schema.to_result())
+            self._set_cache_by_schema(_schema)
+        return result
+
     def get_topic_by_name(self, topic_name):
         """Get the topic of given topic name.
 
@@ -718,6 +739,36 @@ class SchematizerClient(object):
         )
         _consumer_group_data_src = _ConsumerGroupDataSource.from_response(response)
         return _consumer_group_data_src.to_result()
+
+    def is_avro_schema_compatible(
+        self,
+        avro_schema_str,
+        source_name,
+        namespace_name
+    ):
+        """Determines if given avro_schema is backward and forward compatible with all
+        enabled schemas of given source (contained in given namespace).
+
+        Note: Compatibility means the input schema should be able to deserialize data serialized
+            by existing schemas within the same topic and vice versa.
+
+        Args:
+            avro_schema_str (str): json string representing avro_schema to check compatiblity on.
+            source_name (str): name of the source that contains the schemas to check compatibiliy
+                against.
+            namespace_name (str): name of namespace containing the given source
+
+        Returns:
+            (boolean): If the given schema is compatible with all enabled schemas of the source."""
+        response = self._call_api(
+            api=self._client.compatibility.is_avro_schema_compatible,
+            request_body={
+                'source': source_name,
+                'namespace': namespace_name,
+                'schema': avro_schema_str
+            }
+        )
+        return response
 
     def filter_topics_by_pkeys(self, topics):
         """ Create and return a new list of topic names built from topics,

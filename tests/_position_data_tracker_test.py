@@ -20,7 +20,7 @@ class BasePositionDataTrackerTest(object):
     @pytest.yield_fixture(scope="module", autouse=True)
     def patch_contains_pii(self):
         mock_date = '2015-01-01'
-        mock_topic = Topic(1, str(''), None, False, mock_date, mock_date)
+        mock_topic = Topic(1, str(''), None, False, [], mock_date, mock_date)
         mock_schema = AvroSchema(
             1, 'schema', mock_topic, None, 'RW', None, None, mock_date, mock_date
         )

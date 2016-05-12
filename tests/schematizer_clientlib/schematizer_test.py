@@ -108,7 +108,7 @@ class SchematizerClientTestBase(object):
         self._assert_topic_values(actual.topic, expected_resp.topic)
 
     def _assert_topic_values(self, actual, expected_resp):
-        attrs = ('topic_id', 'name', 'contains_pii', 'created_at', 'updated_at')
+        attrs = ('topic_id', 'name', 'contains_pii', 'primary_keys', 'created_at', 'updated_at')
         self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
         self._assert_source_values(actual.source, expected_resp.source)
 
@@ -155,6 +155,31 @@ class TestGetSchemaById(SchematizerClientTestBase):
             assert schema_api_spy.call_count == 0
             assert topic_api_spy.call_count == 0
             assert source_api_spy.call_count == 0
+
+
+class TestGetSchemasByTopic(SchematizerClientTestBase):
+
+    @pytest.fixture(autouse=True, scope='class')
+    def biz_schema(self, yelp_namespace, biz_src_name):
+        return self._register_avro_schema(yelp_namespace, biz_src_name)
+
+    def test_get_schemas_by_topic(self, schematizer, biz_schema):
+        with self.attach_spy_on_api(
+            schematizer._client.topics,
+            'list_schemas_by_topic_name'
+        ) as api_spy:
+            topic_name = biz_schema.topic.name
+            actual = schematizer.get_schemas_by_topic(topic_name)
+            found_schema = False
+            for schema in actual:
+                # Find the schema in the list of schemas, and then check it's
+                # values against our schema
+                if schema.schema_id == biz_schema.schema_id:
+                    found_schema = True
+                    self._assert_schema_values(schema, biz_schema)
+                    break
+            assert found_schema
+            assert api_spy.call_count == 1
 
 
 class TestGetNamespaces(SchematizerClientTestBase):
@@ -797,8 +822,10 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
         )
         assert actual == []
 
-    def test_topics_should_be_cached(self, schematizer):
-        topics = schematizer.get_topics_by_criteria()
+    def test_topics_should_be_cached(self, schematizer, yelp_namespace):
+        topics = schematizer.get_topics_by_criteria(
+            namespace_name=yelp_namespace
+        )
         with self.attach_spy_on_api(
             schematizer._client.topics,
             'get_topic_by_topic_name'
@@ -844,6 +871,67 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
         )
         assert len(actual) == len(sorted_yelp_topics) - 1
         self._assert_topics_values(actual, expected_topics=sorted_yelp_topics[1:])
+
+
+class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
+
+    @pytest.fixture(scope='class')
+    def schema_json(self, yelp_namespace, biz_src_name):
+        return {
+            'type': 'record',
+            'name': biz_src_name,
+            'namespace': yelp_namespace,
+            'fields': [
+                {'type': 'int', 'name': 'biz_id'}
+            ]
+        }
+
+    @pytest.fixture
+    def schema_json_incompatible(self, yelp_namespace, biz_src_name):
+        return {
+            'type': 'record',
+            'name': biz_src_name,
+            'namespace': yelp_namespace,
+            'fields': [
+                {'type': 'int', 'name': 'biz_id'},
+                {'type': 'int', 'name': 'new_field'}
+            ]
+        }
+
+    @pytest.fixture(scope='class')
+    def schema_str(self, schema_json):
+        return simplejson.dumps(schema_json)
+
+    @pytest.fixture
+    def schema_str_incompatible(self, schema_json_incompatible):
+        return simplejson.dumps(schema_json_incompatible)
+
+    @pytest.fixture(autouse=True, scope='class')
+    def biz_schema(self, yelp_namespace, biz_src_name, schema_str):
+        return self._register_avro_schema(
+            yelp_namespace,
+            biz_src_name,
+            schema=schema_str
+        )
+
+    def test_is_avro_schema_compatible(
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name,
+        schema_str,
+        schema_str_incompatible
+    ):
+        assert schematizer.is_avro_schema_compatible(
+            avro_schema_str=schema_str,
+            namespace_name=yelp_namespace,
+            source_name=biz_src_name
+        )
+        assert not schematizer.is_avro_schema_compatible(
+            avro_schema_str=schema_str_incompatible,
+            namespace_name=yelp_namespace,
+            source_name=biz_src_name
+        )
 
 
 class TestFilterTopicsByPkeys(SchematizerClientTestBase):

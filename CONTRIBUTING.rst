@@ -106,7 +106,7 @@ Before you submit a pull request, make sure that any new tool meets these guidel
 3. In bin, create a script that can be run from the commandline that runs your tool.
    See the others in the folder as an example on what to do with a python batch.
    Put the path to this new script in setup.py under scripts
-4. In debian/data-pipeline-tools.links create a new link. Use the others there as an exaple.
+4. In debian/data-pipeline-tools.links create a new link. Use the others there as an example.
 5. In yelp_package/itest/ubuntu.sh, add a line to the string SCRIPTS 
    with the name of the script you put in bin
 
