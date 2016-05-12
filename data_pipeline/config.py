@@ -39,10 +39,15 @@ class Config(object):
     """
     YOCALHOST = '169.254.255.254'
 
-    @cached_property
+    @property
     def logger(self):
         """Logger instance for the clientlib"""
-        return logging.getLogger('data_pipeline_clientlib')
+        logger = logging.getLogger('data_pipeline_clientlib')
+        logger.setLevel(data_pipeline_conf.read_int(
+            'logger_level',
+            default=0
+        ))
+        return logger
 
     @property
     def should_use_testing_containers(self):
