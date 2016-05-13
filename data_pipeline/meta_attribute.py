@@ -93,7 +93,10 @@ class MetaAttribute(object):
         return schema_info.schema_id
 
     def _get_decoded_payload(self, encoded_payload):
-        reader = _AvroStringStore().get_reader(self.schema_id, self.schema_id)
+        reader = _AvroStringStore().get_reader(
+            reader_schema_id=self.schema_id,
+            writer_schema_id=self.schema_id
+        )
         return reader.decode(
             encoded_message=encoded_payload
         )

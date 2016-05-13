@@ -301,7 +301,10 @@ class Message(object):
     @property
     def _avro_string_reader(self):
         """get the reader from store if already exists"""
-        return _AvroStringStore().get_reader(self.schema_id, self.schema_id)
+        return _AvroStringStore().get_reader(
+            reader_schema_id=self.schema_id,
+            writer_schema_id=self.schema_id
+        )
 
     @property
     def payload(self):

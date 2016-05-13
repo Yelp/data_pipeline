@@ -15,8 +15,8 @@ class _AvroStringStore(object):
     used by message class to encode and decode messages respectively.
 
     This class was added for performance enhancements
-    before : https://pb.yelpcorp.com/199097
-    after : https://pb.yelpcorp.com/199143
+    w store : https://pb.yelpcorp.com/199453
+    w/o store : https://pb.yelpcorp.com/199448
     """
     __metaclass__ = Singleton
 
