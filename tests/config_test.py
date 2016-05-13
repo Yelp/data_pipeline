@@ -93,6 +93,9 @@ class TestConfigDefaults(TestConfigBase):
     def test_force_recovery_from_publication_unensurable_error(self, config):
         assert not config.force_recovery_from_publication_unensurable_error
 
+    def test_should_use_testing_containers(self, config):
+        assert not config.should_use_testing_containers
+
 
 class TestConfigurationOverrides(TestConfigBase):
     @classmethod

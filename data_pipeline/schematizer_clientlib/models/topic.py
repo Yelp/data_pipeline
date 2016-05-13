@@ -18,6 +18,7 @@ Args:
     source (data_pipeline.schematizer_clientlib.models.source.Source):
         The source of the topic.
     contains_pii (bool): Whether the messages in this topic contain PII data.
+    primary_keys ([str]): List of keys that are the primary keys of the topics schemas
     created_at (str): The timestamp when the topic is created in ISO-8601
         format.
     updated_at (str): The timestamp when the topic is last updated in ISO-8601
@@ -25,18 +26,20 @@ Args:
 """
 Topic = namedtuple(
     'Topic',
-    ['topic_id', 'name', 'source', 'contains_pii', 'created_at', 'updated_at']
+    ['topic_id', 'name', 'source', 'contains_pii', 'primary_keys',
+     'created_at', 'updated_at']
 )
 
 
 class _Topic(BaseModel):
 
-    def __init__(self, topic_id, name, source, contains_pii,
+    def __init__(self, topic_id, name, source, contains_pii, primary_keys,
                  created_at, updated_at):
         self.topic_id = topic_id
         self.name = name
         self.source = source
         self.contains_pii = contains_pii
+        self.primary_keys = primary_keys
         self.created_at = created_at
         self.updated_at = updated_at
 
@@ -47,6 +50,7 @@ class _Topic(BaseModel):
             name=response.name,
             source=_Source.from_response(response.source),
             contains_pii=response.contains_pii,
+            primary_keys=response.primary_keys,
             created_at=response.created_at,
             updated_at=response.updated_at
         )
@@ -57,6 +61,7 @@ class _Topic(BaseModel):
             'name': self.name,
             'source_id': self.source.source_id,
             'contains_pii': self.contains_pii,
+            'primary_keys': self.primary_keys,
             'created_at': self.created_at,
             'updated_at': self.updated_at
         }
@@ -74,6 +79,7 @@ class _Topic(BaseModel):
             name=cache_value['name'],
             source=id_only_source,
             contains_pii=cache_value['contains_pii'],
+            primary_keys=cache_value['primary_keys'],
             created_at=cache_value['created_at'],
             updated_at=cache_value['updated_at']
         )
@@ -84,6 +90,7 @@ class _Topic(BaseModel):
             name=self.name,
             source=self.source.to_result(),
             contains_pii=self.contains_pii,
+            primary_keys=self.primary_keys,
             created_at=self.created_at,
             updated_at=self.updated_at
         )
