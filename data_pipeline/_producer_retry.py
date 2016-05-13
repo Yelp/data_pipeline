@@ -12,6 +12,7 @@ from kafka.common import LeaderNotAvailableError
 
 from data_pipeline._kafka_util import get_actual_published_messages_count
 from data_pipeline.config import get_config
+from data_pipeline.helpers.log import debug_log
 from data_pipeline.publish_guarantee import PublishGuaranteeEnum
 
 
@@ -119,32 +120,35 @@ class RetryHandler(object):
         requests_to_retry = []
         for request in requests:
             topic, partition = request.topic, request.partition
-            topic_desc = "topic {} partition {} request".format(topic, partition)
+
+            def topic_desc():
+                return "topic {} partition {} request".format(topic, partition)
+
             try:
-                logger.debug("Verifying failed {}.".format(topic_desc))
+                debug_log(lambda: "Verifying failed {}.".format(topic_desc()))
 
                 # try to load the metadata in case it is stale
                 success = self._try_load_topic_metadata(topic)
                 if not success:
-                    logger.debug("Cannot load the metadata of topic {}. Skip {}."
-                                 .format(topic, topic_desc))
+                    debug_log(lambda: "Cannot load the metadata of topic {}. Skip {}."
+                              .format(topic, topic_desc()))
                     continue
 
                 published_count = self._get_published_msg_count(topic, topic_offsets)
                 if len(request.messages) != published_count:
-                    logger.debug(
-                        "Request message count {} doesn't match actual published "
+                    debug_log(
+                        lambda: "Request message count {} doesn't match actual published "
                         "message count {}. Retry {}.".format(
                             len(request.messages),
                             published_count,
-                            topic_desc
+                            topic_desc()
                         )
                     )
                     requests_to_retry.append(request)
                     continue
 
                 # Update stats for the request that actually succeeds
-                logger.debug("{} actually succeeded.".format(topic_desc))
+                debug_log(lambda: "{} actually succeeded.".format(topic_desc()))
                 offset = published_count + topic_offsets[topic]
                 new_stats = _Stats(offset, published_count)
                 self._update_success_topic_stats(topic, partition, new_stats)
@@ -152,8 +156,8 @@ class RetryHandler(object):
             except LeaderNotAvailableError:
                 # Topic doesn't exist yet but the broker is configured to create
                 # the topic automatically. Retry the request.
-                logger.debug(
-                    "Topic {} doesn't exists. Retry {}.".format(topic, topic_desc)
+                debug_log(
+                    lambda: "Topic {} doesn't exists. Retry {}.".format(topic, topic_desc())
                 )
                 requests_to_retry.append(request)
 
@@ -161,8 +165,8 @@ class RetryHandler(object):
                 # Unable to get the high watermark of this topic; do not retry
                 # this request since it's unclear if the messages are actually
                 # successfully published.
-                logger.debug(
-                    "Cannot get the high watermark. Skip {}.".format(topic_desc),
+                debug_log(
+                    lambda: "Cannot get the high watermark. Skip {}.".format(topic_desc()),
                     exc_info=1
                 )
                 pass
