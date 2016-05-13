@@ -1,3 +1,9 @@
+data-pipeline-tools (0.1.71) lucid; urgency=low
+
+  * Commit: Merge branch 'DATAPIPE-981-abrar-avro_w_cache'
+
+ -- Justin Cunningham <justinc@yelp.com>  Thu, 12 May 2016 17:29:46 -0700
+
 data-pipeline-tools (0.1.70) lucid; urgency=low
 
   * Commit: Merge remote-tracking branch 'origin/DATAPIPE-846-
