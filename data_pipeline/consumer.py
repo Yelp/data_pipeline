@@ -112,7 +112,7 @@ class Consumer(BaseConsumer):
 
     def _start(self):
         self.consumer_group = KafkaConsumerGroup(
-            topics=self.topic_to_consumer_topic_state_map.keys(),
+            topics=list(self.topics),
             config=self._kafka_consumer_config
         )
         self.consumer_group.start()
@@ -167,7 +167,6 @@ class Consumer(BaseConsumer):
                 message,
                 self.force_payload_decode
             )
-            self._update_topic_map(message)
             messages.append(message)
             if not blocking or (has_timeout and time() > max_time):
                 break

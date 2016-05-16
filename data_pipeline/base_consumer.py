@@ -109,7 +109,6 @@ class BaseConsumer(Client):
             expected_frequency_seconds,
             monitoring_enabled=False
         )
-        self.topic_to_consumer_topic_state_map = topic_to_consumer_topic_state_map
         self.force_payload_decode = force_payload_decode
         self.auto_offset_reset = auto_offset_reset
         self.partitioner_cooldown = partitioner_cooldown
@@ -117,6 +116,8 @@ class BaseConsumer(Client):
         self.consumer_group = None
         self.pre_rebalance_callback = pre_rebalance_callback
         self.post_rebalance_callback = post_rebalance_callback
+        self.topics = set(topic_to_consumer_topic_state_map.keys())
+        self._commit_topic_map_offsets(topic_to_consumer_topic_state_map)
 
     @cached_property
     def kafka_client(self):
@@ -162,7 +163,6 @@ class BaseConsumer(Client):
                 self.client_name
             ))
         self.reset_topic_to_partition_offset_cache()
-        self._commit_topic_map_offsets()
         self._start()
         self.running = True
         logger.info("Consumer '{0}' started".format(self.client_name))
@@ -402,7 +402,9 @@ class BaseConsumer(Client):
                     if no_new_topics():
                         continue
                     consumer.commit_messages(messages)
-                    topic_map = consumer.topic_to_consumer_topic_state_map
+                    topic_map = {}
+                    for topic in consumer.topics:
+                        topic_map[topic] = None
                     new_topics = get_new_topics()
                     for topic in new_topics:
                         if topic not in topic_map:
@@ -428,25 +430,13 @@ class BaseConsumer(Client):
                 `auto_offset_reset` offset in the topic.
         """
         self.stop()
-        self.topic_to_consumer_topic_state_map = topic_to_consumer_topic_state_map
+        self._commit_topic_map_offsets(topic_to_consumer_topic_state_map)
+        self.topics = set(topic_to_consumer_topic_state_map.keys())
         self.start()
 
-    def _update_topic_map(self, message):
-        consumer_topic_state = self.topic_to_consumer_topic_state_map.get(message.topic)
-        if consumer_topic_state is None:
-            consumer_topic_state = ConsumerTopicState(
-                partition_offset_map={},
-                last_seen_schema_id=message.schema_id
-            )
-        consumer_topic_state.last_seen_schema_id = message.schema_id
-        consumer_topic_state.partition_offset_map[
-            message.kafka_position_info.partition
-        ] = message.kafka_position_info.offset
-        self.topic_to_consumer_topic_state_map[message.topic] = consumer_topic_state
-
-    def _commit_topic_map_offsets(self):
+    def _commit_topic_map_offsets(self, topic_to_consumer_topic_state_map):
         offset_requests = []
-        for topic, consumer_topic_state in self.topic_to_consumer_topic_state_map.iteritems():
+        for topic, consumer_topic_state in topic_to_consumer_topic_state_map.iteritems():
             if consumer_topic_state is None:
                 continue
             for partition, offset in consumer_topic_state.partition_offset_map.iteritems():
@@ -492,16 +482,14 @@ class BaseConsumer(Client):
     def _apply_post_rebalance_callback_to_partition(self, partitions):
         """
         Removes the topics not present in the partitions list
-        from the topic_to_consumer_topic_state_map
+        from the consumer topics set
 
         Args:
             partitions: List of current partitions the kafka
             broker holds
         """
-        self.topic_to_consumer_topic_state_map = {
-            key: self.topic_to_consumer_topic_state_map.get(key)
-            for key in partitions
-        }
+
+        self.topics = {key for key in partitions}
 
         self.reset_topic_to_partition_offset_cache()
 
@@ -511,7 +499,8 @@ class BaseConsumer(Client):
     def refresh_new_topics(
         self,
         topic_filter=None,
-        before_refresh_handler=None
+        pre_topic_refresh_callback=None,
+        post_topic_refresh_callback=None
     ):
         """
         Get newly created topics that match given criteria and refresh internal
@@ -520,12 +509,24 @@ class BaseConsumer(Client):
         Args:
             topic_filter (Optional[TopicFilter]): criteria to filter newly
                 created topics.
-            before_refresh_handler
-                (Optional[Callable[[List[data_pipeline.schematizer_clientlib.models.Topic]], Any]]):
-                function that performs custom logic before the consumer resets
-                topics.  The function will take a list of new topics filtered
-                by the given filter and currently not in the topic state map.
-                The return value of the function is ignored.
+            pre_topic_refresh_callback:
+                (Optional[Callable[[Set[str], Set[str]], Any]]): function
+                that performs custom logic before the consumer resets topics.
+                The function will take a list of new topics filtered by the
+                given filter and currently not being tailed and list of
+                currently tailed topics. The return value of the function is
+                ignored.
+                Note: Commit the offsets of already consumed messages in this
+                callback to prevent duplicate messages. Else, the consumer
+                will pick up the last committed offsets of topics and may
+                consume already consumed messages.
+            post_topic_refresh_callback:
+                (Optional[Callable[[Set[str], Set[str]], Any]]): same as
+                pre_topic_refresh_callback function but performs custom
+                logic after the consumer resets topics. The function will take
+                the same list of old_topics and new_topics as
+                pre_topic_refresh_callback function. The return value of the
+                function is ignored.
 
         Returns:
             [data_pipeline.schematizer_clientlib.models.Topic]: A list of new topics.
@@ -533,17 +534,20 @@ class BaseConsumer(Client):
         # TODO [DATAPIPE-843|clin] deprecate this function in favor of new
         # `refresh_topics` function once AST is revised to use the new function.
         new_topics = self._get_new_topics(topic_filter)
-
         new_topics = [topic for topic in new_topics
-                      if topic.name not in self.topic_to_consumer_topic_state_map]
-
-        if before_refresh_handler:
-            before_refresh_handler(new_topics)
+                      if topic.name not in self.topics]
+        new_topic_names = {topic.name for topic in new_topics}
 
         if new_topics:
             self.stop()
-            self._update_new_topic_state_map(new_topics)
+            old_topic_names = set(self.topics)
+            if pre_topic_refresh_callback:
+                pre_topic_refresh_callback(old_topic_names, new_topic_names)
+            for new_topic in new_topic_names:
+                self.topics.add(new_topic)
             self.start()
+            if post_topic_refresh_callback:
+                post_topic_refresh_callback(old_topic_names, new_topic_names)
 
         return new_topics
 
@@ -557,39 +561,62 @@ class BaseConsumer(Client):
             new_topics = topic_filter.filter_func(new_topics)
         return new_topics
 
-    def _update_new_topic_state_map(self, new_topics):
-        for new_topic in new_topics:
-            self.topic_to_consumer_topic_state_map[new_topic.name] = None
-
-    def refresh_topics(self, consumer_source):
+    def refresh_topics(
+        self,
+        consumer_source,
+        pre_topic_refresh_callback=None,
+        post_topic_refresh_callback=None
+    ):
         """Refresh the topics this consumer is consuming from based on the
         settings in the given consumer_source.
 
         Args:
             consumer_source (data_pipeline.consumer_source.ConsumerSource): one
                 of ConsumerSource types, such as SingleTopic, TopicInNamespace.
+            pre_topic_refresh_callback:
+                (Optional[Callable[[Set[str], Set[str]], Any]]): function
+                that performs custom logic before the consumer resets topics.
+                The function will take a list of new topics filtered by the
+                given filter and currently not being tailed and list of
+                currently tailed topics. The return value of the function is
+                ignored.
+                Note: Commit the offsets of already consumed messages in this
+                callback to prevent duplicate messages. Else, the consumer
+                will pick up the last committed offsets of topics and may
+                consume already consumed messages.
+            post_topic_refresh_callback:
+                (Optional[Callable[[Set[str], Set[str]], Any]]): same as
+                pre_topic_refresh_callback function but performs custom logic
+                after the consumer resets topics. The function will take the
+                same list of old_topics and new_topics as
+                pre_topic_refresh_callback function. The return value of the
+                function is ignored.
 
         Returns:
             List[str]: A list of new topic names that this consumer starts to
             consume.
         """
         topics = consumer_source.get_topics()
-        new_topics = [topic for topic in topics
-                      if topic not in self.topic_to_consumer_topic_state_map]
+        new_topics = {topic for topic in topics
+                      if topic not in self.topics}
 
         if new_topics:
             self.stop()
+            old_topics = set(self.topics)
+            if pre_topic_refresh_callback:
+                pre_topic_refresh_callback(old_topics, new_topics)
             for new_topic in new_topics:
-                self.topic_to_consumer_topic_state_map[new_topic] = None
+                self.topics.add(new_topic)
             self.start()
+            if post_topic_refresh_callback:
+                post_topic_refresh_callback(old_topics, new_topics)
 
             # If a new topic doesn't exist, when the consumer restarts, it will
-            # be removed from the topic state map after the re-balance callback.
+            # be removed from the consumer topics after the re-balance callback.
             # In such case, the non-existent topics are removed from the new_topics.
-            new_topics = [topic for topic in new_topics
-                          if topic in self.topic_to_consumer_topic_state_map]
+            new_topics = [topic for topic in new_topics if topic in self.topics]
 
-        return new_topics
+        return list(new_topics)
 
 
 class TopicFilter(object):
