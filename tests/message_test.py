@@ -118,6 +118,19 @@ class SharedMessageTest(object):
             payload_data={'data': 'foo'}
         )
 
+    def test_reject_encrypted_message_without_encryption(
+        self,
+        pii_schema,
+        valid_message_data
+    ):
+        message_data = self._make_message_data(
+            valid_message_data,
+            schema_id=pii_schema.schema_id
+        )
+        message = self.message_class(**message_data)
+        with pytest.raises(ValueError):
+            message.encryption_type
+
     @pytest.mark.parametrize('invalid_keys', [unicode('foo'), [], [str('foo')]])
     def test_reject_non_unicode_keys(self, valid_message_data, invalid_keys):
         self._assert_invalid_data(valid_message_data, keys=invalid_keys)
@@ -261,19 +274,6 @@ class PayloadOnlyMessageTest(SharedMessageTest):
     def test_rejects_previous_payload_data(self, message):
         with pytest.raises(AttributeError):
             message.previous_payload_data
-
-    def test_reject_encrypted_message_without_encryption(
-        self,
-        pii_schema,
-        valid_message_data
-    ):
-        message_data = self._make_message_data(
-            valid_message_data,
-            schema_id=pii_schema.schema_id
-        )
-        message = self.message_class(**message_data)
-        with pytest.raises(ValueError):
-            message.encryption_type
 
     def test_encrypted_message(self, pii_schema, payload, example_payload_data):
         with reconfigure(encryption_type='AES_MODE_CBC-1'):
@@ -472,19 +472,6 @@ class TestUpdateMessage(SharedMessageTest):
             previous_payload=bytes(10),
             previous_payload_data={'foo': 'bar'}
         )
-
-    def test_reject_encrypted_message_without_encryption(
-        self,
-        pii_schema,
-        valid_message_data
-    ):
-        message_data = self._make_message_data(
-            valid_message_data,
-            schema_id=pii_schema.schema_id
-        )
-        message = self.message_class(**message_data)
-        with pytest.raises(ValueError):
-            message.encryption_type
 
     def test_encrypted_message(self, pii_schema, payload, example_payload_data):
         # TODO [clin|DATAPIPE-851] let's see if this can be refactored
