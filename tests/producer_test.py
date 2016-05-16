@@ -308,12 +308,6 @@ class TestProducer(TestProducerBase):
 
         assert len(offsets_and_messages) == 1
 
-        unpacked_message = Envelope().unpack(offsets_and_messages[0].message.value)
-        encrypted_payload = message._encryption_helper.encrypt_payload(
-            message.payload
-        )
-        assert unpacked_message['payload'] == encrypted_payload
-
         dp_message = create_from_offset_and_message(
             message.topic,
             offsets_and_messages[0]
@@ -321,6 +315,12 @@ class TestProducer(TestProducerBase):
         assert dp_message.payload == message.payload
         assert dp_message.payload_data == message.payload_data
         assert dp_message.schema_id == message.schema_id
+
+        encrypted_payload = dp_message._encryption_helper.encrypt_payload(
+            message.payload
+        )
+        unpacked_message = Envelope().unpack(offsets_and_messages[0].message.value)
+        assert unpacked_message['payload'] == encrypted_payload
 
     def test_publish_message_with_keys(self, create_message, producer):
         sample_keys = (u'key1=\'', u'key2=\\', u'key3=哎ù\x1f')

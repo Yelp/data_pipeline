@@ -265,15 +265,15 @@ class PayloadOnlyMessageTest(SharedMessageTest):
     def test_reject_encrypted_message_without_encryption(
         self,
         pii_schema,
-        payload,
         valid_message_data
     ):
-        self._assert_invalid_data(
+        message_data = self._make_message_data(
             valid_message_data,
-            error=ValueError,
-            schema_id=pii_schema.schema_id,
-            payload=payload
+            schema_id=pii_schema.schema_id
         )
+        message = self.message_class(**message_data)
+        with pytest.raises(ValueError):
+            message.encryption_type
 
     def test_encrypted_message(self, pii_schema, payload, example_payload_data):
         with reconfigure(encryption_type='AES_MODE_CBC-1'):
@@ -476,16 +476,15 @@ class TestUpdateMessage(SharedMessageTest):
     def test_reject_encrypted_message_without_encryption(
         self,
         pii_schema,
-        payload,
         valid_message_data
     ):
-        self._assert_invalid_data(
+        message_data = self._make_message_data(
             valid_message_data,
-            error=ValueError,
-            schema_id=pii_schema.schema_id,
-            payload=payload,
-            previous_payload=payload
+            schema_id=pii_schema.schema_id
         )
+        message = self.message_class(**message_data)
+        with pytest.raises(ValueError):
+            message.encryption_type
 
     def test_encrypted_message(self, pii_schema, payload, example_payload_data):
         # TODO [clin|DATAPIPE-851] let's see if this can be refactored
