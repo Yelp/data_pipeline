@@ -195,6 +195,7 @@ class Message(object):
 
     @property
     def encryption_type(self):
+        # Set the encryption type if the current state is unknown (None)
         if self._should_be_encrypted_state is None:
             self._set_encryption_type()
         return self._encryption_type
@@ -229,7 +230,10 @@ class Message(object):
         """
         self._encryption_type = encryption_type
         if encryption_type:
-            self._encryption_helper = EncryptionHelper(encryption_type, encryption_meta)
+            self._encryption_helper = EncryptionHelper(
+                encryption_type,
+                encryption_meta
+            )
         self._should_be_encrypted_state = bool(encryption_type)
 
     def _set_encryption_meta(self):
@@ -477,6 +481,10 @@ class Message(object):
             encryption_meta=encryption_meta
         )
 
+        # TODO [clin|DATAPIPE-1004, DATAPIPE-1010] Right now it explicitly
+        # passes the topic via the constructor to avoid retrieving it from
+        # the schematizer. Later, once the topic is lazily retrieved, it
+        # should set the topic in the same way as setting encryption type.
         message_params = {
             'uuid': unpacked_message['uuid'],
             'topic': topic,
