@@ -19,7 +19,9 @@ from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
 from data_pipeline.schematizer_clientlib.models.avro_schema import AvroSchema
 from data_pipeline.schematizer_clientlib.models.topic import Topic
+from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from tests.helpers.config import reconfigure
+from tests.helpers.mock_utils import attach_spy_on_func
 
 
 @pytest.mark.usefixtures("containers")
@@ -253,6 +255,32 @@ class SharedMessageTest(object):
         assert message._encryption_helper.decrypt_payload(
             actual_encrypted_payload
         ) == expected_decrypted_payload
+
+    def test_setup_contains_pii_value_once(self, message):
+        schematizer_client = get_schematizer()
+        with attach_spy_on_func(schematizer_client, 'get_schema_by_id') as spy:
+            message.contains_pii
+            assert spy.call_count == 1
+        with attach_spy_on_func(schematizer_client, 'get_schema_by_id') as spy:
+            message.contains_pii
+            assert spy.call_count == 0
+
+    def test_setup_encryption_type_from_config_once(
+        self,
+        pii_schema,
+        valid_message_data
+    ):
+        message_data = self._make_message_data(
+            valid_message_data,
+            schema_id=pii_schema.schema_id
+        )
+        pii_message = self.message_class(**message_data)
+        with reconfigure(encryption_type='Algorithm_one-1'):
+            actual = pii_message.encryption_type
+            assert actual == 'Algorithm_one-1'
+        with reconfigure(encryption_type='Algorithm_two-1'):
+            actual = pii_message.encryption_type
+            assert actual == 'Algorithm_one-1'
 
 
 class PayloadOnlyMessageTest(SharedMessageTest):
@@ -561,3 +589,21 @@ class TestCreateFromMessageAndOffset(object):
         assert extracted_message.timestamp == message.timestamp
         assert extracted_message.topic == message.topic
         assert extracted_message.uuid == message.uuid
+
+    def test_setup_encryption_type_from_message(self, pii_schema, payload):
+        pii_message = dp_message.CreateMessage(
+            pii_schema.schema_id,
+            payload=payload
+        )
+        with reconfigure(encryption_type='AES_MODE_CBC-1'):
+            offset_and_message = OffsetAndMessage(
+                0,
+                create_message(Envelope().pack(pii_message))
+            )
+
+        with reconfigure(encryption_type='New_Algorithm-1'):
+            consumed_message = create_from_offset_and_message(
+                topic=pii_message.topic,
+                offset_and_message=offset_and_message
+            )
+            assert consumed_message.encryption_type == 'AES_MODE_CBC-1'
