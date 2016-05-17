@@ -195,7 +195,6 @@ class Message(object):
 
     @property
     def encryption_type(self):
-        # Set the encryption type if the current state is unknown (None)
         if not self._is_encryption_type_value_known:
             self._set_encryption_type()
         return self._encryption_type
@@ -506,7 +505,12 @@ class Message(object):
         ] if unpacked_message['meta'] else None
 
     @classmethod
-    def _get_unpacked_decrypted_payload(cls, payload, encryption_type, encryption_meta):
+    def _get_unpacked_decrypted_payload(
+        cls,
+        payload,
+        encryption_type,
+        encryption_meta
+    ):
         if not encryption_type:
             return payload
 
@@ -517,6 +521,7 @@ class Message(object):
     def get_encryption_meta(cls, encryption_type, meta):
         if not encryption_type:
             return None
+
         encryption_meta = EncryptionHelper.get_encryption_meta_by_encryption_type(
             encryption_type
         )
