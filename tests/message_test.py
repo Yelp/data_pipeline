@@ -276,11 +276,9 @@ class SharedMessageTest(object):
         )
         pii_message = self.message_class(**message_data)
         with reconfigure(encryption_type='Algorithm_one-1'):
-            actual = pii_message.encryption_type
-            assert actual == 'Algorithm_one-1'
+            assert pii_message.encryption_type == 'Algorithm_one-1'
         with reconfigure(encryption_type='Algorithm_two-1'):
-            actual = pii_message.encryption_type
-            assert actual == 'Algorithm_one-1'
+            assert pii_message.encryption_type == 'Algorithm_one-1'
 
 
 class PayloadOnlyMessageTest(SharedMessageTest):
