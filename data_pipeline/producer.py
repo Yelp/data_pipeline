@@ -172,11 +172,8 @@ class Producer(Client):
         Args:
             message (data_pipeline.message.Message): message to publish
         """
-        self.publish_message(message)
-        self.monitor.record_message(message)
-
-    def publish_message(self, message):
         self._kafka_producer.publish(message)
+        self.monitor.record_message(message)
 
     def ensure_messages_published(self, messages, topic_offsets):
         """This method should only be used when recovering after an unclean
