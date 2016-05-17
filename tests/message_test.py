@@ -256,7 +256,7 @@ class SharedMessageTest(object):
             actual_encrypted_payload
         ) == expected_decrypted_payload
 
-    def test_setup_contains_pii_value_once(self, message):
+    def test_setup_contains_pii_from_schematizer_once(self, message):
         schematizer_client = get_schematizer()
         with attach_spy_on_func(schematizer_client, 'get_schema_by_id') as spy:
             message.contains_pii
