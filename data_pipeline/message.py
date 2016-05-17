@@ -196,14 +196,14 @@ class Message(object):
     @property
     def encryption_type(self):
         # Set the encryption type if the current state is unknown (None)
-        if self._should_be_encrypted_state is None:
+        if not self._is_encryption_type_value_known:
             self._set_encryption_type()
         return self._encryption_type
 
     def _set_encryption_type(self):
         self._encryption_type = None
         if not self._should_be_encrypted:
-            self._should_be_encrypted_state = False
+            self._is_encryption_type_value_known = True
             return
 
         config_encryption_type = get_config().encryption_type
@@ -234,7 +234,7 @@ class Message(object):
                 encryption_type,
                 encryption_meta
             )
-        self._should_be_encrypted_state = bool(encryption_type)
+        self._is_encryption_type_value_known = True
 
     def _set_encryption_meta(self):
         if self._meta is None:
@@ -404,7 +404,7 @@ class Message(object):
             logger.debug(
                 "Overriding message topic: {} for schema {}.".format(topic, schema_id)
             )
-        self._should_be_encrypted_state = None  # unknown state
+        self._is_encryption_type_value_known = False
 
     def _set_payload_or_payload_data(self, payload, payload_data):
         # payload or payload_data are lazily constructed only on request
