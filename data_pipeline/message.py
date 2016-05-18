@@ -510,15 +510,20 @@ class Message(object):
         self._set_payload_data_if_necessary(self._payload)
         self._set_payload_if_necessary(self._payload_data)
 
+    def _cleaned_pii_data_copy(self, data):
+        return dict((key, (unicode(type(value)) if not isinstance(value, type({})) else self._cleaned_pii_data_copy(value)))
+                    for key, value in data.items())
+
     @property
     def _str_repr(self):
-        # TODO [clin|DATAPIPE-849] It should properly handle pii payload data,
-        # especially it shouldn't leak it into the logs if it's used for logging.
+        current_payload_data = self.payload_data
+        if self.contains_pii:
+            current_payload_data = self._cleaned_pii_data_copy(self.payload_data)
         return {
             'uuid': self.uuid_hex,
             'message_type': self.message_type.name,
             'schema_id': self.schema_id,
-            'payload_data': self.payload_data,
+            'payload_data': current_payload_data,
             'timestamp': self.timestamp,
             'meta': self._get_meta_attr_avro_repr(),
             'encryption_type': self.encryption_type

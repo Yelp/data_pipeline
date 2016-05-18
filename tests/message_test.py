@@ -29,6 +29,11 @@ class SharedMessageTest(object):
     def message(self, valid_message_data):
         return self.message_class(**valid_message_data)
 
+    @pytest.fixture
+    def message_with_pii(self, message):
+        message._contains_pii = True
+        return message
+
     @pytest.fixture(params=[
         None,
         100,
@@ -228,7 +233,20 @@ class SharedMessageTest(object):
             'uuid': message.uuid_hex,
             'payload_data': message.payload_data
         }
-        # only use eval to get the original dict when the string is trusted
+        assert eval(actual) == expected
+
+    def test_message_str_with_pii(self, message_with_pii):
+        actual = str(message_with_pii)
+        _payload_data = message_with_pii._cleaned_pii_data_copy(message_with_pii.payload_data)
+        expected = {
+            'message_type': self.expected_message_type.name,
+            'schema_id': message_with_pii.schema_id,
+            'timestamp': message_with_pii.timestamp,
+            'meta': message_with_pii._get_meta_attr_avro_repr(),
+            'encryption_type': message_with_pii.encryption_type,
+            'uuid': message_with_pii.uuid_hex,
+            'payload_data': _payload_data,
+        }
         assert eval(actual) == expected
 
     def assert_equal_decrypted_payload(
@@ -553,7 +571,21 @@ class TestUpdateMessage(SharedMessageTest):
             'payload_data': message.payload_data,
             'previous_payload_data': message.previous_payload_data
         }
-        # only use eval to get the original dict when the string is trusted
+        assert eval(actual) == expected
+
+    def test_message_str_with_pii(self, message_with_pii):
+        actual = str(message_with_pii)
+        _payload_data = message_with_pii._cleaned_pii_data_copy(message_with_pii.payload_data)
+        expected = {
+            'message_type': self.expected_message_type.name,
+            'schema_id': message_with_pii.schema_id,
+            'timestamp': message_with_pii.timestamp,
+            'meta': message_with_pii._get_meta_attr_avro_repr(),
+            'encryption_type': message_with_pii.encryption_type,
+            'uuid': message_with_pii.uuid_hex,
+            'payload_data': _payload_data,
+            'previous_payload_data': message_with_pii.previous_payload_data
+        }
         assert eval(actual) == expected
 
 
