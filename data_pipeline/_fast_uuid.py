@@ -8,7 +8,6 @@ import uuid
 from cffi import FFI
 
 from data_pipeline.config import get_config
-from data_pipeline.helpers.log import debug_log
 
 
 class _UUIDBase(object):
@@ -97,8 +96,8 @@ class _LibUUID(_UUIDBase):
                 ctypes.util.find_library("uuid")
             )
 
-            debug_log(
-                lambda: "FastUUID Created - FFI: ({}), LIBUUID: ({})".format(
+            get_config().logger.debug(
+                "FastUUID Created - FFI: ({}), LIBUUID: ({})".format(
                     _LibUUID._ffi,
                     _LibUUID._libuuid
                 )

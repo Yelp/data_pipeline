@@ -12,12 +12,14 @@ from data_pipeline._encryption_helper import EncryptionHelper
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
-from data_pipeline.helpers.log import debug_log
 from data_pipeline.helpers.yelp_avro_store import _AvroStringStore
 from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
 from data_pipeline.meta_attribute import MetaAttribute
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+
+
+logger = get_config().logger
 
 
 KafkaPositionInfo = namedtuple('KafkaPositionInfo', [
@@ -379,8 +381,8 @@ class Message(object):
         self._set_meta(meta)
         self._set_payload_or_payload_data(payload, payload_data)
         if topic:
-            debug_log(
-                lambda: "Overriding message topic: {} for schema {}.".format(topic, schema_id)
+            logger.debug(
+                "Overriding message topic: {} for schema {}.".format(topic, schema_id)
             )
         if self.encryption_type:
             if self._meta is None:
