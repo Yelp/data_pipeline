@@ -511,19 +511,20 @@ class Message(object):
         self._set_payload_if_necessary(self._payload_data)
 
     def _cleaned_pii_data_copy(self, data):
-        return dict((key, (unicode(type(value)) if not isinstance(value, type({})) else self._cleaned_pii_data_copy(value)))
-                    for key, value in data.items())
+        if not isinstance(data, dict):
+            return unicode(type(data))
+        return {key: self._cleaned_pii_data_copy(value) for key, value in data.iteritems()}
 
     @property
     def _str_repr(self):
-        current_payload_data = self.payload_data
+        cleaned_payload_data = self.payload_data
         if self.contains_pii:
-            current_payload_data = self._cleaned_pii_data_copy(self.payload_data)
+            cleaned_payload_data = self._cleaned_pii_data_copy(self.payload_data)
         return {
             'uuid': self.uuid_hex,
             'message_type': self.message_type.name,
             'schema_id': self.schema_id,
-            'payload_data': current_payload_data,
+            'payload_data': cleaned_payload_data,
             'timestamp': self.timestamp,
             'meta': self._get_meta_attr_avro_repr(),
             'encryption_type': self.encryption_type
@@ -808,6 +809,7 @@ class UpdateMessage(Message):
 
     @property
     def _str_repr(self):
+        # Calls the _str_repr from the super class resulting in encrypted pii data.
         repr_dict = super(UpdateMessage, self)._str_repr
         repr_dict['previous_payload_data'] = self.previous_payload_data
         return repr_dict

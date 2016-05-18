@@ -30,9 +30,10 @@ class SharedMessageTest(object):
         return self.message_class(**valid_message_data)
 
     @pytest.fixture
-    def message_with_pii(self, message):
-        message._contains_pii = True
-        return message
+    def message_with_pii(self, pii_schema, valid_message_data):
+        pii_message = self.message(valid_message_data)
+        pii_message._set_contains_pii(pii_schema.schema_id)
+        return pii_message
 
     @pytest.fixture(params=[
         None,
@@ -233,6 +234,7 @@ class SharedMessageTest(object):
             'uuid': message.uuid_hex,
             'payload_data': message.payload_data
         }
+        # only use eval to get the original dict when the string is trusted
         assert eval(actual) == expected
 
     def test_message_str_with_pii(self, message_with_pii):
@@ -247,6 +249,7 @@ class SharedMessageTest(object):
             'uuid': message_with_pii.uuid_hex,
             'payload_data': _payload_data,
         }
+        # only use eval to get the original dict when the string is trusted
         assert eval(actual) == expected
 
     def assert_equal_decrypted_payload(
@@ -571,6 +574,7 @@ class TestUpdateMessage(SharedMessageTest):
             'payload_data': message.payload_data,
             'previous_payload_data': message.previous_payload_data
         }
+        # only use eval to get the original dict when the string is trusted
         assert eval(actual) == expected
 
     def test_message_str_with_pii(self, message_with_pii):
@@ -586,6 +590,7 @@ class TestUpdateMessage(SharedMessageTest):
             'payload_data': _payload_data,
             'previous_payload_data': message_with_pii.previous_payload_data
         }
+        # only use eval to get the original dict when the string is trusted
         assert eval(actual) == expected
 
 
