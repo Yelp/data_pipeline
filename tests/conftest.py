@@ -78,17 +78,6 @@ def registered_non_compatible_schema(schematizer_client, example_non_compatible_
 
 
 @pytest.fixture(scope='module')
-def registered_schema_two(schematizer_client, example_compatible_schema, namespace, source):
-    return schematizer_client.register_schema(
-        namespace=namespace,
-        source=source,
-        schema_str=example_compatible_schema,
-        source_owner_email='test@yelp.com',
-        contains_pii=False
-    )
-
-
-@pytest.fixture(scope='module')
 def registered_multiple_schemas_with_same_topic(schematizer_client, example_schema, example_compatible_schema, namespace, source):
     schema1 = schematizer_client.register_schema(
         namespace=namespace,
@@ -197,6 +186,7 @@ def payload(example_schema, example_payload_data):
     return AvroStringWriter(
         simplejson.loads(example_schema)
     ).encode(example_payload_data)
+
 
 @pytest.fixture
 def example_previous_payload_data(example_schema_obj):
