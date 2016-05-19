@@ -467,7 +467,6 @@ class TestGetSchemasByTopicName(SchematizerClientTestBase):
             schema=simplejson.dumps(new_schema)
         )
 
-
     def test_get_schemas_of_biz_topic(
         self,
         schematizer,
@@ -486,7 +485,7 @@ class TestGetSchemasByTopicName(SchematizerClientTestBase):
             schematizer.get_schemas_by_topic_name('bad_topic')
         assert e.value.response.status_code == 404
 
-    def test_schemas_should_readebe_cached(self, schematizer, biz_topic):
+    def test_schemas_should_be_cached(self, schematizer, biz_topic):
         schemas = schematizer.get_schemas_by_topic_name(biz_topic.name)
         with self.attach_spy_on_api(
             schematizer._client.schemas,

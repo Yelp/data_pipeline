@@ -13,7 +13,7 @@ import pytest
 from data_pipeline.consumer import Consumer
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import CreateMessage
-from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+from tests.base_consumer_test import BaseConsumerReaderSchemaMapBaseTest
 from tests.base_consumer_test import BaseConsumerTest
 from tests.base_consumer_test import FixedSchemasReaderSchemaMapSetupMixin
 from tests.base_consumer_test import FixedSchemasSetupMixin
@@ -237,7 +237,7 @@ class TestRefreshTopics(RefreshNewTopicsTest):
         )
 
 
-class ConsumerReaderSchemaMapBaseTest(object):
+class ConsumerReaderSchemaMapBaseTest(BaseConsumerReaderSchemaMapBaseTest):
 
     @pytest.fixture
     def consumer_group_name(self):
@@ -254,33 +254,6 @@ class ConsumerReaderSchemaMapBaseTest(object):
     @pytest.fixture(params=[False, True])
     def force_payload_decode(self, request):
         return request.param
-
-    def _register_schema(self, namespace, source, containers):
-        avro_schema = {
-            'type': 'record',
-            'name': source,
-            'namespace': namespace,
-            'fields': [{'type': 'int', 'name': 'id'}]
-        }
-        reg_schema = get_schematizer().register_schema_from_schema_json(
-            namespace=namespace,
-            source=source,
-            schema_json=avro_schema,
-            source_owner_email='bam+test@yelp.com',
-            contains_pii=False
-        )
-        containers.create_kafka_topic(str(reg_schema.topic.name))
-        return reg_schema
-
-    @pytest.fixture(scope='class')
-    def test_schema(self, containers):
-        return self._register_schema('test_reader_schema_map_namespace1', 'test_reader_schema_map_src', containers)
-
-    @pytest.fixture(scope='class')
-    def topic(self, containers, test_schema):
-        topic_name = str(test_schema.topic.name)
-        containers.create_kafka_topic(topic_name)
-        return topic_name
 
     @pytest.fixture
     def consumer_instance(
@@ -302,16 +275,31 @@ class ConsumerReaderSchemaMapBaseTest(object):
             force_payload_decode=force_payload_decode,
             auto_offset_reset='largest',  # start from the tail of the topic
             pre_rebalance_callback=pre_rebalance_callback,
-            post_rebalance_callback=post_rebalance_callback
+            post_rebalance_callback=post_rebalance_callback,
+
         )
 
-    def test_create_reader_schema_map(self, consumer_instance, expected_topic_reader_schema_map):
-        assert len(consumer_instance.topic_to_reader_schema_map) == len(expected_topic_reader_schema_map)
-        assert len(set(consumer_instance.topic_to_reader_schema_map.items()) ^ set(expected_topic_reader_schema_map.items())) == 0
+    def test_get_messages_uses_correct_reader_schema(
+        self,
+        topic,
+        publish_messages,
+        consumer_instance,
+        message,
+        expected_message
+    ):
+        """
+        This test publishes a message and initializes a consumer with different
+        consumer sources. Then it starts the consumer and retrieves the message
+        while passing reader_schema_id. Verifies that if reader_schema_id is
+        provided then message gets decoded using that reader_schema_id else
+        message gets decoded using the schema_id the message was encoded with.
+        """
+        with consumer_instance as consumer:
+            publish_messages(message, count=1)
+            actual_message = consumer.get_message(blocking=True, timeout=TIMEOUT)
 
-    def test_topic_state_map(self, consumer_instance, expected_topic_to_consumer_topic_state_map):
-        assert len(consumer_instance.topic_to_consumer_topic_state_map) == len(expected_topic_to_consumer_topic_state_map)
-        assert len(set(consumer_instance.topic_to_consumer_topic_state_map.items()) ^ set(expected_topic_to_consumer_topic_state_map.items())) == 0
+            assert actual_message.reader_schema_id == expected_message.schema_id
+            assert actual_message.payload_data == expected_message.payload_data
 
 
 class TestReaderSchemaMapFixedTopics(

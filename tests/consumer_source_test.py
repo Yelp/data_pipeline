@@ -137,46 +137,61 @@ class TestMultiTopics(FixedTopicsSourceTestBase):
 class TestFixedSchemasSource(FixedTopicsSourceTestBase):
 
     @pytest.fixture
-    def avro_schema2(self, foo_src, foo_namespace):
-        return {
+    def foo_schema(
+        self,
+        foo_namespace,
+        foo_src,
+        _register_schema,
+    ):
+        return _register_schema(foo_namespace, foo_src)
+
+    @pytest.fixture
+    def foo_schema2(
+        self,
+        foo_namespace,
+        foo_src,
+        _register_schema,
+    ):
+        avro_schema2 = {
             'type': 'record',
             'name': foo_src,
             'namespace': foo_namespace,
-            'fields': [{'type': 'int', 'name': 'id1', 'default': 1}]
+            'fields': [{'type': 'int', 'name': 'id1'}]
         }
-
+        return _register_schema(foo_namespace, foo_src, avro_schema2)
 
     @pytest.fixture
-    def avro_schema3(self, foo_src, foo_namespace):
-        return {
+    def foo_schema3(
+        self,
+        foo_namespace,
+        foo_src,
+        _register_schema,
+    ):
+        avro_schema3 = {
             'type': 'record',
             'name': foo_src,
             'namespace': foo_namespace,
-            'fields': [{'type': 'int', 'name': 'id', 'default': 1}, {'type': 'int', 'name': 'id1', 'default': 1}]
+            'fields': [
+                {'type': 'int', 'name': 'id'},
+                {'type': 'int', 'name': 'id1'}
+            ]
         }
+        return _register_schema(foo_namespace, foo_src, avro_schema3)
 
     @pytest.fixture
-    def foo_schemas(self, foo_namespace, foo_src, _register_schema, avro_schema2, avro_schema3):
-        return (
-            _register_schema(foo_namespace, foo_src),
-            _register_schema(foo_namespace, foo_src, avro_schema2),
-            _register_schema(foo_namespace, foo_src, avro_schema3)
-        )
-
-    @pytest.fixture
-    def consumer_source(self, foo_schemas):
+    def consumer_source(self, foo_schema, foo_schema2, foo_schema3):
         return FixedSchemas(
-            foo_schemas[0].schema_id,
-            foo_schemas[1].schema_id,
-            foo_schemas[2].schema_id
+            foo_schema.schema_id,
+            foo_schema2.schema_id,
+            foo_schema3.schema_id
         )
 
     @pytest.fixture
-    def expected(self, foo_schemas):
+    def expected(self, foo_schema, foo_schema2, foo_schema3):
         return {
-            foo_schemas[0].topic.name,
-            foo_schemas[1].topic.name,
-            foo_schemas[2].topic.name
+            foo_schema.topic.name,
+            foo_schema2.topic.name,
+            foo_schema3.topic.name
         }
 
     def test_empty_schema_list(self):

@@ -61,9 +61,9 @@ class Message(object):
     :class:`data_pipeline.message.RefreshMessage`.
 
     Args:
-        schema_id (int): Identifies the schema used to encode the payload
-        reader_schema_id (int): Identifies the schema used to decode the
-            payload
+        schema_id (int): Identifies the schema used to encode the payload.
+        reader_schema_id (Optional[int]): Identifies the schema used to decode
+            the payload.
         topic (Optional[str]): Kafka topic to publish into.  It is highly
             recommended to leave it unassigned and let the Schematizer decide
             the topic of the schema.  Use caution when overriding the topic.
@@ -166,7 +166,7 @@ class Message(object):
     def _set_reader_schema_id(self, reader_schema_id):
         if not self._is_valid_optional_type(reader_schema_id, int):
             raise TypeError("Reader schema id must be an int")
-        self._reader_schema_id = reader_schema_id if reader_schema_id else self.schema_id
+        self._reader_schema_id = reader_schema_id or self.schema_id
 
     @property
     def message_type(self):
@@ -316,7 +316,7 @@ class Message(object):
 
     @property
     def _avro_reader_schema(self):
-        return self._schematizer.get_schema_by_id(self._reader_schema_id).schema_json
+        return self._schematizer.get_schema_by_id(self.reader_schema_id).schema_json
 
     @property
     def _avro_string_writer(self):
@@ -861,9 +861,9 @@ def create_from_kafka_message(
     force_payload_decoding=True,
     reader_schema_id=None
 ):
-    """ Build a data_pipeline.message.Message from a yelp_kafka message
-    and uses the reader schema id to decode the message. If no reader schema
-    id exists then uses the schema id, the kafka message was encoded with.
+    """ Build a data_pipeline.message.Message from a yelp_kafka message. If no
+    reader schema id is provided, the schema used for encoding will be used for
+    decoding.
 
     Args:
         topic (str): The topic name from which the message was received.
@@ -876,8 +876,10 @@ def create_from_kafka_message(
             we will decode the payload/previous_payload immediately.
             Otherwise the decoding will happen whenever the lazy *_data
             properties are accessed.
-        reader_schema_id (int): Schema id used to decode the kafka_message and
-         build data_pipeline.message.Message message.
+        reader_schema_id (Optional[int]): Schema id used to decode the
+            kafka_message and build data_pipeline.message.Message message.
+            Defaults to None.
+
 
     Returns (class:`data_pipeline.message.Message`):
         The message object
@@ -902,9 +904,10 @@ def create_from_offset_and_message(
     force_payload_decoding=True,
     reader_schema_id=None
 ):
-    """ Build a data_pipeline.message.Message from a kafka.common.OffsetAndMessage
-    and uses the reader schema id to decode the message. If no reader schema
-    id exists then uses the schema id, the message was encoded with.
+    """
+    Build a data_pipeline.message.Message from a kafka.common.OffsetAndMessage.
+    If no reader schema id is provided, the schema used for encoding will be
+    used for decoding.
 
     Args:
         topic (str): The topic name from which the message was received.
@@ -915,8 +918,9 @@ def create_from_offset_and_message(
             we will decode the payload/previous_payload immediately.
             Otherwise the decoding will happen whenever the lazy *_data
             properties are accessed.
-        reader_schema_id (int): Schema id used to decode the incoming kafka
-         message and build data_pipeline.message.Message message.
+        reader_schema_id (Optional[int]): Schema id used to decode the incoming
+            kafka message and build data_pipeline.message.Message message.
+            Defaults to None.
 
     Returns (data_pipeline.message.Message):
         The message object
@@ -936,9 +940,9 @@ def _create_message_from_packed_message(
     kafka_position_info=None,
     reader_schema_id=None
 ):
-    """ Builds a data_pipeline.message.Message from packed_message and uses
-    and uses the reader schema id to decode the message. If no reader schema
-    id exists then uses the schema id, the packed message was encoded with.
+    """ Builds a data_pipeline.message.Message from packed_message. If no
+    reader schema id is provided, the schema used for encoding will be used for
+    decoding.
 
     Args:
         topic (str): the topic name where the message comes from.
@@ -953,8 +957,9 @@ def _create_message_from_packed_message(
         kafka_position_info (Optional[KafkaPositionInfo]): The specified kafka
             position information.  The kafka_position_info may be constructed
             from the unpacked yelp_kafka message.
-        reader_schema_id (int): Schema id used to decode the incoming kafka
-         message and build data_pipeline.message.Message message.
+        reader_schema_id (Optional[int]): Schema id used to decode the incoming
+            kafka message and build data_pipeline.message.Message message.
+            Defaults to None.
 
     Returns (data_pipeline.message.Message):
         The message object

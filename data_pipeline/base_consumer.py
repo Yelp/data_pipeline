@@ -76,8 +76,15 @@ class BaseConsumer(Client):
             consumer_name is used. If there is no committed kafka offset for
             the consumer_name the consumer will begin from the
             `auto_offset_reset` offset in the topic.
-        consumer_source (ConsumerSource): The source of topics to tail.
-                see :class: `data_pipeline.consumer_source.ConsumerSource
+        consumer_source (ConsumerSource): The source of topics to tail. It must
+            be a :class: `data_pipeline.consumer_source.ConsumerSource` object.
+            For example, to process messages from a fixed set of topics, use
+            :class:data_pipeline.consumer_source.FixedTopics.
+            In case of FixedSchema consumer source, at most one schema_id per
+            topic is provided. Consumer would use that schema as reader schema
+            to decode the message. In case no schema id for a topic is
+            specified then the Consumer would use the schema id, the message
+            was encoded with, to decode the message.
         auto_offset_reset (str): automatically resets the offset when there is
             no initial offset in Zookeeper or if an offset is out of range.
             If 'largest', reset the offset to the latest available message (tail).
@@ -96,6 +103,16 @@ class BaseConsumer(Client):
             of partitions as value which were acquired in a repartition. You
             are guaranteed that no messages will be consumed between the
             pre_rebalance_callback and this callback.
+        pre_topic_refresh_callback: (Optional[Callable[Set[str],
+            {str:Optional(ConsumerTopicState)}]]): Optional callback which is
+            passed a set of new_topics which doesn't exist in the
+            `topic_to_consumer_topic_state_map` map. This callback can be used
+            to perform custom logic including fetching the offsets of
+            new_topics. The return value of the function is a dictionary
+            containing the topics and their offsets that the consumer would
+            tail those topics from. If pre_topic_refresh_callback is None,
+            then the consumer will pick up the last committed offsets of
+            topics.
     """
 
     def __init__(
@@ -109,7 +126,8 @@ class BaseConsumer(Client):
         auto_offset_reset='smallest',
         partitioner_cooldown=get_config().consumer_partitioner_cooldown_default,
         pre_rebalance_callback=None,
-        post_rebalance_callback=None
+        post_rebalance_callback=None,
+        pre_topic_refresh_callback=None
     ):
         super(BaseConsumer, self).__init__(
             consumer_name,
@@ -117,16 +135,16 @@ class BaseConsumer(Client):
             expected_frequency_seconds,
             monitoring_enabled=False
         )
-        if (topic_to_consumer_topic_state_map and consumer_source or
-            not topic_to_consumer_topic_state_map and not consumer_source):
-            raise ValueError("Exactly one of topic_to_consumer_topic_state_map "
+        self.pre_topic_refresh_callback = pre_topic_refresh_callback
+        if not (topic_to_consumer_topic_state_map or consumer_source):
+            raise ValueError("At least one of topic_to_consumer_topic_state_map "
                              "or consumer_source must be specified")
-        self.topic_to_consumer_topic_state_map = (
-            topic_to_consumer_topic_state_map
-            if topic_to_consumer_topic_state_map else {}
+
+        self._setup_topic_to_consumer_topic_state_map(
+            topic_to_consumer_topic_state_map,
+            consumer_source
         )
-        self.update_topic_state_map(consumer_source)
-        self.topic_to_reader_schema_map = self.create_reader_schema_map(
+        self.topic_to_reader_schema_map = self._create_reader_schema_map(
             consumer_source
         )
         self.force_payload_decode = force_payload_decode
@@ -137,11 +155,31 @@ class BaseConsumer(Client):
         self.pre_rebalance_callback = pre_rebalance_callback
         self.post_rebalance_callback = post_rebalance_callback
 
-    def create_reader_schema_map(self, consumer_source):
-        topic_reader_schema_map = defaultdict(lambda: None)
+    def _setup_topic_to_consumer_topic_state_map(
+        self,
+        topic_to_consumer_topic_state_map,
+        consumer_source,
+    ):
+        self.topic_to_consumer_topic_state_map = (
+            topic_to_consumer_topic_state_map
+            if topic_to_consumer_topic_state_map else {}
+        )
+
+        if consumer_source:
+            topics = consumer_source.get_topics()
+            new_topics = {topic for topic in topics
+                          if topic not in self.topic_to_consumer_topic_state_map}
+            new_topics_offset_map = {}
+            if self.pre_topic_refresh_callback:
+                new_topics_offset_map = self.pre_topic_refresh_callback(new_topics)
+            for new_topic in new_topics:
+                self.topic_to_consumer_topic_state_map[new_topic] = new_topics_offset_map.get(new_topic)
+
+    def _create_reader_schema_map(self, consumer_source):
+        topic_reader_schema_map = {}
         if isinstance(consumer_source, FixedSchemas):
-            for schema_id in consumer_source.schema_ids:
-                topic_name = get_schematizer().get_schema_by_id(schema_id).topic.name
+            schema_to_topic_map = consumer_source.get_schema_to_topic_map()
+            for schema_id, topic_name in schema_to_topic_map.iteritems():
                 if topic_name not in topic_reader_schema_map:
                     topic_reader_schema_map[topic_name] = schema_id
                 else:
@@ -151,12 +189,6 @@ class BaseConsumer(Client):
                         )
                     )
         return topic_reader_schema_map
-
-    def update_topic_state_map(self, consumer_source):
-        if consumer_source:
-            for topic_name in set(consumer_source.get_topics()):
-                if topic_name not in self.topic_to_consumer_topic_state_map:
-                    self.topic_to_consumer_topic_state_map[topic_name] = None
 
     @cached_property
     def kafka_client(self):
@@ -613,17 +645,17 @@ class BaseConsumer(Client):
             List[str]: A list of new topic names that this consumer starts to
             consume.
         """
-        self.topic_to_reader_schema_map.update(
-            self.create_reader_schema_map(consumer_source)
-        )
         topics = consumer_source.get_topics()
-        new_topics = [topic for topic in topics
-                      if topic not in self.topic_to_consumer_topic_state_map]
+        new_topics = {topic for topic in topics
+                      if topic not in self.topic_to_consumer_topic_state_map}
 
         if new_topics:
             self.stop()
+            new_topics_offset_map = {}
+            if self.pre_topic_refresh_callback:
+                new_topics_offset_map = self.pre_topic_refresh_callback(new_topics)
             for new_topic in new_topics:
-                self.topic_to_consumer_topic_state_map[new_topic] = None
+                self.topic_to_consumer_topic_state_map[new_topic] = new_topics_offset_map.get(new_topic)
             self.start()
 
             # If a new topic doesn't exist, when the consumer restarts, it will
@@ -631,17 +663,7 @@ class BaseConsumer(Client):
             # In such case, the non-existent topics are removed from the new_topics.
             new_topics = [topic for topic in new_topics
                           if topic in self.topic_to_consumer_topic_state_map]
-            self._sync_reader_schema_map()
-
-        return new_topics
-
-    def _sync_reader_schema_map(self):
-        redundant_topics = [
-            topic_name for topic_name in self.topic_to_reader_schema_map
-            if topic_name not in self.topic_to_consumer_topic_state_map
-            ]
-        for topic_name in redundant_topics:
-            self.topic_to_reader_schema_map.pop(topic_name)
+        return list(new_topics)
 
 
 class TopicFilter(object):

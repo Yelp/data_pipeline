@@ -99,10 +99,12 @@ class TopicInSource(ConsumerSource):
 
 
 class FixedSchemas(ConsumerSource):
-    """Consumer tails the topics given a list of schema ids.
+    """Consumer tails the topics given a list of schema ids. FixedSchema
+    consumer source has `schema_to_topic_map` map that provides mapping
+    from schema_id to its corresponding topic name.
 
     Args:
-        schema_ids (list): the list of IDs of the avro schemas registered in the Schematizer.
+        schema_ids: Variable number of schema IDs of avro schemas registered in the Schematizer.
     """
 
     def __init__(self, *schema_ids):
@@ -116,6 +118,13 @@ class FixedSchemas(ConsumerSource):
             for schema_id in self.schema_ids
         }
         return list(topics)
+
+    def get_schema_to_topic_map(self):
+        self.schema_to_topic_map = {}
+        for schema_id in self.schema_ids:
+            topic_name = get_schematizer().get_schema_by_id(schema_id).topic.name
+            self.schema_to_topic_map[schema_id] = topic_name
+        return self.schema_to_topic_map
 
 
 class TopicInDataTarget(ConsumerSource):
