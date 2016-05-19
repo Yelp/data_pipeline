@@ -198,12 +198,6 @@ def payload(example_schema, example_payload_data):
         simplejson.loads(example_schema)
     ).encode(example_payload_data)
 
-
-@pytest.fixture
-def payload_with_latest_schema(example_latest_compatible_schema_obj, example_payload_data_with_latest_schema):
-    return AvroStringWriter(example_latest_compatible_schema_obj).encode(example_payload_data_with_latest_schema)
-
-
 @pytest.fixture
 def example_previous_payload_data(example_schema_obj):
     return generate_payload_data(example_schema_obj)
@@ -212,16 +206,6 @@ def example_previous_payload_data(example_schema_obj):
 @pytest.fixture
 def topic_name_with_registered_schema(registered_schema):
     return registered_schema.topic.name.encode('utf-8')
-
-
-@pytest.fixture(scope='module')
-def topic_name_of_latest_schema_having_multiple_compatible_schemas(registered_multiple_schemas_with_same_topic):
-    return str(registered_multiple_schemas_with_same_topic[1].topic.name)
-
-
-@pytest.fixture(scope='module')
-def topic_name_of_expected_schema_having_multiple_compatible_schemas(registered_multiple_schemas_with_same_topic):
-    return str(registered_multiple_schemas_with_same_topic[0].topic.name)
 
 
 @pytest.fixture
@@ -262,104 +246,6 @@ def message(registered_schema, payload):
     return CreateMessage(
         schema_id=registered_schema.schema_id,
         payload=payload
-    )
-
-
-@pytest.fixture
-def messages_with_multiple_compatible_schemas_for_same_topic(
-        topic_name_of_latest_schema_having_multiple_compatible_schemas,
-        topic_name_of_expected_schema_having_multiple_compatible_schemas,
-        registered_multiple_schemas_with_same_topic,
-        payload,
-        payload_with_latest_schema,
-        example_payload_data,
-        example_payload_data_with_latest_schema
-):
-    registered_schema, registered_schema_two = registered_multiple_schemas_with_same_topic
-    msg = CreateMessage(
-        topic=str(registered_schema.topic.name),
-        schema_id=registered_schema.schema_id,
-        payload=payload,
-        timestamp=1500,
-        contains_pii=False
-    )
-
-    msg_latest = CreateMessage(
-        topic=str(registered_schema_two.topic.name),
-        schema_id=registered_schema_two.schema_id,
-        payload=payload_with_latest_schema,
-        timestamp=1500,
-        contains_pii=False
-    )
-    assert msg.topic == topic_name_of_expected_schema_having_multiple_compatible_schemas
-    assert msg.schema_id == registered_schema.schema_id
-    assert msg.reader_schema_id == registered_schema.schema_id
-    assert msg.payload == payload
-    assert msg.payload_data == example_payload_data
-
-    assert msg_latest.topic == topic_name_of_latest_schema_having_multiple_compatible_schemas
-    assert msg_latest.schema_id == registered_schema_two.schema_id
-    assert msg_latest.reader_schema_id == registered_schema_two.schema_id
-    assert msg_latest.payload == payload_with_latest_schema
-    assert msg_latest.payload_data == example_payload_data_with_latest_schema
-
-    return msg, msg_latest
-
-
-@pytest.fixture
-def message_encoded_with_latest_schema_having_multiple_compatible_schemas(
-        topic_name_of_latest_schema_having_multiple_compatible_schemas,
-        registered_multiple_schemas_with_same_topic,
-        payload_with_latest_schema,
-        example_payload_data_with_latest_schema
-):
-    msg = CreateMessage(
-        topic=str(registered_multiple_schemas_with_same_topic[1].topic.name),
-        schema_id=registered_multiple_schemas_with_same_topic[1].schema_id,
-        payload=payload_with_latest_schema,
-        timestamp=1500,
-        contains_pii=False
-    )
-
-    assert msg.topic == topic_name_of_latest_schema_having_multiple_compatible_schemas
-    assert msg.schema_id == registered_multiple_schemas_with_same_topic[1].schema_id
-    assert msg.reader_schema_id == registered_multiple_schemas_with_same_topic[1].schema_id
-    assert msg.payload == payload_with_latest_schema
-    assert msg.payload_data == example_payload_data_with_latest_schema
-    return msg
-
-
-@pytest.fixture
-def expected_message_having_multiple_compatible_schemas(
-        topic_name_of_expected_schema_having_multiple_compatible_schemas,
-        registered_multiple_schemas_with_same_topic,
-        payload,
-        example_payload_data,
-):
-    msg = CreateMessage(
-        topic=str(registered_multiple_schemas_with_same_topic[0].topic.name),
-        schema_id=registered_multiple_schemas_with_same_topic[0].schema_id,
-        payload=payload,
-        timestamp=1500,
-        contains_pii=False
-    )
-
-    assert msg.topic == topic_name_of_expected_schema_having_multiple_compatible_schemas
-    assert msg.schema_id == registered_multiple_schemas_with_same_topic[0].schema_id
-    assert msg.reader_schema_id == registered_multiple_schemas_with_same_topic[0].schema_id
-    assert msg.payload == payload
-    assert msg.payload_data == example_payload_data
-    return msg
-
-
-@pytest.fixture
-def message_with_payload_data(topic_name_with_registered_schema, registered_schema):
-    return CreateMessage(
-        topic=topic_name_with_registered_schema,
-        schema_id=registered_schema.schema_id,
-        payload_data={'good_field': 100},
-        timestamp=1500,
-        contains_pii=False
     )
 
 

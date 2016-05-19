@@ -166,7 +166,7 @@ class Consumer(BaseConsumer):
                 message.topic,
                 message,
                 self.force_payload_decode,
-                self.topic_to_reader_schema_map[message.topic]
+                reader_schema_id=self.topic_to_reader_schema_map.get(message.topic)
             )
             self._update_topic_map(message)
             messages.append(message)
