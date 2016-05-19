@@ -172,8 +172,8 @@ class NamespaceSrcSetupMixin(ConsumerSourceTestBase):
         return consumer_source_cls(foo_namespace, baz_namespace)
 
     @pytest.fixture
-    def consumer_source_topics(self, foo_topic, baz_topic):
-        return [foo_topic, baz_topic]
+    def expected_source_topics(self, foo_topic, baz_topic):
+        return {foo_topic, baz_topic}
 
     @pytest.fixture
     def bad_consumer_source(self, consumer_source_cls):
@@ -191,8 +191,8 @@ class SourceSrcSetupMixin(ConsumerSourceTestBase):
         )
 
     @pytest.fixture
-    def consumer_source_topics(self, foo_topic):
-        return [foo_topic]
+    def expected_source_topics(self, foo_topic):
+        return {foo_topic}
 
     @pytest.fixture
     def bad_consumer_source(self, foo_src, consumer_source_cls):
@@ -231,8 +231,8 @@ class DataTargetSetupMixin(ConsumerSourceTestBase):
         return consumer_source_cls(data_target.data_target_id)
 
     @pytest.fixture
-    def consumer_source_topics(self, foo_topic):
-        return [foo_topic]
+    def expected_source_topics(self, foo_topic):
+        return {foo_topic}
 
     @pytest.fixture
     def bad_consumer_source(self, schematizer_client, consumer_source_cls):
@@ -246,42 +246,43 @@ class DataTargetSetupMixin(ConsumerSourceTestBase):
 @pytest.mark.usefixtures('foo_schema', 'baz_schema')
 class DynamicTopicSrcTests(ConsumerSourceTestBase):
 
-    def test_get_topics_first_time(self, consumer_source, consumer_source_topics):
-        assert consumer_source.get_topics() == consumer_source_topics
+    def test_get_topics_first_time(self, consumer_source, expected_source_topics):
+        assert set(consumer_source.get_topics()) == expected_source_topics
 
     def test_get_topics_multiple_times_with_no_new_topics(
         self,
         consumer_source,
-        consumer_source_topics,
+        expected_source_topics,
     ):
-        assert consumer_source.get_topics() == consumer_source_topics
-        assert consumer_source.get_topics() == consumer_source_topics
+        assert set(consumer_source.get_topics()) == expected_source_topics
+        assert set(consumer_source.get_topics()) == expected_source_topics
 
     def test_pick_up_new_topics(
         self,
         consumer_source,
-        consumer_source_topics,
+        expected_source_topics,
         foo_src,
         foo_namespace,
         _register_schema,
     ):
-        assert consumer_source.get_topics() == consumer_source_topics
+        assert set(consumer_source.get_topics()) == expected_source_topics
         new_schema = {
             'type': 'record',
             'name': foo_src,
             'namespace': foo_namespace,
             'fields': [{'type': 'bytes', 'name': 'md5'}]
         }
-        consumer_source_topics.append(_register_schema(foo_namespace, foo_src, new_schema).topic.name)
-        assert set(consumer_source.get_topics()) == set(consumer_source_topics)
+        new_topic_name = _register_schema(foo_namespace, foo_src, new_schema).topic.name
+        expected_source_topics.add(new_topic_name)
+        assert set(consumer_source.get_topics()) == set(expected_source_topics)
 
     def test_not_pick_up_new_topics_in_diff_source(
         self,
         consumer_source,
-        consumer_source_topics,
+        expected_source_topics,
         _register_schema,
     ):
-        assert consumer_source.get_topics() == consumer_source_topics
+        assert set(consumer_source.get_topics()) == expected_source_topics
         new_schema = {
             'type': 'record',
             'name': 'src_two',
@@ -289,7 +290,7 @@ class DynamicTopicSrcTests(ConsumerSourceTestBase):
             'fields': [{'type': 'bytes', 'name': 'md5'}]
         }
         _register_schema('namespace_two', 'src_two', new_schema)
-        assert consumer_source.get_topics() == consumer_source_topics
+        assert set(consumer_source.get_topics()) == expected_source_topics
 
     def test_bad_consuemr_source(self, bad_consumer_source):
         assert bad_consumer_source.get_topics() == []
@@ -341,18 +342,18 @@ class TestTopicsInDataTarget(DynamicTopicSrcTests, DataTargetSetupMixin):
 @pytest.mark.usefixtures('foo_schema', 'baz_schema')
 class NewTopicOnlySrcTests(ConsumerSourceTestBase):
 
-    def test_get_topics_first_time(self, consumer_source, consumer_source_topics):
-        assert consumer_source.get_topics() == consumer_source_topics
+    def test_get_topics_first_time(self, consumer_source, expected_source_topics):
+        assert set(consumer_source.get_topics()) == expected_source_topics
 
     def test_get_topics_multiple_times_with_no_new_topics(
         self,
         consumer_source,
-        consumer_source_topics
+        expected_source_topics
     ):
         # Wait some time so that the 1st query time is at least 1 second apart
         # from `foo_topic` creation timestamp to avoid flaky test
         time.sleep(1)
-        assert consumer_source.get_topics() == consumer_source_topics
+        assert set(consumer_source.get_topics()) == expected_source_topics
         # Because the timestamp is rounded up to seconds, here it makes the 2nd
         # query time is at least 1 second after the 1st query to avoid flaky test
         time.sleep(1)
@@ -361,13 +362,13 @@ class NewTopicOnlySrcTests(ConsumerSourceTestBase):
     def test_pick_up_new_topics(
         self,
         consumer_source,
-        consumer_source_topics,
+        expected_source_topics,
         foo_src,
         foo_namespace,
         _register_schema,
     ):
         time.sleep(1)
-        assert consumer_source.get_topics() == consumer_source_topics
+        assert set(consumer_source.get_topics()) == expected_source_topics
 
         time.sleep(1)
         new_schema = {
@@ -382,11 +383,11 @@ class NewTopicOnlySrcTests(ConsumerSourceTestBase):
     def test_not_pick_up_new_topics_in_diff_source(
         self,
         consumer_source,
-        consumer_source_topics,
+        expected_source_topics,
         _register_schema,
     ):
         time.sleep(1)
-        assert consumer_source.get_topics() == consumer_source_topics
+        assert set(consumer_source.get_topics()) == expected_source_topics
 
         time.sleep(1)
         new_schema = {

@@ -66,12 +66,10 @@ class TopicsInFixedNamespaces(ConsumerSource):
         topic_names = []
         for namespace_name in self.namespace_names:
             topic_names.extend(
-                [
-                    topic.name
-                    for topic in self.schematizer.get_topics_by_criteria(
-                        namespace_name=namespace_name
-                    )
-                ]
+                topic.name
+                for topic in self.schematizer.get_topics_by_criteria(
+                    namespace_name=namespace_name
+                )
             )
         return topic_names
 
@@ -141,11 +139,11 @@ class TopicInDataTarget(ConsumerSource):
 
 class NewTopicsOnlyInFixedNamespaces(TopicsInFixedNamespaces):
     """Consumer tails all the topics in specified namespaces, but
-    it internally keeps track the previous query timestamp for the namespace
-    and only returns the topics created after the last query timestamp,
-    including the topics created at the last query timestamp for the namespace.
-    It means the same topics returned previously may be included again if
-    their created_at timestamp is right at previous query timestamp.
+    it internally keeps track of the previous query timestamp for each
+    namespace and only returns the topics created after the last query
+    timestamp, including the topics created at the last query timestamp for
+    the namespace. It means the same topics returned previously may be included
+    again if their created_at timestamp is right at previous query timestamp.
 
     Args:
         namespace_names: Variable number of namespace names in which all the
@@ -154,20 +152,18 @@ class NewTopicsOnlyInFixedNamespaces(TopicsInFixedNamespaces):
 
     def __init__(self, *namespace_names):
         super(NewTopicsOnlyInFixedNamespaces, self).__init__(*namespace_names)
-        self.last_query_timestamp = defaultdict(lambda: None)
+        self.last_query_timestamp = {}
 
     def get_topics(self):
         topic_names = []
         for namespace_name in self.namespace_names:
             created_after_timestamp = long(time.time())
             topic_names.extend(
-                [
-                    topic.name
-                    for topic in self.schematizer.get_topics_by_criteria(
-                        namespace_name=namespace_name,
-                        created_after=self.last_query_timestamp[namespace_name]
-                    )
-                ]
+                topic.name
+                for topic in self.schematizer.get_topics_by_criteria(
+                    namespace_name=namespace_name,
+                    created_after=self.last_query_timestamp.get(namespace_name)
+                )
             )
             self.last_query_timestamp[namespace_name] = created_after_timestamp
         return topic_names
@@ -175,10 +171,11 @@ class NewTopicsOnlyInFixedNamespaces(TopicsInFixedNamespaces):
 
 class NewTopicOnlyInSource(TopicInSource):
     """Consumer tails the topics of the specified source, but it internally
-    keeps track the previous query timestamp and only returns the topics created
-    after the last query timestamp, including the topics created at the last
-    query timestamp.  It means the same topics returned previously may be included
-    again if their created_at timestamp is right at previous query timestamp.
+    keeps track of the previous query timestamp and only returns the topics
+    created after the last query timestamp, including the topics created at the
+    last query timestamp.  It means the same topics returned previously may be
+    included again if their created_at timestamp is right at previous query
+    timestamp.
 
     Args:
         namespace_name (str): Namespace name of the specified source in which
