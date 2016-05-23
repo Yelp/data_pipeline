@@ -22,8 +22,8 @@ from tests.base_consumer_test import SingleSchemaSetupMixin
 from tests.base_consumer_test import SingleTopicSetupMixin
 from tests.base_consumer_test import TIMEOUT
 from tests.base_consumer_test import TopicInDataTargetSetupMixin
-from tests.base_consumer_test import TopicInNamespaceSetupMixin
 from tests.base_consumer_test import TopicInSourceSetupMixin
+from tests.base_consumer_test import TopicsInFixedNamespacesSetupMixin
 from tests.helpers.config import reconfigure
 from tests.helpers.mock_utils import attach_spy_on_func
 
@@ -273,9 +273,9 @@ class ConsumerRefreshDynamicTopicTests(RefreshDynamicTopicTests):
         )
 
 
-class TestRefreshTopicInNamespace(
+class TestRefreshTopicsInFixedNamespaces(
     ConsumerRefreshDynamicTopicTests,
-    TopicInNamespaceSetupMixin
+    TopicsInFixedNamespacesSetupMixin
 ):
     pass
 
