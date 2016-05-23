@@ -807,11 +807,19 @@ class UpdateMessage(Message):
             for field in self.payload_data if self._has_field_changed(field)
         }
 
+    def _cleaned_pii_data_copy(self, data):
+        if not isinstance(data, dict):
+            return unicode(type(data))
+        return {key: self._cleaned_pii_data_copy(value) for key, value in data.iteritems()}
+
     @property
     def _str_repr(self):
         # Calls the _str_repr from the super class resulting in encrypted pii data.
         repr_dict = super(UpdateMessage, self)._str_repr
-        repr_dict['previous_payload_data'] = self.previous_payload_data
+        cleaned_previous_payload_data = self.previous_payload_data
+        if self.contains_pii:
+            cleaned_previous_payload_data = self._cleaned_pii_data_copy(self.previous_payload_data)
+        repr_dict['previous_payload_data'] = cleaned_previous_payload_data
         return repr_dict
 
 

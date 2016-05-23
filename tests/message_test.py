@@ -239,7 +239,7 @@ class SharedMessageTest(object):
 
     def test_message_str_with_pii(self, message_with_pii):
         actual = str(message_with_pii)
-        _payload_data = message_with_pii._cleaned_pii_data_copy(message_with_pii.payload_data)
+        _payload_data = {u'good_field': u"<type 'int'>"}
         expected = {
             'message_type': self.expected_message_type.name,
             'schema_id': message_with_pii.schema_id,
@@ -579,7 +579,8 @@ class TestUpdateMessage(SharedMessageTest):
 
     def test_message_str_with_pii(self, message_with_pii):
         actual = str(message_with_pii)
-        _payload_data = message_with_pii._cleaned_pii_data_copy(message_with_pii.payload_data)
+        _payload_data = {u'good_field': u"<type 'int'>"}
+        _previous_payload_data = {u'good_field': u"<type 'int'>"}
         expected = {
             'message_type': self.expected_message_type.name,
             'schema_id': message_with_pii.schema_id,
@@ -588,7 +589,7 @@ class TestUpdateMessage(SharedMessageTest):
             'encryption_type': message_with_pii.encryption_type,
             'uuid': message_with_pii.uuid_hex,
             'payload_data': _payload_data,
-            'previous_payload_data': message_with_pii.previous_payload_data
+            'previous_payload_data': _previous_payload_data
         }
         # only use eval to get the original dict when the string is trusted
         assert eval(actual) == expected
