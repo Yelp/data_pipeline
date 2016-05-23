@@ -3,7 +3,6 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import time
-from collections import defaultdict
 from datetime import datetime
 
 from cached_property import cached_property
@@ -53,7 +52,7 @@ class TopicsInFixedNamespaces(ConsumerSource):
     """Consumer tails all the topics in specified namespaces.
 
     Args:
-        namespace_names: Variable number of namespace names in which all the
+        namespace_names (*str): Variable number of namespace names in which all the
         topics will be tailed by the consumer.
     """
 
@@ -146,7 +145,7 @@ class NewTopicsOnlyInFixedNamespaces(TopicsInFixedNamespaces):
     again if their created_at timestamp is right at previous query timestamp.
 
     Args:
-        namespace_names: Variable number of namespace names in which all the
+        namespace_names (*str): Variable number of namespace names in which all the
         topics will be tailed by the consumer.
     """
 
