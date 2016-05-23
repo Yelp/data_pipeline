@@ -52,7 +52,7 @@ class TopicsInFixedNamespaces(ConsumerSource):
     """Consumer tails all the topics in specified namespaces.
 
     Args:
-        namespace_names (*str): Variable number of namespace names in which all the
+        namespace_names (tuple(str)): Variable number of namespace names in which all the
         topics will be tailed by the consumer.
     """
 
@@ -145,7 +145,7 @@ class NewTopicsOnlyInFixedNamespaces(TopicsInFixedNamespaces):
     again if their created_at timestamp is right at previous query timestamp.
 
     Args:
-        namespace_names (*str): Variable number of namespace names in which all the
+        namespace_names (tuple(str)): Variable number of namespace names in which all the
         topics will be tailed by the consumer.
     """
 
