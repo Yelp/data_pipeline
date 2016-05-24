@@ -1,3 +1,9 @@
+data-pipeline-tools (0.1.75) lucid; urgency=low
+
+  * Commit: Updated docstring in consumer_source.py
+
+ -- Chia-Chi Lin <clin@yelp.com>  Mon, 23 May 2016 16:35:53 -0700
+
 data-pipeline-tools (0.1.73) lucid; urgency=low
 
   * Commit: Merge remote-tracking branch 'origin/DATAPIPE-260-
