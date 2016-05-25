@@ -301,7 +301,7 @@ class BaseConsumerTest(object):
                 topic_map[message.topic] = ConsumerTopicState(
                     partition_offset_map={
                         message.kafka_position_info.partition:
-                            message.kafka_position_info.offset -1
+                            message.kafka_position_info.offset - 1
                     },
                     last_seen_schema_id=None
                 )
@@ -419,8 +419,12 @@ class RefreshNewTopicsTest(object):
         return reg_schema
 
     @pytest.fixture(scope='class')
-    def test_schema(self, containers):
-        return self._register_schema('test_namespace_{}'.format(uuid4()), 'test_src', containers)
+    def namespace(self):
+        return 'test_namespace_{}'.format(uuid4())
+
+    @pytest.fixture(scope='class')
+    def test_schema(self, containers, namespace):
+        return self._register_schema(namespace, 'test_src', containers)
 
     @pytest.fixture(scope='class')
     def topic(self, containers, test_schema):
@@ -434,7 +438,7 @@ class RefreshNewTopicsTest(object):
             yield consumer
 
     def test_no_newer_topics(self, consumer, yelp_namespace, biz_schema):
-        expected_topics = consumer.topics
+        expected_topics = copy.deepcopy(consumer.topics)
         new_topics = consumer.refresh_new_topics(TopicFilter(
             namespace_name=yelp_namespace,
             created_after=self._increment_seconds(biz_schema.created_at, seconds=1)
@@ -452,8 +456,8 @@ class RefreshNewTopicsTest(object):
         biz_topic = biz_schema.topic
         usr_topic = usr_schema.topic
         expected_topics = copy.deepcopy(consumer.topics)
-        expected_topics.add(biz_topic.name)
-        expected_topics.add(usr_topic.name)
+        expected_topics.append(biz_topic.name)
+        expected_topics.append(usr_topic.name)
 
         new_topics = consumer.refresh_new_topics(TopicFilter(
             namespace_name=yelp_namespace,
@@ -464,7 +468,7 @@ class RefreshNewTopicsTest(object):
         ))
 
         assert new_topics == [biz_topic, usr_topic]
-        assert consumer.topics == expected_topics
+        assert set(consumer.topics) == set(expected_topics)
 
     def test_already_tailed_topics_remains_after_refresh(
         self,
@@ -511,7 +515,7 @@ class RefreshNewTopicsTest(object):
     ):
         biz_topic = biz_schema.topic
         expected_topics = copy.deepcopy(consumer.topics)
-        expected_topics.add(biz_topic.name)
+        expected_topics.append(biz_topic.name)
 
         new_topics = consumer.refresh_new_topics(TopicFilter(
             namespace_name=yelp_namespace,
@@ -523,7 +527,7 @@ class RefreshNewTopicsTest(object):
         ))
 
         assert new_topics == [biz_topic]
-        assert consumer.topics == expected_topics
+        assert set(consumer.topics) == set(expected_topics)
 
     def test_with_bad_namespace(self, consumer):
         actual = consumer.refresh_new_topics(TopicFilter(
@@ -547,8 +551,7 @@ class RefreshNewTopicsTest(object):
         biz_schema
     ):
         mock_pre_topic_refresh_callback_handler = mock.Mock()
-        mock_post_topic_refresh_callback_handler = mock.Mock()
-        old_topic_names = set(consumer.topics)
+        old_topic_names = copy.deepcopy(consumer.topics)
         new_topics = consumer.refresh_new_topics(
             TopicFilter(
                 namespace_name=yelp_namespace,
@@ -557,13 +560,11 @@ class RefreshNewTopicsTest(object):
                     seconds=-1
                 )
             ),
-            pre_topic_refresh_callback=mock_pre_topic_refresh_callback_handler,
-            post_topic_refresh_callback=mock_post_topic_refresh_callback_handler
+            pre_topic_refresh_callback=mock_pre_topic_refresh_callback_handler
         )
         biz_topic = biz_schema.topic
         assert new_topics == [biz_topic]
-        mock_pre_topic_refresh_callback_handler.assert_called_once_with(old_topic_names, {biz_topic.name})
-        mock_post_topic_refresh_callback_handler.assert_called_once_with(old_topic_names, {biz_topic.name})
+        mock_pre_topic_refresh_callback_handler.assert_called_once_with(old_topic_names, [biz_topic.name])
 
     def _get_expected_value(self, original_states, new_states=None):
         expected = copy.deepcopy(original_states)
@@ -713,12 +714,12 @@ class RefreshFixedTopicTests(RefreshTopicsTestBase):
 
     def test_get_topics(self, consumer, consumer_source, expected_topics, topic):
         expected_set = {topic}
-        expected_set.update([topic for topic in expected_topics])
+        expected_set.update([expected_topic for expected_topic in expected_topics])
 
         actual = consumer.refresh_topics(consumer_source)
 
         assert set(actual) == set(expected_topics)
-        assert consumer.topics == expected_set
+        assert set(consumer.topics) == expected_set
 
     def test_get_topics_multiple_times(
         self,
@@ -728,40 +729,21 @@ class RefreshFixedTopicTests(RefreshTopicsTestBase):
         topic
     ):
         expected_set = {topic}
-        expected_set.update([topic for topic in expected_topics])
+        expected_set.update([expected_topic for expected_topic in expected_topics])
 
         actual = consumer.refresh_topics(consumer_source)
         assert set(actual) == set(expected_topics)
-        assert consumer.topics == expected_set
+        assert set(consumer.topics) == expected_set
 
         actual = consumer.refresh_topics(consumer_source)
         assert actual == []
-        assert consumer.topics == expected_set
+        assert set(consumer.topics) == expected_set
 
     def test_bad_topic(self, consumer, bad_consumer_source, topic):
         actual = consumer.refresh_topics(bad_consumer_source)
 
         assert actual == []
-        assert consumer.topics == {topic}
-
-    def test_refresh_topics_with_pre_and_post_topic_refresh_callback(
-        self,
-        consumer,
-        expected_topics,
-        consumer_source,
-    ):
-        mock_pre_topic_refresh_callback_handler = mock.Mock()
-        mock_post_topic_refresh_callback_handler = mock.Mock()
-        expected_topics = set(expected_topics)
-        old_topic_names = set(consumer.topics)
-        new_topics = consumer.refresh_topics(
-            consumer_source,
-            pre_topic_refresh_callback=mock_pre_topic_refresh_callback_handler,
-            post_topic_refresh_callback=mock_post_topic_refresh_callback_handler
-        )
-        assert set(new_topics) == expected_topics
-        mock_pre_topic_refresh_callback_handler.assert_called_once_with(old_topic_names, expected_topics)
-        mock_post_topic_refresh_callback_handler.assert_called_once_with(old_topic_names, expected_topics)
+        assert set(consumer.topics) == {topic}
 
 
 class SingleTopicSetupMixin(RefreshFixedTopicTests):
@@ -828,7 +810,7 @@ class RefreshDynamicTopicTests(RefreshTopicsTestBase):
     def test_no_topics_in_consumer_source(self, consumer, consumer_source, topic):
         actual = consumer.refresh_topics(consumer_source)
         assert actual == []
-        assert consumer.topics == {topic}
+        assert set(consumer.topics) == {topic}
 
     def test_pick_up_new_topic(
         self,
@@ -840,13 +822,13 @@ class RefreshDynamicTopicTests(RefreshTopicsTestBase):
         topic
     ):
 
-        assert consumer.topics == {topic}
+        assert set(consumer.topics) == {topic}
 
         self._publish_then_consume_message(consumer, test_schema)
         actual = consumer.refresh_topics(consumer_source)
 
         assert actual == [foo_topic]
-        assert consumer.topics == {topic, foo_topic}
+        assert set(consumer.topics) == {topic, foo_topic}
 
     def test_not_pick_up_new_topic_in_diff_source(
         self,
@@ -857,10 +839,10 @@ class RefreshDynamicTopicTests(RefreshTopicsTestBase):
         topic,
         _register_schema
     ):
-        assert consumer.topics == {topic}
+        assert set(consumer.topics) == {topic}
         actual = consumer.refresh_topics(consumer_source)
         assert actual == [foo_topic]
-        assert consumer.topics == {topic, foo_topic}
+        assert set(consumer.topics) == {topic, foo_topic}
 
         # force topic is created at least 1 second after last topic query.
         time.sleep(1)
@@ -874,13 +856,13 @@ class RefreshDynamicTopicTests(RefreshTopicsTestBase):
 
         actual = consumer.refresh_topics(consumer_source)
         assert actual == []
-        assert consumer.topics == {topic, foo_topic}
+        assert set(consumer.topics) == {topic, foo_topic}
 
     def test_bad_consumer_source(self, consumer, bad_consumer_source, topic):
         actual = consumer.refresh_topics(bad_consumer_source)
 
         assert actual == []
-        assert consumer.topics == {topic}
+        assert set(consumer.topics) == {topic}
 
     def test_consumer_source_has_bad_topic(
         self,
@@ -891,7 +873,7 @@ class RefreshDynamicTopicTests(RefreshTopicsTestBase):
         actual = consumer.refresh_topics(consumer_source_with_bad_topic)
 
         assert actual == []
-        assert consumer.topics == {topic}
+        assert set(consumer.topics) == {topic}
 
 
 class TopicInNamespaceSetupMixin(RefreshDynamicTopicTests):
