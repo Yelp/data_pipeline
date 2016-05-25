@@ -224,8 +224,8 @@ class Message(object):
     def _set_encryption_meta(self):
         if self._meta is None:
             self._meta = []
-        self._pop_encryption_meta(self.encryption_type, self.meta)
-        self.meta.append(self._encryption_helper.encryption_meta)
+        self._pop_encryption_meta(self._encryption_type, self._meta)
+        self._meta.append(self._encryption_helper.encryption_meta)
 
     @property
     def dry_run(self):
