@@ -14,6 +14,7 @@ from kafka.common import ProduceRequest
 from kafka.common import ProduceResponse
 
 import data_pipeline.producer
+from data_pipeline._encryption_helper import EncryptionHelper
 from data_pipeline._kafka_producer import _EnvelopeAndMessage
 from data_pipeline._kafka_producer import _prepare
 from data_pipeline._retry_util import ExpBackoffPolicy
@@ -26,6 +27,7 @@ from data_pipeline.message import create_from_offset_and_message
 from data_pipeline.message import CreateMessage
 from data_pipeline.message import Message
 from data_pipeline.message_type import _ProtectedMessageType
+from data_pipeline.meta_attribute import MetaAttribute
 from data_pipeline.producer import Producer
 from data_pipeline.producer import PublicationUnensurableError
 from data_pipeline.testing_helpers.kafka_docker import capture_new_data_pipeline_messages
@@ -316,10 +318,16 @@ class TestProducer(TestProducerBase):
         assert dp_message.payload_data == message.payload_data
         assert dp_message.schema_id == message.schema_id
 
-        encrypted_payload = dp_message._encryption_helper.encrypt_payload(
-            message.payload
-        )
         unpacked_message = Envelope().unpack(offsets_and_messages[0].message.value)
+        unpacked_meta_attr = unpacked_message['meta'][0]
+        encryption_helper = EncryptionHelper(
+            dp_message.encryption_type,
+            MetaAttribute(
+                unpacked_meta_attr['schema_id'],
+                unpacked_meta_attr['payload']
+            )
+        )
+        encrypted_payload = encryption_helper.encrypt_payload(message.payload)
         assert unpacked_message['payload'] == encrypted_payload
 
     def test_publish_message_with_keys(self, create_message, producer):

@@ -2,6 +2,8 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import warnings
+
 import mock
 import pytest
 from kafka import create_message
@@ -163,6 +165,20 @@ class SharedMessageTest(object):
 
     def test_get_contains_pii_from_schematizer(self, message, registered_schema):
         assert message.contains_pii == registered_schema.topic.contains_pii
+
+    def test_specify_contains_pii_triggers_warnings(self, valid_message_data):
+        message_data = self._make_message_data(
+            valid_message_data,
+            contains_pii=False
+        )
+        with warnings.catch_warnings(record=True) as warns:
+            warnings.simplefilter("always")
+            self.message_class(**message_data)
+            assert len(warns) == 1
+            contains_pii_warning = warns[0]
+            assert issubclass(contains_pii_warning.category, DeprecationWarning)
+            assert ('contains_pii is deprecated. Please stop passing it in.'
+                    in contains_pii_warning.message)
 
     @pytest.mark.parametrize('invalid_meta', ['not list', ['not_MetaAttribute']])
     def test_rejects_invalid_meta_type(self, valid_message_data, invalid_meta):
@@ -587,21 +603,3 @@ class TestCreateFromMessageAndOffset(object):
         assert extracted_message.timestamp == message.timestamp
         assert extracted_message.topic == message.topic
         assert extracted_message.uuid == message.uuid
-
-    def test_setup_encryption_type_from_message(self, pii_schema, payload):
-        pii_message = dp_message.CreateMessage(
-            pii_schema.schema_id,
-            payload=payload
-        )
-        with reconfigure(encryption_type='AES_MODE_CBC-1'):
-            offset_and_message = OffsetAndMessage(
-                0,
-                create_message(Envelope().pack(pii_message))
-            )
-
-        with reconfigure(encryption_type='New_Algorithm-1'):
-            consumed_message = create_from_offset_and_message(
-                topic=pii_message.topic,
-                offset_and_message=offset_and_message
-            )
-            assert consumed_message.encryption_type == 'AES_MODE_CBC-1'

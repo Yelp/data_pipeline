@@ -230,8 +230,7 @@ class _Monitor(object):
                 topic=self.monitor_topic,
                 schema_id=self.monitor_schema_id,
                 payload_data=tracking_info,
-                dry_run=self.dry_run,
-                contains_pii=False
+                dry_run=self.dry_run
             )
         )
 
