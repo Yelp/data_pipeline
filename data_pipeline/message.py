@@ -18,6 +18,7 @@ from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
 from data_pipeline.meta_attribute import MetaAttribute
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+#import warnings
 
 
 logger = get_config().logger
