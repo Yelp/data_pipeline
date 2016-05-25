@@ -481,7 +481,7 @@ class BaseConsumer(Client):
     def _apply_post_rebalance_callback_to_partition(self, partitions):
         """
         Removes the topics not present in the partitions list
-        from the consumer topics set
+        from the consumer topics list
 
         Args:
             partitions: List of current partitions the kafka
@@ -501,8 +501,8 @@ class BaseConsumer(Client):
     ):
         """
         Get newly created topics that match given criteria and currently not
-        being tailed by the consumer and refresh internal topic state maps for
-        these new topics.
+        being tailed by the consumer and refresh internal topics list for these
+        new topics.
 
         **Example**::
 
@@ -545,7 +545,7 @@ class BaseConsumer(Client):
             topic_filter (Optional[TopicFilter]): criteria to filter newly
                 created topics.
             pre_topic_refresh_callback:
-                (Optional[Callable[[Set[str], Set[str]], Any]]): function
+                (Optional[Callable[[list[str], list[str]], Any]]): function
                 that performs custom logic before the consumer start tailing
                 new topics. The function will take a list of old_topic_names
                 and list of new_topic_names. The return value of the function

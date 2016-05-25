@@ -544,7 +544,7 @@ class RefreshNewTopicsTest(object):
         ))
         assert actual == []
 
-    def test_with_pre_and_post_topic_refresh_callback(
+    def test_with_pre_topic_refresh_callback(
         self,
         consumer,
         yelp_namespace,
@@ -657,8 +657,12 @@ class RefreshTopicsTestBase(object):
         )
 
     @pytest.fixture(scope='class')
-    def test_schema(self, _register_schema):
-        return _register_schema('test_namespace_{}'.format(uuid4()), 'test_src')
+    def namespace(self):
+        return 'test_namespace_{}'.format(uuid4())
+
+    @pytest.fixture(scope='class')
+    def test_schema(self, _register_schema, namespace):
+        return _register_schema(namespace, 'test_src')
 
     @pytest.fixture(scope='class')
     def topic(self, test_schema):
@@ -713,13 +717,13 @@ class RefreshTopicsTestBase(object):
 class RefreshFixedTopicTests(RefreshTopicsTestBase):
 
     def test_get_topics(self, consumer, consumer_source, expected_topics, topic):
-        expected_set = {topic}
-        expected_set.update([expected_topic for expected_topic in expected_topics])
+        expected_list = [topic]
+        expected_list.extend(expected_topic for expected_topic in expected_topics)
 
         actual = consumer.refresh_topics(consumer_source)
 
         assert set(actual) == set(expected_topics)
-        assert set(consumer.topics) == expected_set
+        assert set(consumer.topics) == set(expected_list)
 
     def test_get_topics_multiple_times(
         self,
@@ -728,16 +732,16 @@ class RefreshFixedTopicTests(RefreshTopicsTestBase):
         expected_topics,
         topic
     ):
-        expected_set = {topic}
-        expected_set.update([expected_topic for expected_topic in expected_topics])
+        expected_list = [topic]
+        expected_list.extend(expected_topic for expected_topic in expected_topics)
 
         actual = consumer.refresh_topics(consumer_source)
         assert set(actual) == set(expected_topics)
-        assert set(consumer.topics) == expected_set
+        assert set(consumer.topics) == set(expected_list)
 
         actual = consumer.refresh_topics(consumer_source)
         assert actual == []
-        assert set(consumer.topics) == expected_set
+        assert set(consumer.topics) == set(expected_list)
 
     def test_bad_topic(self, consumer, bad_consumer_source, topic):
         actual = consumer.refresh_topics(bad_consumer_source)
