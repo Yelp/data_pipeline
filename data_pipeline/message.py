@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import time
+import warnings
 from collections import namedtuple
 from uuid import UUID
 
@@ -381,9 +382,7 @@ class Message(object):
         self._set_meta(meta)
         self._set_payload_or_payload_data(payload, payload_data)
         if topic:
-            logger.debug(
-                "Overriding message topic: {} for schema {}.".format(topic, schema_id)
-            )
+            warnings.warn("Passing in topics explicitly is deprecated.", DeprecationWarning)
         if self.encryption_type:
             if self._meta is None:
                 self._meta = []
