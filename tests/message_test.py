@@ -2,6 +2,8 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import warnings
+
 import mock
 import pytest
 from kafka import create_message
@@ -73,6 +75,21 @@ class SharedMessageTest(object):
         ), pytest.raises(ValueError):
             self._assert_invalid_data(valid_message_data, topic=str(''))
 
+    def test_warning_from_explicit_topic(self, valid_message_data):
+        mock_date = '2015-01-01'
+        warnings.simplefilter('always')
+        mock_topic = Topic(3, 'name', None, False, [], mock_date, mock_date)
+        mock_schema = AvroSchema(
+            1, 'schema', mock_topic, None, 'RW', None, None, mock_date, mock_date
+        )
+        with mock.patch(
+            'data_pipeline.schematizer_clientlib.schematizer.SchematizerClient'
+            '.get_schema_by_id',
+            return_value=mock_schema
+        ), pytest.warns(DeprecationWarning) as record:
+            self._assert_invalid_data_warning(valid_message_data, topic=str('Non-empty string'))
+            assert len(record) == 1
+
     def test_get_topic_from_schematizer_by_default(
         self,
         registered_schema,
@@ -125,6 +142,12 @@ class SharedMessageTest(object):
     def _assert_invalid_data(self, valid_data, error=TypeError, **data_overrides):
         invalid_data = self._make_message_data(valid_data, **data_overrides)
         with pytest.raises(error):
+            self.message_class(**invalid_data)
+
+    def _assert_invalid_data_warning(self, valid_data, warning=DeprecationWarning, **data_overrides):
+        invalid_data = self._make_message_data(valid_data, **data_overrides)
+        warnings.simplefilter('always')
+        with pytest.warns(warning):
             self.message_class(**invalid_data)
 
     def _make_message_data(self, valid_data, **overrides):

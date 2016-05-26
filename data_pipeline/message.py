@@ -18,7 +18,6 @@ from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
 from data_pipeline.meta_attribute import MetaAttribute
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
-#import warnings
 
 
 logger = get_config().logger
@@ -383,6 +382,7 @@ class Message(object):
         self._set_meta(meta)
         self._set_payload_or_payload_data(payload, payload_data)
         if topic:
+            warnings.simplefilter("always")
             warnings.warn("Passing in topics explicitly is deprecated.", DeprecationWarning)
         if self.encryption_type:
             if self._meta is None:
