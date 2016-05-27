@@ -374,6 +374,7 @@ class Message(object):
         # overrideable. Now the pass-in contains_pii is no longer used. Next
         # is to remove it from the function signature altogether.
         if contains_pii is not None:
+            warnings.simplefilter('always', DeprecationWarning)
             warnings.warn(
                 "contains_pii is deprecated. Please stop passing it in.",
                 DeprecationWarning

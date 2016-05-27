@@ -172,7 +172,6 @@ class SharedMessageTest(object):
             contains_pii=False
         )
         with warnings.catch_warnings(record=True) as warns:
-            warnings.simplefilter("always")
             self.message_class(**message_data)
             assert len(warns) == 1
             contains_pii_warning = warns[0]
