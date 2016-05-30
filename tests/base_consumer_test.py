@@ -492,6 +492,7 @@ class RefreshNewTopicsTest(object):
         expected = self._get_expected_value(
             original_states=consumer.topic_to_partition_map
         )
+
         new_topics = consumer.refresh_new_topics(TopicFilter(
             source_name=topic.source.name,
             created_after=self._increment_seconds(topic.created_at, seconds=-1)
@@ -585,11 +586,6 @@ class RefreshNewTopicsTest(object):
         biz_topic = biz_schema.topic
         assert new_topics == [biz_topic]
         mock_pre_topic_refresh_callback_handler.assert_called_once_with(old_topic_names, [biz_topic.name])
-
-    def _get_expected_value(self, original_states, new_states=None):
-        expected = copy.deepcopy(original_states)
-        expected.update(new_states or {})
-        return expected
 
     def _get_utc_timestamp(self, dt):
         return int((dt - datetime.datetime(1970, 1, 1)).total_seconds())
@@ -872,7 +868,6 @@ class RefreshDynamicTopicTests(RefreshTopicsTestBase):
         test_schema,
         topic
     ):
-
         assert consumer.topic_to_partition_map == {topic: None}
 
         self._publish_then_consume_message(consumer, test_schema)
@@ -896,10 +891,6 @@ class RefreshDynamicTopicTests(RefreshTopicsTestBase):
         topic,
         _register_schema
     ):
-        self._assert_equal_partition_map(
-            actual_map=consumer.topic_to_partition_map,
-            expected_map={topic: None}
-        )
         actual = consumer.refresh_topics(consumer_source)
         assert actual == [foo_topic]
         self._assert_equal_partition_map(

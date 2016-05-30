@@ -420,7 +420,7 @@ class BaseConsumer(Client):
                         continue
                     consumer.commit_messages(messages)
                     topic_map = {}
-                    for topic in consumer.topics:
+                    for topic in consumer.topic_to_partition_map.keys():
                         topic_map[topic] = None
                     new_topics = get_new_topics()
                     for topic in new_topics:
@@ -458,13 +458,6 @@ class BaseConsumer(Client):
                 if consumer_topic_state is None:
                     continue
                 topic_to_partition_offset_map[topic] = consumer_topic_state.partition_offset_map
-                '''
-                for partition, offset in consumer_topic_state.partition_offset_map.iteritems():
-                    if topic in topic_to_partition_offset_map:
-                        topic_to_partition_offset_map[topic][partition] = offset
-                    else:
-                        topic_to_partition_offset_map[topic] = {partition: offset}
-                '''
             self.commit_offsets(topic_to_partition_offset_map)
 
     def _send_offset_commit_requests(self, offset_commit_request_list):
@@ -499,7 +492,7 @@ class BaseConsumer(Client):
     def _apply_post_rebalance_callback_to_partition(self, partitions):
         """
         Removes the topics not present in the partitions list
-        from the consumer topics list
+        from the consumer topic_to_partition_map
 
         Args:
             partitions: List of current partitions the kafka
