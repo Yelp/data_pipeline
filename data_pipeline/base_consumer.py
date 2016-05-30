@@ -116,12 +116,15 @@ class BaseConsumer(Client):
         self.consumer_group = None
         self.pre_rebalance_callback = pre_rebalance_callback
         self.post_rebalance_callback = post_rebalance_callback
-        self._set_topic_and_commit_offset_helper(topic_to_consumer_topic_state_map)
+        self._temp_topic_to_consumer_topic_state_map = topic_to_consumer_topic_state_map
+        self._set_topic_to_partition_map(topic_to_consumer_topic_state_map)
 
-    def _set_topic_and_commit_offset_helper(self, topic_to_consumer_topic_state_map):
-        self.topics = topic_to_consumer_topic_state_map.keys()
-        self.reset_topic_to_partition_offset_cache()
-        self._commit_topic_map_offsets(topic_to_consumer_topic_state_map)
+    def _set_topic_to_partition_map(self, topic_to_consumer_topic_state_map):
+        self.topic_to_partition_map = {}
+        for topic, consumer_topic_state in topic_to_consumer_topic_state_map.iteritems():
+            self.topic_to_partition_map[topic] = \
+                (consumer_topic_state.partition_offset_map.keys()
+                 if consumer_topic_state else None)
 
     @cached_property
     def kafka_client(self):
@@ -161,6 +164,17 @@ class BaseConsumer(Client):
         Note:
             The derived class must implement _start().
         """
+        logger.info("Committing offsets for Consumer '{0}'...".format(
+            self.client_name
+        ))
+        self.reset_topic_to_partition_offset_cache()
+        self._commit_topic_map_offsets(self._temp_topic_to_consumer_topic_state_map)
+        logger.info("Offsets committed for Consumer '{0}'...".format(
+            self.client_name
+        ))
+        self._start_consumer()
+
+    def _start_consumer(self):
         logger.info("Starting Consumer '{0}'...".format(self.client_name))
         if self.running:
             raise RuntimeError("Consumer '{0}' is already running".format(
@@ -434,20 +448,24 @@ class BaseConsumer(Client):
         """
         self.stop()
         self._commit_topic_map_offsets(topic_to_consumer_topic_state_map)
-        self.topics = topic_to_consumer_topic_state_map.keys()
-        self.start()
+        self._set_topic_to_partition_map(topic_to_consumer_topic_state_map)
+        self._start_consumer()
 
     def _commit_topic_map_offsets(self, topic_to_consumer_topic_state_map):
-        topic_to_partition_offset_map = {}
-        for topic, consumer_topic_state in topic_to_consumer_topic_state_map.iteritems():
-            if consumer_topic_state is None:
-                continue
-            for partition, offset in consumer_topic_state.partition_offset_map.iteritems():
-                if topic in topic_to_partition_offset_map:
-                    topic_to_partition_offset_map[topic][partition] = offset
-                else:
-                    topic_to_partition_offset_map[topic] = {partition: offset}
-        self.commit_offsets(topic_to_partition_offset_map)
+        if topic_to_consumer_topic_state_map:
+            topic_to_partition_offset_map = {}
+            for topic, consumer_topic_state in topic_to_consumer_topic_state_map.iteritems():
+                if consumer_topic_state is None:
+                    continue
+                topic_to_partition_offset_map[topic] = consumer_topic_state.partition_offset_map
+                '''
+                for partition, offset in consumer_topic_state.partition_offset_map.iteritems():
+                    if topic in topic_to_partition_offset_map:
+                        topic_to_partition_offset_map[topic][partition] = offset
+                    else:
+                        topic_to_partition_offset_map[topic] = {partition: offset}
+                '''
+            self.commit_offsets(topic_to_partition_offset_map)
 
     def _send_offset_commit_requests(self, offset_commit_request_list):
         if len(offset_commit_request_list) > 0:
@@ -487,8 +505,8 @@ class BaseConsumer(Client):
             partitions: List of current partitions the kafka
             broker holds
         """
-
-        self.topics = [key for key in partitions]
+        self.topic_to_partition_map = {key: self.topic_to_partition_map.get(key)
+                                       for key in partitions}
         self.reset_topic_to_partition_offset_cache()
 
         if self.post_rebalance_callback:
@@ -558,17 +576,16 @@ class BaseConsumer(Client):
         # `refresh_topics` function once AST is revised to use the new function.
         new_topics = self._get_new_topics(topic_filter)
         new_topics = [topic for topic in new_topics
-                      if topic.name not in self.topics]
+                      if topic.name not in self.topic_to_partition_map]
 
         if new_topics:
             new_topic_names = [topic.name for topic in new_topics]
-            self.stop()
-            old_topic_names = list(self.topics)
+            old_topic_names = self.topic_to_partition_map.keys()
             if pre_topic_refresh_callback:
                 pre_topic_refresh_callback(old_topic_names, new_topic_names)
-            for new_topic in new_topic_names:
-                self.topics.append(new_topic)
-            self.start()
+            self.stop()
+            self._update_topic_to_partition_map(new_topic_names)
+            self._start_consumer()
 
         return new_topics
 
@@ -581,6 +598,10 @@ class BaseConsumer(Client):
         if topic_filter.filter_func:
             new_topics = topic_filter.filter_func(new_topics)
         return new_topics
+
+    def _update_topic_to_partition_map(self, new_topics):
+        for new_topic in new_topics:
+            self.topic_to_partition_map[new_topic] = None
 
     def refresh_topics(self, consumer_source):
         """Refresh the topics this consumer is consuming from based on the
@@ -596,19 +617,18 @@ class BaseConsumer(Client):
         """
         topics = consumer_source.get_topics()
         new_topics = [topic for topic in topics
-                      if topic not in self.topics]
+                      if topic not in self.topic_to_partition_map]
 
         if new_topics:
             self.stop()
-            for new_topic in new_topics:
-                self.topics.append(new_topic)
-            self.start()
+            self._update_topic_to_partition_map(new_topics)
+            self._start_consumer()
 
             # If a new topic doesn't exist, when the consumer restarts, it will
             # be removed from the topic state map after the re-balance callback.
             # In such case, the non-existent topics are removed from the new_topics.
             new_topics = [topic for topic in new_topics
-                          if topic in self.topics]
+                          if topic in self.topic_to_partition_map]
 
         return new_topics
 

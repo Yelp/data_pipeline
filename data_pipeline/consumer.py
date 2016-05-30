@@ -112,7 +112,7 @@ class Consumer(BaseConsumer):
 
     def _start(self):
         self.consumer_group = KafkaConsumerGroup(
-            topics=self.topics,
+            topics=self.topic_to_partition_map.keys(),
             config=self._kafka_consumer_config
         )
         self.consumer_group.start()
