@@ -116,6 +116,11 @@ class BaseConsumer(Client):
         self.consumer_group = None
         self.pre_rebalance_callback = pre_rebalance_callback
         self.post_rebalance_callback = post_rebalance_callback
+
+        # Storing the topic_to_consumer_topic_state_map to a temp instance
+        # variable which will be used to commit partition offsets when starting
+        # the consumer. After committing partition offsets, the temp variable
+        # would be set to `None` to prevent committing these offsets again.
         self._temp_topic_to_consumer_topic_state_map = topic_to_consumer_topic_state_map
         self._set_topic_to_partition_map(topic_to_consumer_topic_state_map)
 
@@ -169,6 +174,7 @@ class BaseConsumer(Client):
         ))
         self.reset_topic_to_partition_offset_cache()
         self._commit_topic_map_offsets(self._temp_topic_to_consumer_topic_state_map)
+        self._temp_topic_to_consumer_topic_state_map = None
         logger.info("Offsets committed for Consumer '{0}'...".format(
             self.client_name
         ))
@@ -498,9 +504,7 @@ class BaseConsumer(Client):
             partitions: List of current partitions the kafka
             broker holds
         """
-        self.topic_to_partition_map = {
-            key: partitions.get(key) for key in partitions
-            }
+        self.topic_to_partition_map = dict(partitions)
         self.reset_topic_to_partition_offset_cache()
 
         if self.post_rebalance_callback:
