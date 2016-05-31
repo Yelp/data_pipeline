@@ -382,7 +382,7 @@ class Message(object):
         self._set_meta(meta)
         self._set_payload_or_payload_data(payload, payload_data)
         if topic:
-            warnings.simplefilter("always")
+            warnings.simplefilter("always", category=DeprecationWarning)
             warnings.warn("Passing in topics explicitly is deprecated.", DeprecationWarning)
         if self.encryption_type:
             if self._meta is None:

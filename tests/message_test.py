@@ -77,7 +77,6 @@ class SharedMessageTest(object):
 
     def test_warning_from_explicit_topic(self, valid_message_data):
         mock_date = '2015-01-01'
-        warnings.simplefilter('always')
         mock_topic = Topic(3, 'name', None, False, [], mock_date, mock_date)
         mock_schema = AvroSchema(
             1, 'schema', mock_topic, None, 'RW', None, None, mock_date, mock_date
@@ -86,9 +85,10 @@ class SharedMessageTest(object):
             'data_pipeline.schematizer_clientlib.schematizer.SchematizerClient'
             '.get_schema_by_id',
             return_value=mock_schema
-        ), pytest.warns(DeprecationWarning) as record:
+        ), warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter('always', category=DeprecationWarning)
             self._assert_invalid_data_warning(valid_message_data, topic=str('Non-empty string'))
-            assert len(record) == 1
+            assert len(w) == 1
 
     def test_get_topic_from_schematizer_by_default(
         self,
@@ -145,10 +145,9 @@ class SharedMessageTest(object):
             self.message_class(**invalid_data)
 
     def _assert_invalid_data_warning(self, valid_data, warning=DeprecationWarning, **data_overrides):
-        invalid_data = self._make_message_data(valid_data, **data_overrides)
-        warnings.simplefilter('always')
+        data_with_topic = self._make_message_data(valid_data, **data_overrides)
         with pytest.warns(warning):
-            self.message_class(**invalid_data)
+            self.message_class(**data_with_topic)
 
     def _make_message_data(self, valid_data, **overrides):
         message_data = dict(valid_data)
