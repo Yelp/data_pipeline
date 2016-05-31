@@ -74,6 +74,10 @@ class BaseConsumerTest(object):
     def topic(self, registered_schema):
         return str(registered_schema.topic.name)
 
+    @pytest.fixture(scope="module")
+    def partitions(self):
+        return [0]
+
     @pytest.fixture(scope="module", autouse=True)
     def ensure_topic_exist(self, containers, topic):
         containers.create_kafka_topic(topic)
@@ -208,11 +212,11 @@ class BaseConsumerTest(object):
                 consumer.commit_messages(msgs)
                 assert func_spy.call_count == 1
 
-    def test_get_message_none(self, consumer_instance, topic):
+    def test_get_message_none(self, consumer_instance, topic, partitions):
         with consumer_instance as consumer:
             _messsage = consumer.get_message(blocking=True, timeout=TIMEOUT)
             assert _messsage is None
-            assert consumer.topic_to_partition_map[topic] is None
+            assert consumer.topic_to_partition_map[topic] == partitions
 
     def test_basic_iteration(self, consumer_instance, publish_messages, message):
         with consumer_instance as consumer:
@@ -464,7 +468,7 @@ class RefreshNewTopicsTest(object):
         usr_topic = usr_schema.topic
         expected = self._get_expected_value(
             original_states=consumer.topic_to_partition_map,
-            new_states={biz_topic.name: None, usr_topic.name: None}
+            new_states={biz_topic.name: [0], usr_topic.name: [0]}
         )
 
         new_topics = consumer.refresh_new_topics(TopicFilter(
@@ -532,7 +536,7 @@ class RefreshNewTopicsTest(object):
         biz_topic = biz_schema.topic
         expected = self._get_expected_value(
             original_states=consumer.topic_to_partition_map,
-            new_states={biz_topic.name: None}
+            new_states={biz_topic.name: [0]}
         )
 
         new_topics = consumer.refresh_new_topics(TopicFilter(
@@ -697,6 +701,10 @@ class RefreshTopicsTestBase(object):
     def topic(self, test_schema):
         return str(test_schema.topic.name)
 
+    @pytest.fixture(scope='class')
+    def partitions(self):
+        return [0]
+
     @pytest.fixture
     def schema_with_bad_topic(self, schematizer_client, foo_namespace, foo_src):
         avro_schema = {
@@ -744,9 +752,9 @@ class RefreshTopicsTestBase(object):
 
 class RefreshFixedTopicTests(RefreshTopicsTestBase):
 
-    def test_get_topics(self, consumer, consumer_source, expected_topics, topic):
-        expected_map = {topic: None}
-        expected_map.update({topic: None for topic in expected_topics})
+    def test_get_topics(self, consumer, consumer_source, expected_topics, topic, partitions):
+        expected_map = {topic: partitions}
+        expected_map.update({topic: partitions for topic in expected_topics})
 
         actual = consumer.refresh_topics(consumer_source)
 
@@ -761,10 +769,11 @@ class RefreshFixedTopicTests(RefreshTopicsTestBase):
         consumer,
         consumer_source,
         expected_topics,
-        topic
+        topic,
+        partitions
     ):
-        expected_map = {topic: None}
-        expected_map.update({topic: None for topic in expected_topics})
+        expected_map = {topic: partitions}
+        expected_map.update({topic: partitions for topic in expected_topics})
 
         actual = consumer.refresh_topics(consumer_source)
         assert set(actual) == set(expected_topics)
@@ -780,13 +789,13 @@ class RefreshFixedTopicTests(RefreshTopicsTestBase):
             expected_map=expected_map
         )
 
-    def test_bad_topic(self, consumer, bad_consumer_source, topic):
+    def test_bad_topic(self, consumer, bad_consumer_source, topic, partitions):
         actual = consumer.refresh_topics(bad_consumer_source)
 
         assert actual == []
         self._assert_equal_partition_map(
             actual_map=consumer.topic_to_partition_map,
-            expected_map={topic: None}
+            expected_map={topic: partitions}
         )
 
 
@@ -851,12 +860,12 @@ class SingleSchemaSetupMixin(RefreshFixedTopicTests):
 
 class RefreshDynamicTopicTests(RefreshTopicsTestBase):
 
-    def test_no_topics_in_consumer_source(self, consumer, consumer_source, topic):
+    def test_no_topics_in_consumer_source(self, consumer, consumer_source, topic, partitions):
         actual = consumer.refresh_topics(consumer_source)
         assert actual == []
         self._assert_equal_partition_map(
             actual_map=consumer.topic_to_partition_map,
-            expected_map={topic: None}
+            expected_map={topic: partitions}
         )
 
     def test_pick_up_new_topic(
@@ -866,20 +875,21 @@ class RefreshDynamicTopicTests(RefreshTopicsTestBase):
         foo_topic,
         data_source,
         test_schema,
-        topic
+        topic,
+        partitions
     ):
-        assert consumer.topic_to_partition_map == {topic: None}
+        assert consumer.topic_to_partition_map == {topic: partitions}
 
         self._publish_then_consume_message(consumer, test_schema)
         partition_list = consumer.topic_to_partition_map[topic]
-        assert partition_list is None
+        assert partition_list == partitions
 
         actual = consumer.refresh_topics(consumer_source)
 
         assert actual == [foo_topic]
         self._assert_equal_partition_map(
             actual_map=consumer.topic_to_partition_map,
-            expected_map={topic: None, foo_topic: None}
+            expected_map={topic: partitions, foo_topic: partitions}
         )
 
     def test_not_pick_up_new_topic_in_diff_source(
@@ -889,13 +899,14 @@ class RefreshDynamicTopicTests(RefreshTopicsTestBase):
         foo_topic,
         data_source,
         topic,
+        partitions,
         _register_schema
     ):
         actual = consumer.refresh_topics(consumer_source)
         assert actual == [foo_topic]
         self._assert_equal_partition_map(
             actual_map=consumer.topic_to_partition_map,
-            expected_map={topic: None, foo_topic: None}
+            expected_map={topic: partitions, foo_topic: partitions}
         )
 
         # force topic is created at least 1 second after last topic query.
@@ -912,30 +923,31 @@ class RefreshDynamicTopicTests(RefreshTopicsTestBase):
         assert actual == []
         self._assert_equal_partition_map(
             actual_map=consumer.topic_to_partition_map,
-            expected_map={topic: None, foo_topic: None}
+            expected_map={topic: partitions, foo_topic: partitions}
         )
 
-    def test_bad_consumer_source(self, consumer, bad_consumer_source, topic):
+    def test_bad_consumer_source(self, consumer, bad_consumer_source, topic, partitions):
         actual = consumer.refresh_topics(bad_consumer_source)
 
         assert actual == []
         self._assert_equal_partition_map(
             actual_map=consumer.topic_to_partition_map,
-            expected_map={topic: None}
+            expected_map={topic: partitions}
         )
 
     def test_consumer_source_has_bad_topic(
         self,
         consumer,
         consumer_source_with_bad_topic,
-        topic
+        topic,
+        partitions
     ):
         actual = consumer.refresh_topics(consumer_source_with_bad_topic)
 
         assert actual == []
         self._assert_equal_partition_map(
             actual_map=consumer.topic_to_partition_map,
-            expected_map={topic: None}
+            expected_map={topic: partitions}
         )
 
 

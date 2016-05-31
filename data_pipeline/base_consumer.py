@@ -498,8 +498,9 @@ class BaseConsumer(Client):
             partitions: List of current partitions the kafka
             broker holds
         """
-        self.topic_to_partition_map = {key: self.topic_to_partition_map.get(key)
-                                       for key in partitions}
+        self.topic_to_partition_map = {
+            key: partitions.get(key) for key in partitions
+            }
         self.reset_topic_to_partition_offset_cache()
 
         if self.post_rebalance_callback:
