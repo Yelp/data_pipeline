@@ -811,8 +811,11 @@ class UpdateMessage(Message):
     def _str_repr(self):
         # Calls the _str_repr from the super class resulting in encrypted pii data.
         repr_dict = super(UpdateMessage, self)._str_repr
-        cleaned_previous_payload_data = self._cleaned_pii_data_copy(self.previous_payload_data)
-        repr_dict['previous_payload_data'] = cleaned_previous_payload_data if self.contains_pii else self.previous_payload_data
+        repr_dict['previous_payload_data'] = (
+            self.previous_payload_data if not self.contains_pii
+            else self._cleaned_pii_data_copy(self.previous_payload_data)
+        )
+
         return repr_dict
 
 
