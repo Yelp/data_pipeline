@@ -199,17 +199,17 @@ class TestConsumer(BaseConsumerTest):
                 consumer_one.get_message(blocking=True, timeout=TIMEOUT)
                 # TODO: https://jira.yelpcorp.com/browse/DATAPIPE-752
                 time.sleep(1)
-            assert len(consumer_one.topic_to_consumer_topic_state_map) == 1
+            assert len(consumer_one.topic_to_partition_map) == 1
 
             consumer_one_rebalanced_event.set()
             consumer_two_process.join()
 
             consumer_one.get_message(blocking=True, timeout=TIMEOUT)
-            assert len(consumer_one.topic_to_consumer_topic_state_map) == 2
+            assert len(consumer_one.topic_to_partition_map) == 2
 
     def _run_consumer_two(self, consumer_instance, rebalanced_event):
         with consumer_instance as another_consumer:
-            assert len(another_consumer.topic_to_consumer_topic_state_map) == 1
+            assert len(another_consumer.topic_to_partition_map) == 1
             another_consumer.get_message(blocking=True, timeout=TIMEOUT)
             rebalanced_event.wait()
 
