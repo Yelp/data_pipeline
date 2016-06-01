@@ -174,10 +174,10 @@ class BaseConsumer(Client):
             self.client_name
         ))
         self._commit_topic_map_offsets(self._temp_topic_to_consumer_topic_state_map)
-        self._temp_topic_to_consumer_topic_state_map = None
         logger.info("Offsets committed for Consumer '{0}'...".format(
             self.client_name
         ))
+        self._temp_topic_to_consumer_topic_state_map = None
         self._start_consumer()
 
     def _start_consumer(self):
