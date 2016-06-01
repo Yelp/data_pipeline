@@ -2,10 +2,13 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import warnings
+
 import pytest
 import simplejson as json
 
 from data_pipeline.schema_cache import get_schema_cache
+from data_pipeline.schema_cache import SchematizerClient
 
 
 class TestSchemaCache(object):
@@ -29,6 +32,11 @@ class TestSchemaCache(object):
         return schema_cache.register_schema_from_mysql_stmts(
             **self.sample_schema_create_from_mysql_stmts_data
         )
+
+    def test_schema_cache_deprecated(self, schema_cache):
+        with pytest.warns(DeprecationWarning):
+            warnings.simplefilter('always', category=DeprecationWarning)
+            SchematizerClient()
 
     def test_get_transformed_schema_id(self, schema_cache):
         assert schema_cache.get_transformed_schema_id(0) is None

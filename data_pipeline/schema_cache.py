@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import warnings
 from collections import namedtuple
 
 import simplejson
@@ -28,7 +29,9 @@ Namespace = namedtuple('Namespace', ['namespace_id', 'name', 'created_at'])
 
 
 class SchematizerClient(object):
-    """Client that provides high level api calls to interact with Schematizer
+    """This old Schematizer cache is now deprecated.
+
+    Client that provides high level api calls to interact with Schematizer
     service.  It has a built-in cache that maps schema_id's to their schemas
     and to their transformed schema_ids.
 
@@ -37,6 +40,8 @@ class SchematizerClient(object):
     """
 
     def __init__(self):
+        warnings.simplefilter('always', category=DeprecationWarning)
+        warnings.warn('The old schematizer cache is deprecated.', DeprecationWarning)
         self.schema_id_to_schema_map = {}
         self.schema_id_to_topic_map = {}
         self.base_to_transformed_schema_id_map = {}
