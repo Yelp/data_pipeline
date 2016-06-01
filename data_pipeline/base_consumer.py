@@ -169,10 +169,10 @@ class BaseConsumer(Client):
         Note:
             The derived class must implement _start().
         """
+        self.reset_topic_to_partition_offset_cache()
         logger.info("Committing offsets for Consumer '{0}'...".format(
             self.client_name
         ))
-        self.reset_topic_to_partition_offset_cache()
         self._commit_topic_map_offsets(self._temp_topic_to_consumer_topic_state_map)
         self._temp_topic_to_consumer_topic_state_map = None
         logger.info("Offsets committed for Consumer '{0}'...".format(

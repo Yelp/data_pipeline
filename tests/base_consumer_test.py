@@ -299,8 +299,8 @@ class BaseConsumerTest(object):
             )
             asserter.assert_messages(messages, expected_count=2)
 
-            # get_messages would not commit the offsets. so, call the
-            # reset_topics to reset the cache and get the same messages again.
+            # Set the offset to one previous so we can use reset_topics to
+            # receive the same two messages again
             topic_map = {}
             for message in messages:
                 topic_map[message.topic] = ConsumerTopicState(
@@ -610,6 +610,7 @@ class RefreshNewTopicsTest(object):
                 assert actual_partitions is None
                 continue
             assert set(actual_partitions) == set(expected_partitions)
+
 
 @pytest.mark.usefixtures("configure_teams")
 class RefreshTopicsTestBase(object):
