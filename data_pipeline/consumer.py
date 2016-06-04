@@ -172,4 +172,28 @@ class Consumer(BaseConsumer):
             messages.append(message)
             if not blocking or (has_timeout and time() > max_time):
                 break
+            self._refresh_consumer_source_topics_if_necessary()
         return messages
+
+    def _refresh_consumer_source_topics_if_necessary(self):
+        if not self.refresh_timer.should_tick():
+            return
+
+        old_topics = self.topic_to_consumer_topic_state_map.keys()
+        new_topics = self.consumer_source.get_topics()
+
+        if set(new_topics).issubset(set(old_topics)):
+            return
+        if self.pre_topic_refresh_callback:
+            self.pre_topic_refresh_callback(old_topics, new_topics)
+        self._refresh_consumer_source_topics()
+
+    def _refresh_consumer_source_topics(self):
+        self.reset_topics(
+            self._setup_topic_to_consumer_topic_state_map(
+                self.topic_to_consumer_topic_state_map
+            )
+        )
+
+
+        #self.refresh_topics()

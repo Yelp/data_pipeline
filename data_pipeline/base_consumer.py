@@ -16,13 +16,9 @@ from data_pipeline.config import get_config
 from data_pipeline.consumer_source import FixedSchemas
 from data_pipeline.message import Message
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
-
+from data_pipeline._consumer_tick import ConsumerTick
 
 logger = get_config().logger
-
-
-class DataException(Exception):
-    pass
 
 
 class ConsumerTopicState(object):
@@ -127,6 +123,7 @@ class BaseConsumer(Client):
         partitioner_cooldown=get_config().consumer_partitioner_cooldown_default,
         pre_rebalance_callback=None,
         post_rebalance_callback=None,
+        fetch_offsets_for_topics=None,
         pre_topic_refresh_callback=None
     ):
         super(BaseConsumer, self).__init__(
@@ -135,18 +132,11 @@ class BaseConsumer(Client):
             expected_frequency_seconds,
             monitoring_enabled=False
         )
-        self.pre_topic_refresh_callback = pre_topic_refresh_callback
         if not (topic_to_consumer_topic_state_map or consumer_source):
             raise ValueError("At least one of topic_to_consumer_topic_state_map "
                              "or consumer_source must be specified")
 
-        self._setup_topic_to_consumer_topic_state_map(
-            topic_to_consumer_topic_state_map,
-            consumer_source
-        )
-        self.topic_to_reader_schema_map = self._create_reader_schema_map(
-            consumer_source
-        )
+        self.consumer_source = consumer_source
         self.force_payload_decode = force_payload_decode
         self.auto_offset_reset = auto_offset_reset
         self.partitioner_cooldown = partitioner_cooldown
@@ -154,41 +144,49 @@ class BaseConsumer(Client):
         self.consumer_group = None
         self.pre_rebalance_callback = pre_rebalance_callback
         self.post_rebalance_callback = post_rebalance_callback
+        self.fetch_offsets_for_topics = fetch_offsets_for_topics
+        self.pre_topic_refresh_callback = pre_topic_refresh_callback
+        self._setup_refresh_timer()
+        self._setup_topic_to_consumer_topic_state_map(topic_to_consumer_topic_state_map)
+        self._setup_topic_reader_schema_map()
 
-    def _setup_topic_to_consumer_topic_state_map(
-        self,
-        topic_to_consumer_topic_state_map,
-        consumer_source,
-    ):
+    def _setup_refresh_timer(self):
+        self.refresh_timer = ConsumerTick(
+            refresh_time_seconds=get_config().topic_refresh_frequency_seconds
+        )
+
+    def _setup_topic_to_consumer_topic_state_map(self, topic_to_consumer_topic_state_map):
         self.topic_to_consumer_topic_state_map = (
             topic_to_consumer_topic_state_map
             if topic_to_consumer_topic_state_map else {}
         )
 
-        if consumer_source:
-            topics = consumer_source.get_topics()
+        if self.consumer_source:
+            topics = self.consumer_source.get_topics()
             new_topics = {topic for topic in topics
                           if topic not in self.topic_to_consumer_topic_state_map}
-            new_topics_offset_map = {}
-            if self.pre_topic_refresh_callback:
-                new_topics_offset_map = self.pre_topic_refresh_callback(new_topics)
-            for new_topic in new_topics:
-                self.topic_to_consumer_topic_state_map[new_topic] = new_topics_offset_map.get(new_topic)
+            if new_topics:
+                new_topics_offset_map = {}
+                if self.fetch_offsets_for_topics:
+                    new_topics_offset_map = self.fetch_offsets_for_topics(new_topics)
+                for new_topic in new_topics:
+                    self.topic_to_consumer_topic_state_map[new_topic] = new_topics_offset_map.get(new_topic)
 
-    def _create_reader_schema_map(self, consumer_source):
-        topic_reader_schema_map = {}
-        if isinstance(consumer_source, FixedSchemas):
-            schema_to_topic_map = consumer_source.get_schema_to_topic_map()
+    def _setup_topic_reader_schema_map(self):
+        self.topic_reader_schema_map = {}
+        if isinstance(self.consumer_source, FixedSchemas):
+            schema_to_topic_map = self.consumer_source.get_schema_to_topic_map()
             for schema_id, topic_name in schema_to_topic_map.iteritems():
-                if topic_name not in topic_reader_schema_map:
-                    topic_reader_schema_map[topic_name] = schema_id
+                if topic_name not in self.topic_reader_schema_map:
+                    self.topic_reader_schema_map[topic_name] = schema_id
                 else:
-                    raise DataException(
-                        'Multiple reader schemas exist for topic: {topic}'.format(
+                    raise ValueError(
+                        'Multiple reader schemas ({schema1}, {schema2}) exist for topic: {topic}'.format(
+                            schema1=self.topic_reader_schema_map[topic_name],
+                            schema2=schema_id,
                             topic=topic_name
                         )
                     )
-        return topic_reader_schema_map
 
     @cached_property
     def kafka_client(self):
@@ -201,6 +199,7 @@ class BaseConsumer(Client):
         return "consumer"
 
     def __enter__(self):
+
         self.start()
         return self
 

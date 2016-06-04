@@ -87,6 +87,27 @@ class Config(object):
             )
 
     @property
+    def topic_refresh_frequency_seconds(self):
+        """The frequency how often the Consumer refreshes the consumer source
+        topics from the Schematizer.  The frequency is specified in seconds,
+        default to 300 seconds (5 minutes).  The Consumer will automatically
+        start consuming messages from newly picked-up topics.
+        """
+        return data_pipeline_conf.read_float('topic_refresh_frequency_seconds', 300)
+
+    @property
+    def window_max_time_seconds(self):
+        """Amount of time (in seconds!) that can pass after the last processed messages
+        before batching a set of messages in a BatchedSpolt. If `window_max_messages`,
+        `window_max_time_seconds`, and `window_by_schema_id` are all left to their defaults,
+        a ValueError is raised."""
+        #update docstring. taj.
+        return data_pipeline_conf.read_float(
+            'window_max_time_seconds',
+            0,
+        )
+
+    @property
     def load_schematizer_host_and_port_from_smartstack(self):
         """Load the host and port from SmartStack instead of setting it
         directly.

@@ -104,7 +104,7 @@ class FixedSchemas(ConsumerSource):
     from schema_id to its corresponding topic name.
 
     Args:
-        schema_ids: Variable number of schema IDs of avro schemas registered in the Schematizer.
+        schema_ids (tuple(int)): Variable number of schema IDs of avro schemas registered in the Schematizer.
     """
 
     def __init__(self, *schema_ids):

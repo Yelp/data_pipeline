@@ -77,7 +77,6 @@ class ConsumerSourceTestBase(object):
 
 @pytest.mark.usefixtures('foo_schema', 'bar_schema')
 class FixedTopicsSourceTestBase(ConsumerSourceTestBase):
-
     def test_happy_case(self, consumer_source, expected):
         assert set(consumer_source.get_topics()) == expected
 
@@ -137,61 +136,17 @@ class TestMultiTopics(FixedTopicsSourceTestBase):
 class TestFixedSchemasSource(FixedTopicsSourceTestBase):
 
     @pytest.fixture
-    def foo_schema(
-        self,
-        foo_namespace,
-        foo_src,
-        _register_schema,
-    ):
-        return _register_schema(foo_namespace, foo_src)
-
-    @pytest.fixture
-    def foo_schema2(
-        self,
-        foo_namespace,
-        foo_src,
-        _register_schema,
-    ):
-        avro_schema2 = {
-            'type': 'record',
-            'name': foo_src,
-            'namespace': foo_namespace,
-            'fields': [{'type': 'int', 'name': 'id1'}]
-        }
-        return _register_schema(foo_namespace, foo_src, avro_schema2)
-
-    @pytest.fixture
-    def foo_schema3(
-        self,
-        foo_namespace,
-        foo_src,
-        _register_schema,
-    ):
-        avro_schema3 = {
-            'type': 'record',
-            'name': foo_src,
-            'namespace': foo_namespace,
-            'fields': [
-                {'type': 'int', 'name': 'id'},
-                {'type': 'int', 'name': 'id1'}
-            ]
-        }
-        return _register_schema(foo_namespace, foo_src, avro_schema3)
-
-    @pytest.fixture
-    def consumer_source(self, foo_schema, foo_schema2, foo_schema3):
+    def consumer_source(self, foo_schema, bar_schema):
         return FixedSchemas(
             foo_schema.schema_id,
-            foo_schema2.schema_id,
-            foo_schema3.schema_id
+            bar_schema.schema_id
         )
 
     @pytest.fixture
-    def expected(self, foo_schema, foo_schema2, foo_schema3):
+    def expected(self, foo_schema, bar_schema):
         return {
             foo_schema.topic.name,
-            foo_schema2.topic.name,
-            foo_schema3.topic.name
+            bar_schema.topic.name
         }
 
     def test_empty_schema_list(self):

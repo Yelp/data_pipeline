@@ -815,6 +815,7 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
         actual = schematizer.get_topics_by_criteria(
             namespace_name=yelp_namespace
         )
+        import ipdb;ipdb.set_trace();
         self._assert_topics_values(actual, expected_topics=yelp_topics)
 
     def test_get_topics_of_biz_source(
