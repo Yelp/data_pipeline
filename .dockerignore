@@ -1,0 +1,13 @@
+.git
+.gitignore
+.tox
+venv
+virtualenv_run
+build
+dist
+*.pyc
+*.log
+*.swp
+Dockerfile
+docker-compose.yml
+.docker

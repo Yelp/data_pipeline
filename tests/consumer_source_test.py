@@ -77,6 +77,7 @@ class ConsumerSourceTestBase(object):
 
 @pytest.mark.usefixtures('foo_schema', 'bar_schema')
 class FixedTopicsSourceTestBase(ConsumerSourceTestBase):
+
     def test_happy_case(self, consumer_source, expected):
         assert set(consumer_source.get_topics()) == expected
 

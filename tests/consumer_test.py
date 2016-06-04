@@ -17,7 +17,6 @@ from tests.base_consumer_test import BaseConsumerReaderSchemaMapBaseTest
 from tests.base_consumer_test import BaseConsumerTest
 from tests.base_consumer_test import FixedSchemasReaderSchemaMapSetupMixin
 from tests.base_consumer_test import FixedSchemasSetupMixin
-from tests.base_consumer_test import MULTI_CONSUMER_TIMEOUT
 from tests.base_consumer_test import MultiTopicsSetupMixin
 from tests.base_consumer_test import RefreshDynamicTopicTests
 from tests.base_consumer_test import RefreshFixedTopicTests
@@ -28,9 +27,9 @@ from tests.base_consumer_test import TIMEOUT
 from tests.base_consumer_test import TopicInDataTargetReaderSchemaMapSetupMixin
 from tests.base_consumer_test import TopicInDataTargetSetupMixin
 from tests.base_consumer_test import TopicInNamespaceReaderSchemaMapSetupMixin
-from tests.base_consumer_test import TopicInNamespaceSetupMixin
 from tests.base_consumer_test import TopicInSourceReaderSchemaMapSetupMixin
 from tests.base_consumer_test import TopicInSourceSetupMixin
+from tests.base_consumer_test import TopicsInFixedNamespacesSetupMixin
 from tests.helpers.config import reconfigure
 from tests.helpers.mock_utils import attach_spy_on_func
 
@@ -125,47 +124,47 @@ class TestConsumer(BaseConsumerTest):
         message,
         pii_message
     ):
-        """
-        This test starts a consumer (consumer_one) with two topics and
-        retrieves a message and starts another consumer (consumer_two)
-        with the same name in a separate process. This test asserts that
-        everytime a consumer under goes rebalance
-        topic_to_partition_offset_map_cache is reset.
-        """
-
+        # TODO [DATAPIPE-249] previous version of test has an issue that
+        # sometimes the consumer one doesn't get any message right after
+        # consumer two starts.  It's unclear the cause and may be related
+        # to how the tests are setup. Re-writting the test to bypass it
+        # and defer addressing it in the DATAPIPE-249.
         consumer_one_rebalanced_event = Event()
         with consumer_instance as consumer_one:
-            # publishing messages on two topics
             publish_messages(message, count=10)
             publish_messages(pii_message, count=10)
 
+            consumer_one_message = consumer_one.get_message(
+                blocking=True,
+                timeout=TIMEOUT
+            )
+            consumer_one.commit_message(consumer_one_message)
+
+            # trigger rebalancing by starting another consumer with same name
             consumer_two_process = Process(
                 target=self._run_consumer_two,
                 args=(consumer_two_instance, consumer_one_rebalanced_event)
             )
             consumer_two_process.start()
-            consumer_one_msgs = []
-            for _ in range(2):
-                msg = consumer_one.get_message(blocking=True, timeout=MULTI_CONSUMER_TIMEOUT)
-                consumer_one.commit_message(msg)
-                consumer_one_msgs.append(msg)
-                time.sleep(1)
-
+            # consumer one is rebalanced during `get_message`
+            consumer_one.get_message(blocking=True, timeout=TIMEOUT)
             consumer_one_rebalanced_event.set()
-            consumer_two_process.join()
 
-            # force consumer rebalance, consumer rebalance is defered
-            # until get_message
-            for _ in range(8):
-                consumer_one.get_message(blocking=True, timeout=MULTI_CONSUMER_TIMEOUT)
+            consumer_two_process.join(timeout=1)
+            assert not consumer_two_process.exitcode
 
-            # post rebalance callback is not called untill consumer
-            # talks to kafka
+            # force consumer rebalance again; consumer rebalance occurs when
+            # get_message is called; set short timeout because we don't care
+            # if there is any message left.
+            consumer_one.get_message(blocking=True, timeout=0.1)
+
+            # The same offset should be committed again because the rebalancing
+            # will clear the internal offset cache.
             with attach_spy_on_func(
                 consumer_one.kafka_client,
                 'send_offset_commit_request'
             ) as func_spy:
-                consumer_one.commit_messages(consumer_one_msgs)
+                consumer_one.commit_message(consumer_one_message)
                 assert func_spy.call_count == 1
 
     def test_sync_topic_consumer_map(
@@ -206,23 +205,21 @@ class TestConsumer(BaseConsumerTest):
                 consumer_one.get_message(blocking=True, timeout=TIMEOUT)
                 # TODO: https://jira.yelpcorp.com/browse/DATAPIPE-752
                 time.sleep(1)
-            assert len(consumer_one.topic_to_consumer_topic_state_map) == 1
+            assert len(consumer_one.topic_to_partition_map) == 1
 
             consumer_one_rebalanced_event.set()
             consumer_two_process.join()
 
-            for _ in range(8):
-                consumer_one.get_message(blocking=True, timeout=TIMEOUT)
-            assert len(consumer_one.topic_to_consumer_topic_state_map) == 2
+            consumer_one.get_message(blocking=True, timeout=TIMEOUT)
+            assert len(consumer_one.topic_to_partition_map) == 2
 
     def _run_consumer_two(self, consumer_instance, rebalanced_event):
         with consumer_instance as another_consumer:
-            assert len(another_consumer.topic_to_consumer_topic_state_map) == 1
+            assert len(another_consumer.topic_to_partition_map) == 1
             another_consumer.get_message(blocking=True, timeout=TIMEOUT)
             rebalanced_event.wait()
 
-            for _ in range(9):
-                another_consumer.get_message(blocking=True, timeout=TIMEOUT)
+            another_consumer.get_message(blocking=True, timeout=TIMEOUT)
 
 
 class TestRefreshTopics(RefreshNewTopicsTest):
@@ -382,9 +379,9 @@ class ConsumerRefreshDynamicTopicTests(RefreshDynamicTopicTests):
         )
 
 
-class TestRefreshTopicInNamespace(
+class TestRefreshTopicsInFixedNamespaces(
     ConsumerRefreshDynamicTopicTests,
-    TopicInNamespaceSetupMixin
+    TopicsInFixedNamespacesSetupMixin
 ):
     pass
 

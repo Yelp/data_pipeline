@@ -6,15 +6,13 @@ import time
 from collections import namedtuple
 from uuid import UUID
 
-from enum import Enum
-from yelp_avro.avro_string_reader import AvroStringReader
-from yelp_avro.avro_string_writer import AvroStringWriter
 from yelp_lib.containers.lists import unlist
 
 from data_pipeline._encryption_helper import EncryptionHelper
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
+from data_pipeline.helpers.yelp_avro_store import _AvroStringStore
 from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
 from data_pipeline.meta_attribute import MetaAttribute
@@ -37,17 +35,13 @@ PayloadFieldDiff = namedtuple('PayloadFieldDiff', [
 ])
 
 
-class FieldValue(Enum):
-    """Enum that specifies the content of the field in the payload data or
-    previous payload data.
+class NoEntryPayload(object):
+    """ This class denotes that no previous value exists for the field. """
+    pass
 
-    Attributes:
-      DATA_NOT_AVAILABLE: No information is available for the field.
-      EMPTY_DATA: field value is None.
-    """
 
-    DATA_NOT_AVAILABLE = "DATA_NOT_AVAILABLE"
-    EMPTY_DATA = "EMPTY_DATA"
+class InvalidOperation(Exception):
+    pass
 
 
 class Message(object):
@@ -320,15 +314,15 @@ class Message(object):
 
     @property
     def _avro_string_writer(self):
-        return AvroStringWriter(
-            schema=self._avro_schema
-        )
+        """get the writer from store if already exists"""
+        return _AvroStringStore().get_writer(self.schema_id)
 
     @property
     def _avro_string_reader(self):
-        return AvroStringReader(
-            reader_schema=self._avro_reader_schema,
-            writer_schema=self._avro_schema
+        """get the reader from store if already exists"""
+        return _AvroStringStore().get_reader(
+            reader_schema_id=self.reader_schema_id,
+            writer_schema_id=self.schema_id
         )
 
     @property
@@ -539,15 +533,21 @@ class Message(object):
         self._set_payload_data_if_necessary(self._payload)
         self._set_payload_if_necessary(self._payload_data)
 
+    def _cleaned_pii_data_copy(self, data):
+        if not isinstance(data, dict):
+            return unicode(type(data))
+        return {key: self._cleaned_pii_data_copy(value) for key, value in data.iteritems()}
+
     @property
     def _str_repr(self):
-        # TODO [clin|DATAPIPE-849] It should properly handle pii payload data,
-        # especially it shouldn't leak it into the logs if it's used for logging.
+        cleaned_payload_data = self.payload_data
+        if self.contains_pii:
+            cleaned_payload_data = self._cleaned_pii_data_copy(self.payload_data)
         return {
             'uuid': self.uuid_hex,
             'message_type': self.message_type.name,
             'schema_id': self.schema_id,
-            'payload_data': self.payload_data,
+            'payload_data': cleaned_payload_data,
             'timestamp': self.timestamp,
             'meta': self._get_meta_attr_avro_repr(),
             'encryption_type': self.encryption_type
@@ -594,7 +594,7 @@ class CreateMessage(Message):
 
     def _get_field_diff(self, field):
         return PayloadFieldDiff(
-            old_value=FieldValue.EMPTY_DATA,
+            old_value=NoEntryPayload,
             current_value=self.payload_data[field]
         )
 
@@ -606,7 +606,7 @@ class DeleteMessage(Message):
     def _get_field_diff(self, field):
         return PayloadFieldDiff(
             old_value=self.payload_data[field],
-            current_value=FieldValue.DATA_NOT_AVAILABLE
+            current_value=NoEntryPayload
         )
 
 
@@ -615,30 +615,21 @@ class RefreshMessage(Message):
     _message_type = MessageType.refresh
 
     def _get_field_diff(self, field):
-        return PayloadFieldDiff(
-            old_value=FieldValue.DATA_NOT_AVAILABLE,
-            current_value=self.payload_data[field]
-        )
+        raise InvalidOperation()
 
 
 class LogMessage(Message):
     _message_type = MessageType.log
 
     def _get_field_diff(self, field):
-        return PayloadFieldDiff(
-            old_value=FieldValue.DATA_NOT_AVAILABLE,
-            current_value=self.payload_data[field]
-        )
+        raise InvalidOperation()
 
 
 class MonitorMessage(Message):
     _message_type = _ProtectedMessageType.monitor
 
     def _get_field_diff(self, field):
-        return PayloadFieldDiff(
-            old_value=FieldValue.DATA_NOT_AVAILABLE,
-            current_value=self.payload_data[field]
-        )
+        raise InvalidOperation()
 
 
 class UpdateMessage(Message):
@@ -845,8 +836,13 @@ class UpdateMessage(Message):
 
     @property
     def _str_repr(self):
+        # Calls the _str_repr from the super class resulting in encrypted pii data.
         repr_dict = super(UpdateMessage, self)._str_repr
-        repr_dict['previous_payload_data'] = self.previous_payload_data
+        repr_dict['previous_payload_data'] = (
+            self.previous_payload_data if not self.contains_pii
+            else self._cleaned_pii_data_copy(self.previous_payload_data)
+        )
+
         return repr_dict
 
 

@@ -532,8 +532,16 @@ class TestEnsureMessagesPublished(TestProducerBase):
         return create_new_schema(source='ensure_published_source')
 
     @pytest.fixture
+    def secondary_random_schema(self, create_new_schema):
+        return create_new_schema(source='ensure_published_source_2')
+
+    @pytest.fixture
     def topic(self, random_schema):
         return str(random_schema.topic.name)
+
+    @pytest.fixture
+    def secondary_topic(self, secondary_random_schema):
+        return str(secondary_random_schema.topic.name)
 
     @pytest.fixture(params=[True, False])
     def topic_offsets(self, request, producer, random_schema, containers):
@@ -549,8 +557,25 @@ class TestEnsureMessagesPublished(TestProducerBase):
 
     @pytest.fixture
     def messages(self, random_schema):
-        return [CreateMessage(random_schema.schema_id, payload=str(i))
-                for i in range(self.number_of_messages)]
+        return [
+            CreateMessage(
+                random_schema.schema_id,
+                payload=str(i),
+                upstream_position_info={'position': i + 1}
+            )
+            for i in range(self.number_of_messages)
+        ]
+
+    @pytest.fixture
+    def secondary_messages(self, secondary_random_schema):
+        return [
+            CreateMessage(
+                secondary_random_schema.schema_id,
+                payload=str(i),
+                upstream_position_info={'position': i + 1}
+            )
+            for i in range(-2, 1)
+        ]
 
     def test_ensure_messages_published_without_message(
         self, topic, producer, topic_offsets
@@ -595,7 +620,8 @@ class TestEnsureMessagesPublished(TestProducerBase):
     def _test_success_ensure_messages_published(
         self, topic, messages, producer, topic_offsets, unpublished_count
     ):
-        messages_published_first = messages[:unpublished_count]
+        messages_to_publish = len(messages) - unpublished_count
+        messages_published_first = messages[:messages_to_publish]
 
         with setup_capture_new_messages_consumer(
             topic
@@ -606,9 +632,19 @@ class TestEnsureMessagesPublished(TestProducerBase):
             for message in messages_published_first:
                 producer.publish(message)
             producer.flush()
+            producer.position_data_callback = mock.Mock()
 
             producer.ensure_messages_published(messages, topic_offsets)
+
+            if unpublished_count > 0:
+                assert producer.position_data_callback.call_count == 1
+
             self._assert_all_messages_published(consumer)
+
+            position_info = producer.get_checkpoint_position_data()
+            last_position = position_info.last_published_message_position_info
+            assert last_position['position'] == self.number_of_messages
+
             self._assert_logged_info_correct(
                 mock_logger,
                 messages_already_published=len(messages_published_first),
@@ -616,6 +652,41 @@ class TestEnsureMessagesPublished(TestProducerBase):
                 topic_offsets=topic_offsets,
                 message_count=len(messages)
             )
+
+    def test_multitopic_offsets(
+        self,
+        topic,
+        messages,
+        secondary_topic,
+        secondary_messages,
+        producer,
+        topic_offsets,
+        containers
+    ):
+        """Publishes a single message on the secondary_topic, and all
+        messages on the primary topic, simulating the case where publishes for
+        one topic fail, while the other succeeds, and the one that succeeds
+        comes later in time.  The goal is that the position data still reflects
+        the original message ordering, irrespective of failure.
+        """
+        containers.create_kafka_topic(secondary_topic)
+        with setup_capture_new_messages_consumer(
+            secondary_topic
+        ) as consumer:
+            producer.publish(secondary_messages[0])
+            for message in messages:
+                producer.publish(message)
+            producer.flush()
+
+            producer.ensure_messages_published(
+                secondary_messages + messages,
+                topic_offsets
+            )
+
+            position_info = producer.get_checkpoint_position_data()
+            last_position = position_info.last_published_message_position_info
+            assert last_position['position'] == self.number_of_messages
+            assert len(consumer.get_messages(10)) == len(secondary_messages)
 
     def test_ensure_messages_published_fails_when_overpublished(
         self, topic, messages, producer, topic_offsets
@@ -639,6 +710,33 @@ class TestEnsureMessagesPublished(TestProducerBase):
                 topic_offsets,
                 message_count=len(messages[:2])
             )
+
+    def test_forced_recovery_when_overpublished(
+        self, topic, messages, producer, topic_offsets
+    ):
+        for message in messages:
+            producer.publish(message)
+        producer.flush()
+
+        with reconfigure(
+            force_recovery_from_publication_unensurable_error=True
+        ), setup_capture_new_messages_consumer(
+            topic
+        ) as consumer, mock.patch.object(
+            data_pipeline.producer,
+            'logger'
+        ) as mock_logger:
+            producer.ensure_messages_published(messages[:2], topic_offsets)
+
+            self._assert_logged_info_correct(
+                mock_logger,
+                len(messages),
+                topic,
+                topic_offsets,
+                message_count=len(messages[:2])
+            )
+
+            assert len(consumer.get_messages(10)) == 2
 
     def test_ensure_messages_published_on_new_topic(
         self, create_new_schema, producer

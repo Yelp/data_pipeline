@@ -188,6 +188,20 @@ class BaseConsumer(Client):
                         )
                     )
 
+        # Storing the topic_to_consumer_topic_state_map to a temp instance
+        # variable which will be used to commit partition offsets when starting
+        # the consumer. After committing partition offsets, the temp variable
+        # would be set to `None` to prevent committing these offsets again.
+        self._temp_topic_to_consumer_topic_state_map = topic_to_consumer_topic_state_map
+        self._set_topic_to_partition_map(topic_to_consumer_topic_state_map)
+
+    def _set_topic_to_partition_map(self, topic_to_consumer_topic_state_map):
+        self.topic_to_partition_map = {}
+        for topic, consumer_topic_state in topic_to_consumer_topic_state_map.iteritems():
+            self.topic_to_partition_map[topic] = \
+                (consumer_topic_state.partition_offset_map.keys()
+                 if consumer_topic_state else None)
+
     @cached_property
     def kafka_client(self):
         """ Returns the `KafkaClient` object."""
@@ -227,13 +241,23 @@ class BaseConsumer(Client):
         Note:
             The derived class must implement _start().
         """
+        self.reset_topic_to_partition_offset_cache()
+        logger.info("Committing offsets for Consumer '{0}'...".format(
+            self.client_name
+        ))
+        self._commit_topic_map_offsets(self._temp_topic_to_consumer_topic_state_map)
+        logger.info("Offsets committed for Consumer '{0}'...".format(
+            self.client_name
+        ))
+        self._temp_topic_to_consumer_topic_state_map = None
+        self._start_consumer()
+
+    def _start_consumer(self):
         logger.info("Starting Consumer '{0}'...".format(self.client_name))
         if self.running:
             raise RuntimeError("Consumer '{0}' is already running".format(
                 self.client_name
             ))
-        self.reset_topic_to_partition_offset_cache()
-        self._commit_topic_map_offsets()
         self._start()
         self.running = True
         logger.info("Consumer '{0}' started".format(self.client_name))
@@ -473,7 +497,9 @@ class BaseConsumer(Client):
                     if no_new_topics():
                         continue
                     consumer.commit_messages(messages)
-                    topic_map = consumer.topic_to_consumer_topic_state_map
+                    topic_map = {}
+                    for topic in consumer.topic_to_partition_map.keys():
+                        topic_map[topic] = None
                     new_topics = get_new_topics()
                     for topic in new_topics:
                         if topic not in topic_map:
@@ -499,37 +525,18 @@ class BaseConsumer(Client):
                 `auto_offset_reset` offset in the topic.
         """
         self.stop()
-        self.topic_to_consumer_topic_state_map = topic_to_consumer_topic_state_map
-        self.start()
+        self._commit_topic_map_offsets(topic_to_consumer_topic_state_map)
+        self._set_topic_to_partition_map(topic_to_consumer_topic_state_map)
+        self._start_consumer()
 
-    def _update_topic_map(self, message):
-        consumer_topic_state = self.topic_to_consumer_topic_state_map.get(message.topic)
-        if consumer_topic_state is None:
-            consumer_topic_state = ConsumerTopicState(
-                partition_offset_map={},
-                last_seen_schema_id=message.schema_id
-            )
-        consumer_topic_state.last_seen_schema_id = message.schema_id
-        consumer_topic_state.partition_offset_map[
-            message.kafka_position_info.partition
-        ] = message.kafka_position_info.offset
-        self.topic_to_consumer_topic_state_map[message.topic] = consumer_topic_state
-
-    def _commit_topic_map_offsets(self):
-        offset_requests = []
-        for topic, consumer_topic_state in self.topic_to_consumer_topic_state_map.iteritems():
-            if consumer_topic_state is None:
-                continue
-            for partition, offset in consumer_topic_state.partition_offset_map.iteritems():
-                offset_requests.append(
-                    OffsetCommitRequest(
-                        topic=kafka_bytestring(topic),
-                        partition=partition,
-                        offset=offset,
-                        metadata=None
-                    )
-                )
-        self._send_offset_commit_requests(offset_requests)
+    def _commit_topic_map_offsets(self, topic_to_consumer_topic_state_map):
+        if topic_to_consumer_topic_state_map:
+            topic_to_partition_offset_map = {}
+            for topic, consumer_topic_state in topic_to_consumer_topic_state_map.iteritems():
+                if consumer_topic_state is None:
+                    continue
+                topic_to_partition_offset_map[topic] = consumer_topic_state.partition_offset_map
+            self.commit_offsets(topic_to_partition_offset_map)
 
     def _send_offset_commit_requests(self, offset_commit_request_list):
         if len(offset_commit_request_list) > 0:
@@ -563,17 +570,13 @@ class BaseConsumer(Client):
     def _apply_post_rebalance_callback_to_partition(self, partitions):
         """
         Removes the topics not present in the partitions list
-        from the topic_to_consumer_topic_state_map
+        from the consumer topic_to_partition_map
 
         Args:
             partitions: List of current partitions the kafka
             broker holds
         """
-        self.topic_to_consumer_topic_state_map = {
-            key: self.topic_to_consumer_topic_state_map.get(key)
-            for key in partitions
-        }
-
+        self.topic_to_partition_map = dict(partitions)
         self.reset_topic_to_partition_offset_cache()
 
         if self.post_rebalance_callback:
@@ -582,21 +585,59 @@ class BaseConsumer(Client):
     def refresh_new_topics(
         self,
         topic_filter=None,
-        before_refresh_handler=None
+        pre_topic_refresh_callback=None
     ):
         """
-        Get newly created topics that match given criteria and refresh internal
-        topic state maps for these new topics.
+        Get newly created topics that match given criteria and currently not
+        being tailed by the consumer and refresh internal topics list for these
+        new topics.
+
+        **Example**::
+
+            topic_filter = TopicFilter(namespace_name='test_namespace')
+            with Consumer(
+                consumer_name='example',
+                team_name='bam',
+                expected_frequency_seconds=12345,
+                topic_to_consumer_topic_state_map={'topic1': None, 'topic2': None}
+            ) as consumer:
+                while True:
+                    messages = consumer.get_messages(
+                        count=batch_size,
+                        blocking=True,
+                        timeout=batch_timeout
+                    )
+                    process_messages(messages)
+                    if no_new_topics():
+                        continue
+                    consumer.commit_messages(messages)
+                    consumer.refresh_new_topics(
+                        topic_filter,
+                        pre_topic_refresh_callback
+                    )
+
+        Note:
+            pre_topic_refresh_callback can be used to perform custom logic and
+            takes the currently tailed topics and the newly added topics as
+            arguments. For example, in the aforementioned example, if a new
+            topic 'topic3' is being added to namespace 'test_namespace' then
+            `pre_topic_refresh_callback(['topic1', 'topic2'], ['topic3'])`
+            would be executed.
+
+            Commit the offsets of already consumed messages before refreshing
+            to prevent duplicate messages. Else, the consumer will pick up the
+            last committed offsets of topics and will consume already consumed
+            messages.
 
         Args:
             topic_filter (Optional[TopicFilter]): criteria to filter newly
                 created topics.
-            before_refresh_handler
-                (Optional[Callable[[List[data_pipeline.schematizer_clientlib.models.Topic]], Any]]):
-                function that performs custom logic before the consumer resets
-                topics.  The function will take a list of new topics filtered
-                by the given filter and currently not in the topic state map.
-                The return value of the function is ignored.
+            pre_topic_refresh_callback:
+                (Optional[Callable[[list[str], list[str]], Any]]): function
+                that performs custom logic before the consumer start tailing
+                new topics. The function will take a list of old_topic_names
+                and list of new_topic_names. The return value of the function
+                is ignored.
 
         Returns:
             [data_pipeline.schematizer_clientlib.models.Topic]: A list of new topics.
@@ -604,17 +645,17 @@ class BaseConsumer(Client):
         # TODO [DATAPIPE-843|clin] deprecate this function in favor of new
         # `refresh_topics` function once AST is revised to use the new function.
         new_topics = self._get_new_topics(topic_filter)
-
         new_topics = [topic for topic in new_topics
-                      if topic.name not in self.topic_to_consumer_topic_state_map]
-
-        if before_refresh_handler:
-            before_refresh_handler(new_topics)
+                      if topic.name not in self.topic_to_partition_map]
 
         if new_topics:
+            new_topic_names = [topic.name for topic in new_topics]
+            old_topic_names = self.topic_to_partition_map.keys()
+            if pre_topic_refresh_callback:
+                pre_topic_refresh_callback(old_topic_names, new_topic_names)
             self.stop()
-            self._update_new_topic_state_map(new_topics)
-            self.start()
+            self._update_topic_to_partition_map(new_topic_names)
+            self._start_consumer()
 
         return new_topics
 
@@ -628,9 +669,9 @@ class BaseConsumer(Client):
             new_topics = topic_filter.filter_func(new_topics)
         return new_topics
 
-    def _update_new_topic_state_map(self, new_topics):
+    def _update_topic_to_partition_map(self, new_topics):
         for new_topic in new_topics:
-            self.topic_to_consumer_topic_state_map[new_topic.name] = None
+            self.topic_to_partition_map[new_topic] = None
 
     def refresh_topics(self, consumer_source):
         """Refresh the topics this consumer is consuming from based on the
@@ -638,13 +679,14 @@ class BaseConsumer(Client):
 
         Args:
             consumer_source (data_pipeline.consumer_source.ConsumerSource): one
-                of ConsumerSource types, such as SingleTopic, TopicInNamespace.
+            of ConsumerSource types, such as SingleTopic, TopicsInFixedNamespaces.
 
         Returns:
             List[str]: A list of new topic names that this consumer starts to
             consume.
         """
         topics = consumer_source.get_topics()
+<<<<<<< HEAD
         new_topics = {topic for topic in topics
                       if topic not in self.topic_to_consumer_topic_state_map}
 
@@ -656,13 +698,28 @@ class BaseConsumer(Client):
             for new_topic in new_topics:
                 self.topic_to_consumer_topic_state_map[new_topic] = new_topics_offset_map.get(new_topic)
             self.start()
+=======
+        new_topics = [topic for topic in topics
+                      if topic not in self.topic_to_partition_map]
+
+        if new_topics:
+            self.stop()
+            self._update_topic_to_partition_map(new_topics)
+            self._start_consumer()
+>>>>>>> master
 
             # If a new topic doesn't exist, when the consumer restarts, it will
             # be removed from the topic state map after the re-balance callback.
             # In such case, the non-existent topics are removed from the new_topics.
             new_topics = [topic for topic in new_topics
+<<<<<<< HEAD
                           if topic in self.topic_to_consumer_topic_state_map]
         return list(new_topics)
+=======
+                          if topic in self.topic_to_partition_map]
+
+        return new_topics
+>>>>>>> master
 
 
 class TopicFilter(object):

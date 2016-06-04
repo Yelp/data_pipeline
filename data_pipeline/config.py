@@ -362,6 +362,27 @@ class Config(object):
             default=False
         )
 
+    @property
+    def force_recovery_from_publication_unensurable_error(self):
+        """Toggling this option to true and restarting the impacted service will
+        force the `Producer` to recover from `PublicationUnensurableError`
+        generated in the `ensure_messages_published` method.  This option should
+        be turned off after the service recovers.  Ideally it would never be
+        used, but it can be helpful to get an exactly-once service working again
+        after a logical error, at the expense of violating the guarantee.  It's
+        primarily here to get services running again, while we're working out
+        their kinks and debugging.  Don't use it unless you're absolutely sure
+        of what you're doing.
+
+        Warning:
+            Setting this option to True guarantees that the exactly-once
+            guarantee will be broken.
+        """
+        return data_pipeline_conf.read_bool(
+            'force_recovery_from_publication_unensurable_error',
+            default=False
+        )
+
 
 def configure_from_dict(config_dict):
     """Configure the :mod:`data_pipeline` clientlib from a dictionary.

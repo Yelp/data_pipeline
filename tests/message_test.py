@@ -12,8 +12,9 @@ from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import create_from_offset_and_message
 from data_pipeline.message import CreateMessage
-from data_pipeline.message import FieldValue
+from data_pipeline.message import InvalidOperation
 from data_pipeline.message import MetaAttribute
+from data_pipeline.message import NoEntryPayload
 from data_pipeline.message import PayloadFieldDiff
 from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
@@ -28,6 +29,12 @@ class SharedMessageTest(object):
     @pytest.fixture
     def message(self, valid_message_data):
         return self.message_class(**valid_message_data)
+
+    @pytest.fixture
+    def message_with_pii(self, pii_schema, valid_message_data):
+        pii_message = self.message(valid_message_data)
+        pii_message._set_contains_pii(pii_schema.schema_id)
+        return pii_message
 
     @pytest.fixture(params=[
         None,
@@ -62,7 +69,7 @@ class SharedMessageTest(object):
 
     def test_rejects_empty_topic(self, valid_message_data):
         mock_date = '2015-01-01'
-        mock_topic = Topic(1, str(''), None, False, mock_date, mock_date)
+        mock_topic = Topic(1, str(''), None, False, [], mock_date, mock_date)
         mock_schema = AvroSchema(
             1, 'schema', mock_topic, None, 'RW', None, None, mock_date, mock_date
         )
@@ -231,6 +238,21 @@ class SharedMessageTest(object):
         # only use eval to get the original dict when the string is trusted
         assert eval(actual) == expected
 
+    def test_message_str_with_pii(self, message_with_pii):
+        actual = str(message_with_pii)
+        expected_payload_data = {u'good_field': u"<type 'int'>"}
+        expected = {
+            'message_type': self.expected_message_type.name,
+            'schema_id': message_with_pii.schema_id,
+            'timestamp': message_with_pii.timestamp,
+            'meta': message_with_pii._get_meta_attr_avro_repr(),
+            'encryption_type': message_with_pii.encryption_type,
+            'uuid': message_with_pii.uuid_hex,
+            'payload_data': expected_payload_data,
+        }
+        # only use eval to get the original dict when the string is trusted
+        assert eval(actual) == expected
+
     def assert_equal_decrypted_payload(
         self,
         message,
@@ -305,7 +327,6 @@ class TestCreateMessage(PayloadOnlyMessageTest):
 
     def test_payload_diff(self, valid_message_data):
         valid_message_data.pop('payload', None)
-        valid_message_data.pop('previous_payload', None)
         message_data = self._make_message_data(
             valid_message_data,
             payload_data={'key1': 1, 'key2': 20}
@@ -314,11 +335,11 @@ class TestCreateMessage(PayloadOnlyMessageTest):
 
         expected = {
             'key1': PayloadFieldDiff(
-                old_value=FieldValue.EMPTY_DATA,
+                old_value=NoEntryPayload,
                 current_value=1
             ),
             'key2': PayloadFieldDiff(
-                old_value=FieldValue.EMPTY_DATA,
+                old_value=NoEntryPayload,
                 current_value=20
             )
         }
@@ -334,26 +355,15 @@ class TestLogMessage(PayloadOnlyMessageTest):
     def expected_message_type(self):
         return MessageType.log
 
-    def test_payload_diff(self, valid_message_data):
+    def test_payload_diff_raises_exception(self, valid_message_data):
         valid_message_data.pop('payload', None)
-        valid_message_data.pop('previous_payload', None)
         message_data = self._make_message_data(
             valid_message_data,
             payload_data={'key1': 1, 'key2': 20}
         )
         message = self.message_class(**message_data)
-
-        expected = {
-            'key1': PayloadFieldDiff(
-                old_value=FieldValue.DATA_NOT_AVAILABLE,
-                current_value=1
-            ),
-            'key2': PayloadFieldDiff(
-                old_value=FieldValue.DATA_NOT_AVAILABLE,
-                current_value=20
-            )
-        }
-        assert message.payload_diff == expected
+        with pytest.raises(InvalidOperation):
+            message.payload_diff
 
 
 class TestMonitorMessage(PayloadOnlyMessageTest):
@@ -365,26 +375,15 @@ class TestMonitorMessage(PayloadOnlyMessageTest):
     def expected_message_type(self):
         return _ProtectedMessageType.monitor
 
-    def test_payload_diff(self, valid_message_data):
+    def test_payload_diff_raises_exception(self, valid_message_data):
         valid_message_data.pop('payload', None)
-        valid_message_data.pop('previous_payload', None)
         message_data = self._make_message_data(
             valid_message_data,
             payload_data={'key1': 1, 'key2': 20}
         )
         message = self.message_class(**message_data)
-
-        expected = {
-            'key1': PayloadFieldDiff(
-                old_value=FieldValue.DATA_NOT_AVAILABLE,
-                current_value=1
-            ),
-            'key2': PayloadFieldDiff(
-                old_value=FieldValue.DATA_NOT_AVAILABLE,
-                current_value=20
-            )
-        }
-        assert message.payload_diff == expected
+        with pytest.raises(InvalidOperation):
+            message.payload_diff
 
 
 class TestRefreshMessage(PayloadOnlyMessageTest):
@@ -397,26 +396,15 @@ class TestRefreshMessage(PayloadOnlyMessageTest):
     def expected_message_type(self):
         return MessageType.refresh
 
-    def test_payload_diff(self, valid_message_data):
+    def test_payload_diff_raises_exception(self, valid_message_data):
         valid_message_data.pop('payload', None)
-        valid_message_data.pop('previous_payload', None)
         message_data = self._make_message_data(
             valid_message_data,
             payload_data={'key1': 1, 'key2': 20}
         )
         message = self.message_class(**message_data)
-
-        expected = {
-            'key1': PayloadFieldDiff(
-                old_value=FieldValue.DATA_NOT_AVAILABLE,
-                current_value=1
-            ),
-            'key2': PayloadFieldDiff(
-                old_value=FieldValue.DATA_NOT_AVAILABLE,
-                current_value=20
-            )
-        }
-        assert message.payload_diff == expected
+        with pytest.raises(InvalidOperation):
+            message.payload_diff
 
 
 class TestDeleteMessage(PayloadOnlyMessageTest):
@@ -431,7 +419,6 @@ class TestDeleteMessage(PayloadOnlyMessageTest):
 
     def test_payload_diff(self, valid_message_data):
         valid_message_data.pop('payload', None)
-        valid_message_data.pop('previous_payload', None)
         message_data = self._make_message_data(
             valid_message_data,
             payload_data={'key1': 1, 'key2': 20}
@@ -441,11 +428,11 @@ class TestDeleteMessage(PayloadOnlyMessageTest):
         expected = {
             'key1': PayloadFieldDiff(
                 old_value=1,
-                current_value=FieldValue.DATA_NOT_AVAILABLE
+                current_value=NoEntryPayload
             ),
             'key2': PayloadFieldDiff(
                 old_value=20,
-                current_value=FieldValue.DATA_NOT_AVAILABLE
+                current_value=NoEntryPayload
             )
         }
         assert message.payload_diff == expected
@@ -587,6 +574,23 @@ class TestUpdateMessage(SharedMessageTest):
             'uuid': message.uuid_hex,
             'payload_data': message.payload_data,
             'previous_payload_data': message.previous_payload_data
+        }
+        # only use eval to get the original dict when the string is trusted
+        assert eval(actual) == expected
+
+    def test_message_str_with_pii(self, message_with_pii):
+        actual = str(message_with_pii)
+        expected_payload_data = {u'good_field': u"<type 'int'>"}
+        expected_previous_payload_data = {u'good_field': u"<type 'int'>"}
+        expected = {
+            'message_type': self.expected_message_type.name,
+            'schema_id': message_with_pii.schema_id,
+            'timestamp': message_with_pii.timestamp,
+            'meta': message_with_pii._get_meta_attr_avro_repr(),
+            'encryption_type': message_with_pii.encryption_type,
+            'uuid': message_with_pii.uuid_hex,
+            'payload_data': expected_payload_data,
+            'previous_payload_data': expected_previous_payload_data
         }
         # only use eval to get the original dict when the string is trusted
         assert eval(actual) == expected
