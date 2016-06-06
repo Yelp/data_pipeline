@@ -1,3 +1,10 @@
+data-pipeline-tools (0.2.1) lucid; urgency=low
+
+  * Commit: Merge branch 'datapipe-917-Remove-topic-offsets-tracking-
+    information-inside-consumer'
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Mon, 06 Jun 2016 11:06:13 -0700
+
 data-pipeline-tools (0.1.76) lucid; urgency=low
 
   * Refactor up tools/tailer to expose timestamp_to_offset_mapper
