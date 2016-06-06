@@ -107,6 +107,13 @@ class SchematizerClientTestBase(object):
         assert actual.schema_json == simplejson.loads(expected_resp.schema)
         self._assert_topic_values(actual.topic, expected_resp.topic)
 
+    def _assert_schema_element_values(self, actual, expected_resp):
+        assert len(actual) == len(expected_resp)
+        attrs = ('note', 'schema_id', 'element_type', 'key', 'id')
+
+        for i in range(0, len(actual)):
+            self._assert_equal_multi_attrs(actual[i], expected_resp[i], *attrs)
+
     def _assert_topic_values(self, actual, expected_resp):
         attrs = ('topic_id', 'name', 'contains_pii', 'primary_keys', 'created_at', 'updated_at')
         self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
@@ -155,6 +162,23 @@ class TestGetSchemaById(SchematizerClientTestBase):
             assert schema_api_spy.call_count == 0
             assert topic_api_spy.call_count == 0
             assert source_api_spy.call_count == 0
+
+
+class TestGetSchemaElementsBySchemaId(SchematizerClientTestBase):
+
+    @pytest.fixture(autouse=True, scope='class')
+    def biz_schema(self, yelp_namespace, biz_src_name):
+        return self._register_avro_schema(yelp_namespace, biz_src_name)
+
+    def test_get_schema_elements_by_schema_id(self, schematizer, biz_schema):
+        with self.attach_spy_on_api(
+            schematizer._client.schemas,
+            'get_schema_elements_by_schema_id'
+        ) as api_spy:
+            actual = schematizer.get_schema_elements_by_schema_id(biz_schema.schema_id)
+            for element in actual:
+                assert element.schema_id == biz_schema.schema_id
+            assert api_spy.call_count == 1
 
 
 class TestGetSchemasByTopic(SchematizerClientTestBase):
