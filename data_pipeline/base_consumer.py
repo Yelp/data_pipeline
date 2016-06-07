@@ -11,12 +11,12 @@ from kafka.common import OffsetCommitRequest
 from kafka.util import kafka_bytestring
 from yelp_kafka.config import KafkaConsumerConfig
 
+from data_pipeline._consumer_tick import ConsumerTick
 from data_pipeline.client import Client
 from data_pipeline.config import get_config
 from data_pipeline.consumer_source import FixedSchemas
 from data_pipeline.message import Message
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
-from data_pipeline._consumer_tick import ConsumerTick
 
 logger = get_config().logger
 
@@ -99,16 +99,23 @@ class BaseConsumer(Client):
             of partitions as value which were acquired in a repartition. You
             are guaranteed that no messages will be consumed between the
             pre_rebalance_callback and this callback.
-        pre_topic_refresh_callback: (Optional[Callable[Set[str],
-            {str:Optional(ConsumerTopicState)}]]): Optional callback which is
-            passed a set of new_topics which doesn't exist in the
-            `topic_to_consumer_topic_state_map` map. This callback can be used
-            to perform custom logic including fetching the offsets of
-            new_topics. The return value of the function is a dictionary
-            containing the topics and their offsets that the consumer would
-            tail those topics from. If pre_topic_refresh_callback is None,
-            then the consumer will pick up the last committed offsets of
-            topics.
+        fetch_offsets_for_topics: (Optional[Callable[List[str],
+            Dict[str, Optional[Dict[int, int]]]]]): Optional callback which is
+            passed a list of new_topics which doesn't exist in the
+            `topic_to_partition_map` map. This callback should return a
+            dictionary where keys are topic names and values are either None
+            if no offset should be manually set, or a map from partition to
+            offset. If fetch_offsets_for_topics is None, then the consumer will
+            pick up the last committed offsets of topics.
+            If implemented, this function will be called at the start of the
+            consumer and every time consumer refreshes itself to include to new
+            topics. The default behavior is storing offsets in Kafka, and
+            resetting to the smallest(`auto_offset_reset`) offset.
+        pre_topic_refresh_callback: (Optional[Callable[[list[str], list[str]],
+            Any]]): function that performs custom logic whenever consumer
+            refreshes itself and starts tailing new topics. The function will
+            take a list of old_topic_names and list of new_topic_names. The
+            return value of the function is ignored.
     """
 
     def __init__(
@@ -121,6 +128,7 @@ class BaseConsumer(Client):
         force_payload_decode=True,
         auto_offset_reset='smallest',
         partitioner_cooldown=get_config().consumer_partitioner_cooldown_default,
+        topic_refresh_frequency_seconds=get_config().topic_refresh_frequency_seconds,
         pre_rebalance_callback=None,
         post_rebalance_callback=None,
         fetch_offsets_for_topics=None,
@@ -146,56 +154,89 @@ class BaseConsumer(Client):
         self.post_rebalance_callback = post_rebalance_callback
         self.fetch_offsets_for_topics = fetch_offsets_for_topics
         self.pre_topic_refresh_callback = pre_topic_refresh_callback
-        self._setup_refresh_timer()
-        self._setup_topic_to_consumer_topic_state_map(topic_to_consumer_topic_state_map)
-        self._setup_topic_reader_schema_map()
-
-    def _setup_refresh_timer(self):
-        self.refresh_timer = ConsumerTick(
-            refresh_time_seconds=get_config().topic_refresh_frequency_seconds
-        )
-
-    def _setup_topic_to_consumer_topic_state_map(self, topic_to_consumer_topic_state_map):
-        self.topic_to_consumer_topic_state_map = (
-            topic_to_consumer_topic_state_map
-            if topic_to_consumer_topic_state_map else {}
-        )
-
-        if self.consumer_source:
-            topics = self.consumer_source.get_topics()
-            new_topics = {topic for topic in topics
-                          if topic not in self.topic_to_consumer_topic_state_map}
-            if new_topics:
-                new_topics_offset_map = {}
-                if self.fetch_offsets_for_topics:
-                    new_topics_offset_map = self.fetch_offsets_for_topics(new_topics)
-                for new_topic in new_topics:
-                    self.topic_to_consumer_topic_state_map[new_topic] = new_topics_offset_map.get(new_topic)
-
-    def _setup_topic_reader_schema_map(self):
-        self.topic_reader_schema_map = {}
-        if isinstance(self.consumer_source, FixedSchemas):
-            schema_to_topic_map = self.consumer_source.get_schema_to_topic_map()
-            for schema_id, topic_name in schema_to_topic_map.iteritems():
-                if topic_name not in self.topic_reader_schema_map:
-                    self.topic_reader_schema_map[topic_name] = schema_id
-                else:
-                    raise ValueError(
-                        'Multiple reader schemas ({schema1}, {schema2}) exist for topic: {topic}'.format(
-                            schema1=self.topic_reader_schema_map[topic_name],
-                            schema2=schema_id,
-                            topic=topic_name
-                        )
-                    )
+        self._setup_refresh_timer(topic_refresh_frequency_seconds)
+        self._setup_topic_to_reader_schema_map()
 
         # Storing the topic_to_consumer_topic_state_map to a temp instance
         # variable which will be used to commit partition offsets when starting
         # the consumer. After committing partition offsets, the temp variable
         # would be set to `None` to prevent committing these offsets again.
-        self._temp_topic_to_consumer_topic_state_map = topic_to_consumer_topic_state_map
-        self._set_topic_to_partition_map(topic_to_consumer_topic_state_map)
+        self._temp_topic_to_consumer_topic_state_map = \
+            self._get_topic_to_consumer_topic_state_map(
+                topic_to_consumer_topic_state_map
+            )
+        self._set_topic_to_partition_map(self._temp_topic_to_consumer_topic_state_map)
+
+    def _setup_refresh_timer(self, topic_refresh_frequency_seconds):
+        self.refresh_timer = ConsumerTick(
+            refresh_time_seconds=topic_refresh_frequency_seconds
+        )
+
+    def _convert_to_topic_state_map(self, topic_to_partition_map):
+        return {
+            topic_name: None for topic_name in topic_to_partition_map
+        }
+
+    def _get_topic_to_consumer_topic_state_map(self, topic_to_consumer_state_map):
+        """ Get a topic_to_consumer_state_map, refreshes the consumer source
+        and Returns the updated topic_to_consumer_topic_state_map.
+        """
+        topic_to_consumer_topic_state_map = (
+            topic_to_consumer_state_map
+            if topic_to_consumer_state_map else {}
+        )
+
+        if self.consumer_source:
+            topics = self.consumer_source.get_topics()
+            new_topics = [
+                topic for topic in topics
+                if topic not in topic_to_consumer_topic_state_map
+            ]
+            if new_topics:
+                new_topic_to_consumer_state_map = {}
+                if self.fetch_offsets_for_topics:
+                    topic_to_partition_offsets_map = self.fetch_offsets_for_topics(new_topics)
+                    new_topic_to_consumer_state_map = {
+                        topic: (
+                            ConsumerTopicState(
+                                partition_offset_map,
+                                last_seen_schema_id=None
+                            ) if partition_offset_map else None
+                        )
+                        for topic, partition_offset_map in
+                        topic_to_partition_offsets_map.iteritems()
+                    }
+                for new_topic in new_topics:
+                    topic_to_consumer_topic_state_map[new_topic] = \
+                        new_topic_to_consumer_state_map.get(new_topic)
+        return topic_to_consumer_topic_state_map
+
+    def _setup_topic_to_reader_schema_map(self):
+        """ In case of FixedSchema consumer source, creates a dictionary with
+        key as topic name and value as schema id that is used to decode the
+        messages of that topic.
+        """
+        self.topic_to_reader_schema_map = {}
+        if isinstance(self.consumer_source, FixedSchemas):
+            schema_to_topic_map = self.consumer_source.get_schema_to_topic_map()
+            for schema_id, topic_name in schema_to_topic_map.iteritems():
+                if topic_name not in self.topic_to_reader_schema_map:
+                    self.topic_to_reader_schema_map[topic_name] = schema_id
+                else:
+                    raise ValueError(
+                        'Multiple reader schemas ({schema1}, {schema2}) exist '
+                        'for topic: {topic}'.format(
+                            schema1=self.topic_to_reader_schema_map[topic_name],
+                            schema2=schema_id,
+                            topic=topic_name
+                        )
+                    )
 
     def _set_topic_to_partition_map(self, topic_to_consumer_topic_state_map):
+        """ Get the topic_to_consumer_topic_state_map and set the
+        topic_to_partition_map instance variable with topic name as key and
+        corresponding partitions list as value.
+        """
         self.topic_to_partition_map = {}
         for topic, consumer_topic_state in topic_to_consumer_topic_state_map.iteritems():
             self.topic_to_partition_map[topic] = \
@@ -686,19 +727,6 @@ class BaseConsumer(Client):
             consume.
         """
         topics = consumer_source.get_topics()
-<<<<<<< HEAD
-        new_topics = {topic for topic in topics
-                      if topic not in self.topic_to_consumer_topic_state_map}
-
-        if new_topics:
-            self.stop()
-            new_topics_offset_map = {}
-            if self.pre_topic_refresh_callback:
-                new_topics_offset_map = self.pre_topic_refresh_callback(new_topics)
-            for new_topic in new_topics:
-                self.topic_to_consumer_topic_state_map[new_topic] = new_topics_offset_map.get(new_topic)
-            self.start()
-=======
         new_topics = [topic for topic in topics
                       if topic not in self.topic_to_partition_map]
 
@@ -706,20 +734,14 @@ class BaseConsumer(Client):
             self.stop()
             self._update_topic_to_partition_map(new_topics)
             self._start_consumer()
->>>>>>> master
 
             # If a new topic doesn't exist, when the consumer restarts, it will
             # be removed from the topic state map after the re-balance callback.
             # In such case, the non-existent topics are removed from the new_topics.
             new_topics = [topic for topic in new_topics
-<<<<<<< HEAD
-                          if topic in self.topic_to_consumer_topic_state_map]
-        return list(new_topics)
-=======
                           if topic in self.topic_to_partition_map]
 
         return new_topics
->>>>>>> master
 
 
 class TopicFilter(object):

@@ -8,15 +8,12 @@ from data_pipeline.config import get_config
 
 
 class ConsumerTick(object):
-    """This class is copied from https://reviewboard.yelpcorp.com/r/140223.  The
-    paastorm should use the `PaastormTick` class from that review once it's out.
-
-    Ticks are controlled by the window_max_time_seconds config property.  This class
-    manages state related to ticks and triggers ticks on the attached spolt when
-    appropriate. This class will accept a manual override kwarg as well; that way
-    it can be used by refresh_new_topics and other methods requiring tick functionality.
+    """Ticks are controlled by the window_max_time_seconds config property.
+    This class manages state related to ticks and triggers ticks on the
+    attached Consumer when appropriate. This class will accept a manual
+    override kwarg as well; that way it can be used by refresh_new_topics and
+    other methods requiring tick functionality.
     """
-    # update docstring. taj.
 
     def __init__(self, refresh_time_seconds=None):
         self.refresh_time_seconds = refresh_time_seconds or get_config().window_max_time_seconds
@@ -26,5 +23,5 @@ class ConsumerTick(object):
         self.next_tick_time = time.time() + self.refresh_time_seconds
 
     def should_tick(self):
-        """Will trigger a tick on the spolt if necessary"""
+        """Will trigger a tick on the Consumer if necessary"""
         return time.time() >= self.next_tick_time

@@ -6,6 +6,7 @@ import random
 import time
 from multiprocessing import Event
 from multiprocessing import Process
+from uuid import uuid4
 
 import mock
 import pytest
@@ -13,22 +14,24 @@ import pytest
 from data_pipeline.consumer import Consumer
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import CreateMessage
-from tests.base_consumer_test import BaseConsumerReaderSchemaMapBaseTest
+from tests.base_consumer_test import BaseConsumerSourceBaseTest
 from tests.base_consumer_test import BaseConsumerTest
 from tests.base_consumer_test import FixedSchemasReaderSchemaMapSetupMixin
 from tests.base_consumer_test import FixedSchemasSetupMixin
+from tests.base_consumer_test import FixedTopicsReaderSchemaMapSetupMixin
 from tests.base_consumer_test import MultiTopicsSetupMixin
 from tests.base_consumer_test import RefreshDynamicTopicTests
 from tests.base_consumer_test import RefreshFixedTopicTests
 from tests.base_consumer_test import RefreshNewTopicsTest
-from tests.base_consumer_test import FixedTopicsReaderSchemaMapSetupMixin
 from tests.base_consumer_test import SingleTopicSetupMixin
 from tests.base_consumer_test import TIMEOUT
 from tests.base_consumer_test import TopicInDataTargetReaderSchemaMapSetupMixin
 from tests.base_consumer_test import TopicInDataTargetSetupMixin
-from tests.base_consumer_test import TopicInNamespaceReaderSchemaMapSetupMixin
+from tests.base_consumer_test import TopicInFixedNamespacesReaderSchemaMapSetupMixin
+from tests.base_consumer_test import TopicInSourceAutoRefreshSetupMixin
 from tests.base_consumer_test import TopicInSourceReaderSchemaMapSetupMixin
 from tests.base_consumer_test import TopicInSourceSetupMixin
+from tests.base_consumer_test import TopicsInFixedNamespacesAutoRefreshSetupMixin
 from tests.base_consumer_test import TopicsInFixedNamespacesSetupMixin
 from tests.helpers.config import reconfigure
 from tests.helpers.mock_utils import attach_spy_on_func
@@ -167,7 +170,7 @@ class TestConsumer(BaseConsumerTest):
                 consumer_one.commit_message(consumer_one_message)
                 assert func_spy.call_count == 1
 
-    def test_sync_topic_consumer_map(
+    def test_sync_topic_partition_map(
         self,
         topic,
         pii_topic,
@@ -182,7 +185,7 @@ class TestConsumer(BaseConsumerTest):
         retrieves a message and starts another consumer (consumer_two)
         with the same name in a separate process and while the
         consumer_two is retrieving messages asserts that the topic
-        redistribution occurs and the topic_to_consumer_topic_state_map
+        redistribution occurs and the topic_to_parition_map
         for consumer_two is with only one of the two topics. Then it
         stops consumer_two process first and again asserts that all
         the original topics have been reassigned to consumer one.
@@ -234,23 +237,154 @@ class TestRefreshTopics(RefreshNewTopicsTest):
         )
 
 
-class ConsumerReaderSchemaMapBaseTest(BaseConsumerReaderSchemaMapBaseTest):
+class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
 
     @pytest.fixture
-    def consumer_group_name(self):
-        return 'test_consumer_{}'.format(random.random())
+    def refresh_namespace(self):
+        return "auto_refresh_namespace_{}".format(uuid4())
 
     @pytest.fixture
-    def pre_rebalance_callback(self):
-        return mock.Mock()
+    def refresh_source(self):
+        return "auto_refresh_source_{}".format(uuid4())
 
     @pytest.fixture
-    def post_rebalance_callback(self):
-        return mock.Mock()
+    def registered_auro_refresh_schema(
+            self,
+            containers,
+            schematizer_client,
+            example_schema,
+            refresh_namespace,
+            refresh_source
+    ):
+        schema = schematizer_client.register_schema(
+            namespace=refresh_namespace,
+            source=refresh_source,
+            schema_str=example_schema,
+            source_owner_email='test@yelp.com',
+            contains_pii=False
+        )
+        topic_name = str(schema.topic.name)
+        containers.create_kafka_topic(topic_name)
+        return schema
 
-    @pytest.fixture(params=[False, True])
-    def force_payload_decode(self, request):
-        return request.param
+    @pytest.fixture
+    def test_message(self, registered_auro_refresh_schema, payload):
+        return CreateMessage(
+            schema_id=registered_auro_refresh_schema.schema_id,
+            payload=payload
+        )
+
+    @pytest.fixture
+    def register_message_in_new_topic(
+        self,
+        schematizer_client,
+        refresh_namespace,
+        refresh_source,
+        example_non_compatible_schema,
+        payload
+    ):
+        def _register_message_in_new_topic():
+            registered_schema = schematizer_client.register_schema(
+                namespace=refresh_namespace,
+                source=refresh_source,
+                schema_str=example_non_compatible_schema,
+                source_owner_email='test@yelp.com',
+                contains_pii=False
+            )
+            return CreateMessage(
+                schema_id=registered_schema.schema_id,
+                payload=payload
+            )
+        return _register_message_in_new_topic
+
+    @pytest.fixture
+    def consumer_instance(
+        self,
+        consumer_group_name,
+        team_name,
+        consumer_source,
+        pre_rebalance_callback,
+        post_rebalance_callback,
+    ):
+        return Consumer(
+            consumer_name=consumer_group_name,
+            team_name=team_name,
+            expected_frequency_seconds=ExpectedFrequency.constantly,
+            topic_to_consumer_topic_state_map=None,
+            consumer_source=consumer_source,
+            topic_refresh_frequency_seconds=0.5,
+            auto_offset_reset='smallest',
+            pre_rebalance_callback=pre_rebalance_callback,
+            post_rebalance_callback=post_rebalance_callback,
+        )
+
+    def test_auto_refresh_topics(
+        self,
+        registered_auro_refresh_schema,
+        publish_messages,
+        consumer_instance,
+        test_message,
+        register_message_in_new_topic
+    ):
+        """
+        This test publishes 2 messages and starts the consumer. The consumer
+        should receive exactly those 2 messages. It then commits those messages
+        and publishes 3 new messages in a different topic. Verifies that the
+        consumer refreshes itself to include the new topic and receives exactly
+        those 3 messages.
+        """
+        with consumer_instance as consumer:
+            publish_messages(test_message, count=2)
+            # consumer should return exactly 2 messages 'message'
+            actual_messages = consumer.get_messages(
+                count=10, blocking=True, timeout=TIMEOUT
+            )
+            self.assert_equal_messages(actual_messages, test_message, 2)
+            assert len(consumer.topic_to_partition_map) == 1
+
+            consumer.commit_messages(actual_messages)
+            new_message = register_message_in_new_topic()
+            time.sleep(0.5)
+
+            publish_messages(new_message, count=3)
+            # consumer should refresh itself and include the new topic in the
+            # topic_to_partition_map
+            new_messages = consumer.get_messages(
+                count=10, blocking=True, timeout=TIMEOUT
+            )
+            self.assert_equal_messages(new_messages, new_message, 3)
+            assert len(consumer.topic_to_partition_map) == 2
+
+    def assert_equal_messages(
+        self,
+        actual_messages,
+        expected_message,
+        expected_count
+    ):
+        assert isinstance(actual_messages, list)
+        assert len(actual_messages) == expected_count
+        for actual_message in actual_messages:
+            assert actual_message.message_type == expected_message.message_type
+            assert actual_message.payload == expected_message.payload
+            assert actual_message.schema_id == expected_message.schema_id
+            assert actual_message.topic == expected_message.topic
+            assert actual_message.payload_data == expected_message.payload_data
+
+
+class ConsumerReaderSchemaMapBaseTest(BaseConsumerSourceBaseTest):
+
+    @pytest.fixture
+    def message(self, registered_multiple_schemas_with_same_topic, payload):
+        return CreateMessage(
+            schema_id=registered_multiple_schemas_with_same_topic[1].schema_id,
+            payload=payload
+        )
+
+    @pytest.fixture(scope='class')
+    def topic(self, containers, registered_multiple_schemas_with_same_topic):
+        topic_name = str(registered_multiple_schemas_with_same_topic[0].topic.name)
+        containers.create_kafka_topic(topic_name)
+        return topic_name
 
     @pytest.fixture
     def consumer_instance(
@@ -282,7 +416,8 @@ class ConsumerReaderSchemaMapBaseTest(BaseConsumerReaderSchemaMapBaseTest):
         publish_messages,
         consumer_instance,
         message,
-        expected_message
+        expected_message,
+        containers
     ):
         """
         This test publishes a message and initializes a consumer with different
@@ -308,7 +443,7 @@ class TestReaderSchemaMapFixedTopics(
 
 class TestReaderSchemaMapTopicInNamespace(
     ConsumerReaderSchemaMapBaseTest,
-    TopicInNamespaceReaderSchemaMapSetupMixin
+    TopicInFixedNamespacesReaderSchemaMapSetupMixin
 ):
     pass
 
@@ -330,6 +465,20 @@ class TestReaderSchemaMapFixedSchemas(
 class TestReaderSchemaMapTopicInDataTarget(
     ConsumerReaderSchemaMapBaseTest,
     TopicInDataTargetReaderSchemaMapSetupMixin
+):
+    pass
+
+
+class TestAutoRefreshConsumerTopicsInFixedNamespaces(
+    ConsumerAutoRefreshTest,
+    TopicsInFixedNamespacesAutoRefreshSetupMixin
+):
+    pass
+
+
+class TestAutoRefreshConsumerTopicInSource(
+    ConsumerAutoRefreshTest,
+    TopicInSourceAutoRefreshSetupMixin
 ):
     pass
 

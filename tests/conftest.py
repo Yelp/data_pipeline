@@ -111,6 +111,7 @@ def example_compatible_schema(namespace, source):
     }
     ''' % (namespace, source)
 
+
 @pytest.fixture(scope='module')
 def example_non_compatible_schema(namespace, source):
     return '''

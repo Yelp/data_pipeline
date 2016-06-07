@@ -17,11 +17,7 @@ from data_pipeline.consumer_source import FixedSchemas
 from data_pipeline.consumer_source import FixedTopics
 from data_pipeline.consumer_source import NewTopicOnlyInDataTarget
 from data_pipeline.consumer_source import NewTopicOnlyInSource
-<<<<<<< HEAD
-=======
 from data_pipeline.consumer_source import NewTopicsOnlyInFixedNamespaces
-from data_pipeline.consumer_source import SingleSchema
->>>>>>> master
 from data_pipeline.consumer_source import TopicInDataTarget
 from data_pipeline.consumer_source import TopicInSource
 from data_pipeline.consumer_source import TopicsInFixedNamespaces
@@ -330,7 +326,24 @@ class BaseConsumerTest(object):
             asserter.assert_messages(messages, expected_count=2)
 
 
-class BaseConsumerReaderSchemaMapBaseTest(object):
+class BaseConsumerSourceBaseTest(object):
+
+    @pytest.fixture
+    def consumer_group_name(self):
+        return 'test_consumer_{}'.format(random.random())
+
+    @pytest.fixture
+    def pre_rebalance_callback(self):
+        return mock.Mock()
+
+    @pytest.fixture
+    def post_rebalance_callback(self):
+        return mock.Mock()
+
+    @pytest.fixture(params=[False, True])
+    def force_payload_decode(self, request):
+        return request.param
+
     @pytest.yield_fixture
     def producer(self, team_name):
         with Producer(
@@ -349,19 +362,6 @@ class BaseConsumerReaderSchemaMapBaseTest(object):
                 producer.publish(message)
             producer.flush()
         return _publish_messages
-
-    @pytest.fixture
-    def message(self, registered_multiple_schemas_with_same_topic, payload):
-        return CreateMessage(
-            schema_id=registered_multiple_schemas_with_same_topic[1].schema_id,
-            payload=payload
-        )
-
-    @pytest.fixture(scope='class')
-    def topic(self, containers, registered_multiple_schemas_with_same_topic):
-        topic_name = str(registered_multiple_schemas_with_same_topic[0].topic.name)
-        containers.create_kafka_topic(topic_name)
-        return topic_name
 
 
 class ConsumerAsserter(object):
@@ -467,21 +467,12 @@ class RefreshNewTopicsTest(object):
         return reg_schema
 
     @pytest.fixture(scope='class')
-<<<<<<< HEAD
-    def test_schema(self, containers):
-        return self._register_schema(
-            'test_namespace_{}'.format(uuid4()),
-            'test_refresh_src',
-            containers
-        )
-=======
     def namespace(self):
         return 'test_namespace_{}'.format(uuid4())
 
     @pytest.fixture(scope='class')
     def test_schema(self, containers, namespace):
         return self._register_schema(namespace, 'test_src', containers)
->>>>>>> master
 
     @pytest.fixture(scope='class')
     def topic(self, containers, test_schema):
@@ -554,16 +545,9 @@ class RefreshNewTopicsTest(object):
             created_after=self._increment_seconds(topic.created_at, seconds=-1)
         ))
 
-<<<<<<< HEAD
-        assert (topic.topic_id not in
-                [new_topic.topic_id for new_topic in new_topics])
-        self._assert_equal_state_map(
-            actual_map=consumer.topic_to_consumer_topic_state_map,
-=======
         assert topic.topic_id not in [new_topic.topic_id for new_topic in new_topics]
         self._assert_equal_partition_map(
             actual_map=consumer.topic_to_partition_map,
->>>>>>> master
             expected_map=expected
         )
 
@@ -648,7 +632,10 @@ class RefreshNewTopicsTest(object):
         )
         biz_topic = biz_schema.topic
         assert new_topics == [biz_topic]
-        mock_pre_topic_refresh_callback_handler.assert_called_once_with(old_topic_names, [biz_topic.name])
+        mock_pre_topic_refresh_callback_handler.assert_called_once_with(
+            old_topic_names,
+            [biz_topic.name]
+        )
 
     def _get_utc_timestamp(self, dt):
         return int((dt - datetime.datetime(1970, 1, 1)).total_seconds())
@@ -754,17 +741,12 @@ class RefreshTopicsTestBase(object):
         )
 
     @pytest.fixture(scope='class')
-<<<<<<< HEAD
-    def test_schema(self, _register_schema):
-        return _register_schema('test_namespace_{}'.format(uuid4()), 'test_src')
-=======
     def namespace(self):
         return 'test_namespace_{}'.format(uuid4())
 
     @pytest.fixture(scope='class')
     def test_schema(self, _register_schema, namespace):
         return _register_schema(namespace, 'test_src')
->>>>>>> master
 
     @pytest.fixture(scope='class')
     def topic(self, test_schema):
@@ -821,21 +803,16 @@ class RefreshTopicsTestBase(object):
 
 class RefreshFixedTopicTests(RefreshTopicsTestBase):
 
-<<<<<<< HEAD
     def test_get_topics(
         self,
         consumer,
         consumer_source,
         expected_topics,
-        topic
+        topic,
+        partitions
     ):
-        expected_map = {topic: None}
-        expected_map.update({topic: None for topic in expected_topics})
-=======
-    def test_get_topics(self, consumer, consumer_source, expected_topics, topic, partitions):
         expected_map = {topic: partitions}
         expected_map.update({topic: partitions for topic in expected_topics})
->>>>>>> master
 
         actual = consumer.refresh_topics(consumer_source)
 
@@ -887,23 +864,32 @@ class FixedTopicsReaderSchemaMapSetupMixin(object):
         return FixedTopics(topic)
 
     @pytest.fixture
-    def expected_message(self, registered_multiple_schemas_with_same_topic, payload):
+    def expected_message(
+        self,
+        registered_multiple_schemas_with_same_topic,
+        payload
+    ):
         return CreateMessage(
             schema_id=registered_multiple_schemas_with_same_topic[1].schema_id,
             payload=payload
         )
 
 
-class TopicInNamespaceReaderSchemaMapSetupMixin(object):
+class TopicInFixedNamespacesReaderSchemaMapSetupMixin(object):
 
     @pytest.fixture
     def consumer_source(self, registered_multiple_schemas_with_same_topic):
-        return TopicInNamespace(
-            namespace_name=registered_multiple_schemas_with_same_topic[1].topic.source.namespace.name
+        return TopicsInFixedNamespaces(
+            registered_multiple_schemas_with_same_topic[1].
+            topic.source.namespace.name
         )
 
     @pytest.fixture
-    def expected_message(self, registered_multiple_schemas_with_same_topic, payload):
+    def expected_message(
+        self,
+        registered_multiple_schemas_with_same_topic,
+        payload
+    ):
         return CreateMessage(
             schema_id=registered_multiple_schemas_with_same_topic[1].schema_id,
             payload=payload
@@ -915,12 +901,18 @@ class TopicInSourceReaderSchemaMapSetupMixin(object):
     @pytest.fixture
     def consumer_source(self, registered_multiple_schemas_with_same_topic):
         return TopicInSource(
-            namespace_name=registered_multiple_schemas_with_same_topic[1].topic.source.namespace.name,
-            source_name=registered_multiple_schemas_with_same_topic[1].topic.source.name
+            namespace_name=registered_multiple_schemas_with_same_topic[1].
+            topic.source.namespace.name,
+            source_name=registered_multiple_schemas_with_same_topic[1].
+            topic.source.name
         )
 
     @pytest.fixture
-    def expected_message(self, registered_multiple_schemas_with_same_topic, payload):
+    def expected_message(
+        self,
+        registered_multiple_schemas_with_same_topic,
+        payload
+    ):
         return CreateMessage(
             schema_id=registered_multiple_schemas_with_same_topic[1].schema_id,
             payload=payload
@@ -941,7 +933,11 @@ class FixedSchemasReaderSchemaMapSetupMixin(object):
         )
 
     @pytest.fixture
-    def expected_message(self, registered_multiple_schemas_with_same_topic, payload):
+    def expected_message(
+        self,
+        registered_multiple_schemas_with_same_topic,
+        payload
+    ):
         return CreateMessage(
             schema_id=registered_multiple_schemas_with_same_topic[0].schema_id,
             payload=payload
@@ -990,7 +986,8 @@ class TopicInDataTargetReaderSchemaMapSetupMixin(object):
         return schematizer_client.create_consumer_group_data_source(
             consumer_group_id=consumer_group.consumer_group_id,
             data_source_type=DataSourceTypeEnum.Source,
-            data_source_id=registered_multiple_schemas_with_same_topic[1].topic.source.source_id
+            data_source_id=registered_multiple_schemas_with_same_topic[1].
+            topic.source.source_id
         )
 
     @pytest.fixture
@@ -998,10 +995,34 @@ class TopicInDataTargetReaderSchemaMapSetupMixin(object):
         return TopicInDataTarget(data_target.data_target_id)
 
     @pytest.fixture
-    def expected_message(self, registered_multiple_schemas_with_same_topic, payload):
+    def expected_message(
+        self,
+        registered_multiple_schemas_with_same_topic,
+        payload
+    ):
         return CreateMessage(
             schema_id=registered_multiple_schemas_with_same_topic[1].schema_id,
             payload=payload
+        )
+
+
+class TopicsInFixedNamespacesAutoRefreshSetupMixin(object):
+
+    @pytest.fixture
+    def consumer_source(self, registered_auro_refresh_schema):
+        return TopicsInFixedNamespaces(
+            registered_auro_refresh_schema.topic.source.namespace.name
+        )
+
+
+class TopicInSourceAutoRefreshSetupMixin(object):
+
+    @pytest.fixture
+    def consumer_source(self, registered_auro_refresh_schema):
+        return TopicInSource(
+            namespace_name=registered_auro_refresh_schema.
+            topic.source.namespace.name,
+            source_name=registered_auro_refresh_schema.topic.source.name
         )
 
 
@@ -1116,16 +1137,13 @@ class FixedSchemasSetupMixin(RefreshFixedTopicTests):
 
 class RefreshDynamicTopicTests(RefreshTopicsTestBase):
 
-<<<<<<< HEAD
     def test_no_topics_in_consumer_source(
         self,
         consumer,
         consumer_source,
-        topic
+        topic,
+        partitions
     ):
-=======
-    def test_no_topics_in_consumer_source(self, consumer, consumer_source, topic, partitions):
->>>>>>> master
         actual = consumer.refresh_topics(consumer_source)
         assert actual == []
         self._assert_equal_partition_map(
@@ -1191,7 +1209,13 @@ class RefreshDynamicTopicTests(RefreshTopicsTestBase):
             expected_map={topic: partitions, foo_topic: partitions}
         )
 
-    def test_bad_consumer_source(self, consumer, bad_consumer_source, topic, partitions):
+    def test_bad_consumer_source(
+        self,
+        consumer,
+        bad_consumer_source,
+        topic,
+        partitions
+    ):
         actual = consumer.refresh_topics(bad_consumer_source)
 
         assert actual == []
@@ -1218,7 +1242,10 @@ class RefreshDynamicTopicTests(RefreshTopicsTestBase):
 
 class TopicsInFixedNamespacesSetupMixin(RefreshDynamicTopicTests):
 
-    @pytest.fixture(params=[TopicsInFixedNamespaces, NewTopicsOnlyInFixedNamespaces])
+    @pytest.fixture(params=[
+        TopicsInFixedNamespaces,
+        NewTopicsOnlyInFixedNamespaces
+    ])
     def consumer_source_cls(self, request):
         return request.param
 

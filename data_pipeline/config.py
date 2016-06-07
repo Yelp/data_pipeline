@@ -97,11 +97,9 @@ class Config(object):
 
     @property
     def window_max_time_seconds(self):
-        """Amount of time (in seconds!) that can pass after the last processed messages
-        before batching a set of messages in a BatchedSpolt. If `window_max_messages`,
-        `window_max_time_seconds`, and `window_by_schema_id` are all left to their defaults,
-        a ValueError is raised."""
-        #update docstring. taj.
+        """Maximum amount of time (in seconds!) that can pass after the last
+        processed messages before batching a set of messages in a Consumer.
+        """
         return data_pipeline_conf.read_float(
             'window_max_time_seconds',
             0,
