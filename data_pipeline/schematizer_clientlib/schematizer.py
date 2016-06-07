@@ -108,7 +108,8 @@ class SchematizerClient(object):
             (List of data_pipeline.schematizer_clientlib.models.avro_schema_element.AvroSchemaElement):
                 The list requested avro Schema elements by schema_id.
         """
-        return [element.to_result() for element in self._get_schema_elements_by_schema_id(schema_id)]
+        # Filter out elements that represent the whole record (when element.element_name == None)
+        return [element.to_result() for element in self._get_schema_elements_by_schema_id(schema_id) if element.element_name]
 
     def _get_schema_elements_by_schema_id(self, schema_id):
         response = self._call_api(

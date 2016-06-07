@@ -14,7 +14,7 @@ Args:
     id (int): The element id.
     schema_id (int): The id of the avro schema.
     element_type (): The data type of the element
-    key ():
+    element_name (str): The column corresponding to the key of the AvroSchemaElement
     doc ():
     note (Optional[str]): Information specified by users about the schema.
     created_at (str): The timestamp when the schema is created in ISO-8601
@@ -25,9 +25,11 @@ Args:
 
 AvroSchemaElement = namedtuple(
     'AvroSchemaElement',
-    ['id', 'schema_id', 'element_type', 'key', 'doc',
+    ['id', 'schema_id', 'element_type', 'element_name', 'doc',
      'note', 'created_at', 'updated_at']
 )
+
+_SCHEMA_KEY_DELIMITER = '|'
 
 
 class _AvroSchemaElement(BaseModel):
@@ -40,11 +42,14 @@ class _AvroSchemaElement(BaseModel):
         self.id = id
         self.schema_id = schema_id
         self.element_type = element_type
-        self.key = key
+        self.element_name = None
         self.doc = doc
         self.note = note
         self.created_at = created_at
         self.updated_at = updated_at
+        split_keys = key.split(_SCHEMA_KEY_DELIMITER)
+        if len(split_keys) >= 2:
+            self.element_name = split_keys[1]
 
     @classmethod
     def from_response(cls, response_lst):
@@ -69,7 +74,7 @@ class _AvroSchemaElement(BaseModel):
             id=self.id,
             schema_id=self.schema_id,
             element_type=self.element_type,
-            key=self.key,
+            element_name=self.element_name,
             doc=self.doc,
             note=self.note,
             created_at=self.created_at,
