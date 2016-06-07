@@ -41,8 +41,8 @@ class SchematizerClient(object):
 
     def __init__(self):
         warnings.simplefilter('always', category=DeprecationWarning)
-        warnings.warn("https: // opengrok.yelpcorp.com / xref / clientlibs / data_pipeline / data_pipeline / schema_cache.py  # 30"
-                      "is deprecated.", DeprecationWarning)
+        warnings.warn("https://opengrok.yelpcorp.com/xref/clientlibs/data_pipeline/data_pipeline/schema_cache.py#30"
+                      " is deprecated.", DeprecationWarning)
         self.schema_id_to_schema_map = {}
         self.schema_id_to_topic_map = {}
         self.base_to_transformed_schema_id_map = {}
