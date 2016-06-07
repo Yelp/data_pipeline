@@ -115,8 +115,6 @@ class Containers(object):
             $(make compose-prefix) ps
     """
 
-    services = ["zookeeper", "schematizer", "kafka"]
-
     @classmethod
     def compose_prefix(cls):
         """Returns a configured docker-compose command for the user and project
@@ -224,6 +222,9 @@ class Containers(object):
             getpass.getuser()
         )
         self.additional_compose_file = additional_compose_file
+
+        self.services = ["zookeeper", "schematizer", "kafka"]
+
         if additional_services is not None:
             self.services.extend(additional_services)
 
