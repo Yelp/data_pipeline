@@ -703,10 +703,6 @@ class RefreshTopicsTestBase(object):
         return _register_schema(foo_namespace, foo_src)
 
     @pytest.fixture
-    def test_schemas(self, foo_namespace, foo_src, _register_schema):
-        return _register_schema(foo_namespace, foo_src)
-
-    @pytest.fixture
     def foo_topic(self, foo_schema):
         return foo_schema.topic.name
 
@@ -922,6 +918,16 @@ class TopicInSourceReaderSchemaMapSetupMixin(object):
 class FixedSchemasReaderSchemaMapSetupMixin(object):
 
     @pytest.fixture
+    def registered_non_compatible_schema(self, schematizer_client, example_non_compatible_schema, namespace, source):
+        return schematizer_client.register_schema(
+            namespace=namespace,
+            source=source,
+            schema_str=example_non_compatible_schema,
+            source_owner_email='test@yelp.com',
+            contains_pii=False
+        )
+
+    @pytest.fixture
     def consumer_source(
         self,
         registered_multiple_schemas_with_same_topic,
@@ -1073,11 +1079,10 @@ class MultiTopicsSetupMixin(RefreshFixedTopicTests):
 class FixedSchemasSetupMixin(RefreshFixedTopicTests):
 
     @pytest.fixture
-    def consumer_source(self, foo_schema, foo_schema2, foo_schema3):
+    def consumer_source(self, foo_schema, foo_schema2):
         return FixedSchemas(
             foo_schema.schema_id,
             foo_schema2.schema_id,
-            foo_schema3.schema_id
         )
 
     @pytest.fixture
@@ -1105,29 +1110,10 @@ class FixedSchemasSetupMixin(RefreshFixedTopicTests):
         return _register_schema(foo_namespace, foo_src, avro_schema2)
 
     @pytest.fixture
-    def foo_schema3(
-        self,
-        foo_namespace,
-        foo_src,
-        _register_schema,
-    ):
-        avro_schema3 = {
-            'type': 'record',
-            'name': foo_src,
-            'namespace': foo_namespace,
-            'fields': [
-                {'type': 'int', 'name': 'id'},
-                {'type': 'int', 'name': 'id1'}
-            ]
-        }
-        return _register_schema(foo_namespace, foo_src, avro_schema3)
-
-    @pytest.fixture
-    def expected_topics(self, foo_schema, foo_schema2, foo_schema3):
+    def expected_topics(self, foo_schema, foo_schema2):
         return {
             foo_schema.topic.name,
-            foo_schema2.topic.name,
-            foo_schema3.topic.name
+            foo_schema2.topic.name
         }
 
     @pytest.fixture

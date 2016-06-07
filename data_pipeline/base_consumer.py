@@ -213,8 +213,8 @@ class BaseConsumer(Client):
 
     def _setup_topic_to_reader_schema_map(self):
         """ In case of FixedSchema consumer source, creates a dictionary with
-        key as topic name and value as schema id that is used to decode the
-        messages of that topic.
+        topic name as key and reader schema id as value that would be used to
+        decode the messages of that topic.
         """
         self.topic_to_reader_schema_map = {}
         if isinstance(self.consumer_source, FixedSchemas):
@@ -254,7 +254,6 @@ class BaseConsumer(Client):
         return "consumer"
 
     def __enter__(self):
-
         self.start()
         return self
 

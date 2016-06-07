@@ -6,6 +6,8 @@ import mock
 import pytest
 from kafka import create_message
 from kafka.common import OffsetAndMessage
+from yelp_avro.testing_helpers.generate_payload_data import generate_payload_data
+from yelp_avro.util import get_avro_schema_object
 
 from data_pipeline import message as dp_message
 from data_pipeline._fast_uuid import FastUUID
@@ -601,6 +603,14 @@ class TestCreateFromMessageAndOffset(object):
     @pytest.fixture
     def offset_and_message(self, message):
         return OffsetAndMessage(0, create_message(Envelope().pack(message)))
+
+    @pytest.fixture
+    def example_latest_compatible_schema_obj(self, example_compatible_schema):
+        return get_avro_schema_object(example_compatible_schema)
+
+    @pytest.fixture
+    def example_payload_data_with_latest_schema(self, example_latest_compatible_schema_obj):
+        return generate_payload_data(example_latest_compatible_schema_obj)
 
     def test_create_from_offset_and_message(self, offset_and_message, message):
         extracted_message = create_from_offset_and_message(
