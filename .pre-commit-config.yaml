@@ -16,7 +16,7 @@
     -   id: check-json
     -   id: check-merge-conflict
     -   id: name-tests-test
-        exclude: tests/helpers/(.+).py
+        exclude: (tests/helpers/(.+).py)|(tests/factories/(.+).py)
 -   repo: git@git.yelpcorp.com:yelp_pre_commit_hooks
     sha: cff7fc91c367ea75e2a38e34a4aafb025cf02781
     hooks:
