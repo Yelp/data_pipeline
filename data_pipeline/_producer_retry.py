@@ -165,7 +165,6 @@ class RetryHandler(object):
                     "Cannot get the high watermark. Skip {}.".format(topic_desc),
                     exc_info=1
                 )
-                pass
 
         return requests_to_retry
 
