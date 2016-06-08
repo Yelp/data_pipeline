@@ -8,6 +8,7 @@ from swaggerpy.exception import HTTPError
 from data_pipeline.config import get_config
 from data_pipeline.helpers.singleton import Singleton
 from data_pipeline.schematizer_clientlib.models.avro_schema import _AvroSchema
+from data_pipeline.schematizer_clientlib.models.avro_schema_element import _AvroSchemaElement
 from data_pipeline.schematizer_clientlib.models.consumer_group import _ConsumerGroup
 from data_pipeline.schematizer_clientlib.models.consumer_group_data_source \
     import _ConsumerGroupDataSource
@@ -95,6 +96,27 @@ class SchematizerClient(object):
         )
         _schema = _AvroSchema.from_response(response)
         self._set_cache_by_schema(_schema)
+        return _schema
+
+    def get_schema_elements_by_schema_id(self, schema_id):
+        """Get the avro schema elements of given schema id.
+
+        Args:
+            schema_id (int): The id of requested avro schema elements.
+
+        Returns:
+            (List of data_pipeline.schematizer_clientlib.models.avro_schema_element.AvroSchemaElement):
+                The list requested avro Schema elements by schema_id.
+        """
+        # Filter out elements that represent the whole record (when element.element_name == None)
+        return [element.to_result() for element in self._get_schema_elements_by_schema_id(schema_id) if element.element_name]
+
+    def _get_schema_elements_by_schema_id(self, schema_id):
+        response = self._call_api(
+            api=self._client.schemas.get_schema_elements_by_schema_id,
+            params={'schema_id': schema_id}
+        )
+        _schema = _AvroSchemaElement.from_response(response)
         return _schema
 
     def _make_avro_schema_key(self, schema_json):
