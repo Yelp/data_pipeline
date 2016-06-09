@@ -112,6 +112,13 @@ class Config(object):
         )
 
     @property
+    def schematizer_client_max_connection_retry(self):
+        """Maximum number of times we try to connect to schematizer
+        before giving up.
+        """
+        return 5
+
+    @property
     def cluster_config(self):
         """Returns a yelp_kafka.config.ClusterConfig.
 

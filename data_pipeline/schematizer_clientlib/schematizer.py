@@ -3,8 +3,12 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import simplejson
+from requests import ConnectionError
 from swaggerpy.exception import HTTPError
 
+from data_pipeline._retry_util import ExpBackoffPolicy
+from data_pipeline._retry_util import retry_on_exception
+from data_pipeline._retry_util import RetryPolicy
 from data_pipeline.config import get_config
 from data_pipeline.helpers.singleton import Singleton
 from data_pipeline.schematizer_clientlib.models.avro_schema import _AvroSchema
@@ -845,12 +849,19 @@ class SchematizerClient(object):
         return response
 
     def _call_api(self, api, params=None, request_body=None):
-        # TODO(DATAPIPE-207|joshszep): Include retry strategy support
         request_params = params or {}
         if request_body:
             request_params['body'] = request_body
         request = api(**request_params)
-        response = request.result()
+        retry_policy = RetryPolicy(
+            ExpBackoffPolicy(with_jitter=True),
+            max_retry_count=get_config().schematizer_client_max_connection_retry
+        )
+        response = retry_on_exception(
+            retry_policy=retry_policy,
+            retry_exceptions=ConnectionError,
+            func_to_retry=request.result
+        )
         return response
 
     def _get_cached_schema(self, schema_id):
