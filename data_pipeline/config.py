@@ -113,10 +113,13 @@ class Config(object):
 
     @property
     def schematizer_client_max_connection_retry(self):
-        """Maximum number of times we try to connect to schematizer
-        before giving up.
+        """Maximum number of times schematizer_clientlib tries to connect
+        to schematizer before giving up.
         """
-        return 5
+        return data_pipeline_conf.read_float(
+            'schematizer_client_max_connection_retry',
+            default=5
+        )
 
     @property
     def cluster_config(self):
