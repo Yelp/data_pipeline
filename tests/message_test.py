@@ -120,18 +120,9 @@ class SharedMessageTest(object):
             payload_data={'data': 'foo'}
         )
 
-    def test_reject_encrypted_message_without_encryption(
-        self,
-        pii_schema,
-        valid_message_data
-    ):
-        message_data = self._make_message_data(
-            valid_message_data,
-            schema_id=pii_schema.schema_id
-        )
-        message = self.message_class(**message_data)
+    def test_reject_encrypted_message_without_encryption(self, pii_message):
         with pytest.raises(ValueError):
-            message.encryption_type
+            pii_message.encryption_type
 
     @pytest.mark.parametrize('invalid_keys', [unicode('foo'), [], [str('foo')]])
     def test_reject_non_unicode_keys(self, valid_message_data, invalid_keys):
