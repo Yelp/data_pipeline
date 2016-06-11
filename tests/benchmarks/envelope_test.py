@@ -9,8 +9,9 @@ from tests.factories.base_factory import MessageFactory
 
 
 @pytest.mark.usefixtures(
-    "containers"
+    "config_containers_connections"
 )
+@pytest.mark.benchmark
 class TestBenchEnvelop(object):
 
     @pytest.fixture

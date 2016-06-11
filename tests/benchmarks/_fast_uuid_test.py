@@ -6,8 +6,9 @@ import pytest
 
 
 @pytest.mark.usefixtures(
-    "containers"
+    "config_containers_connections"
 )
+@pytest.mark.benchmark
 class TestBenchFastUUID(object):
 
     def test_uuid1(self, benchmark, fast_uuid):

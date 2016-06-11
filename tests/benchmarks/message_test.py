@@ -10,8 +10,9 @@ from tests.factories.base_factory import SchemaFactory
 
 
 @pytest.mark.usefixtures(
-    "containers"
+    "config_containers_connections"
 )
+@pytest.mark.benchmark
 class TestBenchMessage(object):
 
     def test_create_message(self, benchmark):

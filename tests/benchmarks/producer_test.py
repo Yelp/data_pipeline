@@ -9,14 +9,15 @@ import pytest
 
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.producer import Producer
-from tests.factories.base_factory import MessageFactory
+# from tests.factories.base_factory import MessageFactory
 
 
 @pytest.mark.usefixtures(
     "configure_teams",
     # "patch_monitor_init_start_time_to_now",
-    "containers"
+    "config_containers_connections"
 )
+@pytest.mark.benchmark
 class TestBenchProducer(object):
 
     @pytest.yield_fixture

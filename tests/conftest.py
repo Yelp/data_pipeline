@@ -158,17 +158,19 @@ def payload_data_message(registered_schema, example_payload_data):
 
 @pytest.yield_fixture(scope='session')
 def containers():
-    if pytest.config.getoption("--benchmark-only"):
-        configure_from_dict(dict(
-            schematizer_host_and_port='schematizer:8888',
-            kafka_zookeeper='zk:2181',
-            kafka_broker_list=['kafka:9092'],
-            should_use_testing_containers=True
-        ))
-        yield
-    else:
-        with Containers() as containers:
-            yield containers
+    with Containers() as containers:
+        yield containers
+
+
+@pytest.yield_fixture(scope='session')
+def config_containers_connections():
+    configure_from_dict(dict(
+        schematizer_host_and_port='schematizer:8888',
+        kafka_zookeeper='zk:2181',
+        kafka_broker_list=['kafka:9092'],
+        should_use_testing_containers=True
+    ))
+    yield
 
 
 @pytest.fixture(scope='session')
