@@ -33,12 +33,6 @@ class SharedMessageTest(object):
     def message(self, valid_message_data):
         return self.message_class(**valid_message_data)
 
-    @pytest.fixture
-    def message_with_pii(self, pii_schema, valid_message_data):
-        pii_message = self.message(valid_message_data)
-        pii_message._set_contains_pii(pii_schema.schema_id)
-        return pii_message
-
     @pytest.fixture(params=[
         None,
         100,
@@ -56,16 +50,6 @@ class SharedMessageTest(object):
     ])
     def invalid_payload_data(self, request):
         return request.param
-
-    @pytest.fixture
-    def pii_schema(self, schematizer_client, namespace, source, example_schema):
-        return schematizer_client.register_schema(
-            namespace=namespace,
-            source=source,
-            schema_str=example_schema,
-            source_owner_email='test@yelp.com',
-            contains_pii=True
-        )
 
     def test_rejects_unicode_topic(self, valid_message_data):
         self._assert_invalid_data(valid_message_data, topic=unicode('topic'))
@@ -267,20 +251,26 @@ class SharedMessageTest(object):
         # only use eval to get the original dict when the string is trusted
         assert eval(actual) == expected
 
-    def test_message_str_with_pii(self, message_with_pii):
-        actual = str(message_with_pii)
-        expected_payload_data = {u'good_field': u"<type 'int'>"}
-        expected = {
-            'message_type': self.expected_message_type.name,
-            'schema_id': message_with_pii.schema_id,
-            'timestamp': message_with_pii.timestamp,
-            'meta': message_with_pii._get_meta_attr_avro_repr(),
-            'encryption_type': message_with_pii.encryption_type,
-            'uuid': message_with_pii.uuid_hex,
-            'payload_data': expected_payload_data,
-        }
-        # only use eval to get the original dict when the string is trusted
-        assert eval(actual) == expected
+    def test_message_str_with_pii(self, valid_message_data, pii_schema):
+        message_data = self._make_message_data(
+            valid_message_data,
+            schema_id=pii_schema.schema_id
+        )
+        with reconfigure(encryption_type='AES_MODE_CBC-1'):
+            message_with_pii = self.message_class(**message_data)
+            actual = str(message_with_pii)
+            expected_payload_data = {u'good_field': u"<type 'int'>"}
+            expected = {
+                'message_type': self.expected_message_type.name,
+                'schema_id': message_with_pii.schema_id,
+                'timestamp': message_with_pii.timestamp,
+                'meta': [message_with_pii.meta[0]._asdict()],
+                'encryption_type': message_with_pii.encryption_type,
+                'uuid': message_with_pii.uuid_hex,
+                'payload_data': expected_payload_data,
+            }
+            # only use eval to get the original dict when the string is trusted
+            assert eval(actual) == expected
 
     def assert_equal_decrypted_payload(
         self,
@@ -604,22 +594,29 @@ class TestUpdateMessage(SharedMessageTest):
         # only use eval to get the original dict when the string is trusted
         assert eval(actual) == expected
 
-    def test_message_str_with_pii(self, message_with_pii):
-        actual = str(message_with_pii)
-        expected_payload_data = {u'good_field': u"<type 'int'>"}
-        expected_previous_payload_data = {u'good_field': u"<type 'int'>"}
-        expected = {
-            'message_type': self.expected_message_type.name,
-            'schema_id': message_with_pii.schema_id,
-            'timestamp': message_with_pii.timestamp,
-            'meta': message_with_pii._get_meta_attr_avro_repr(),
-            'encryption_type': message_with_pii.encryption_type,
-            'uuid': message_with_pii.uuid_hex,
-            'payload_data': expected_payload_data,
-            'previous_payload_data': expected_previous_payload_data
-        }
-        # only use eval to get the original dict when the string is trusted
-        assert eval(actual) == expected
+    def test_message_str_with_pii(self, valid_message_data, pii_schema):
+        message_data = self._make_message_data(
+            valid_message_data,
+            schema_id=pii_schema.schema_id
+        )
+        with reconfigure(encryption_type='AES_MODE_CBC-1'):
+            message_with_pii = self.message_class(**message_data)
+            actual = str(message_with_pii)
+
+            expected_payload_data = {u'good_field': u"<type 'int'>"}
+            expected_previous_payload_data = {u'good_field': u"<type 'int'>"}
+            expected = {
+                'message_type': self.expected_message_type.name,
+                'schema_id': message_with_pii.schema_id,
+                'timestamp': message_with_pii.timestamp,
+                'meta': [message_with_pii.meta[0]._asdict()],
+                'encryption_type': message_with_pii.encryption_type,
+                'uuid': message_with_pii.uuid_hex,
+                'payload_data': expected_payload_data,
+                'previous_payload_data': expected_previous_payload_data
+            }
+            # only use eval to get the original dict when the string is trusted
+            assert eval(actual) == expected
 
 
 class TestCreateFromMessageAndOffset(object):

@@ -195,7 +195,7 @@ class Message(object):
 
     @property
     def encryption_type(self):
-        if self._should_be_encrypted and not self._encryption_type:
+        if not self._encryption_type and self._should_be_encrypted:
             self._set_encryption_type()
         return self._encryption_type
 
@@ -236,6 +236,8 @@ class Message(object):
 
     @property
     def meta(self):
+        if not self._encryption_type and self._should_be_encrypted:
+            self._set_encryption_type()
         return self._meta
 
     def _set_meta(self, meta):
@@ -544,23 +546,26 @@ class Message(object):
         self._set_payload_data_if_necessary(self._payload)
         self._set_payload_if_necessary(self._payload_data)
 
-    def _cleaned_pii_data_copy(self, data):
+    def _get_cleaned_pii_data(self, data):
         if not isinstance(data, dict):
             return unicode(type(data))
-        return {key: self._cleaned_pii_data_copy(value) for key, value in data.iteritems()}
+        return {
+            key: self._get_cleaned_pii_data(value)
+            for key, value in data.iteritems()
+        }
 
     @property
     def _str_repr(self):
         cleaned_payload_data = self.payload_data
         if self.contains_pii:
-            cleaned_payload_data = self._cleaned_pii_data_copy(self.payload_data)
+            cleaned_payload_data = self._get_cleaned_pii_data(self.payload_data)
         return {
             'uuid': self.uuid_hex,
             'message_type': self.message_type.name,
             'schema_id': self.schema_id,
             'payload_data': cleaned_payload_data,
             'timestamp': self.timestamp,
-            'meta': self._get_meta_attr_avro_repr(),
+            'meta': None if self.meta is None else [m._asdict() for m in self.meta],
             'encryption_type': self.encryption_type
         }
 
@@ -820,7 +825,7 @@ class UpdateMessage(Message):
         repr_dict = super(UpdateMessage, self)._str_repr
         repr_dict['previous_payload_data'] = (
             self.previous_payload_data if not self.contains_pii
-            else self._cleaned_pii_data_copy(self.previous_payload_data)
+            else self._get_cleaned_pii_data(self.previous_payload_data)
         )
 
         return repr_dict
