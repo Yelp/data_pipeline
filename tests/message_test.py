@@ -51,6 +51,14 @@ class SharedMessageTest(object):
     def invalid_payload_data(self, request):
         return request.param
 
+    @pytest.fixture
+    def pii_message(self, valid_message_data, pii_schema):
+        message_data = self._make_message_data(
+            valid_message_data,
+            schema_id=pii_schema.schema_id
+        )
+        return self.message_class(**message_data)
+
     def test_rejects_unicode_topic(self, valid_message_data):
         self._assert_invalid_data(valid_message_data, topic=unicode('topic'))
 
@@ -251,22 +259,17 @@ class SharedMessageTest(object):
         # only use eval to get the original dict when the string is trusted
         assert eval(actual) == expected
 
-    def test_message_str_with_pii(self, valid_message_data, pii_schema):
-        message_data = self._make_message_data(
-            valid_message_data,
-            schema_id=pii_schema.schema_id
-        )
+    def test_message_str_with_pii(self, pii_message):
         with reconfigure(encryption_type='AES_MODE_CBC-1'):
-            message_with_pii = self.message_class(**message_data)
-            actual = str(message_with_pii)
+            actual = str(pii_message)
             expected_payload_data = {u'good_field': u"<type 'int'>"}
             expected = {
                 'message_type': self.expected_message_type.name,
-                'schema_id': message_with_pii.schema_id,
-                'timestamp': message_with_pii.timestamp,
-                'meta': [message_with_pii.meta[0]._asdict()],
-                'encryption_type': message_with_pii.encryption_type,
-                'uuid': message_with_pii.uuid_hex,
+                'schema_id': pii_message.schema_id,
+                'timestamp': pii_message.timestamp,
+                'meta': [pii_message.meta[0]._asdict()],
+                'encryption_type': pii_message.encryption_type,
+                'uuid': pii_message.uuid_hex,
                 'payload_data': expected_payload_data,
             }
             # only use eval to get the original dict when the string is trusted
@@ -291,16 +294,7 @@ class SharedMessageTest(object):
             message.contains_pii
             assert spy.call_count == 0
 
-    def test_setup_encryption_type_from_config_once(
-        self,
-        pii_schema,
-        valid_message_data
-    ):
-        message_data = self._make_message_data(
-            valid_message_data,
-            schema_id=pii_schema.schema_id
-        )
-        pii_message = self.message_class(**message_data)
+    def test_setup_encryption_type_from_config_once(self, pii_message):
         with reconfigure(encryption_type='Algorithm_one-1'):
             assert pii_message.encryption_type == 'Algorithm_one-1'
         with reconfigure(encryption_type='Algorithm_two-1'):
@@ -594,24 +588,19 @@ class TestUpdateMessage(SharedMessageTest):
         # only use eval to get the original dict when the string is trusted
         assert eval(actual) == expected
 
-    def test_message_str_with_pii(self, valid_message_data, pii_schema):
-        message_data = self._make_message_data(
-            valid_message_data,
-            schema_id=pii_schema.schema_id
-        )
+    def test_message_str_with_pii(self, pii_message):
         with reconfigure(encryption_type='AES_MODE_CBC-1'):
-            message_with_pii = self.message_class(**message_data)
-            actual = str(message_with_pii)
+            actual = str(pii_message)
 
             expected_payload_data = {u'good_field': u"<type 'int'>"}
             expected_previous_payload_data = {u'good_field': u"<type 'int'>"}
             expected = {
                 'message_type': self.expected_message_type.name,
-                'schema_id': message_with_pii.schema_id,
-                'timestamp': message_with_pii.timestamp,
-                'meta': [message_with_pii.meta[0]._asdict()],
-                'encryption_type': message_with_pii.encryption_type,
-                'uuid': message_with_pii.uuid_hex,
+                'schema_id': pii_message.schema_id,
+                'timestamp': pii_message.timestamp,
+                'meta': [pii_message.meta[0]._asdict()],
+                'encryption_type': pii_message.encryption_type,
+                'uuid': pii_message.uuid_hex,
                 'payload_data': expected_payload_data,
                 'previous_payload_data': expected_previous_payload_data
             }
