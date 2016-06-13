@@ -6,6 +6,7 @@ import pytest
 import simplejson as json
 
 from data_pipeline.schema_cache import get_schema_cache
+from data_pipeline.schema_cache import SchematizerClient
 
 
 class TestSchemaCache(object):
@@ -29,6 +30,12 @@ class TestSchemaCache(object):
         return schema_cache.register_schema_from_mysql_stmts(
             **self.sample_schema_create_from_mysql_stmts_data
         )
+
+    def test_schema_cache_deprecated(self):
+        with pytest.warns(DeprecationWarning) as deprecation_record:
+            SchematizerClient()
+        assert (deprecation_record[0].message.args[0] ==
+                "data_pipeline.schema_cache.SchematizerClient is deprecated.")
 
     def test_get_transformed_schema_id(self, schema_cache):
         assert schema_cache.get_transformed_schema_id(0) is None
