@@ -9,7 +9,7 @@ import pytest
 
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.producer import Producer
-# from tests.factories.base_factory import MessageFactory
+from tests.factories.base_factory import MessageFactory
 
 
 @pytest.mark.usefixtures(
@@ -38,11 +38,10 @@ class TestBenchProducer(object):
         ) as producer:
             yield producer
 
-    # this test needs to be fixed
-    # def test_publish(self, benchmark, dp_producer):
+    def test_publish(self, benchmark, dp_producer):
 
-    #     def setup():
-    #         return [MessageFactory.create_message_with_payload_data()], {}
-    #     # timeout for flush currently is 100ms, on an average msg publish take ~1ms
-    #     # 10000 round be ensure 100 flushes
-    #     benchmark.pedantic(dp_producer.publish, setup=setup, rounds=10000)
+        def setup():
+            return [MessageFactory.create_message_with_payload_data()], {}
+        # timeout for flush currently is 100ms, on an average msg publish take ~1ms
+        # 10000 round be ensure 100 flushes
+        benchmark.pedantic(dp_producer.publish, setup=setup, rounds=1000)

@@ -145,7 +145,7 @@ class RetryHandler(object):
 
                 # Update stats for the request that actually succeeds
                 logger.debug("{} actually succeeded.".format(topic_desc))
-                offset = published_count + topic_offsets[topic]
+                offset = published_count + topic_offsets.get(topic, 0)
                 new_stats = _Stats(offset, published_count)
                 self._update_success_topic_stats(topic, partition, new_stats)
 

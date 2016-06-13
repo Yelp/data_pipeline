@@ -25,7 +25,7 @@ class SchemaFactory(object):
         return get_schematizer().register_schema(
             schema_str=cls.SOURCE_SCHEMA,
             namespace='test_namespace',
-            source="test_source_{}".format(randint(0, 1000)),
+            source="test_source_{}".format(randint(0, 100)),
             source_owner_email='test@yelp.com',
             contains_pii=False
         )

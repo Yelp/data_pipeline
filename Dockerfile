@@ -28,7 +28,6 @@ run ln -s /usr/bin/gcc /usr/local/bin/cc
 run pip install virtualenv tox
 
 # Setup clientlib
-run mkdir /data_pipeline
 WORKDIR /data_pipeline
 add requirements.d/dev.txt /data_pipeline/requirements.d/dev.txt
 add requirements.d/tools.txt /data_pipeline/requirements.d/tools.txt
@@ -44,9 +43,6 @@ run mkdir /dp_reqs
 run virtualenv /dp_reqs/venv
 run /dp_reqs/venv/bin/pip install -i https://pypi.yelpcorp.com/simple/ -r /data_pipeline/requirements.d/dev.txt
 
-WORKDIR /data_pipeline
 ADD . /data_pipeline
 
 VOLUME ["/data_pipeline"]
-
-WORKDIR /data_pipeline
