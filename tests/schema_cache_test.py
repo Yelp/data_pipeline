@@ -34,9 +34,8 @@ class TestSchemaCache(object):
     def test_schema_cache_deprecated(self):
         with pytest.warns(DeprecationWarning) as deprecation_record:
             SchematizerClient()
-        assert deprecation_record[0].message.args[0] == str("https://opengrok.yelpcorp.com/"
-                                                            "xref/clientlibs/data_pipeline/data_pipeline/"
-                                                            "schema_cache.py#30 is deprecated.")
+        assert (deprecation_record[0].message.args[0] ==
+                "data_pipeline.schema_cache.SchematizerClient is deprecated.")
 
     def test_get_transformed_schema_id(self, schema_cache):
         assert schema_cache.get_transformed_schema_id(0) is None
