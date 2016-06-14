@@ -1,0 +1,6 @@
+pypy:
+  build: .
+  links:
+    - zookeeper:zk
+    - kafka:kafka
+    - schematizer:schematizer
