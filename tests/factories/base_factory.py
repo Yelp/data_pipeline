@@ -39,9 +39,7 @@ class MessageFactory(object):
 
     @classmethod
     def create_message_with_payload_data(self):
-        schema_json = SchemaFactory.get_schema_json()
-        payload_data = SchemaFactory.get_payload_data()
         return CreateMessage(
-            schema_id=schema_json.schema_id,
-            payload_data=payload_data
+            schema_id=SchemaFactory.get_schema_json().schema_id,
+            payload_data=SchemaFactory.get_payload_data()
         )

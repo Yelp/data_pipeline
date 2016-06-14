@@ -14,7 +14,6 @@ from tests.factories.base_factory import MessageFactory
 
 @pytest.mark.usefixtures(
     "configure_teams",
-    # "patch_monitor_init_start_time_to_now",
     "config_containers_connections"
 )
 @pytest.mark.benchmark
@@ -42,6 +41,10 @@ class TestBenchProducer(object):
 
         def setup():
             return [MessageFactory.create_message_with_payload_data()], {}
-        # timeout for flush currently is 100ms, on an average msg publish take ~1ms
-        # 10000 round be ensure 100 flushes
-        benchmark.pedantic(dp_producer.publish, setup=setup, rounds=1000)
+
+        # Publishing a message takes 1ms on average.
+        # Messages are flushed every 100ms.
+        # config::kafka_producer_flush_time_limit_seconds
+        #
+        # Perform 2000 rounds to ensure 20 flushes.
+        benchmark.pedantic(dp_producer.publish, setup=setup, rounds=2000)

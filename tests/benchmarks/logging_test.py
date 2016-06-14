@@ -14,7 +14,7 @@ from tests.factories.base_factory import MessageFactory
     "config_containers_connections"
 )
 @pytest.mark.benchmark
-class TestLogging(object):
+class TestBenchLogging(object):
 
     @pytest.fixture(
         params=[True, False],
@@ -39,12 +39,12 @@ class TestLogging(object):
     def test_debug_log(self, message, benchmark, patch_logger_enabled):
         @benchmark
         def logr():
-            debug_log(lambda: "Message buffered: %s" % repr(message))
+            debug_log(lambda: "Message buffered: {}".format(repr(message)))
 
     def test_logger(self, benchmark, message, patch_logger_enabled):
         @benchmark
         def logr():
-            get_config().logger.debug("Message buffered: %s" % repr(message))
+            get_config().logger.debug("Message buffered: {}".format(repr(message)))
 
     def test_repr_message(self, benchmark, message):
         @benchmark
