@@ -76,16 +76,7 @@ class SharedMessageTest(object):
             self._assert_invalid_data(valid_message_data, topic=str(''))
 
     def test_warning_from_explicit_topic(self, valid_message_data):
-        mock_date = '2015-01-01'
-        mock_topic = Topic(3, 'name', None, False, [], mock_date, mock_date)
-        mock_schema = AvroSchema(
-            1, 'schema', mock_topic, None, 'RW', None, None, mock_date, mock_date
-        )
-        with mock.patch(
-            'data_pipeline.schematizer_clientlib.schematizer.SchematizerClient'
-            '.get_schema_by_id',
-            return_value=mock_schema
-        ), warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter('always', category=DeprecationWarning)
             self._assert_invalid_data_warning(valid_message_data, topic=str('Non-empty string'))
             assert len(w) == 1
