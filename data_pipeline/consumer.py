@@ -179,11 +179,6 @@ class Consumer(BaseConsumer):
         has_timeout = timeout is not None
         if has_timeout:
             max_time = time() + timeout
-        #is_max_time_set = False
-        #import ipdb;ipdb.set_trace()
-        # if has_timeout and not is_max_time_set:
-        #     max_time = time() + timeout
-        #     #is_max_time_set = True
         while len(messages) < count:
             self._refresh_source_topics_if_necessary()
 

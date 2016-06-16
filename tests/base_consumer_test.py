@@ -31,7 +31,7 @@ from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from tests.helpers.mock_utils import attach_spy_on_func
 
 
-TIMEOUT = 1.1
+TIMEOUT = 1.5
 """ TIMEOUT is used for all 'get_messages' calls in these tests. It's
 essential that this value is large enough for the background workers
 to have a chance to retrieve the messages, but otherwise as small
