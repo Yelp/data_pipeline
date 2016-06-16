@@ -195,11 +195,12 @@ class Message(object):
 
     @property
     def encryption_type(self):
-        if not self._encryption_type and self._should_be_encrypted:
-            self._set_encryption_type()
+        self._set_encryption_type_if_necessary()
         return self._encryption_type
 
-    def _set_encryption_type(self):
+    def _set_encryption_type_if_necessary(self):
+        if self._encryption_type or not self._should_be_encrypted:
+            return
         config_encryption_type = get_config().encryption_type
         if config_encryption_type is None:
             raise ValueError(
@@ -236,8 +237,7 @@ class Message(object):
 
     @property
     def meta(self):
-        if not self._encryption_type and self._should_be_encrypted:
-            self._set_encryption_type()
+        self._set_encryption_type_if_necessary()
         return self._meta
 
     def _set_meta(self, meta):
