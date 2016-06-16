@@ -6,12 +6,16 @@ import logging
 import os
 from uuid import uuid4
 
+import mock
 import pytest
 import simplejson
 from yelp_avro.avro_string_writer import AvroStringWriter
 from yelp_avro.testing_helpers.generate_payload_data import generate_payload_data
 from yelp_avro.util import get_avro_schema_object
 
+import data_pipeline._fast_uuid
+from data_pipeline._fast_uuid import FastUUID
+from data_pipeline.config import configure_from_dict
 from data_pipeline.message import CreateMessage
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.testing_helpers.containers import Containers
@@ -207,6 +211,17 @@ def containers():
         yield containers
 
 
+@pytest.yield_fixture(scope='session')
+def config_containers_connections():
+    configure_from_dict(dict(
+        schematizer_host_and_port='schematizer:8888',
+        kafka_zookeeper='zk:2181',
+        kafka_broker_list=['kafka:9092'],
+        should_use_testing_containers=True
+    ))
+    yield
+
+
 @pytest.fixture(scope='session')
 def kafka_docker(containers):
     return containers.get_kafka_connection()
@@ -292,3 +307,28 @@ def schema_ref(schema_ref_dict, schema_ref_defaults):
         schema_ref=schema_ref_dict,
         defaults=schema_ref_defaults
     )
+
+
+@pytest.fixture(params=[True, False])
+def libuuid_available(request):
+    return request.param
+
+
+@pytest.yield_fixture
+def fast_uuid(libuuid_available):
+    if libuuid_available:
+        yield FastUUID()
+    else:
+        with mock.patch.object(
+            data_pipeline._fast_uuid,
+            'FFI',
+            side_effect=Exception
+        ):
+            # Save and restore the existing state; this will allow already
+            # instantiated FastUUID instances to keep working.
+            original_ffi = data_pipeline._fast_uuid._LibUUID._ffi
+            data_pipeline._fast_uuid._LibUUID._ffi = None
+            try:
+                yield FastUUID()
+            finally:
+                data_pipeline._fast_uuid._LibUUID._ffi = original_ffi

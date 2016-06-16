@@ -56,3 +56,9 @@ class InitializationVector(MetaAttribute):
     @property
     def payload(self):
         return self.initialization_vector_array
+
+    def _asdict(self):
+        return {
+            'schema_id': self.schema_id,
+            'payload_data': self.payload.encode('hex')
+        }
