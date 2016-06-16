@@ -1,3 +1,9 @@
+data-pipeline-tools (0.2.2) lucid; urgency=low
+
+  * Commit: refactored set encryption type function in Message class
+
+ -- Chia-Chi Lin <clin@yelp.com>  Thu, 16 Jun 2016 07:50:34 -0700
+
 data-pipeline-tools (0.2.1) lucid; urgency=low
 
   * Commit: Merge branch 'datapipe-917-Remove-topic-offsets-tracking-
