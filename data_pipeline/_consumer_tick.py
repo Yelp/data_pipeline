@@ -12,7 +12,6 @@ class _ConsumerTick(object):
     """
 
     def __init__(self, refresh_time_seconds):
-        # self.refresh_time_seconds = refresh_time_seconds or get_config().window_max_time_seconds
         self.refresh_time_seconds = refresh_time_seconds
         self._reset()
 

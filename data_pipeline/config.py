@@ -95,16 +95,6 @@ class Config(object):
         """
         return data_pipeline_conf.read_float('topic_refresh_frequency_seconds', 300)
 
-    # @property
-    # def window_max_time_seconds(self):
-    #     """Maximum amount of time (in seconds!) that can pass after the last
-    #     processed messages before batching a set of messages in a Consumer.
-    #     """
-    #     return data_pipeline_conf.read_float(
-    #         'window_max_time_seconds',
-    #         0,
-    #     )
-
     @property
     def load_schematizer_host_and_port_from_smartstack(self):
         """Load the host and port from SmartStack instead of setting it
@@ -128,16 +118,6 @@ class Config(object):
         """
         return client.get_client(
             'http://{0}/api-docs'.format(self.schematizer_host_and_port)
-        )
-
-    @property
-    def schematizer_client_max_connection_retry(self):
-        """Maximum number of times schematizer_clientlib tries to connect
-        to schematizer before giving up.
-        """
-        return data_pipeline_conf.read_float(
-            'schematizer_client_max_connection_retry',
-            default=5
         )
 
     @property

@@ -107,9 +107,7 @@ class BaseConsumer(Client):
             manually set, or a map from partition to offset. If
             fetch_offsets_for_topics is None, then the consumer will pick up
             the last committed offsets of topics. If implemented, this function
-            will be called every time consumer refreshes the topics. The
-            default behavior is storing offsets in Kafka, and resetting to the
-            smallest(`auto_offset_reset`) offset.
+            will be called every time consumer refreshes the topics.
         pre_topic_refresh_callback: (Optional[Callable[[list[str], list[str]],
             Any]]): Optional callback that gets executed right before the
             consumer is about to refresh the topics. The callback function is
@@ -197,7 +195,8 @@ class BaseConsumer(Client):
 
     def _get_topic_to_consumer_topic_state_map(
         self,
-        topic_to_partition_map, consumer_source
+        topic_to_partition_map,
+        consumer_source
     ):
         """ Get the topic_to_partition_map, refreshes the consumer source
         and return the updated topic_to_consumer_topic_state_map
