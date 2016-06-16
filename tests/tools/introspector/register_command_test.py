@@ -227,7 +227,7 @@ class TestRegisterMysqlCommand(BaseTestRegister):
             'fields': [
                 {'name': 'id', 'type': 'int'},
                 {'name': 'name',
-                 'type': ['null', 'string'], 'maxlen': '8', 'default': None}
+                 'type': ['null', 'string'], 'maxlen': 8, 'default': None}
             ]
         }
 
