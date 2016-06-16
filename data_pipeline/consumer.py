@@ -34,13 +34,14 @@ class Consumer(BaseConsumer):
             consumer_name is used. If there is no committed kafka offset for
             the consumer_name the consumer will begin from the
             `auto_offset_reset` offset in the topic.
-        consumer_source (ConsumerSource): The source of topics to tail. It must
-            be a :class: `data_pipeline.consumer_source.ConsumerSource` object.
-            For example, to process messages from a fixed set of topics, use
-            :class:data_pipeline.consumer_source.FixedTopics.
-            In case of FixedSchema consumer source, at most one schema_id per
-            topic is provided. Consumer would use that schema as reader schema
-            to decode the message. In case no schema id for a topic is
+        consumer_source (ConsumerSource): Object to specify the topics this
+            consumer consumes messages from. It must be a
+            :class:`data_pipeline.consumer_source.ConsumerSource` object. For
+            example, to process messages from a fixed set of topics, use
+            :class:`data_pipeline.consumer_source.FixedTopics`.
+            In case of FixedSchema consumer source, at most one schema_id can
+            be provided per topic. Consumer would use that schema as reader
+            schema to decode the message. In case no schema id for a topic is
             specified then the Consumer would use the schema id, the message
             was encoded with, to decode the message.
         auto_offset_reset (str): automatically resets the offset when there is
@@ -63,21 +64,21 @@ class Consumer(BaseConsumer):
             pre_rebalance_callback and this callback.
         fetch_offsets_for_topics: (Optional[Callable[List[str],
             Dict[str, Optional[Dict[int, int]]]]]): Optional callback which is
-            passed a list of new_topics which doesn't exist in the
-            `topic_to_partition_map` map. This callback should return a
-            dictionary where keys are topic names and values are either None
-            if no offset should be manually set, or a map from partition to
-            offset. If fetch_offsets_for_topics is None, then the consumer will
-            pick up the last committed offsets of topics.
-            If implemented, this function will be called at the start of the
-            consumer and every time consumer refreshes itself to include to new
-            topics. The default behavior is storing offsets in Kafka, and
-            resetting to the smallest(`auto_offset_reset`) offset.
+            passed a list of topics, and should return a dictionary where keys
+            are topic names and values are either None if no offset should be
+            manually set, or a map from partition to offset. If
+            fetch_offsets_for_topics is None, then the consumer will pick up
+            the last committed offsets of topics. If implemented, this function
+            will be called every time consumer refreshes the topics. The
+            default behavior is storing offsets in Kafka, and resetting to the
+            smallest(`auto_offset_reset`) offset.
         pre_topic_refresh_callback: (Optional[Callable[[list[str], list[str]],
-            Any]]): function that performs custom logic whenever consumer
-            refreshes itself and starts tailing new topics. The function will
-            take a list of old_topic_names and list of new_topic_names. The
-            return value of the function is ignored.
+            Any]]): Optional callback that gets executed right before the
+            consumer is about to refresh the topics. The callback function is
+            passed in a list of topic names Consumer is currently consuming
+            from (old topics) and a list of topic names Consumer will be
+            consuming from (new topics). The return value of the function is
+            ignored.
 
     Note:
         The Consumer leverages the yelp_kafka `KafkaConsumerGroup`.
@@ -175,11 +176,17 @@ class Consumer(BaseConsumer):
             how many messages were retrieved within the timeout.
         """
         messages = []
-        self._refresh_consumer_source_topics_if_necessary()
         has_timeout = timeout is not None
         if has_timeout:
             max_time = time() + timeout
+        #is_max_time_set = False
+        #import ipdb;ipdb.set_trace()
+        # if has_timeout and not is_max_time_set:
+        #     max_time = time() + timeout
+        #     #is_max_time_set = True
         while len(messages) < count:
+            self._refresh_source_topics_if_necessary()
+
             try:
                 default_iter_timeout = self.consumer_group.iter_timeout
                 # Converting seconds to milliseconds
@@ -193,32 +200,32 @@ class Consumer(BaseConsumer):
                 message.topic,
                 message,
                 self.force_payload_decode,
-                reader_schema_id=self.topic_to_reader_schema_map.get(message.topic)
+                reader_schema_id=self._topic_to_reader_schema_map.get(message.topic)
             )
             messages.append(message)
             if not blocking or (has_timeout and time() > max_time):
                 break
         return messages
 
-    def _refresh_consumer_source_topics_if_necessary(self):
-        if not self.refresh_timer.should_tick():
+    def _refresh_source_topics_if_necessary(self):
+        if not self._refresh_timer.should_tick():
             return
 
         old_topics = self.topic_to_partition_map.keys()
-        new_topics = (
-            self.consumer_source.get_topics() if self.consumer_source else []
-        )
+        new_topics = self._get_topic_to_consumer_topic_state_map(
+            self.topic_to_partition_map,
+            self.consumer_source
+        ).keys()
 
-        if set(new_topics).issubset(set(old_topics)):
+        if set(old_topics) == set(new_topics):
             return
+
         if self.pre_topic_refresh_callback:
             self.pre_topic_refresh_callback(old_topics, new_topics)
+        self._refresh_source_topics()
 
-        self._refresh_consumer_source_topics()
-
-    def _refresh_consumer_source_topics(self):
-        self.reset_topics(
-            self._get_topic_to_consumer_topic_state_map(
-                self._convert_to_topic_state_map(self.topic_to_partition_map)
-            )
-        )
+    def _refresh_source_topics(self):
+        self.reset_topics(self._get_topic_to_consumer_topic_state_map(
+            self.topic_to_partition_map,
+            self.consumer_source
+        ))

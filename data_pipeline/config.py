@@ -95,15 +95,15 @@ class Config(object):
         """
         return data_pipeline_conf.read_float('topic_refresh_frequency_seconds', 300)
 
-    @property
-    def window_max_time_seconds(self):
-        """Maximum amount of time (in seconds!) that can pass after the last
-        processed messages before batching a set of messages in a Consumer.
-        """
-        return data_pipeline_conf.read_float(
-            'window_max_time_seconds',
-            0,
-        )
+    # @property
+    # def window_max_time_seconds(self):
+    #     """Maximum amount of time (in seconds!) that can pass after the last
+    #     processed messages before batching a set of messages in a Consumer.
+    #     """
+    #     return data_pipeline_conf.read_float(
+    #         'window_max_time_seconds',
+    #         0,
+    #     )
 
     @property
     def load_schematizer_host_and_port_from_smartstack(self):
