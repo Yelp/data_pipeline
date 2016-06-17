@@ -25,13 +25,14 @@ class FakeParserError(Exception):
 @pytest.mark.usefixtures('containers')
 class TestIntrospectorBase(object):
     def _register_avro_schema(self, namespace, source, two_fields):
-        fields = [{'type': 'int', 'name': 'foo'}]
+        fields = [{'type': 'int', 'doc': 'test', 'name': 'foo'}]
         if two_fields:
-            fields.append({'type': 'int', 'name': 'bar'})
+            fields.append({'type': 'int', 'doc': 'test', 'name': 'bar'})
         schema_json = {
             'type': 'record',
             'name': source,
             'namespace': namespace,
+            'doc': 'test',
             'fields': fields
         }
         return get_schematizer().register_schema(

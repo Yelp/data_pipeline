@@ -52,8 +52,9 @@ def example_schema(namespace, source):
         "type":"record",
         "namespace": "%s",
         "name": "%s",
+        "doc":"test",
         "fields":[
-            {"type":"int", "name":"good_field"}
+            {"type":"int", "name":"good_field", "doc":"test"}
         ]
     }
     ''' % (namespace, source)
@@ -99,8 +100,9 @@ def example_meta_attr_schema(namespace):
         "type":"record",
         "namespace":"%s",
         "name":"good_meta_attribute",
+        "doc":"test",
         "fields":[
-            {"type":"int", "name":"good_payload"}
+            {"type":"int", "name":"good_payload", "doc":"test"}
         ]
     }
     ''' % (namespace)

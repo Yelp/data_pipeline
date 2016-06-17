@@ -411,7 +411,8 @@ class RefreshNewTopicsTest(object):
             'type': 'record',
             'name': source,
             'namespace': namespace,
-            'fields': [{'type': 'int', 'name': 'id'}]
+            'doc': 'test',
+            'fields': [{'type': 'int', 'doc': 'test', 'name': 'id'}]
         }
         reg_schema = get_schematizer().register_schema_from_schema_json(
             namespace=namespace,
@@ -626,8 +627,9 @@ class RefreshTopicsTestBase(object):
             avro_schema = avro_schema or {
                 'type': 'record',
                 'name': source,
+                'doc': 'test',
                 'namespace': namespace,
-                'fields': [{'type': 'int', 'name': 'id'}]
+                'fields': [{'type': 'int', 'doc': 'test', 'name': 'id'}]
             }
             new_schema = schematizer_client.register_schema_from_schema_json(
                 namespace=namespace,
@@ -711,8 +713,9 @@ class RefreshTopicsTestBase(object):
         avro_schema = {
             'type': 'record',
             'name': foo_src,
+            'doc': 'test',
             'namespace': foo_namespace,
-            'fields': [{'type': 'int', 'name': 'id'}]
+            'fields': [{'type': 'int', 'doc': 'test', 'name': 'id'}]
         }
         new_schema = schematizer_client.register_schema_from_schema_json(
             namespace=foo_namespace,
@@ -822,8 +825,9 @@ class MultiTopicsSetupMixin(RefreshFixedTopicTests):
         new_schema = {
             'type': 'record',
             'name': foo_src,
+            'doc': 'test',
             'namespace': foo_namespace,
-            'fields': [{'type': 'string', 'name': 'memo'}]
+            'fields': [{'type': 'string', 'doc': 'test', 'name': 'memo'}]
         }
         return _register_schema(foo_namespace, foo_src, new_schema)
 
@@ -915,8 +919,9 @@ class RefreshDynamicTopicTests(RefreshTopicsTestBase):
         new_schema = {
             'type': 'record',
             'name': 'src_two',
+            'doc': 'test',
             'namespace': 'namespace_two',
-            'fields': [{'type': 'bytes', 'name': 'md5'}]
+            'fields': [{'type': 'bytes', 'doc': 'test', 'name': 'md5'}]
         }
         _register_schema('namespace_two', 'src_two', new_schema)
 

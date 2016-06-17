@@ -152,9 +152,10 @@ class TestCompactionSetter(object):
             'type': 'record',
             'name': source.name,
             'namespace': namespace.name,
+            'doc': 'test',
             'fields': [
-                {'type': 'int', 'name': 'id', 'pkey': 1},
-                {'type': 'int', 'name': 'data'}
+                {'type': 'int', 'doc': 'test', 'name': 'id', 'pkey': 1},
+                {'type': 'int', 'doc': 'test', 'name': 'data'}
             ],
             'pkey': ['id']
         }

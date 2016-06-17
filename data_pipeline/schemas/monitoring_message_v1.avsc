@@ -18,6 +18,7 @@
       "name": "client_type",
       "type": {
         "name": "client_type",
+        "doc": "ENUM of Client Types",
         "type": "enum",
         "symbols": [
           "producer",
