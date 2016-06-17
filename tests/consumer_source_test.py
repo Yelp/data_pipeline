@@ -26,9 +26,10 @@ class ConsumerSourceTestBase(object):
         def register_func(namespace, source, avro_schema=None):
             avro_schema = avro_schema or {
                 'type': 'record',
+                'doc': 'test',
                 'name': source,
                 'namespace': namespace,
-                'fields': [{'type': 'int', 'name': 'id'}]
+                'fields': [{'type': 'int', 'doc': 'test', 'name': 'id'}]
             }
             new_schema = schematizer_client.register_schema_from_schema_json(
                 namespace=namespace,
@@ -82,7 +83,8 @@ class ConsumerSourceTestBase(object):
             'type': 'record',
             'name': foo_src,
             'namespace': foo_namespace,
-            'fields': [{'type': 'string', 'name': 'memo'}]
+            'doc': 'test',
+            'fields': [{'type': 'string', 'doc': 'test', 'name': 'memo'}]
         }
         return _register_schema(foo_namespace, foo_src, new_schema)
 
@@ -113,8 +115,9 @@ class FixedTopicsSourceTestBase(ConsumerSourceTestBase):
         new_schema = {
             'type': 'record',
             'name': foo_src,
+            'doc': 'test',
             'namespace': foo_namespace,
-            'fields': [{'type': 'bytes', 'name': 'md5'}]
+            'fields': [{'type': 'bytes', 'doc': 'test', 'name': 'md5'}]
         }
         _register_schema(foo_namespace, foo_src, new_schema)
         assert set(consumer_source.get_topics()) == expected
@@ -269,8 +272,9 @@ class DynamicTopicSrcTests(ConsumerSourceTestBase):
         new_schema = {
             'type': 'record',
             'name': foo_src,
+            'doc': 'test',
             'namespace': foo_namespace,
-            'fields': [{'type': 'bytes', 'name': 'md5'}]
+            'fields': [{'type': 'bytes', 'doc': 'test', 'name': 'md5'}]
         }
         new_topic_name = _register_schema(foo_namespace, foo_src, new_schema).topic.name
         expected_source_topics.add(new_topic_name)
@@ -286,8 +290,9 @@ class DynamicTopicSrcTests(ConsumerSourceTestBase):
         new_schema = {
             'type': 'record',
             'name': 'src_two',
+            'doc': 'test',
             'namespace': 'namespace_two',
-            'fields': [{'type': 'bytes', 'name': 'md5'}]
+            'fields': [{'type': 'bytes', 'doc': 'test', 'name': 'md5'}]
         }
         _register_schema('namespace_two', 'src_two', new_schema)
         assert set(consumer_source.get_topics()) == expected_source_topics
@@ -374,8 +379,9 @@ class NewTopicOnlySrcTests(ConsumerSourceTestBase):
         new_schema = {
             'type': 'record',
             'name': foo_src,
+            'doc': 'test',
             'namespace': foo_namespace,
-            'fields': [{'type': 'bytes', 'name': 'md5'}]
+            'fields': [{'type': 'bytes', 'doc': 'test', 'name': 'md5'}]
         }
         new_topic = _register_schema(foo_namespace, foo_src, new_schema).topic.name
         assert consumer_source.get_topics() == [new_topic]
@@ -393,8 +399,9 @@ class NewTopicOnlySrcTests(ConsumerSourceTestBase):
         new_schema = {
             'type': 'record',
             'name': 'src_two',
+            'doc': 'test',
             'namespace': 'namespace_two',
-            'fields': [{'type': 'bytes', 'name': 'md5'}]
+            'fields': [{'type': 'bytes', 'doc': 'test', 'name': 'md5'}]
         }
         _register_schema('namespace_two', 'src_two', new_schema)
         assert consumer_source.get_topics() == []

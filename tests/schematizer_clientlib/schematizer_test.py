@@ -82,7 +82,8 @@ class SchematizerClientTestBase(object):
             'type': 'record',
             'name': source,
             'namespace': namespace,
-            'fields': [{'type': 'int', 'name': 'foo'}]
+            'doc': 'test',
+            'fields': [{'type': 'int', 'doc': 'test', 'name': 'foo'}]
         }
         params = {
             'namespace': namespace,
@@ -225,7 +226,8 @@ class TestGetSchemaBySchemaJson(SchematizerClientTestBase):
             'type': 'record',
             'name': biz_src_name,
             'namespace': yelp_namespace,
-            'fields': [{'type': 'int', 'name': 'biz_id'}]
+            'doc': 'test',
+            'fields': [{'type': 'int', 'doc': 'test', 'name': 'biz_id'}]
         }
 
     @pytest.fixture
@@ -455,7 +457,7 @@ class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
     @pytest.fixture(autouse=True, scope='class')
     def biz_schema_two(self, biz_schema):
         new_schema = simplejson.loads(biz_schema.schema)
-        new_schema['fields'].append({'type': 'int', 'name': 'bar', 'default': 0})
+        new_schema['fields'].append({'type': 'int', 'doc': 'test', 'name': 'bar', 'default': 0})
         return self._register_avro_schema(
             namespace=biz_schema.topic.source.namespace.name,
             source=biz_schema.topic.source.name,
@@ -503,7 +505,8 @@ class TestRegisterSchema(SchematizerClientTestBase):
             'type': 'record',
             'name': biz_src_name,
             'namespace': yelp_namespace,
-            'fields': [{'type': 'int', 'name': 'biz_id'}]
+            'doc': 'test',
+            'fields': [{'type': 'int', 'doc': 'test', 'name': 'biz_id'}]
         }
 
     @pytest.fixture
@@ -696,9 +699,10 @@ class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
             'type': 'record',
             'name': biz_src_name,
             'namespace': '',
+            'doc': 'test',
             'fields': [
-                {'name': 'id', 'type': 'int'},
-                {'name': 'name',
+                {'name': 'id', 'doc': 'test', 'type': 'int'},
+                {'name': 'name', 'doc': 'test',
                  'type': ['null', 'string'], 'maxlen': '8', 'default': None}
             ]
         }
@@ -905,8 +909,9 @@ class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
             'type': 'record',
             'name': biz_src_name,
             'namespace': yelp_namespace,
+            'doc': 'test',
             'fields': [
-                {'type': 'int', 'name': 'biz_id'}
+                {'type': 'int', 'doc': 'test', 'name': 'biz_id'}
             ]
         }
 
@@ -916,9 +921,10 @@ class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
             'type': 'record',
             'name': biz_src_name,
             'namespace': yelp_namespace,
+            'doc': 'test',
             'fields': [
-                {'type': 'int', 'name': 'biz_id'},
-                {'type': 'int', 'name': 'new_field'}
+                {'type': 'int', 'doc': 'test', 'name': 'biz_id'},
+                {'type': 'int', 'doc': 'test', 'name': 'new_field'}
             ]
         }
 
@@ -966,9 +972,10 @@ class TestFilterTopicsByPkeys(SchematizerClientTestBase):
             'type': 'record',
             'name': usr_src_name,
             'namespace': yelp_namespace,
+            'doc': 'test',
             'fields': [
-                {'type': 'int', 'name': 'id', 'pkey': 1},
-                {'type': 'int', 'name': 'data'}
+                {'type': 'int', 'doc': 'test', 'name': 'id', 'pkey': 1},
+                {'type': 'int', 'doc': 'test', 'name': 'data'}
             ],
             'pkey': ['id']
         }
@@ -1295,8 +1302,9 @@ class TestGetSchemaMigration(SchematizerClientTestBase):
         return {
             'type': 'record',
             'name': 'schema_a',
+            'doc': 'test',
             'namespace': 'test_namespace',
-            'fields': [{'type': 'int', 'name': 'test_id'}]
+            'fields': [{'type': 'int', 'doc': 'test', 'name': 'test_id'}]
         }
 
     @pytest.fixture(params=[True, False])

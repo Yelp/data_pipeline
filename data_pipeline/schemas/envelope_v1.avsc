@@ -18,6 +18,7 @@
       "type": {
         "name": "message_type",
         "type": "enum",
+        "doc": "Types of Messages",
         "symbols": [
           "create",
           "update",
