@@ -5,6 +5,11 @@ from __future__ import unicode_literals
 import mock
 import pytest
 
+import data_pipeline._fast_uuid
+from data_pipeline._fast_uuid import _DefaultUUID
+from data_pipeline._fast_uuid import _LibUUID
+from data_pipeline._fast_uuid import FastUUID
+
 
 class TestFastUUID(object):
 

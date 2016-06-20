@@ -6,15 +6,12 @@ import logging
 import os
 from uuid import uuid4
 
-import mock
 import pytest
 import simplejson
 from yelp_avro.avro_string_writer import AvroStringWriter
 from yelp_avro.testing_helpers.generate_payload_data import generate_payload_data
 from yelp_avro.util import get_avro_schema_object
 
-import data_pipeline._fast_uuid
-from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import configure_from_dict
 from data_pipeline.message import CreateMessage
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
