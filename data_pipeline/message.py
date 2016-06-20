@@ -2,18 +2,16 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import time
 import warnings
 from collections import namedtuple
 from uuid import UUID
 
 from yelp_lib.containers.lists import unlist
 
+from data_pipeline._avro_payload import _AvroPayload
 from data_pipeline._encryption_helper import EncryptionHelper
-from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
-from data_pipeline.helpers.yelp_avro_store import _AvroStringStore
 from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
 from data_pipeline.meta_attribute import MetaAttribute
@@ -125,32 +123,17 @@ class Message(object):
     data_pipeline.message_type.MessageType. It must be set by child class.
     """
 
-    _fast_uuid = FastUUID()
-    """UUID generator - this isn't a @cached_property so it can be serialized"""
-
     @property
     def _schematizer(self):
         return get_schematizer()
 
     @property
     def topic(self):
-        return self._topic
-
-    def _set_topic(self, topic):
-        if not isinstance(topic, str):
-            raise TypeError("Topic must be a non-empty string")
-        if len(topic) == 0:
-            raise ValueError("Topic must be a non-empty string")
-        self._topic = topic
+        return self._avro_payload.topic
 
     @property
     def schema_id(self):
-        return self._schema_id
-
-    def _set_schema_id(self, schema_id):
-        if not isinstance(schema_id, int):
-            raise TypeError("Schema id should be an int")
-        self._schema_id = schema_id
+        return self._avro_payload.schema_id
 
     @property
     def message_type(self):
@@ -159,22 +142,7 @@ class Message(object):
 
     @property
     def uuid(self):
-        return self._uuid
-
-    def _set_uuid(self, uuid):
-        if uuid is None:
-            # UUID generation is expensive.  Using FastUUID instead of the built
-            # in UUID methods increases Messages that can be instantiated per
-            # second from ~25,000 to ~185,000.  Not generating UUIDs at all
-            # increases the throughput further still to about 730,000 per
-            # second.
-            uuid = self._fast_uuid.uuid4()
-        elif len(uuid) != 16:
-            raise TypeError(
-                "UUIDs should be exactly 16 bytes.  Conforming UUID's can be "
-                "generated with `import uuid; uuid.uuid4().bytes`."
-            )
-        self._uuid = uuid
+        return self._avro_payload.uuid
 
     @property
     def uuid_hex(self):
@@ -183,15 +151,7 @@ class Message(object):
 
     @property
     def contains_pii(self):
-        if self._contains_pii is not None:
-            return self._contains_pii
-        self._set_contains_pii()
-        return self._contains_pii
-
-    def _set_contains_pii(self):
-        self._contains_pii = self._schematizer.get_schema_by_id(
-            self.schema_id
-        ).topic.contains_pii
+        return self._avro_payload.contains_pii
 
     @property
     def encryption_type(self):
@@ -230,10 +190,7 @@ class Message(object):
 
     @property
     def dry_run(self):
-        return self._dry_run
-
-    def _set_dry_run(self, dry_run):
-        self._dry_run = dry_run
+        return self._avro_payload.dry_run
 
     @property
     def meta(self):
@@ -259,12 +216,7 @@ class Message(object):
 
     @property
     def timestamp(self):
-        return self._timestamp
-
-    def _set_timestamp(self, timestamp):
-        if timestamp is None:
-            timestamp = int(time.time())
-        self._timestamp = timestamp
+        return self._avro_payload.timestamp
 
     @property
     def upstream_position_info(self):
@@ -300,41 +252,6 @@ class Message(object):
         self._kafka_position_info = kafka_position_info
 
     @property
-    def _avro_string_writer(self):
-        """get the writer from store if already exists"""
-        return _AvroStringStore().get_writer(self.schema_id)
-
-    @property
-    def _avro_string_reader(self):
-        """get the reader from store if already exists"""
-        return _AvroStringStore().get_reader(
-            reader_schema_id=self.schema_id,
-            writer_schema_id=self.schema_id
-        )
-
-    @property
-    def payload(self):
-        self._set_payload_if_necessary(self._payload_data)
-        return self._payload
-
-    def _set_payload(self, payload):
-        if not isinstance(payload, bytes):
-            raise TypeError("Payload must be bytes")
-        self._payload = payload
-        self._payload_data = None  # force payload_data to be re-decoded
-
-    @property
-    def payload_data(self):
-        self._set_payload_data_if_necessary(self._payload)
-        return self._payload_data
-
-    def _set_payload_data(self, payload_data):
-        if not isinstance(payload_data, dict):
-            raise TypeError("Payload data must be a dict")
-        self._payload_data = payload_data
-        self._payload = None  # force payload to be re-encoded
-
-    @property
     def keys(self):
         return self._keys
 
@@ -344,6 +261,14 @@ class Message(object):
         if self._any_invalid_type(keys, unicode):
             raise TypeError("Element of keys must be unicode.")
         self._keys = keys
+
+    @property
+    def payload(self):
+        return self._avro_payload.payload
+
+    @property
+    def payload_data(self):
+        return self._avro_payload.payload_data
 
     @property
     def payload_diff(self):
@@ -381,40 +306,26 @@ class Message(object):
                 "contains_pii is deprecated. Please stop passing it in.",
                 DeprecationWarning
             )
-
-        self._set_schema_id(schema_id)
-        self._set_topic(
-            topic or str(self._schematizer.get_schema_by_id(schema_id).topic.name)
+        self._avro_payload = _AvroPayload(
+            schema_id=schema_id,
+            topic=topic,
+            payload=payload,
+            payload_data=payload_data,
+            uuid=uuid,
+            timestamp=timestamp,
+            dry_run=dry_run
         )
-        self._set_uuid(uuid)
-        self._set_timestamp(timestamp)
+
         self._set_upstream_position_info(upstream_position_info)
         self._set_kafka_position_info(kafka_position_info)
         self._set_keys(keys)
-        self._set_dry_run(dry_run)
         self._set_meta(meta)
-        self._set_payload_or_payload_data(payload, payload_data)
         if topic:
             logger.debug(
                 "Overriding message topic: {} for schema {}.".format(topic, schema_id)
             )
         self._should_be_encrypted_state = None
         self._encryption_type = None
-        self._contains_pii = None
-
-    def _set_payload_or_payload_data(self, payload, payload_data):
-        # payload or payload_data are lazily constructed only on request
-        is_not_none_payload = payload is not None
-        is_not_none_payload_data = payload_data is not None
-
-        if is_not_none_payload and is_not_none_payload_data:
-            raise TypeError("Cannot pass both payload and payload_data.")
-        if is_not_none_payload:
-            self._set_payload(payload)
-        elif is_not_none_payload_data:
-            self._set_payload_data(payload_data)
-        else:
-            raise TypeError("Either payload or payload_data must be provided.")
 
     def _is_valid_optional_type(self, value, typ):
         return value is None or isinstance(value, typ)
@@ -424,30 +335,10 @@ class Message(object):
             return False
         return any(not isinstance(value, typ) for value in value_list)
 
-    def _encode_payload_data(self, payload_data):
-        if self.dry_run:
-            return repr(payload_data)
-        return self._avro_string_writer.encode(
-            message_avro_representation=payload_data
-        )
-
-    def _decode_payload(self, payload):
-        return self._avro_string_reader.decode(
-            encoded_message=payload
-        )
-
     def _encrypt_payload_if_necessary(self, payload):
         if self.encryption_type is not None:
             return self._encryption_helper.encrypt_payload(payload)
         return payload
-
-    def _set_payload_data_if_necessary(self, payload):
-        if self._payload_data is None:
-            self._payload_data = self._decode_payload(payload)
-
-    def _set_payload_if_necessary(self, payload_data):
-        if self._payload is None:
-            self._payload = self._encode_payload_data(payload_data)
 
     @property
     def avro_repr(self):
@@ -502,7 +393,7 @@ class Message(object):
     @classmethod
     def _get_unpacked_meta(cls, unpacked_message):
         return [
-            MetaAttribute(schema_id=o['schema_id'], encoded_payload=o['payload'])
+            MetaAttribute(schema_id=o['schema_id'], payload=o['payload'])
             for o in unpacked_message['meta']
         ] if unpacked_message['meta'] else None
 
@@ -540,12 +431,6 @@ class Message(object):
         """Get all the payloads in the message."""
         return {'payload': unpacked_message['payload']}
 
-    def reload_data(self):
-        """Populate the payload data or the payload if it hasn't done so.
-        """
-        self._set_payload_data_if_necessary(self._payload)
-        self._set_payload_if_necessary(self._payload_data)
-
     def _get_cleaned_pii_data(self, data):
         if not isinstance(data, dict):
             return unicode(type(data))
@@ -553,6 +438,11 @@ class Message(object):
             key: self._get_cleaned_pii_data(value)
             for key, value in data.iteritems()
         }
+
+    def reload_data(self):
+        """Populate the payload data or the payload if it hasn't done so.
+        """
+        self._avro_payload.reload_data()
 
     @property
     def _str_repr(self):
@@ -698,33 +588,15 @@ class UpdateMessage(Message):
             dry_run=dry_run,
             meta=meta,
         )
-        self._set_previous_payload_or_payload_data(
-            previous_payload,
-            previous_payload_data
+        self._previous_avro_payload = _AvroPayload(
+            schema_id=schema_id,
+            topic=topic,
+            payload=previous_payload,
+            payload_data=previous_payload_data,
+            uuid=uuid,
+            timestamp=timestamp,
+            dry_run=dry_run
         )
-
-    def _set_previous_payload_or_payload_data(
-        self,
-        previous_payload,
-        previous_payload_data
-    ):
-        # previous_payload or previous_payload_data are lazily constructed
-        # only on request
-        is_not_none_previous_payload = previous_payload is not None
-        is_not_none_previous_payload_data = previous_payload_data is not None
-
-        if is_not_none_previous_payload and is_not_none_previous_payload_data:
-            raise TypeError(
-                "Cannot pass both previous_payload and previous_payload_data."
-            )
-        if is_not_none_previous_payload:
-            self._set_previous_payload(previous_payload)
-        elif is_not_none_previous_payload_data:
-            self._set_previous_payload_data(previous_payload_data)
-        else:
-            raise TypeError(
-                "Either previous_payload or previous_payload_data must be provided."
-            )
 
     @property
     def _eq_key(self):
@@ -743,26 +615,11 @@ class UpdateMessage(Message):
         """Avro-encoded message - encoded with schema identified by
         `schema_id`.  Required when message type is `MessageType.update`.
         """
-        self._set_previous_payload_if_necessary(self._previous_payload_data)
-        return self._previous_payload
-
-    def _set_previous_payload(self, previous_payload):
-        if not isinstance(previous_payload, bytes):
-            raise TypeError("Previous payload must be bytes")
-        self._previous_payload = previous_payload
-        self._previous_payload_data = None  # force previous_payload_data to be re-decoded
+        return self._previous_avro_payload.payload
 
     @property
     def previous_payload_data(self):
-        self._set_previous_payload_data_if_necessary(self._previous_payload)
-        return self._previous_payload_data
-
-    def _set_previous_payload_data(self, previous_payload_data):
-        if not isinstance(previous_payload_data, dict):
-            raise TypeError("Previous payload data must be a dict")
-
-        self._previous_payload_data = previous_payload_data
-        self._previous_payload = None  # force previous_payload to be re-encoded
+        return self._previous_avro_payload.payload_data
 
     @property
     def avro_repr(self):
@@ -780,24 +637,13 @@ class UpdateMessage(Message):
             'previous_payload': unpacked_message['previous_payload']
         }
 
-    def _set_previous_payload_if_necessary(self, previous_payload_data):
-        if self._previous_payload is None:
-            self._previous_payload = self._encode_payload_data(
-                previous_payload_data
-            )
-
-    def _set_previous_payload_data_if_necessary(self, previous_payload):
-        if self._previous_payload_data is None:
-            self._previous_payload_data = self._decode_payload(previous_payload)
-
     def reload_data(self):
         """Populate the previous payload data or decode the previous payload
         if it hasn't done so. The payload encoding/payload data decoding is
         taken care of by the `Message.reload` function in the parent class.
         """
         super(UpdateMessage, self).reload_data()
-        self._set_previous_payload_data_if_necessary(self._previous_payload)
-        self._set_previous_payload_if_necessary(self._previous_payload_data)
+        self._previous_avro_payload.reload_data()
 
     def _has_field_changed(self, field):
         return self.payload_data[field] != self.previous_payload_data[field]

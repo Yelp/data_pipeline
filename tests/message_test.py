@@ -42,15 +42,6 @@ class SharedMessageTest(object):
     def invalid_payload(self, request):
         return request.param
 
-    @pytest.fixture(params=[
-        None,
-        100,
-        ['test'],
-        bytes(10)
-    ])
-    def invalid_payload_data(self, request):
-        return request.param
-
     @pytest.fixture
     def pii_message(self, valid_message_data, pii_schema):
         message_data = self._make_message_data(
@@ -100,17 +91,6 @@ class SharedMessageTest(object):
             valid_message_data,
             payload=invalid_payload,
             payload_data=None
-        )
-
-    def test_rejects_invalid_payload_data(
-        self,
-        valid_message_data,
-        invalid_payload_data
-    ):
-        self._assert_invalid_data(
-            valid_message_data,
-            payload=None,
-            payload_data=invalid_payload_data
         )
 
     def test_rejects_both_payload_and_payload_data(self, valid_message_data):
@@ -173,14 +153,15 @@ class SharedMessageTest(object):
         self._assert_invalid_data(valid_message_data, meta=invalid_meta)
 
     @pytest.fixture
-    def meta_attr_payload(self):
+    def meta_attr_payload_data(self):
         return {'good_payload': 26}
 
     @pytest.fixture
-    def valid_meta_param(self, meta_attr_payload, registered_meta_attribute):
-        meta_attr = MetaAttribute()
-        meta_attr.schema_id = registered_meta_attribute.schema_id
-        meta_attr.payload = meta_attr_payload
+    def valid_meta_param(self, meta_attr_payload_data, registered_meta_attribute):
+        meta_attr = MetaAttribute(
+            schema_id=registered_meta_attribute.schema_id,
+            payload_data=meta_attr_payload_data
+        )
         return [meta_attr]
 
     def _get_dry_run_message_with_meta(self, valid_message_data, meta_param=None):
@@ -198,14 +179,14 @@ class SharedMessageTest(object):
         self,
         valid_message_data,
         valid_meta_param,
-        meta_attr_payload
+        meta_attr_payload_data
     ):
         dry_run_message = self._get_dry_run_message_with_meta(
             valid_message_data,
             valid_meta_param
         )
         assert dry_run_message.meta[0].schema_id == valid_meta_param[0].schema_id
-        assert dry_run_message.meta[0].payload == meta_attr_payload
+        assert dry_run_message.meta[0].payload_data == meta_attr_payload_data
 
     def test_dry_run(self, valid_message_data):
         payload_data = {'data': 'test'}
@@ -487,17 +468,6 @@ class TestUpdateMessage(SharedMessageTest):
             valid_message_data,
             previous_payload=invalid_payload,
             previous_payload_data=None
-        )
-
-    def test_rejects_invalid_previous_payload_data(
-        self,
-        valid_message_data,
-        invalid_payload_data
-    ):
-        self._assert_invalid_data(
-            valid_message_data,
-            previous_payload=None,
-            previous_payload_data=invalid_payload_data
         )
 
     def test_rejects_both_previous_payload_and_payload_data(

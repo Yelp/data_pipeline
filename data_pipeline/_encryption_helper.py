@@ -2,10 +2,77 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import os
+from collections import namedtuple
+
+import simplejson
+from cached_property import cached_property
 from Crypto.Cipher import AES
 
 from data_pipeline.config import get_config
+from data_pipeline.helpers.singleton import Singleton
 from data_pipeline.initialization_vector import InitializationVector
+from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+
+
+_EAlgorithmAVSCInfo = namedtuple('_EAlgorithmAVSCInfo', (
+    'avsc_file_path', 'namespace', 'source', 'source_owner_email', 'contains_pii')
+)
+
+
+initialization_vector_info = _EAlgorithmAVSCInfo(
+    'data_pipeline/schemas/initialization_vector_v1.avsc',
+    'yelp.data_pipeline',
+    'initialization_vector',
+    'bam+data_pipeline@yelp.com',
+    False
+)
+
+
+class _EAlgorithmAVSCStore(object):
+
+    __metaclass__ = Singleton
+
+    def get_schema_id(self, avro_schema_info):
+        key = avro_schema_info.avsc_file_path
+        schema_id = self._schema_id_cache.get(key)
+        if not schema_id:
+            schema_id = int(self._load_schema(avro_schema_info).schema_id)
+        return schema_id
+
+    def set_schema_id(self, avro_schema_info, schema_id):
+        self._schema_id_cache[avro_schema_info.avsc_file_path] = schema_id
+
+    def __init__(self):
+        self._schema_id_cache = {}
+
+    @cached_property
+    def _schematizer(self):
+        return get_schematizer()
+
+    def _load_schema(self, avro_schema_info):
+        avro_schema_json = self._load_avro_schema_file(avro_schema_info.avsc_file_path)
+        schema_info = self._register_schema(avro_schema_info, avro_schema_json)
+        self.set_schema_id(avro_schema_info, schema_info.schema_id)
+        return schema_info
+
+    def _load_avro_schema_file(self, avsc_file_path):
+        schema_path = os.path.join(
+            os.path.dirname(__file__),
+            os.pardir,
+            avsc_file_path
+        )
+        with open(schema_path, 'r') as f:
+            return simplejson.loads(f.read())
+
+    def _register_schema(self, avro_schema_info, avro_schema_json):
+        return self._schematizer.register_schema_from_schema_json(
+            namespace=avro_schema_info.namespace,
+            source=avro_schema_info.source,
+            schema_json=avro_schema_json,
+            source_owner_email=avro_schema_info.source_owner_email,
+            contains_pii=avro_schema_info.contains_pii
+        )
 
 
 class EncryptionHelper(object):
@@ -63,7 +130,8 @@ class EncryptionHelper(object):
         """
         algorithm, _ = cls._get_algorithm_and_key_id(encryption_type)
         if algorithm:
-            return InitializationVector()
+            schema_id = _EAlgorithmAVSCStore().get_schema_id(initialization_vector_info)
+            return InitializationVector(schema_id)
         raise Exception(
             "Encryption algorithm {} is not supported.".format(algorithm)
         )

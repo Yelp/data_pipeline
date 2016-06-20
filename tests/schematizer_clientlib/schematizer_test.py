@@ -133,7 +133,7 @@ class SchematizerClientTestBase(object):
 class TestGetSchemaById(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
-    def biz_schema(self, yelp_namespace, biz_src_name):
+    def biz_schema(self, yelp_namespace, biz_src_name, containers):
         return self._register_avro_schema(yelp_namespace, biz_src_name)
 
     def test_get_non_cached_schema_by_id(self, schematizer, biz_schema):
@@ -168,7 +168,7 @@ class TestGetSchemaById(SchematizerClientTestBase):
 class TestGetSchemaElementsBySchemaId(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
-    def biz_schema(self, yelp_namespace, biz_src_name):
+    def biz_schema(self, yelp_namespace, biz_src_name, containers):
         return self._register_avro_schema(yelp_namespace, biz_src_name)
 
     def test_get_schema_elements_by_schema_id(self, schematizer, biz_schema):
@@ -185,7 +185,7 @@ class TestGetSchemaElementsBySchemaId(SchematizerClientTestBase):
 class TestGetSchemasByTopic(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
-    def biz_schema(self, yelp_namespace, biz_src_name):
+    def biz_schema(self, yelp_namespace, biz_src_name, containers):
         return self._register_avro_schema(yelp_namespace, biz_src_name)
 
     def test_get_schemas_by_topic(self, schematizer, biz_schema):
@@ -233,36 +233,6 @@ class TestGetSchemaBySchemaJson(SchematizerClientTestBase):
     @pytest.fixture
     def schema_str(self, schema_json):
         return simplejson.dumps(schema_json)
-
-    def test_get_schema_by_schema_json_returns_none_if_not_cached(
-        self,
-        schematizer,
-        schema_json
-    ):
-        assert schematizer.get_schema_by_schema_json(schema_json) is None
-
-    def test_get_schema_by_schema_json_returns_cached_schema(
-        self,
-        schematizer,
-        biz_src_name,
-        schema_json,
-        yelp_namespace
-    ):
-        schema_one = schematizer.register_schema_from_schema_json(
-            namespace=yelp_namespace,
-            source=biz_src_name,
-            schema_json=schema_json,
-            source_owner_email=self.source_owner_email,
-            contains_pii=False
-        )
-
-        with self.attach_spy_on_api(
-            schematizer._client.schemas,
-            'register_schema'
-        ) as register_schema_api_spy:
-            schema_two = schematizer.get_schema_by_schema_json(schema_json)
-            assert register_schema_api_spy.called == 0
-            assert schema_one == schema_two
 
 
 class TestGetTopicByName(SchematizerClientTestBase):
@@ -447,7 +417,7 @@ class TestGetLatestTopicBySourceId(SchematizerClientTestBase):
 class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
-    def biz_schema(self, yelp_namespace, biz_src_name):
+    def biz_schema(self, yelp_namespace, biz_src_name, containers):
         return self._register_avro_schema(yelp_namespace, biz_src_name)
 
     @pytest.fixture(autouse=True, scope='class')
@@ -455,7 +425,7 @@ class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
         return biz_schema.topic
 
     @pytest.fixture(autouse=True, scope='class')
-    def biz_schema_two(self, biz_schema):
+    def biz_schema_two(self, biz_schema, containers):
         new_schema = simplejson.loads(biz_schema.schema)
         new_schema['fields'].append({'type': 'int', 'doc': 'test', 'name': 'bar', 'default': 0})
         return self._register_avro_schema(
@@ -937,7 +907,7 @@ class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
         return simplejson.dumps(schema_json_incompatible)
 
     @pytest.fixture(autouse=True, scope='class')
-    def biz_schema(self, yelp_namespace, biz_src_name, schema_str):
+    def biz_schema(self, yelp_namespace, biz_src_name, schema_str, containers):
         return self._register_avro_schema(
             yelp_namespace,
             biz_src_name,
