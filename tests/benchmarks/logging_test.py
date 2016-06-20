@@ -38,20 +38,20 @@ class TestBenchLogging(object):
 
     def test_debug_log(self, message, benchmark, patch_logger_enabled):
         @benchmark
-        def logr():
+        def log_command():
             debug_log(lambda: "Message buffered: {}".format(repr(message)))
 
     def test_logger(self, benchmark, message, patch_logger_enabled):
         @benchmark
-        def logr():
+        def log_command():
             get_config().logger.debug("Message buffered: {}".format(repr(message)))
 
     def test_repr_message(self, benchmark, message):
         @benchmark
-        def logr():
+        def log_command():
             repr(message)
 
     def test_pass(self, benchmark, message):
         @benchmark
-        def logr():
+        def log_command():
             pass
