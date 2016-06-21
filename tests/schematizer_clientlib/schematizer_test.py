@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 import random
 import time
+from datetime import datetime
 
 import mock
 import pytest
@@ -180,6 +181,45 @@ class TestGetSchemaElementsBySchemaId(SchematizerClientTestBase):
             for element in actual:
                 assert element.schema_id == biz_schema.schema_id
             assert api_spy.call_count == 1
+
+
+class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
+
+    def test_get_schemas_created_after_date(self, schematizer):
+        created_after_str = "2015-01-01T19:10:26"
+        created_after = datetime.strptime(created_after_str,
+                                          '%Y-%m-%dT%H:%M:%S')
+        creation_timestamp = long((created_after -
+                                   datetime.utcfromtimestamp(0)).total_seconds())
+        with self.attach_spy_on_api(
+            schematizer._client.schemas,
+            'get_schemas_created_after'
+        ) as api_spy:
+            schemas = schematizer.get_schemas_created_after_date(creation_timestamp)
+            for schema in schemas:
+                assert schema.created_at >= created_after
+            assert api_spy.call_count == 1
+
+    def test_get_schemas_created_after_date_filter(self, schematizer):
+        created_after_str = "2015-01-01T19:10:26"
+        created_after = datetime.strptime(created_after_str,
+                                          '%Y-%m-%dT%H:%M:%S')
+        creation_timestamp = long((created_after -
+                                   datetime.utcfromtimestamp(0)).total_seconds())
+
+        created_after_str2 = "2016-06-10T19:10:26"
+        created_after2 = datetime.strptime(created_after_str2,
+                                           '%Y-%m-%dT%H:%M:%S')
+        creation_timestamp2 = long((created_after2 -
+                                    datetime.utcfromtimestamp(0)).total_seconds())
+        with self.attach_spy_on_api(
+            schematizer._client.schemas,
+            'get_schemas_created_after'
+        ) as api_spy:
+            schemas = schematizer.get_schemas_created_after_date(creation_timestamp)
+            schemas_later = schematizer.get_schemas_created_after_date(creation_timestamp2)
+            assert len(schemas) >= len(schemas_later)
+            assert api_spy.call_count == 2
 
 
 class TestGetSchemasByTopic(SchematizerClientTestBase):
