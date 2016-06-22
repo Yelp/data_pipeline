@@ -8,6 +8,7 @@ import time
 import mock
 import pytest
 import simplejson
+from requests import ConnectionError
 from swaggerpy import exception as swaggerpy_exc
 
 from data_pipeline.config import get_config
@@ -128,6 +129,25 @@ class SchematizerClientTestBase(object):
     def _assert_equal_multi_attrs(self, actual, expected, *attrs):
         for attr in attrs:
             assert getattr(actual, attr) == getattr(expected, attr)
+
+
+class TestAPIClient(SchematizerClientTestBase):
+
+    @pytest.fixture(autouse=True, scope='class')
+    def biz_schema(self, yelp_namespace, biz_src_name, containers):
+        return self._register_avro_schema(yelp_namespace, biz_src_name)
+
+    def test_retry_api_call(self, schematizer, biz_schema):
+        with mock.patch.object(
+            schematizer,
+            '_get_api_result',
+            side_effect=[ConnectionError, ConnectionError, None]
+        ) as api_spy:
+            schematizer._call_api(
+                api=schematizer._client.schemas.get_schema_by_id,
+                params={'schema_id': biz_schema.schema_id}
+            )
+            assert api_spy.call_count == 3
 
 
 class TestGetSchemaById(SchematizerClientTestBase):

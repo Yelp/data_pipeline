@@ -860,9 +860,13 @@ class SchematizerClient(object):
         response = retry_on_exception(
             retry_policy=retry_policy,
             retry_exceptions=ConnectionError,
-            func_to_retry=request.result
+            func_to_retry=self._get_api_result,
+            request=request
         )
         return response
+
+    def _get_api_result(self, request):
+        return request.result()
 
     def _get_cached_schema(self, schema_id):
         _schema = self._cache.get_value(_AvroSchema, schema_id)
