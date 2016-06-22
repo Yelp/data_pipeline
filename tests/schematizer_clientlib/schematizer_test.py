@@ -116,6 +116,13 @@ class SchematizerClientTestBase(object):
         for i in range(0, len(actual)):
             self._assert_equal_multi_attrs(actual[i], expected_resp[i], *attrs)
 
+    def _assert_avro_schemas_equal(self, actual, expected_resp):
+        attrs = ('schema_id', 'base_schema_id', 'status', 'primary_keys', 'note',
+                 'created_at', 'updated_at')
+        self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
+        assert actual.schema_json == expected_resp.schema_json
+        self._assert_topic_values(actual.topic, expected_resp.topic)
+
     def _assert_topic_values(self, actual, expected_resp):
         attrs = ('topic_id', 'name', 'contains_pii', 'primary_keys', 'created_at', 'updated_at')
         self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
@@ -220,6 +227,18 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
             schemas_later = schematizer.get_schemas_created_after_date(creation_timestamp2)
             assert len(schemas) >= len(schemas_later)
             assert api_spy.call_count == 2
+
+    def test_get_schemas_created_after_date_cached(self, schematizer):
+        created_after_str = "2015-01-01T19:10:26"
+        created_after = datetime.strptime(created_after_str,
+                                          '%Y-%m-%dT%H:%M:%S')
+        creation_timestamp = long((created_after -
+                                   datetime.utcfromtimestamp(0)).total_seconds())
+        schemas = schematizer.get_schemas_created_after_date(creation_timestamp)
+        # Assert each element was cached properly
+        for schema in schemas:
+            actual = schematizer.get_schema_by_id(schema.schema_id)
+            self._assert_avro_schemas_equal(actual, schema)
 
 
 class TestGetSchemasByTopic(SchematizerClientTestBase):

@@ -141,6 +141,8 @@ class SchematizerClient(object):
             params={'created_after': created_after}
         )
         _schemas = [_AvroSchema.from_response(response) for response in responses]
+        for _schema in _schemas:
+            self._set_cache_by_schema(_schema)
         return _schemas
 
     def _make_avro_schema_key(self, schema_json):
