@@ -30,6 +30,20 @@ initialization_vector_info = _EncryptionAlgorithmInfo(
 
 
 class _EncryptionAlgorithmAVSCStore(object):
+    """We want to require the users of data pipeline (replication handler or
+    someone who wishes to publish messages containing Meta Attributes)
+    to register their meta_attribute schemas at bootstrap phase of their application,
+    cache those registered schema_id's at bootstrap and then use the schema_id
+    to reference the meta_attribute schema in the rest of the application.
+
+    The _EncryptionAlgorithmAVSCStore were introduced in the clientlib
+    because there is no bootstrap phase present in clientlib.
+    Ths is a singleton class to enable one time registration 
+    and subsequent retrievals possible.
+
+    This may be replcaced with something better in the future. This class
+    is not meant to be used outside of this file.
+    """
 
     __metaclass__ = Singleton
 

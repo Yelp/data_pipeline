@@ -119,14 +119,12 @@ class _AvroPayload(object):
         is_not_none_payload = payload is not None
         is_not_none_payload_data = payload_data is not None
 
-        if is_not_none_payload and is_not_none_payload_data:
-            raise TypeError("Cannot pass both payload and payload_data.")
+        if is_not_none_payload == is_not_none_payload_data:
+            raise TypeError("Exactly one of payload and payload_data must be set.")
         if is_not_none_payload:
             self._set_payload(payload)
         elif is_not_none_payload_data:
             self._set_payload_data(payload_data)
-        else:
-            raise TypeError("Either payload or payload_data must be provided.")
 
     @property
     def payload(self):
