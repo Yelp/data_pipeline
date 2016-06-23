@@ -1,3 +1,9 @@
+data-pipeline-tools (0.2.3) lucid; urgency=low
+
+  * Commit: Released 0.2.2 via make release
+
+ -- Shahid Chohan <chohan@yelp.com>  Thu, 23 Jun 2016 12:12:17 -0700
+
 data-pipeline-tools (0.2.2) lucid; urgency=low
 
   * Commit: refactored set encryption type function in Message class
