@@ -183,28 +183,32 @@ class Message(object):
 
     @property
     def contains_pii(self):
+        if self._contains_pii is not None:
+            return self._contains_pii
+        self._set_contains_pii()
         return self._contains_pii
 
-    def _set_contains_pii(self, schema_id):
+    def _set_contains_pii(self):
         self._contains_pii = self._schematizer.get_schema_by_id(
-            schema_id
+            self.schema_id
         ).topic.contains_pii
 
     @property
     def encryption_type(self):
+        self._set_encryption_type_if_necessary()
         return self._encryption_type
 
-    def _set_encryption_type(self):
-        self._encryption_type = None
-        if not self._should_be_encrypted:
+    def _set_encryption_type_if_necessary(self):
+        if self._encryption_type or not self._should_be_encrypted:
             return
-
         config_encryption_type = get_config().encryption_type
         if config_encryption_type is None:
             raise ValueError(
                 "Encryption type must be set when message requires to be encrypted."
             )
-        self._manual_set_encryption_type(config_encryption_type)
+        self._encryption_type = config_encryption_type
+        self._encryption_helper = EncryptionHelper(config_encryption_type)
+        self._set_encryption_meta()
 
     @property
     def _should_be_encrypted(self):
@@ -212,17 +216,17 @@ class Message(object):
         to determine if the message should be encrypted is the pii information.
         Include additional criteria if necessary.
         """
-        return self.contains_pii
+        if self._should_be_encrypted_state is not None:
+            return self._should_be_encrypted_state
 
-    def _manual_set_encryption_type(self, encryption_type):
-        """Manually set the encryption type of the message.  It is for the case
-        when not all the criteria used to determine if this message should be
-        encryption is available, such as when constructing the message from a
-        published kafka message.
-        """
-        self._encryption_type = encryption_type
-        if encryption_type:
-            self._encryption_helper = EncryptionHelper(encryption_type)
+        self._should_be_encrypted_state = self.contains_pii
+        return self._should_be_encrypted_state
+
+    def _set_encryption_meta(self):
+        if self._meta is None:
+            self._meta = []
+        self._pop_encryption_meta(self._encryption_type, self._meta)
+        self._meta.append(self._encryption_helper.encryption_meta)
 
     @property
     def dry_run(self):
@@ -233,6 +237,7 @@ class Message(object):
 
     @property
     def meta(self):
+        self._set_encryption_type_if_necessary()
         return self._meta
 
     def _set_meta(self, meta):
@@ -366,6 +371,17 @@ class Message(object):
         # does, and in addition, this check is quite a bit faster than
         # serialization.  Finally, if we do it this way, we can lazily
         # serialize the payload in a subclass if necessary.
+
+        # TODO(DATAPIPE-416|psuben): Make it so contains_pii is no longer
+        # overrideable. Now the pass-in contains_pii is no longer used. Next
+        # is to remove it from the function signature altogether.
+        if contains_pii is not None:
+            warnings.simplefilter('always', DeprecationWarning)
+            warnings.warn(
+                "contains_pii is deprecated. Please stop passing it in.",
+                DeprecationWarning
+            )
+
         self._set_schema_id(schema_id)
         self._set_topic(
             topic or str(self._schematizer.get_schema_by_id(schema_id).topic.name)
@@ -376,19 +392,14 @@ class Message(object):
         self._set_kafka_position_info(kafka_position_info)
         self._set_keys(keys)
         self._set_dry_run(dry_run)
-        # TODO(DATAPIPE-416|psuben): Make it so contains_pii is no longer overrideable.
-        self._set_contains_pii(schema_id)
-        self._set_encryption_type()
         self._set_meta(meta)
         self._set_payload_or_payload_data(payload, payload_data)
         if topic:
             warnings.simplefilter("always", category=DeprecationWarning)
             warnings.warn("Passing in topics explicitly is deprecated.", DeprecationWarning)
-        if self.encryption_type:
-            if self._meta is None:
-                self._meta = []
-            if not self.get_encryption_meta(self.encryption_type, self.meta):
-                self.meta.append(self._encryption_helper.encryption_meta)
+        self._should_be_encrypted_state = None
+        self._encryption_type = None
+        self._contains_pii = None
 
     def _set_payload_or_payload_data(self, payload, payload_data):
         # payload or payload_data are lazily constructed only on request
@@ -453,29 +464,38 @@ class Message(object):
     def create_from_unpacked_message(
         cls,
         unpacked_message,
-        topic=None,
+        topic,
         kafka_position_info=None
     ):
         encryption_type = unpacked_message['encryption_type']
         meta = cls._get_unpacked_meta(unpacked_message)
-        payload = cls._get_unpacked_decrypted_payload(
-            unpacked_message['payload'],
-            encryption_type=encryption_type,
-            meta=meta
-        )
+        encryption_meta = cls._pop_encryption_meta(encryption_type, meta)
+        payloads = {
+            param_name: cls._get_unpacked_decrypted_payload(
+                payload,
+                encryption_type=encryption_type,
+                encryption_meta=encryption_meta
+            )
+            for param_name, payload in cls._get_all_payloads(
+                unpacked_message
+            ).iteritems()
+        }
 
+        # TODO [clin|DATAPIPE-1004, DATAPIPE-1010] Right now it explicitly
+        # passes the topic via the constructor to avoid retrieving it from
+        # the schematizer. Later, once the topic is lazily retrieved, it
+        # should set the topic in the same way as setting encryption type.
         message_params = {
             'uuid': unpacked_message['uuid'],
+            'topic': topic,
             'schema_id': unpacked_message['schema_id'],
-            'payload': payload,
             'timestamp': unpacked_message['timestamp'],
             'meta': meta,
             'kafka_position_info': kafka_position_info
         }
-        if topic:
-            message_params['topic'] = topic
+        message_params.update(payloads)
         message = cls(**message_params)
-        message._manual_set_encryption_type(encryption_type)
+        message._should_be_encrypted_state = bool(encryption_type)
         return message
 
     @classmethod
@@ -486,23 +506,38 @@ class Message(object):
         ] if unpacked_message['meta'] else None
 
     @classmethod
-    def _get_unpacked_decrypted_payload(cls, payload, encryption_type, meta):
+    def _get_unpacked_decrypted_payload(
+        cls,
+        payload,
+        encryption_type,
+        encryption_meta
+    ):
         if not encryption_type:
             return payload
 
-        encryption_meta = cls.get_encryption_meta(encryption_type, meta)
         encryption_helper = EncryptionHelper(encryption_type, encryption_meta)
         return encryption_helper.decrypt_payload(payload)
 
     @classmethod
-    def get_encryption_meta(cls, encryption_type, meta):
+    def _pop_encryption_meta(cls, encryption_type, meta):
+        if not encryption_type or not meta:
+            return None
+
         encryption_meta = EncryptionHelper.get_encryption_meta_by_encryption_type(
             encryption_type
         )
-        return next(
-            (m for m in meta if m.schema_id == encryption_meta.schema_id),
-            None
-        )
+        for index, meta_attr in enumerate(meta):
+            if meta_attr.schema_id == encryption_meta.schema_id:
+                target_meta = meta_attr
+                meta[index] = meta[-1]
+                meta.pop()
+                return target_meta
+        return None
+
+    @classmethod
+    def _get_all_payloads(cls, unpacked_message):
+        """Get all the payloads in the message."""
+        return {'payload': unpacked_message['payload']}
 
     def reload_data(self):
         """Populate the payload data or the payload if it hasn't done so.
@@ -510,17 +545,26 @@ class Message(object):
         self._set_payload_data_if_necessary(self._payload)
         self._set_payload_if_necessary(self._payload_data)
 
+    def _get_cleaned_pii_data(self, data):
+        if not isinstance(data, dict):
+            return unicode(type(data))
+        return {
+            key: self._get_cleaned_pii_data(value)
+            for key, value in data.iteritems()
+        }
+
     @property
     def _str_repr(self):
-        # TODO [clin|DATAPIPE-849] It should properly handle pii payload data,
-        # especially it shouldn't leak it into the logs if it's used for logging.
+        cleaned_payload_data = self.payload_data
+        if self.contains_pii:
+            cleaned_payload_data = self._get_cleaned_pii_data(self.payload_data)
         return {
             'uuid': self.uuid_hex,
             'message_type': self.message_type.name,
             'schema_id': self.schema_id,
-            'payload_data': self.payload_data,
+            'payload_data': cleaned_payload_data,
             'timestamp': self.timestamp,
-            'meta': self._get_meta_attr_avro_repr(),
+            'meta': None if self.meta is None else [m._asdict() for m in self.meta],
             'encryption_type': self.encryption_type
         }
 
@@ -728,39 +772,12 @@ class UpdateMessage(Message):
         return repr_dict
 
     @classmethod
-    def create_from_unpacked_message(
-        cls,
-        unpacked_message,
-        topic=None,
-        kafka_position_info=None
-    ):
-        encryption_type = unpacked_message['encryption_type']
-        meta = cls._get_unpacked_meta(unpacked_message)
-        payload = cls._get_unpacked_decrypted_payload(
-            unpacked_message['payload'],
-            encryption_type=encryption_type,
-            meta=meta
-        )
-        previous_payload = cls._get_unpacked_decrypted_payload(
-            unpacked_message['previous_payload'],
-            encryption_type=encryption_type,
-            meta=meta
-        )
-
-        message_params = {
-            'uuid': unpacked_message['uuid'],
-            'schema_id': unpacked_message['schema_id'],
-            'payload': payload,
-            'previous_payload': previous_payload,
-            'timestamp': unpacked_message['timestamp'],
-            'meta': meta,
-            'kafka_position_info': kafka_position_info
+    def _get_all_payloads(cls, unpacked_message):
+        """Get all the payloads in the message."""
+        return {
+            'payload': unpacked_message['payload'],
+            'previous_payload': unpacked_message['previous_payload']
         }
-        if topic:
-            message_params['topic'] = topic
-        message = cls(**message_params)
-        message._manual_set_encryption_type(encryption_type)
-        return message
 
     def _set_previous_payload_if_necessary(self, previous_payload_data):
         if self._previous_payload is None:
@@ -803,8 +820,13 @@ class UpdateMessage(Message):
 
     @property
     def _str_repr(self):
+        # Calls the _str_repr from the super class resulting in encrypted pii data.
         repr_dict = super(UpdateMessage, self)._str_repr
-        repr_dict['previous_payload_data'] = self.previous_payload_data
+        repr_dict['previous_payload_data'] = (
+            self.previous_payload_data if not self.contains_pii
+            else self._get_cleaned_pii_data(self.previous_payload_data)
+        )
+
         return repr_dict
 
 

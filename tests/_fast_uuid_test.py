@@ -29,10 +29,8 @@ class TestFastUUID(object):
             ):
                 # Save and restore the existing state; this will allow already
                 # instantiated FastUUID instances to keep working.
-                original_ffi, data_pipeline._fast_uuid._LibUUID._ffi = (
-                    data_pipeline._fast_uuid._LibUUID._ffi,
-                    None
-                )
+                original_ffi = data_pipeline._fast_uuid._LibUUID._ffi
+                data_pipeline._fast_uuid._LibUUID._ffi = None
                 try:
                     yield FastUUID()
                 finally:

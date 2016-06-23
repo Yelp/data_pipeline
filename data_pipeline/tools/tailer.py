@@ -25,6 +25,7 @@ from data_pipeline.consumer import Consumer
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import Message
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+from data_pipeline.tools.timestamp_to_offset_mapper import get_first_offset_at_or_after_start_timestamp
 
 logger = get_config().logger
 
@@ -237,10 +238,10 @@ class Tailer(Batch):
         if len(self.topic_to_offsets_map) == 0:
             self.option_parser.error("At least one topic must be specified.")
 
-        if self.options.start_timestamp and self.options.start_timestamp >= int(time.time()):
+        if self.options.start_timestamp is not None and self.options.start_timestamp >= int(time.time()):
             self.option_parser.error("--start-timestamp should not be later than current time")
 
-        if self.options.start_timestamp and self.options.end_timestamp and (
+        if self.options.start_timestamp is not None and self.options.end_timestamp and (
             self.options.start_timestamp > self.options.end_timestamp
         ):
             self.option_parser.error("--end-timestamp must not be smaller than --start-timestamp")
@@ -286,7 +287,7 @@ class Tailer(Batch):
         self.topic_to_offsets_map = {}
         self._setup_manual_topics()
         self._setup_schematizer_topics()
-        if self.options.start_timestamp:
+        if self.options.start_timestamp is not None:
             self._setup_start_timestamp_topics(self.options.start_timestamp)
 
     def _setup_manual_topics(self):
@@ -336,162 +337,13 @@ class Tailer(Batch):
         logger.info(
             "Getting starting offsets for {} based on --start-timestamp".format(no_offset_topics)
         )
-        start_timestamp_topic_to_offset_map = self._get_first_offsets_after_start_timestamp(
+        start_timestamp_topic_to_offset_map = get_first_offset_at_or_after_start_timestamp(
+            self.kafka_client,
             no_offset_topics,
             start_timestamp
         )
         for topic, consumer_topic_state in start_timestamp_topic_to_offset_map.iteritems():
             self.topic_to_offsets_map[topic] = start_timestamp_topic_to_offset_map[topic]
-
-    def _get_first_offsets_after_start_timestamp(self, topics, start_timestamp):
-        """Uses binary search to find the first offset that comes after --start-timestamp for each
-        topic in topics. Outputs a result_topic_to_consumer_topic_state_map which can be used to set offsets"""
-        watermarks = offsets.get_topics_watermarks(
-            self.kafka_client,
-            topics,
-            raise_on_error=False
-        )
-
-        topic_to_consumer_topic_state_map = self._build_topic_to_consumer_topic_state_map(watermarks)
-        topic_to_range_map = self._build_topic_to_range_map(watermarks)
-        result_topic_to_consumer_topic_state_map = self._build_empty_topic_to_consumer_topic_state_map(topics)
-
-        self._move_finished_topics_to_result_map(
-            topic_to_consumer_topic_state_map,
-            topic_to_range_map,
-            result_topic_to_consumer_topic_state_map
-        )
-        while topic_to_consumer_topic_state_map:
-            self._get_message_and_alter_range(
-                start_timestamp,
-                topic_to_consumer_topic_state_map,
-                topic_to_range_map,
-                result_topic_to_consumer_topic_state_map
-            )
-
-        logger.info(
-            "Got topic offsets based on start-date: {}".format(result_topic_to_consumer_topic_state_map)
-        )
-        return result_topic_to_consumer_topic_state_map
-
-    def _build_topic_to_consumer_topic_state_map(self, watermarks):
-        """Builds a topic_to_consumer_topic_state_map from a kafka get_topics_watermarks response"""
-        return {
-            topic: ConsumerTopicState({
-                partition: int((marks.highmark + marks.lowmark) / 2)
-                for partition, marks in watermarks_map.items()
-            }, None)
-            for topic, watermarks_map in watermarks.items()
-        }
-
-    def _build_topic_to_range_map(self, watermarks):
-        """Builds a topic_to_range_map from a kafka get_topics_watermarks response"""
-        return {
-            topic: {
-                partition: {
-                    'high': marks.highmark,
-                    'low': marks.lowmark
-                }
-                for partition, marks in watermarks_map.items()
-            }
-            for topic, watermarks_map in watermarks.items()
-        }
-
-    def _build_empty_topic_to_consumer_topic_state_map(self, topics):
-        """Builds a topic_to_consumer_topic_state_map from a list of topics where all of the interior
-        partition_offset_maps are empty"""
-        return {
-            topic: ConsumerTopicState({}, None)
-            for topic in topics
-        }
-
-    def _get_message_and_alter_range(
-        self,
-        start_timestamp,
-        topic_to_consumer_topic_state_map,
-        topic_to_range_map,
-        result_topic_to_consumer_topic_state_map
-    ):
-        """Create a consumer based on our topic_to_consumer_state_map, get a message, and based
-        on that message's timestamp, adjust our topic ranges and maps with _update_ranges_for_message and
-        _move_finisehd_topics_to_result_map"""
-        # We create a new consumer each time since it would otherwise require refactoring how
-        # we consume from KafkaConsumerGroups (currently use an iterator, which doesn't support big jumps in offset)
-        with Consumer(
-            'data_pipeline_tailer_starting_offset_getter-{}'.format(
-                str(UUID(bytes=FastUUID().uuid4()).hex)
-            ),
-            'bam',
-            ExpectedFrequency.constantly,
-            topic_to_consumer_topic_state_map
-        ) as consumer:
-            message = consumer.get_message(timeout=0.1, blocking=True)
-            if message is None:
-                return
-            self._update_ranges_for_message(
-                message,
-                start_timestamp,
-                topic_to_consumer_topic_state_map,
-                topic_to_range_map
-            )
-        self._move_finished_topics_to_result_map(
-            topic_to_consumer_topic_state_map,
-            topic_to_range_map,
-            result_topic_to_consumer_topic_state_map
-        )
-
-    def _move_finished_topics_to_result_map(
-        self,
-        topic_to_consumer_topic_state_map,
-        topic_to_range_map,
-        result_topic_to_consumer_topic_state_map
-    ):
-        """Moves all "finished" (where max of topic range is equal to min) partitions
-        to result_topic_to_consumer_topic_state_map for output, and removes them from the
-        intermediate ones to stop getting messages from that partition"""
-        for topic, consumer_topic_state_map in topic_to_consumer_topic_state_map.iteritems():
-            for partition in consumer_topic_state_map.partition_offset_map.keys():
-                topic_range = topic_to_range_map[topic][partition]
-                if topic_range['high'] == topic_range['low']:
-                    result_topic_to_consumer_topic_state_map[topic].partition_offset_map[partition] = \
-                        consumer_topic_state_map.partition_offset_map.pop(partition)
-
-        for topic in topic_to_consumer_topic_state_map.keys():
-            consumer_topic_state_map = topic_to_consumer_topic_state_map[topic]
-            if not consumer_topic_state_map.partition_offset_map:
-                topic_to_consumer_topic_state_map.pop(topic)
-
-    def _update_ranges_for_message(
-        self,
-        message,
-        start_timestamp,
-        topic_to_consumer_topic_state_map,
-        topic_to_range_map
-    ):
-        """Given a message, updates our topic_to_range_maps and sets the new state of the
-        topic_to_consumer_topic_state_map, based on start_timestamp"""
-        topic = message.topic
-        offset = message.kafka_position_info.offset
-        partition = message.kafka_position_info.partition
-        timestamp = message.timestamp
-
-        if timestamp < start_timestamp:
-            topic_to_range_map[topic][partition]['low'] = offset + 1
-        else:
-            topic_to_range_map[topic][partition]['high'] = offset
-        new_mid = int(
-            (
-                topic_to_range_map[topic][partition]['high'] +
-                topic_to_range_map[topic][partition]['low']
-            ) / 2
-        )
-        topic_to_consumer_topic_state_map[topic].partition_offset_map[partition] = new_mid
-        logger.debug(
-            "During start-date offset search got message from "
-            "topic|offset|part: {}|{}|{}, new range: {}".format(
-                topic, offset, partition, topic_to_range_map[topic]
-            )
-        )
 
     @batch_configure
     def _configure_signals(self):
@@ -533,7 +385,8 @@ class Tailer(Batch):
 
     def _get_message_result_dict(self, message):
         return {
-            field: getattr(message, field) for field in self.options.fields
+            field: getattr(message, field)
+            for field in self.options.fields if hasattr(message, field)
         }
 
     def _walk_dict(self, node, transform_item):

@@ -12,6 +12,7 @@ from yelp_avro.avro_string_writer import AvroStringWriter
 from yelp_avro.testing_helpers.generate_payload_data import generate_payload_data
 from yelp_avro.util import get_avro_schema_object
 
+from data_pipeline.config import configure_from_dict
 from data_pipeline.message import CreateMessage
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.testing_helpers.containers import Containers
@@ -48,8 +49,9 @@ def example_schema(namespace, source):
         "type":"record",
         "namespace": "%s",
         "name": "%s",
+        "doc":"test",
         "fields":[
-            {"type":"int", "name":"good_field"}
+            {"type":"int", "name":"good_field", "doc":"test"}
         ]
     }
     ''' % (namespace, source)
@@ -95,8 +97,9 @@ def example_meta_attr_schema(namespace):
         "type":"record",
         "namespace":"%s",
         "name":"good_meta_attribute",
+        "doc":"test",
         "fields":[
-            {"type":"int", "name":"good_payload"}
+            {"type":"int", "name":"good_payload", "doc":"test"}
         ]
     }
     ''' % (namespace)
@@ -156,6 +159,17 @@ def payload_data_message(registered_schema, example_payload_data):
 def containers():
     with Containers() as containers:
         yield containers
+
+
+@pytest.yield_fixture(scope='session')
+def config_containers_connections():
+    configure_from_dict(dict(
+        schematizer_host_and_port='schematizer:8888',
+        kafka_zookeeper='zk:2181',
+        kafka_broker_list=['kafka:9092'],
+        should_use_testing_containers=True
+    ))
+    yield
 
 
 @pytest.fixture(scope='session')

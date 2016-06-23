@@ -1,3 +1,34 @@
+data-pipeline-tools (0.2.4) lucid; urgency=low
+
+  * Commit: Revert hardcode schematizer endpoint.
+
+ -- Shahid Chohan <chohan@yelp.com>  Thu, 23 Jun 2016 12:24:14 -0700
+
+data-pipeline-tools (0.2.3) lucid; urgency=low
+
+  * Commit: Released 0.2.2 via make release
+
+ -- Shahid Chohan <chohan@yelp.com>  Thu, 23 Jun 2016 12:12:17 -0700
+
+data-pipeline-tools (0.2.2) lucid; urgency=low
+
+  * Commit: refactored set encryption type function in Message class
+
+ -- Chia-Chi Lin <clin@yelp.com>  Thu, 16 Jun 2016 07:50:34 -0700
+
+data-pipeline-tools (0.2.1) lucid; urgency=low
+
+  * Commit: Merge branch 'datapipe-917-Remove-topic-offsets-tracking-
+    information-inside-consumer'
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Mon, 06 Jun 2016 11:06:13 -0700
+
+data-pipeline-tools (0.1.76) lucid; urgency=low
+
+  * Refactor up tools/tailer to expose timestamp_to_offset_mapper
+
+ -- Prateek Agarwal <agarwal@yelp.com>  Thu, 26 May 2016 13:06:46 -0700
+
 data-pipeline-tools (0.1.75) lucid; urgency=low
 
   * Commit: Updated docstring in consumer_source.py

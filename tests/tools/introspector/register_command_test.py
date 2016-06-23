@@ -87,7 +87,8 @@ class TestRegisterAvroCommand(BaseTestRegister):
             'type': 'record',
             'name': source_name,
             'namespace': namespace_name,
-            'fields': [{'type': 'int', 'name': 'biz_id'}]
+            'doc': 'test',
+            'fields': [{'type': 'int', 'doc': 'test', 'name': 'biz_id'}]
         }
 
     @pytest.fixture
@@ -224,10 +225,11 @@ class TestRegisterMysqlCommand(BaseTestRegister):
             'type': 'record',
             'name': source_name.split('-')[0],
             'namespace': '',
+            'doc': 'test',
             'fields': [
-                {'name': 'id', 'type': 'int'},
-                {'name': 'name',
-                 'type': ['null', 'string'], 'maxlen': '8', 'default': None}
+                {'name': 'id', 'doc': 'test', 'type': 'int'},
+                {'name': 'name', 'doc': 'test',
+                 'type': ['null', 'string'], 'maxlen': 8, 'default': None}
             ]
         }
 
@@ -271,6 +273,9 @@ class TestRegisterMysqlCommand(BaseTestRegister):
         assert register_command.print_schema.call_count == 1
         call_args, _ = register_command.print_schema.call_args
         schema = call_args[0]
+        schema.schema_json['doc'] = 'test'
+        schema.schema_json['fields'][0]['doc'] = 'test'
+        schema.schema_json['fields'][1]['doc'] = 'test'
         self._assert_correct_schema(
             schema=schema,
             primary_keys=[],
@@ -301,6 +306,9 @@ class TestRegisterMysqlCommand(BaseTestRegister):
         assert register_command.print_schema.call_count == 1
         call_args, _ = register_command.print_schema.call_args
         schema = call_args[0]
+        schema.schema_json['doc'] = 'test'
+        schema.schema_json['fields'][0]['doc'] = 'test'
+        schema.schema_json['fields'][1]['doc'] = 'test'
         self._assert_correct_schema(
             schema=schema,
             primary_keys=[],
@@ -333,6 +341,9 @@ class TestRegisterMysqlCommand(BaseTestRegister):
         assert register_command.print_schema.call_count == 1
         call_args, _ = register_command.print_schema.call_args
         non_pii_schema = call_args[0]
+        non_pii_schema.schema_json['doc'] = 'test'
+        non_pii_schema.schema_json['fields'][0]['doc'] = 'test'
+        non_pii_schema.schema_json['fields'][1]['doc'] = 'test'
         self._assert_correct_schema(
             schema=non_pii_schema,
             primary_keys=[],
@@ -345,6 +356,9 @@ class TestRegisterMysqlCommand(BaseTestRegister):
         assert register_command.print_schema.call_count == 2
         call_args, _ = register_command.print_schema.call_args
         pii_schema = call_args[0]
+        pii_schema.schema_json['doc'] = 'test'
+        pii_schema.schema_json['fields'][0]['doc'] = 'test'
+        pii_schema.schema_json['fields'][1]['doc'] = 'test'
         self._assert_correct_schema(
             schema=pii_schema,
             primary_keys=[],

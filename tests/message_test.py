@@ -21,7 +21,9 @@ from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
 from data_pipeline.schematizer_clientlib.models.avro_schema import AvroSchema
 from data_pipeline.schematizer_clientlib.models.topic import Topic
+from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from tests.helpers.config import reconfigure
+from tests.helpers.mock_utils import attach_spy_on_func
 
 
 @pytest.mark.usefixtures("containers")
@@ -50,14 +52,12 @@ class SharedMessageTest(object):
         return request.param
 
     @pytest.fixture
-    def pii_schema(self, schematizer_client, namespace, source, example_schema):
-        return schematizer_client.register_schema(
-            namespace=namespace,
-            source=source,
-            schema_str=example_schema,
-            source_owner_email='test@yelp.com',
-            contains_pii=True
+    def pii_message(self, valid_message_data, pii_schema):
+        message_data = self._make_message_data(
+            valid_message_data,
+            schema_id=pii_schema.schema_id
         )
+        return self.message_class(**message_data)
 
     def test_rejects_unicode_topic(self, valid_message_data):
         self._assert_invalid_data(valid_message_data, topic=unicode('topic'))
@@ -130,6 +130,10 @@ class SharedMessageTest(object):
             payload_data={'data': 'foo'}
         )
 
+    def test_reject_encrypted_message_without_encryption(self, pii_message):
+        with pytest.raises(ValueError):
+            pii_message.encryption_type
+
     @pytest.mark.parametrize('invalid_keys', [unicode('foo'), [], [str('foo')]])
     def test_reject_non_unicode_keys(self, valid_message_data, invalid_keys):
         self._assert_invalid_data(valid_message_data, keys=invalid_keys)
@@ -160,6 +164,19 @@ class SharedMessageTest(object):
 
     def test_get_contains_pii_from_schematizer(self, message, registered_schema):
         assert message.contains_pii == registered_schema.topic.contains_pii
+
+    def test_specify_contains_pii_triggers_warnings(self, valid_message_data):
+        message_data = self._make_message_data(
+            valid_message_data,
+            contains_pii=False
+        )
+        with warnings.catch_warnings(record=True) as warns:
+            self.message_class(**message_data)
+            assert len(warns) == 1
+            contains_pii_warning = warns[0]
+            assert issubclass(contains_pii_warning.category, DeprecationWarning)
+            assert ('contains_pii is deprecated. Please stop passing it in.'
+                    in contains_pii_warning.message)
 
     @pytest.mark.parametrize('invalid_meta', ['not list', ['not_MetaAttribute']])
     def test_rejects_invalid_meta_type(self, valid_message_data, invalid_meta):
@@ -243,6 +260,22 @@ class SharedMessageTest(object):
         # only use eval to get the original dict when the string is trusted
         assert eval(actual) == expected
 
+    def test_message_str_with_pii(self, pii_message):
+        with reconfigure(encryption_type='AES_MODE_CBC-1'):
+            actual = str(pii_message)
+            expected_payload_data = {u'good_field': u"<type 'int'>"}
+            expected = {
+                'message_type': self.expected_message_type.name,
+                'schema_id': pii_message.schema_id,
+                'timestamp': pii_message.timestamp,
+                'meta': [pii_message.meta[0]._asdict()],
+                'encryption_type': pii_message.encryption_type,
+                'uuid': pii_message.uuid_hex,
+                'payload_data': expected_payload_data,
+            }
+            # only use eval to get the original dict when the string is trusted
+            assert eval(actual) == expected
+
     def assert_equal_decrypted_payload(
         self,
         message,
@@ -252,6 +285,21 @@ class SharedMessageTest(object):
         assert message._encryption_helper.decrypt_payload(
             actual_encrypted_payload
         ) == expected_decrypted_payload
+
+    def test_setup_contains_pii_from_schematizer_once(self, message):
+        schematizer_client = get_schematizer()
+        with attach_spy_on_func(schematizer_client, 'get_schema_by_id') as spy:
+            message.contains_pii
+            assert spy.call_count == 1
+        with attach_spy_on_func(schematizer_client, 'get_schema_by_id') as spy:
+            message.contains_pii
+            assert spy.call_count == 0
+
+    def test_setup_encryption_type_from_config_once(self, pii_message):
+        with reconfigure(encryption_type='Algorithm_one-1'):
+            assert pii_message.encryption_type == 'Algorithm_one-1'
+        with reconfigure(encryption_type='Algorithm_two-1'):
+            assert pii_message.encryption_type == 'Algorithm_one-1'
 
 
 class PayloadOnlyMessageTest(SharedMessageTest):
@@ -273,19 +321,6 @@ class PayloadOnlyMessageTest(SharedMessageTest):
     def test_rejects_previous_payload_data(self, message):
         with pytest.raises(AttributeError):
             message.previous_payload_data
-
-    def test_reject_encrypted_message_without_encryption(
-        self,
-        pii_schema,
-        payload,
-        valid_message_data
-    ):
-        self._assert_invalid_data(
-            valid_message_data,
-            error=ValueError,
-            schema_id=pii_schema.schema_id,
-            payload=payload
-        )
 
     def test_encrypted_message(self, pii_schema, payload, example_payload_data):
         with reconfigure(encryption_type='AES_MODE_CBC-1'):
@@ -485,20 +520,6 @@ class TestUpdateMessage(SharedMessageTest):
             previous_payload_data={'foo': 'bar'}
         )
 
-    def test_reject_encrypted_message_without_encryption(
-        self,
-        pii_schema,
-        payload,
-        valid_message_data
-    ):
-        self._assert_invalid_data(
-            valid_message_data,
-            error=ValueError,
-            schema_id=pii_schema.schema_id,
-            payload=payload,
-            previous_payload=payload
-        )
-
     def test_encrypted_message(self, pii_schema, payload, example_payload_data):
         # TODO [clin|DATAPIPE-851] let's see if this can be refactored
         with reconfigure(encryption_type='AES_MODE_CBC-1'):
@@ -567,6 +588,25 @@ class TestUpdateMessage(SharedMessageTest):
         }
         # only use eval to get the original dict when the string is trusted
         assert eval(actual) == expected
+
+    def test_message_str_with_pii(self, pii_message):
+        with reconfigure(encryption_type='AES_MODE_CBC-1'):
+            actual = str(pii_message)
+
+            expected_payload_data = {u'good_field': u"<type 'int'>"}
+            expected_previous_payload_data = {u'good_field': u"<type 'int'>"}
+            expected = {
+                'message_type': self.expected_message_type.name,
+                'schema_id': pii_message.schema_id,
+                'timestamp': pii_message.timestamp,
+                'meta': [pii_message.meta[0]._asdict()],
+                'encryption_type': pii_message.encryption_type,
+                'uuid': pii_message.uuid_hex,
+                'payload_data': expected_payload_data,
+                'previous_payload_data': expected_previous_payload_data
+            }
+            # only use eval to get the original dict when the string is trusted
+            assert eval(actual) == expected
 
 
 class TestCreateFromMessageAndOffset(object):

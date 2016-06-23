@@ -6,10 +6,8 @@ from collections import defaultdict
 from collections import Mapping
 
 from data_pipeline.config import get_config
+from data_pipeline.helpers.log import debug_log
 from data_pipeline.position_data import PositionData
-
-
-logger = get_config().logger
 
 
 def PositionDataTracker():
@@ -49,12 +47,14 @@ class _PositionDataTracker(object):
         self._update_merged_upstream_position_info(message)
 
     def record_message_buffered(self, message):
-        logger.debug("Message buffered: %s" % repr(message))
+        debug_log(lambda: "Message buffered: %s" % repr(message))
         self.record_message(message)
         self.unpublished_messages += 1
 
     def record_messages_published(self, topic, offset, message_count):
-        logger.debug("Messages published: %s, %s" % (topic, message_count))
+        debug_log(
+            lambda: "Messages published: %s, %s" % (topic, message_count)
+        )
         self.topic_to_kafka_offset_map[topic] = offset + message_count
         self.unpublished_messages -= message_count
 

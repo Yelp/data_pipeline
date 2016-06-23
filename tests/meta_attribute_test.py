@@ -20,8 +20,9 @@ class TestMetaAttribute(object):
             "type": "record",
             "namespace": "test_namespace",
             "name": "i_am_so_meta",
+            'doc': 'test',
             "fields": [
-                {"type": "int", "name": "me_name_meta"}
+                {"type": "int", 'doc': 'test', "name": "me_name_meta"}
             ]
         }
 

@@ -3,11 +3,16 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import simplejson
+from requests import ConnectionError
 from swaggerpy.exception import HTTPError
 
+from data_pipeline._retry_util import ExpBackoffPolicy
+from data_pipeline._retry_util import retry_on_exception
+from data_pipeline._retry_util import RetryPolicy
 from data_pipeline.config import get_config
 from data_pipeline.helpers.singleton import Singleton
 from data_pipeline.schematizer_clientlib.models.avro_schema import _AvroSchema
+from data_pipeline.schematizer_clientlib.models.avro_schema_element import _AvroSchemaElement
 from data_pipeline.schematizer_clientlib.models.consumer_group import _ConsumerGroup
 from data_pipeline.schematizer_clientlib.models.consumer_group_data_source \
     import _ConsumerGroupDataSource
@@ -96,6 +101,49 @@ class SchematizerClient(object):
         _schema = _AvroSchema.from_response(response)
         self._set_cache_by_schema(_schema)
         return _schema
+
+    def get_schema_elements_by_schema_id(self, schema_id):
+        """Get the avro schema elements of given schema id.
+
+        Args:
+            schema_id (int): The id of requested avro schema elements.
+
+        Returns:
+            (List of data_pipeline.schematizer_clientlib.models.avro_schema_element.AvroSchemaElement):
+                The list requested avro Schema elements by schema_id.
+        """
+        # Filter out elements that represent the whole record (when element.element_name == None)
+        return [element.to_result() for element in self._get_schema_elements_by_schema_id(schema_id) if element.element_name]
+
+    def _get_schema_elements_by_schema_id(self, schema_id):
+        response = self._call_api(
+            api=self._client.schemas.get_schema_elements_by_schema_id,
+            params={'schema_id': schema_id}
+        )
+        _schema = _AvroSchemaElement.from_response(response)
+        return _schema
+
+    def get_schemas_created_after_date(self, created_after):
+        """Get the avro schemas created after given datetime timestamp.
+
+        Args:
+            created_after (long): get schemas created after given utc long (inclusive).
+
+        Returns:
+            (List of data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
+                The list of avro schemas created after (inclusive) specified date.
+        """
+        return [schema.to_result() for schema in self._get_schemas_created_after_date(created_after)]
+
+    def _get_schemas_created_after_date(self, created_after):
+        responses = self._call_api(
+            api=self._client.schemas.get_schemas_created_after,
+            params={'created_after': created_after}
+        )
+        _schemas = [_AvroSchema.from_response(response) for response in responses]
+        for _schema in _schemas:
+            self._set_cache_by_schema(_schema)
+        return _schemas
 
     def _make_avro_schema_key(self, schema_json):
         return simplejson.dumps(schema_json, sort_keys=True)
@@ -823,13 +871,24 @@ class SchematizerClient(object):
         return response
 
     def _call_api(self, api, params=None, request_body=None):
-        # TODO(DATAPIPE-207|joshszep): Include retry strategy support
         request_params = params or {}
         if request_body:
             request_params['body'] = request_body
         request = api(**request_params)
-        response = request.result()
+        retry_policy = RetryPolicy(
+            ExpBackoffPolicy(with_jitter=True),
+            max_retry_count=get_config().schematizer_client_max_connection_retry
+        )
+        response = retry_on_exception(
+            retry_policy=retry_policy,
+            retry_exceptions=ConnectionError,
+            func_to_retry=self._get_api_result,
+            request=request
+        )
         return response
+
+    def _get_api_result(self, request):
+        return request.result()
 
     def _get_cached_schema(self, schema_id):
         _schema = self._cache.get_value(_AvroSchema, schema_id)
