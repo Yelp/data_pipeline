@@ -1,3 +1,9 @@
+data-pipeline-tools (0.2.4) lucid; urgency=low
+
+  * Commit: Revert hardcode schematizer endpoint.
+
+ -- Shahid Chohan <chohan@yelp.com>  Thu, 23 Jun 2016 12:24:14 -0700
+
 data-pipeline-tools (0.2.3) lucid; urgency=low
 
   * Commit: Released 0.2.2 via make release
