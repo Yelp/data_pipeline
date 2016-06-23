@@ -108,7 +108,8 @@ class Config(object):
         included docker-compose file.
         """
         return client.get_client(
-            'http://{0}/api-docs'.format(self.schematizer_host_and_port)
+            # 'http://{0}/api-docs'.format(self.schematizer_host_and_port)
+            'http://dev34-devc.dev.yelpcorp.com:59740/api-docs'
         )
 
     @property
