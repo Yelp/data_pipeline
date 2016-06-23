@@ -15,12 +15,12 @@ from data_pipeline.initialization_vector import InitializationVector
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 
-_EAlgorithmAVSCInfo = namedtuple('_EAlgorithmAVSCInfo', (
+_EncryptionAlgorithmInfo = namedtuple('_EncryptionAlgorithmInfo', (
     'avsc_file_path', 'namespace', 'source', 'source_owner_email', 'contains_pii')
 )
 
 
-initialization_vector_info = _EAlgorithmAVSCInfo(
+initialization_vector_info = _EncryptionAlgorithmInfo(
     'data_pipeline/schemas/initialization_vector_v1.avsc',
     'yelp.data_pipeline',
     'initialization_vector',
@@ -29,7 +29,7 @@ initialization_vector_info = _EAlgorithmAVSCInfo(
 )
 
 
-class _EAlgorithmAVSCStore(object):
+class _EncryptionAlgorithmAVSCStore(object):
 
     __metaclass__ = Singleton
 
@@ -130,7 +130,7 @@ class EncryptionHelper(object):
         """
         algorithm, _ = cls._get_algorithm_and_key_id(encryption_type)
         if algorithm:
-            schema_id = _EAlgorithmAVSCStore().get_schema_id(initialization_vector_info)
+            schema_id = _EncryptionAlgorithmAVSCStore().get_schema_id(initialization_vector_info)
             return InitializationVector(schema_id)
         raise Exception(
             "Encryption algorithm {} is not supported.".format(algorithm)

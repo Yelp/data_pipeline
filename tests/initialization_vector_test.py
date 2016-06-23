@@ -4,7 +4,7 @@ from __future__ import unicode_literals
 
 import pytest
 
-from data_pipeline._encryption_helper import _EAlgorithmAVSCStore
+from data_pipeline._encryption_helper import _EncryptionAlgorithmAVSCStore
 from data_pipeline._encryption_helper import initialization_vector_info
 from data_pipeline.initialization_vector import InitializationVector
 
@@ -13,7 +13,7 @@ class TestInitializationVector(object):
 
     @pytest.fixture
     def vector_schema_id(self):
-        return _EAlgorithmAVSCStore().get_schema_id(initialization_vector_info)
+        return _EncryptionAlgorithmAVSCStore().get_schema_id(initialization_vector_info)
 
     @pytest.fixture
     def vector_payload_data(self):

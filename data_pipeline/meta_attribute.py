@@ -8,7 +8,7 @@ from data_pipeline._avro_payload import _AvroPayload
 
 
 class MetaAttribute(object):
-    """Messages flowing through data pipeline have a ability to contain an
+    """Messages flowing through data pipeline can contain an
     additional array of avro encoded payloads under the “meta” key.
     These avro encoded payloads are known as Meta Attributes within the
     data pipeline domain. Meta Attributes contains additional information
@@ -38,7 +38,9 @@ class MetaAttribute(object):
                 )
 
 
-    2. Create a MetaAttribute object from serialized MetaAttribute payload.
+    2. Recover a MetaAttribute object from serialized MetaAttribute payload.
+    This will be usefull specifically in the case where we want to reconstruct
+    Meta Attribute object from serialized payload coming out of Kafka.
 
     **Examples**:
 

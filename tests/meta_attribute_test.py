@@ -5,8 +5,8 @@ from __future__ import unicode_literals
 import mock
 import pytest
 
-from data_pipeline._encryption_helper import _EAlgorithmAVSCInfo
-from data_pipeline._encryption_helper import _EAlgorithmAVSCStore
+from data_pipeline._encryption_helper import _EncryptionAlgorithmInfo
+from data_pipeline._encryption_helper import _EncryptionAlgorithmAVSCStore
 from data_pipeline.meta_attribute import MetaAttribute
 
 
@@ -30,12 +30,12 @@ class TestMetaAttribute(object):
 
     @pytest.fixture
     def avro_schema_info(self):
-        return _EAlgorithmAVSCInfo(
-            'mock_avsc_file_path',
-            'yelp.meta_all_things',
-            'meta_me_meta',
-            'meta_handler@yelp.com',
-            False
+        return _EncryptionAlgorithmInfo(
+            avsc_file_path='mock_avsc_file_path',
+            namespace='yelp.meta_all_things',
+            source='meta_me_meta',
+            source_owner_email='meta_handler@yelp.com',
+            contains_pii=False
         )
 
     @pytest.fixture
@@ -49,11 +49,11 @@ class TestMetaAttribute(object):
         class NewMetaAttribute(MetaAttribute):
             def __init__(self):
                 with mock.patch.object(
-                    _EAlgorithmAVSCStore,
+                    _EncryptionAlgorithmAVSCStore,
                     '_load_avro_schema_file',
                     return_value=avro_schema_json
                 ):
-                    schema_id = _EAlgorithmAVSCStore().get_schema_id(avro_schema_info)
+                    schema_id = _EncryptionAlgorithmAVSCStore().get_schema_id(avro_schema_info)
                 super(NewMetaAttribute, self).__init__(
                     schema_id=schema_id,
                     payload_data=meta_attr_payload_data

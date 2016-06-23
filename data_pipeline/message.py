@@ -15,7 +15,6 @@ from data_pipeline.envelope import Envelope
 from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
 from data_pipeline.meta_attribute import MetaAttribute
-from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 
 logger = get_config().logger
@@ -122,10 +121,6 @@ class Message(object):
     """Identifies the nature of the message. The valid value is one of the
     data_pipeline.message_type.MessageType. It must be set by child class.
     """
-
-    @property
-    def _schematizer(self):
-        return get_schematizer()
 
     @property
     def topic(self):

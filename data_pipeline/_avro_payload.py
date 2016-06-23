@@ -30,7 +30,7 @@ class _AvroPayload(object):
     ):
         self._set_schema_id(schema_id)
         self._set_topic(
-            topic or str(self._schematizer.get_schema_by_id(schema_id).topic.name)
+            topic or str(self.schematizer.get_schema_by_id(schema_id).topic.name)
         )
         self._set_contains_pii()
         self._set_uuid(uuid)
@@ -44,7 +44,7 @@ class _AvroPayload(object):
         self._contains_pii = None
 
     @property
-    def _schematizer(self):
+    def schematizer(self):
         return get_schematizer()
 
     @property
@@ -75,7 +75,7 @@ class _AvroPayload(object):
         return self._contains_pii
 
     def _set_contains_pii(self):
-        self._contains_pii = self._schematizer.get_schema_by_id(
+        self._contains_pii = self.schematizer.get_schema_by_id(
             self.schema_id
         ).topic.contains_pii
 
