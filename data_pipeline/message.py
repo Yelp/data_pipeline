@@ -416,9 +416,8 @@ class Message(object):
         self._set_meta(meta)
         self._set_payload_or_payload_data(payload, payload_data)
         if topic:
-            logger.debug(
-                "Overriding message topic: {} for schema {}.".format(topic, schema_id)
-            )
+            warnings.simplefilter("always", category=DeprecationWarning)
+            warnings.warn("Passing in topics explicitly is deprecated.", DeprecationWarning)
         self._should_be_encrypted_state = None
         self._encryption_type = None
         self._contains_pii = None

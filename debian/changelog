@@ -1,3 +1,22 @@
+data-pipeline-tools (0.2.5) lucid; urgency=low
+
+  * Commit: Merge branch 'PERF-663_Update_psutil_version_in_data-
+    pipeline'
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Fri, 24 Jun 2016 14:20:30 -0700
+
+data-pipeline-tools (0.2.4) lucid; urgency=low
+
+  * Commit: Revert hardcode schematizer endpoint.
+
+ -- Shahid Chohan <chohan@yelp.com>  Thu, 23 Jun 2016 12:24:14 -0700
+
+data-pipeline-tools (0.2.3) lucid; urgency=low
+
+  * Commit: Released 0.2.2 via make release
+
+ -- Shahid Chohan <chohan@yelp.com>  Thu, 23 Jun 2016 12:12:17 -0700
+
 data-pipeline-tools (0.2.2) lucid; urgency=low
 
   * Commit: refactored set encryption type function in Message class

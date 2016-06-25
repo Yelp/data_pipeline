@@ -385,7 +385,8 @@ class Tailer(Batch):
 
     def _get_message_result_dict(self, message):
         return {
-            field: getattr(message, field) for field in self.options.fields
+            field: getattr(message, field)
+            for field in self.options.fields if hasattr(message, field)
         }
 
     def _walk_dict(self, node, transform_item):

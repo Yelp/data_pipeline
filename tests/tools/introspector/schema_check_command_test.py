@@ -60,20 +60,22 @@ class TestInfoCommand(object):
     def schema_json(self, namespace_name, source_name):
         return {
             'type': 'record',
+            'doc': 'test',
             'name': source_name,
             'namespace': namespace_name,
-            'fields': [{'type': 'int', 'name': 'biz_id'}]
+            'fields': [{'type': 'int', 'doc': 'test', 'name': 'biz_id'}]
         }
 
     @pytest.fixture(scope='class')
     def schema_json_incompatible(self, namespace_name, source_name):
         return {
             'type': 'record',
+            'doc': 'test',
             'name': source_name,
             'namespace': namespace_name,
             'fields': [
-                {'type': 'int', 'name': 'biz_id'},
-                {'type': 'int', 'name': 'new_field'}
+                {'type': 'int', 'doc': 'test', 'name': 'biz_id'},
+                {'type': 'int', 'doc': 'test', 'name': 'new_field'}
             ]
         }
 

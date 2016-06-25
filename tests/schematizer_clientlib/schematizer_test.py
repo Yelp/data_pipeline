@@ -4,10 +4,12 @@ from __future__ import unicode_literals
 
 import random
 import time
+from datetime import datetime
 
 import mock
 import pytest
 import simplejson
+from requests import ConnectionError
 from swaggerpy import exception as swaggerpy_exc
 
 from data_pipeline.config import get_config
@@ -82,7 +84,8 @@ class SchematizerClientTestBase(object):
             'type': 'record',
             'name': source,
             'namespace': namespace,
-            'fields': [{'type': 'int', 'name': 'foo'}]
+            'doc': 'test',
+            'fields': [{'type': 'int', 'doc': 'test', 'name': 'foo'}]
         }
         params = {
             'namespace': namespace,
@@ -114,6 +117,13 @@ class SchematizerClientTestBase(object):
         for i in range(0, len(actual)):
             self._assert_equal_multi_attrs(actual[i], expected_resp[i], *attrs)
 
+    def _assert_avro_schemas_equal(self, actual, expected_resp):
+        attrs = ('schema_id', 'base_schema_id', 'status', 'primary_keys', 'note',
+                 'created_at', 'updated_at')
+        self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
+        assert actual.schema_json == expected_resp.schema_json
+        self._assert_topic_values(actual.topic, expected_resp.topic)
+
     def _assert_topic_values(self, actual, expected_resp):
         attrs = ('topic_id', 'name', 'contains_pii', 'primary_keys', 'created_at', 'updated_at')
         self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
@@ -127,6 +137,25 @@ class SchematizerClientTestBase(object):
     def _assert_equal_multi_attrs(self, actual, expected, *attrs):
         for attr in attrs:
             assert getattr(actual, attr) == getattr(expected, attr)
+
+
+class TestAPIClient(SchematizerClientTestBase):
+
+    @pytest.fixture(autouse=True, scope='class')
+    def biz_schema(self, yelp_namespace, biz_src_name, containers):
+        return self._register_avro_schema(yelp_namespace, biz_src_name)
+
+    def test_retry_api_call(self, schematizer, biz_schema):
+        with mock.patch.object(
+            schematizer,
+            '_get_api_result',
+            side_effect=[ConnectionError, ConnectionError, None]
+        ) as api_spy:
+            schematizer._call_api(
+                api=schematizer._client.schemas.get_schema_by_id,
+                params={'schema_id': biz_schema.schema_id}
+            )
+            assert api_spy.call_count == 3
 
 
 class TestGetSchemaById(SchematizerClientTestBase):
@@ -181,6 +210,57 @@ class TestGetSchemaElementsBySchemaId(SchematizerClientTestBase):
             assert api_spy.call_count == 1
 
 
+class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
+
+    def test_get_schemas_created_after_date(self, schematizer):
+        created_after_str = "2015-01-01T19:10:26"
+        created_after = datetime.strptime(created_after_str,
+                                          '%Y-%m-%dT%H:%M:%S')
+        creation_timestamp = long((created_after -
+                                   datetime.utcfromtimestamp(0)).total_seconds())
+        with self.attach_spy_on_api(
+            schematizer._client.schemas,
+            'get_schemas_created_after'
+        ) as api_spy:
+            schemas = schematizer.get_schemas_created_after_date(creation_timestamp)
+            for schema in schemas:
+                assert schema.created_at >= created_after
+            assert api_spy.call_count == 1
+
+    def test_get_schemas_created_after_date_filter(self, schematizer):
+        created_after_str = "2015-01-01T19:10:26"
+        created_after = datetime.strptime(created_after_str,
+                                          '%Y-%m-%dT%H:%M:%S')
+        creation_timestamp = long((created_after -
+                                   datetime.utcfromtimestamp(0)).total_seconds())
+
+        created_after_str2 = "2016-06-10T19:10:26"
+        created_after2 = datetime.strptime(created_after_str2,
+                                           '%Y-%m-%dT%H:%M:%S')
+        creation_timestamp2 = long((created_after2 -
+                                    datetime.utcfromtimestamp(0)).total_seconds())
+        with self.attach_spy_on_api(
+            schematizer._client.schemas,
+            'get_schemas_created_after'
+        ) as api_spy:
+            schemas = schematizer.get_schemas_created_after_date(creation_timestamp)
+            schemas_later = schematizer.get_schemas_created_after_date(creation_timestamp2)
+            assert len(schemas) >= len(schemas_later)
+            assert api_spy.call_count == 2
+
+    def test_get_schemas_created_after_date_cached(self, schematizer):
+        created_after_str = "2015-01-01T19:10:26"
+        created_after = datetime.strptime(created_after_str,
+                                          '%Y-%m-%dT%H:%M:%S')
+        creation_timestamp = long((created_after -
+                                   datetime.utcfromtimestamp(0)).total_seconds())
+        schemas = schematizer.get_schemas_created_after_date(creation_timestamp)
+        # Assert each element was cached properly
+        for schema in schemas:
+            actual = schematizer.get_schema_by_id(schema.schema_id)
+            self._assert_avro_schemas_equal(actual, schema)
+
+
 class TestGetSchemasByTopic(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
@@ -225,7 +305,8 @@ class TestGetSchemaBySchemaJson(SchematizerClientTestBase):
             'type': 'record',
             'name': biz_src_name,
             'namespace': yelp_namespace,
-            'fields': [{'type': 'int', 'name': 'biz_id'}]
+            'doc': 'test',
+            'fields': [{'type': 'int', 'doc': 'test', 'name': 'biz_id'}]
         }
 
     @pytest.fixture
@@ -455,7 +536,7 @@ class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
     @pytest.fixture(autouse=True, scope='class')
     def biz_schema_two(self, biz_schema):
         new_schema = simplejson.loads(biz_schema.schema)
-        new_schema['fields'].append({'type': 'int', 'name': 'bar', 'default': 0})
+        new_schema['fields'].append({'type': 'int', 'doc': 'test', 'name': 'bar', 'default': 0})
         return self._register_avro_schema(
             namespace=biz_schema.topic.source.namespace.name,
             source=biz_schema.topic.source.name,
@@ -503,7 +584,8 @@ class TestRegisterSchema(SchematizerClientTestBase):
             'type': 'record',
             'name': biz_src_name,
             'namespace': yelp_namespace,
-            'fields': [{'type': 'int', 'name': 'biz_id'}]
+            'doc': 'test',
+            'fields': [{'type': 'int', 'doc': 'test', 'name': 'biz_id'}]
         }
 
     @pytest.fixture
@@ -696,9 +778,10 @@ class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
             'type': 'record',
             'name': biz_src_name,
             'namespace': '',
+            'doc': 'test',
             'fields': [
-                {'name': 'id', 'type': 'int'},
-                {'name': 'name',
+                {'name': 'id', 'doc': 'test', 'type': 'int'},
+                {'name': 'name', 'doc': 'test',
                  'type': ['null', 'string'], 'maxlen': '8', 'default': None}
             ]
         }
@@ -905,8 +988,9 @@ class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
             'type': 'record',
             'name': biz_src_name,
             'namespace': yelp_namespace,
+            'doc': 'test',
             'fields': [
-                {'type': 'int', 'name': 'biz_id'}
+                {'type': 'int', 'doc': 'test', 'name': 'biz_id'}
             ]
         }
 
@@ -916,9 +1000,10 @@ class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
             'type': 'record',
             'name': biz_src_name,
             'namespace': yelp_namespace,
+            'doc': 'test',
             'fields': [
-                {'type': 'int', 'name': 'biz_id'},
-                {'type': 'int', 'name': 'new_field'}
+                {'type': 'int', 'doc': 'test', 'name': 'biz_id'},
+                {'type': 'int', 'doc': 'test', 'name': 'new_field'}
             ]
         }
 
@@ -966,9 +1051,10 @@ class TestFilterTopicsByPkeys(SchematizerClientTestBase):
             'type': 'record',
             'name': usr_src_name,
             'namespace': yelp_namespace,
+            'doc': 'test',
             'fields': [
-                {'type': 'int', 'name': 'id', 'pkey': 1},
-                {'type': 'int', 'name': 'data'}
+                {'type': 'int', 'doc': 'test', 'name': 'id', 'pkey': 1},
+                {'type': 'int', 'doc': 'test', 'name': 'data'}
             ],
             'pkey': ['id']
         }
@@ -1295,8 +1381,9 @@ class TestGetSchemaMigration(SchematizerClientTestBase):
         return {
             'type': 'record',
             'name': 'schema_a',
+            'doc': 'test',
             'namespace': 'test_namespace',
-            'fields': [{'type': 'int', 'name': 'test_id'}]
+            'fields': [{'type': 'int', 'doc': 'test', 'name': 'test_id'}]
         }
 
     @pytest.fixture(params=[True, False])

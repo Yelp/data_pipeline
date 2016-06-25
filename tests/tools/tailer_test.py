@@ -13,6 +13,7 @@ from yelp_batch.batch import BatchOptionParser
 import data_pipeline
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import CreateMessage
+from data_pipeline.message import RefreshMessage
 from data_pipeline.producer import Producer
 from data_pipeline.schematizer_clientlib.models.topic import Topic
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
@@ -99,6 +100,19 @@ class TestTailer(object):
             payload_data={'good_field': 100},
             timestamp=1500
         )
+
+    @pytest.fixture
+    def refresh_message(self, registered_schema):
+        return RefreshMessage(
+            registered_schema.schema_id,
+            payload_data={'good_field': 200},
+            timestamp=1200
+        )
+
+    @pytest.fixture
+    def topic_with_refresh_message(self, refresh_message, producer):
+        topic, offset = self._get_published_topic_and_offset(refresh_message, producer)
+        return self._construct_topic_with_offset_arg(topic, offset - 1)
 
     @pytest.fixture
     def topic_with_good_offset(self, message, producer):
@@ -304,9 +318,38 @@ class TestTailer(object):
 
         out, _ = capsys.readouterr()
         assert "{u'good_field': 100}" in out
+        assert "'uuid_hex'" in out
+        assert "'encryption_type'" in out
         assert "'kafka_position_info'" in out
+        assert "'topic'" in out
+        assert "'schema_id'" in out
+        assert "'meta'" in out
         assert "'timestamp': 1500" in out
+        assert "'contains_pii'" in out
+        assert "'payload_diff'" in out
         assert "'message_type': MessageType.create(1)" in out
+
+    def test_all_fields_for_refresh_message(self, dp_tailer, topic_with_refresh_message, capsys):
+        self._init_batch(dp_tailer, [
+            '--topic', topic_with_refresh_message,
+            '--message-limit', '1',
+            '--all-fields'
+        ])
+
+        dp_tailer.run()
+
+        out, _ = capsys.readouterr()
+        assert "{u'good_field': 200}" in out
+        assert "'uuid_hex'" in out
+        assert "'encryption_type'" in out
+        assert "'kafka_position_info'" in out
+        assert "'topic'" in out
+        assert "'schema_id'" in out
+        assert "'meta'" in out
+        assert "'timestamp': 1200" in out
+        assert "'contains_pii'" in out
+        assert "'message_type': MessageType.refresh(4)" in out
+        assert "'payload_diff'" not in out
 
     def test_iso_time(self, dp_tailer, topic_with_good_offset, capsys):
         self._init_batch(dp_tailer, [

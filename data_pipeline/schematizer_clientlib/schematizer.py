@@ -123,6 +123,28 @@ class SchematizerClient(object):
         _schema = _AvroSchemaElement.from_response(response)
         return _schema
 
+    def get_schemas_created_after_date(self, created_after):
+        """Get the avro schemas created after given datetime timestamp.
+
+        Args:
+            created_after (long): get schemas created after given utc long (inclusive).
+
+        Returns:
+            (List of data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
+                The list of avro schemas created after (inclusive) specified date.
+        """
+        return [schema.to_result() for schema in self._get_schemas_created_after_date(created_after)]
+
+    def _get_schemas_created_after_date(self, created_after):
+        responses = self._call_api(
+            api=self._client.schemas.get_schemas_created_after,
+            params={'created_after': created_after}
+        )
+        _schemas = [_AvroSchema.from_response(response) for response in responses]
+        for _schema in _schemas:
+            self._set_cache_by_schema(_schema)
+        return _schemas
+
     def _make_avro_schema_key(self, schema_json):
         return simplejson.dumps(schema_json, sort_keys=True)
 
@@ -860,9 +882,13 @@ class SchematizerClient(object):
         response = retry_on_exception(
             retry_policy=retry_policy,
             retry_exceptions=ConnectionError,
-            func_to_retry=request.result
+            func_to_retry=self._get_api_result,
+            request=request
         )
         return response
+
+    def _get_api_result(self, request):
+        return request.result()
 
     def _get_cached_schema(self, schema_id):
         _schema = self._cache.get_value(_AvroSchema, schema_id)
