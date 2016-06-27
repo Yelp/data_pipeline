@@ -66,10 +66,15 @@ class Consumer(BaseConsumer):
             Dict[str, Optional[Dict[int, int]]]]]): Optional callback which is
             passed a list of topics, and should return a dictionary where keys
             are topic names and values are either None if no offset should be
-            manually set, or a map from partition to offset. If
-            fetch_offsets_for_topics is None, then the consumer will pick up
-            the last committed offsets of topics. If implemented, this function
-            will be called every time consumer refreshes the topics.
+            manually set, or a map from partition to offset.
+                If implemented, this function will be called every time
+            consumer refreshes the topics, so that the consumer can provide a
+            map of partitions to offsets for each topic, or None if the default
+            behavior should be employed instead. The default behavior is
+            picking up the last committed offsets of topics.
+                This method must be implemented if topic state is to be stored
+            in some system other than Kafka, for example when writing data from
+            Kafka into a transactional store.
         pre_topic_refresh_callback: (Optional[Callable[[list[str], list[str]],
             Any]]): Optional callback that gets executed right before the
             consumer is about to refresh the topics. The callback function is
@@ -179,7 +184,6 @@ class Consumer(BaseConsumer):
             max_time = time() + timeout
         while len(messages) < count:
             self._refresh_source_topics_if_necessary()
-
             try:
                 default_iter_timeout = self.consumer_group.iter_timeout
                 # Converting seconds to milliseconds
@@ -204,21 +208,17 @@ class Consumer(BaseConsumer):
         if not self._refresh_timer.should_tick():
             return
 
-        old_topics = self.topic_to_partition_map.keys()
-        new_topics = self._get_topic_to_consumer_topic_state_map(
+        current_topics = self.topic_to_partition_map.keys()
+
+        refreshed_topic_to_state_map = self._get_topic_to_consumer_topic_state_map(
             self.topic_to_partition_map,
             self.consumer_source
-        ).keys()
+        )
+        refreshed_topics = refreshed_topic_to_state_map.keys()
 
-        if set(old_topics) == set(new_topics):
+        if set(current_topics) == set(refreshed_topics):
             return
 
         if self.pre_topic_refresh_callback:
-            self.pre_topic_refresh_callback(old_topics, new_topics)
-        self._refresh_source_topics()
-
-    def _refresh_source_topics(self):
-        self.reset_topics(self._get_topic_to_consumer_topic_state_map(
-            self.topic_to_partition_map,
-            self.consumer_source
-        ))
+            self.pre_topic_refresh_callback(current_topics, refreshed_topics)
+        self.reset_topics(refreshed_topic_to_state_map)

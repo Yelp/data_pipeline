@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 import copy
 import datetime
+import json
 import random
 import time
 from uuid import uuid4
@@ -856,75 +857,18 @@ class RefreshFixedTopicTests(RefreshTopicsTestBase):
         )
 
 
-class FixedTopicsReaderSchemaMapSetupMixin(object):
-
-    @pytest.fixture
-    def consumer_source(self, topic):
-        return FixedTopics(topic)
-
-    @pytest.fixture
-    def expected_message(
-        self,
-        registered_multiple_schemas_with_same_topic,
-        payload
-    ):
-        return CreateMessage(
-            schema_id=registered_multiple_schemas_with_same_topic[1].schema_id,
-            payload=payload
-        )
-
-
-class TopicInFixedNamespacesReaderSchemaMapSetupMixin(object):
-
-    @pytest.fixture
-    def consumer_source(self, registered_multiple_schemas_with_same_topic):
-        return TopicsInFixedNamespaces(
-            registered_multiple_schemas_with_same_topic[1].
-            topic.source.namespace.name
-        )
-
-    @pytest.fixture
-    def expected_message(
-        self,
-        registered_multiple_schemas_with_same_topic,
-        payload
-    ):
-        return CreateMessage(
-            schema_id=registered_multiple_schemas_with_same_topic[1].schema_id,
-            payload=payload
-        )
-
-
-class TopicInSourceReaderSchemaMapSetupMixin(object):
-
-    @pytest.fixture
-    def consumer_source(self, registered_multiple_schemas_with_same_topic):
-        return TopicInSource(
-            namespace_name=registered_multiple_schemas_with_same_topic[1].
-            topic.source.namespace.name,
-            source_name=registered_multiple_schemas_with_same_topic[1].
-            topic.source.name
-        )
-
-    @pytest.fixture
-    def expected_message(
-        self,
-        registered_multiple_schemas_with_same_topic,
-        payload
-    ):
-        return CreateMessage(
-            schema_id=registered_multiple_schemas_with_same_topic[1].schema_id,
-            payload=payload
-        )
-
-
 class FixedSchemasReaderSchemaMapSetupMixin(object):
 
     @pytest.fixture
-    def registered_non_compatible_schema(self, schematizer_client, example_non_compatible_schema, namespace, source):
+    def registered_non_compatible_schema(
+        self,
+        schematizer_client,
+        example_non_compatible_schema
+    ):
+        schema = json.loads(example_non_compatible_schema)
         return schematizer_client.register_schema(
-            namespace=namespace,
-            source=source,
+            namespace=schema['namespace'],
+            source=schema['name'],
             schema_str=example_non_compatible_schema,
             source_owner_email='test@yelp.com',
             contains_pii=False
@@ -933,84 +877,23 @@ class FixedSchemasReaderSchemaMapSetupMixin(object):
     @pytest.fixture
     def consumer_source(
         self,
-        registered_multiple_schemas_with_same_topic,
+        registered_schema,
+        registered_compatible_schema,
         registered_non_compatible_schema
     ):
         return FixedSchemas(
-            registered_multiple_schemas_with_same_topic[0].schema_id,
+            registered_compatible_schema.schema_id,
             registered_non_compatible_schema.schema_id
         )
 
     @pytest.fixture
     def expected_message(
         self,
-        registered_multiple_schemas_with_same_topic,
+        registered_compatible_schema,
         payload
     ):
         return CreateMessage(
-            schema_id=registered_multiple_schemas_with_same_topic[0].schema_id,
-            payload=payload
-        )
-
-
-class TopicInDataTargetReaderSchemaMapSetupMixin(object):
-
-    @property
-    def target_type(self):
-        return 'redshift'
-
-    @property
-    def destination(self):
-        return 'dw.redshift.destination'
-
-    def random_name(self, prefix=None):
-        suffix = random.random()
-        return '{}_{}'.format(prefix, suffix) if prefix else '{}'.format(suffix)
-
-    @pytest.fixture
-    def data_target(self, schematizer_client):
-        return schematizer_client.create_data_target(
-            target_type=self.target_type,
-            destination=self.destination
-        )
-
-    @pytest.fixture
-    def expected_reader_schema(self, registered_multiple_schemas_with_same_topic):
-        return registered_multiple_schemas_with_same_topic[1]
-
-    @pytest.fixture
-    def consumer_group(self, data_target, schematizer_client):
-        return schematizer_client.create_consumer_group(
-            group_name=self.random_name('test_group'),
-            data_target_id=data_target.data_target_id
-        )
-
-    @pytest.fixture
-    def data_source(
-        self,
-        registered_multiple_schemas_with_same_topic,
-        consumer_group,
-        schematizer_client
-    ):
-        return schematizer_client.create_consumer_group_data_source(
-            consumer_group_id=consumer_group.consumer_group_id,
-            data_source_type=DataSourceTypeEnum.Source,
-            data_source_id=registered_multiple_schemas_with_same_topic[1].
-            topic.source.source_id
-        )
-
-    @pytest.fixture
-    def consumer_source(self, data_target, data_source):
-        return TopicInDataTarget(data_target.data_target_id)
-
-    @pytest.fixture
-    def expected_message(
-        self,
-        registered_multiple_schemas_with_same_topic,
-        payload
-    ):
-        return CreateMessage(
-            schema_id=registered_multiple_schemas_with_same_topic[1].schema_id,
+            schema_id=registered_compatible_schema.schema_id,
             payload=payload
         )
 
@@ -1108,8 +991,9 @@ class FixedSchemasSetupMixin(RefreshFixedTopicTests):
         avro_schema2 = {
             'type': 'record',
             'name': foo_src,
+            'doc': 'test',
             'namespace': foo_namespace,
-            'fields': [{'type': 'int', 'name': 'id1'}]
+            'fields': [{'type': 'int', 'name': 'id1', 'doc': 'test'}]
         }
         return _register_schema(foo_namespace, foo_src, avro_schema2)
 

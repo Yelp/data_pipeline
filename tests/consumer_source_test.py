@@ -173,6 +173,10 @@ class TestFixedSchemasSource(FixedTopicsSourceTestBase):
         with pytest.raises(ValueError):
             FixedSchemas()
 
+    def test_invalid_schema(self):
+        with pytest.raises(ValueError):
+            FixedSchemas(0)
+
 
 class NamespaceSrcSetupMixin(ConsumerSourceTestBase):
 

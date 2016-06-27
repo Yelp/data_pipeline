@@ -8,8 +8,6 @@ import mock
 import pytest
 from kafka import create_message
 from kafka.common import OffsetAndMessage
-from yelp_avro.testing_helpers.generate_payload_data import generate_payload_data
-from yelp_avro.util import get_avro_schema_object
 
 from data_pipeline import message as dp_message
 from data_pipeline._fast_uuid import FastUUID
@@ -618,14 +616,6 @@ class TestCreateFromMessageAndOffset(object):
     def offset_and_message(self, message):
         return OffsetAndMessage(0, create_message(Envelope().pack(message)))
 
-    @pytest.fixture
-    def example_latest_compatible_schema_obj(self, example_compatible_schema):
-        return get_avro_schema_object(example_compatible_schema)
-
-    @pytest.fixture
-    def example_payload_data_with_latest_schema(self, example_latest_compatible_schema_obj):
-        return generate_payload_data(example_latest_compatible_schema_obj)
-
     def test_create_from_offset_and_message(self, offset_and_message, message):
         extracted_message = create_from_offset_and_message(
             topic=message.topic,
@@ -641,14 +631,14 @@ class TestCreateFromMessageAndOffset(object):
 
     def test_create_from_offset_and_message_with_reader_schema_specified(
         self,
-        registered_multiple_schemas_with_same_topic,
+        registered_schema,
+        registered_compatible_schema,
         payload,
         example_payload_data,
     ):
-        expected_schema, latest_schema = registered_multiple_schemas_with_same_topic
         unpacked_message = CreateMessage(
-            topic=str(latest_schema.topic.name),
-            schema_id=latest_schema.schema_id,
+            topic=str(registered_compatible_schema.topic.name),
+            schema_id=registered_compatible_schema.schema_id,
             payload=payload,
             timestamp=1500,
             contains_pii=False
@@ -658,25 +648,24 @@ class TestCreateFromMessageAndOffset(object):
             create_message(Envelope().pack(unpacked_message))
         )
         extracted_message = create_from_offset_and_message(
-            topic=str(latest_schema.topic.name),
+            topic=str(registered_schema.topic.name),
             offset_and_message=offset_and_message,
-            reader_schema_id=expected_schema.schema_id
+            reader_schema_id=registered_schema.schema_id
         )
-        assert extracted_message.schema_id == latest_schema.schema_id
-        assert extracted_message.topic == expected_schema.topic.name
-        assert extracted_message.reader_schema_id == expected_schema.schema_id
+        assert extracted_message.schema_id == registered_compatible_schema.schema_id
+        assert extracted_message.topic == registered_schema.topic.name
+        assert extracted_message.reader_schema_id == registered_schema.schema_id
         assert extracted_message.payload_data == example_payload_data
 
     def test_create_from_offset_and_message_with_no_reader_schema_specified(
         self,
-        registered_multiple_schemas_with_same_topic,
+        registered_schema,
         payload,
-        example_payload_data_with_latest_schema
+        example_payload_data
     ):
-        expected_schema, latest_schema = registered_multiple_schemas_with_same_topic
         unpacked_message = CreateMessage(
-            topic=str(latest_schema.topic.name),
-            schema_id=latest_schema.schema_id,
+            topic=str(registered_schema.topic.name),
+            schema_id=registered_schema.schema_id,
             payload=payload,
             timestamp=1500,
             contains_pii=False
@@ -687,11 +676,11 @@ class TestCreateFromMessageAndOffset(object):
         )
 
         extracted_message = create_from_offset_and_message(
-            topic=str(latest_schema.topic.name),
+            topic=str(registered_schema.topic.name),
             offset_and_message=offset_and_message,
             reader_schema_id=None
         )
-        assert extracted_message.schema_id == latest_schema.schema_id
-        assert extracted_message.topic == latest_schema.topic.name
-        assert extracted_message.reader_schema_id == latest_schema.schema_id
-        assert extracted_message.payload_data == example_payload_data_with_latest_schema
+        assert extracted_message.schema_id == registered_schema.schema_id
+        assert extracted_message.topic == registered_schema.topic.name
+        assert extracted_message.reader_schema_id == registered_schema.schema_id
+        assert extracted_message.payload_data == example_payload_data

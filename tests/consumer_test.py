@@ -18,18 +18,14 @@ from tests.base_consumer_test import BaseConsumerSourceBaseTest
 from tests.base_consumer_test import BaseConsumerTest
 from tests.base_consumer_test import FixedSchemasReaderSchemaMapSetupMixin
 from tests.base_consumer_test import FixedSchemasSetupMixin
-from tests.base_consumer_test import FixedTopicsReaderSchemaMapSetupMixin
 from tests.base_consumer_test import MultiTopicsSetupMixin
 from tests.base_consumer_test import RefreshDynamicTopicTests
 from tests.base_consumer_test import RefreshFixedTopicTests
 from tests.base_consumer_test import RefreshNewTopicsTest
 from tests.base_consumer_test import SingleTopicSetupMixin
 from tests.base_consumer_test import TIMEOUT
-from tests.base_consumer_test import TopicInDataTargetReaderSchemaMapSetupMixin
 from tests.base_consumer_test import TopicInDataTargetSetupMixin
-from tests.base_consumer_test import TopicInFixedNamespacesReaderSchemaMapSetupMixin
 from tests.base_consumer_test import TopicInSourceAutoRefreshSetupMixin
-from tests.base_consumer_test import TopicInSourceReaderSchemaMapSetupMixin
 from tests.base_consumer_test import TopicInSourceSetupMixin
 from tests.base_consumer_test import TopicsInFixedNamespacesAutoRefreshSetupMixin
 from tests.base_consumer_test import TopicsInFixedNamespacesSetupMixin
@@ -373,16 +369,9 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
 
 class ConsumerReaderSchemaMapBaseTest(BaseConsumerSourceBaseTest):
 
-    @pytest.fixture
-    def message(self, registered_multiple_schemas_with_same_topic, payload):
-        return CreateMessage(
-            schema_id=registered_multiple_schemas_with_same_topic[1].schema_id,
-            payload=payload
-        )
-
     @pytest.fixture(scope='class')
-    def topic(self, containers, registered_multiple_schemas_with_same_topic):
-        topic_name = str(registered_multiple_schemas_with_same_topic[0].topic.name)
+    def topic(self, registered_schema, containers):
+        topic_name = str(registered_schema.topic.name)
         containers.create_kafka_topic(topic_name)
         return topic_name
 
@@ -429,42 +418,13 @@ class ConsumerReaderSchemaMapBaseTest(BaseConsumerSourceBaseTest):
         with consumer_instance as consumer:
             publish_messages(message, count=1)
             actual_message = consumer.get_message(blocking=True, timeout=TIMEOUT)
-
             assert actual_message.reader_schema_id == expected_message.schema_id
             assert actual_message.payload_data == expected_message.payload_data
-
-
-class TestReaderSchemaMapFixedTopics(
-    ConsumerReaderSchemaMapBaseTest,
-    FixedTopicsReaderSchemaMapSetupMixin
-):
-    pass
-
-
-class TestReaderSchemaMapTopicInNamespace(
-    ConsumerReaderSchemaMapBaseTest,
-    TopicInFixedNamespacesReaderSchemaMapSetupMixin
-):
-    pass
-
-
-class TestReaderSchemaMapTopicInSource(
-    ConsumerReaderSchemaMapBaseTest,
-    TopicInSourceReaderSchemaMapSetupMixin
-):
-    pass
 
 
 class TestReaderSchemaMapFixedSchemas(
     ConsumerReaderSchemaMapBaseTest,
     FixedSchemasReaderSchemaMapSetupMixin
-):
-    pass
-
-
-class TestReaderSchemaMapTopicInDataTarget(
-    ConsumerReaderSchemaMapBaseTest,
-    TopicInDataTargetReaderSchemaMapSetupMixin
 ):
     pass
 

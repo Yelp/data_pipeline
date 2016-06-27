@@ -104,10 +104,15 @@ class BaseConsumer(Client):
             Dict[str, Optional[Dict[int, int]]]]]): Optional callback which is
             passed a list of topics, and should return a dictionary where keys
             are topic names and values are either None if no offset should be
-            manually set, or a map from partition to offset. If
-            fetch_offsets_for_topics is None, then the consumer will pick up
-            the last committed offsets of topics. If implemented, this function
-            will be called every time consumer refreshes the topics.
+            manually set, or a map from partition to offset.
+                If implemented, this function will be called every time
+            consumer refreshes the topics, so that the consumer can provide a
+            map of partitions to offsets for each topic, or None if the default
+            behavior should be employed instead. The default behavior is
+            picking up the last committed offsets of topics.
+                This method must be implemented if topic state is to be stored
+            in some system other than Kafka, for example when writing data from
+            Kafka into a transactional store.
         pre_topic_refresh_callback: (Optional[Callable[[list[str], list[str]],
             Any]]): Optional callback that gets executed right before the
             consumer is about to refresh the topics. The callback function is
@@ -181,16 +186,15 @@ class BaseConsumer(Client):
         """ Return the topic_to_consumer_topic_state_map after updating the
         given topic_to_consumer_state_map with the consumer_source topics.
         """
-        topic_to_consumer_topic_state_map = (
-            topic_to_consumer_state_map if topic_to_consumer_state_map else {}
-        )
-
+        topic_to_consumer_topic_state_map = {}
         if consumer_source:
-            topics = consumer_source.get_topics()
-            for topic in topics:
-                if topic not in topic_to_consumer_topic_state_map:
-                    topic_to_consumer_topic_state_map[topic] = None
-
+            topic_to_consumer_topic_state_map = {
+                topic: None for topic in consumer_source.get_topics()
+            }
+        if topic_to_consumer_state_map:
+            topic_to_consumer_topic_state_map.update(
+                topic_to_consumer_state_map
+            )
         return topic_to_consumer_topic_state_map
 
     def _get_topic_to_consumer_topic_state_map(
@@ -198,8 +202,9 @@ class BaseConsumer(Client):
         topic_to_partition_map,
         consumer_source
     ):
-        """ Get the topic_to_partition_map, refreshes the consumer source
-        and return the updated topic_to_consumer_topic_state_map
+        """ This function constructs a new topic_to_consumer_topic_state_map
+        from the given topic_to_partition_map and consumer_source. Return the
+        topic_to_consumer_topic_state_map dictionary.
         """
         topics = consumer_source.get_topics() if consumer_source else []
         for topic in topic_to_partition_map:
@@ -248,9 +253,9 @@ class BaseConsumer(Client):
         return topic_to_reader_schema_map
 
     def _set_topic_to_partition_map(self, topic_to_consumer_topic_state_map):
-        """ Get the topic_to_consumer_topic_state_map and set the
-        topic_to_partition_map instance variable with topic name as key and
-        corresponding partitions list as value.
+        """ This function takes a topic_to_consumer_topic_state_map and sets
+        the topic_to_partition_map instance variable with topic names as keys
+        and corresponding partition lists as values.
         """
         self.topic_to_partition_map = {}
         for topic, consumer_topic_state in topic_to_consumer_topic_state_map.iteritems():
@@ -446,7 +451,8 @@ class BaseConsumer(Client):
         for message in messages:
             pos_info = message.kafka_position_info
             partition_offset_map = topic_to_partition_offset_map.get(
-                message.topic, {}
+                message.topic,
+                {}
             )
             max_offset = partition_offset_map.get(pos_info.partition, 0)
             # Increment the offset value by 1 so the consumer knows where to

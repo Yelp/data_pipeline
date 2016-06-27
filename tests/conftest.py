@@ -69,52 +69,37 @@ def registered_schema(schematizer_client, example_schema, namespace, source):
 
 
 @pytest.fixture(scope='module')
-def registered_multiple_schemas_with_same_topic(schematizer_client, example_schema, example_compatible_schema, namespace, source):
-    schema1 = schematizer_client.register_schema(
-        namespace=namespace,
-        source=source,
-        schema_str=example_schema,
-        source_owner_email='test@yelp.com',
-        contains_pii=False
-    )
-
-    schema2 = schematizer_client.register_schema(
-        namespace=namespace,
-        source=source,
+def registered_compatible_schema(
+    schematizer_client,
+    example_compatible_schema
+):
+    schema = simplejson.loads(example_compatible_schema)
+    return schematizer_client.register_schema(
+        namespace=schema['namespace'],
+        source=schema['name'],
         schema_str=example_compatible_schema,
         source_owner_email='test@yelp.com',
         contains_pii=False
     )
 
-    return schema1, schema2
+
+@pytest.fixture(scope='module')
+def example_compatible_schema(example_schema):
+    schema = simplejson.loads(example_schema)
+    schema['fields'][0]['name'] = 'good_field_two'
+    return simplejson.dumps(schema)
 
 
 @pytest.fixture(scope='module')
-def example_compatible_schema(namespace, source):
-    return '''
-    {
-        "type":"record",
-        "namespace": "%s",
-        "name": "%s",
-        "fields":[
-            {"type":"int", "name":"good_field_two", "default": 1}
-        ]
-    }
-    ''' % (namespace, source)
-
-
-@pytest.fixture(scope='module')
-def example_non_compatible_schema(namespace, source):
-    return '''
-    {
-        "type":"record",
-        "namespace": "%s",
-        "name": "%s",
-        "fields":[
-            {"type":"string", "name":"good_not_compatible_field"}
-        ]
-    }
-    ''' % (namespace, source)
+def example_non_compatible_schema(example_schema):
+    schema = simplejson.loads(example_schema)
+    schema['fields'].pop()
+    schema['fields'].append({
+        u'doc': u'test',
+        u'type': u'string',
+        u'name': u'good_non_compatible_field'
+    })
+    return simplejson.dumps(schema)
 
 
 @pytest.fixture(scope="module")
