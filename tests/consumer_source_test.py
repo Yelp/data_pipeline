@@ -169,13 +169,15 @@ class TestFixedSchemasSource(FixedTopicsSourceTestBase):
             bar_schema.topic.name
         }
 
-    def test_empty_schema_list(self):
-        with pytest.raises(ValueError):
-            FixedSchemas()
-
     def test_invalid_schema(self):
         with pytest.raises(ValueError):
+            FixedSchemas()
+        with pytest.raises(ValueError):
             FixedSchemas(0)
+        with pytest.raises(ValueError):
+            FixedSchemas('')
+        with pytest.raises(ValueError):
+            FixedSchemas('', '')
 
 
 class NamespaceSrcSetupMixin(ConsumerSourceTestBase):
