@@ -20,7 +20,7 @@
 # should be at least 1.2.1 for trusty compatibility.
 
 argparse==1.4.0
--e git://github.com/Yelp/avro.git@5f7b97fcbb79cabf4ed7a7ec5ba8314d06e8a7e5#egg=avro&subdirectory=lang/py
+avro==1.10.0
 boto==2.38.0
 cached-property==1.2.0
 cffi==1.2.1
