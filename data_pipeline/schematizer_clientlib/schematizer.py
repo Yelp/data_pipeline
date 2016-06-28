@@ -122,6 +122,58 @@ class SchematizerClient(object):
         _schema = _AvroSchemaElement.from_response(response)
         return _schema
 
+<<<<<<< HEAD
+=======
+    def get_schemas_created_after_date(self, created_after):
+        """Get the avro schemas created after given datetime timestamp.
+
+        Args:
+            created_after (long): get schemas created after given utc long (inclusive).
+
+        Returns:
+            (List of data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
+                The list of avro schemas created after (inclusive) specified date.
+        """
+        return [schema.to_result() for schema in self._get_schemas_created_after_date(created_after)]
+
+    def _get_schemas_created_after_date(self, created_after):
+        responses = self._call_api(
+            api=self._client.schemas.get_schemas_created_after,
+            params={'created_after': created_after}
+        )
+        _schemas = [_AvroSchema.from_response(response) for response in responses]
+        for _schema in _schemas:
+            self._set_cache_by_schema(_schema)
+        return _schemas
+
+    def _make_avro_schema_key(self, schema_json):
+        return simplejson.dumps(schema_json, sort_keys=True)
+
+    def get_schema_by_schema_json(self, schema_json):
+        """ Get schema object if one exists for a given avro schema.
+        If not, return None.
+
+        Args:
+            schema_json (dict or list): Python object representation of the
+                avro schema json.
+
+        Returns:
+            (data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
+                Avro Schema object.
+        """
+        cached_schema = self._avro_schema_cache.get(
+            self._make_avro_schema_key(schema_json)
+        )
+        if cached_schema:
+            _schema = _AvroSchema.from_cache_value(cached_schema)
+            _schema.topic = self._get_topic_by_name(cached_schema['topic_name'])
+            return _schema.to_result()
+        else:
+            # TODO(DATAPIPE-608|askatti): Add schematizer endpoint to return
+            # Schema object given a schema_json
+            return None
+
+>>>>>>> master
     def get_schemas_by_topic(self, topic_name):
         """Get the list of schemas in the specified topic.
 
@@ -832,9 +884,13 @@ class SchematizerClient(object):
         response = retry_on_exception(
             retry_policy=retry_policy,
             retry_exceptions=ConnectionError,
-            func_to_retry=request.result
+            func_to_retry=self._get_api_result,
+            request=request
         )
         return response
+
+    def _get_api_result(self, request):
+        return request.result()
 
     def _get_cached_schema(self, schema_id):
         _schema = self._cache.get_value(_AvroSchema, schema_id)

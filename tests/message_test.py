@@ -66,6 +66,16 @@ class SharedMessageTest(object):
         ), pytest.raises(ValueError):
             self._assert_invalid_data(valid_message_data, topic=str(''))
 
+    def test_warning_from_explicit_topic(self, valid_message_data):
+        data_with_topic = self._make_message_data(
+            valid_message_data,
+            topic=str('explicit_topic')
+        )
+        with warnings.catch_warnings(record=True) as w:
+            self.message_class(**data_with_topic)
+            assert len(w) == 1
+            assert "Passing in topics explicitly is deprecated." in w[0].message
+
     def test_get_topic_from_schematizer_by_default(
         self,
         registered_schema,

@@ -11,11 +11,12 @@ from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 class SchemaFactory(object):
     SOURCE_SCHEMA = '''
     {
-        "type":"record",
-        "namespace":"test_namespace",
-        "name":"source_schema",
-        "fields":[
-            {"type":"int","name":"original"}
+        "type": "record",
+        "namespace": "test_namespace",
+        "doc": "test_doc",
+        "name": "source_schema",
+        "fields": [
+            {"type": "int","name": "original", "doc": "test_doc"}
         ]
     }
     '''

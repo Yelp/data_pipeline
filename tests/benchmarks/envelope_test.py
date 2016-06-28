@@ -12,7 +12,7 @@ from tests.factories.base_factory import MessageFactory
     "config_containers_connections"
 )
 @pytest.mark.benchmark
-class TestBenchEnvelop(object):
+class TestBenchEnvelope(object):
 
     @pytest.fixture
     def envelope(self):
