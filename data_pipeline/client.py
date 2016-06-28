@@ -98,6 +98,10 @@ class Client(object):
         self.client_name = client_name
         self.team_name = team_name
         self.expected_frequency_seconds = expected_frequency_seconds
+        self.registrar = _Registrar(
+            client_name,
+            self.client_type
+        )
 
     @property
     def client_name(self):
@@ -325,3 +329,58 @@ class _Monitor(object):
 
         self.flush_buffered_info()
         self.producer.close()
+
+
+class _Registrar(object):
+    """This class holds the main functionality for Producer/Consumer registration
+
+    Currently, the registrar holds an internal mapping of schema_ids to the last time
+    they are used by the Client's subclass. Client will provide functionality for updating
+    this mapping as it sends/receives messages. Every time the given threshold time is
+    reached, the Client will send a serialized message using clog.
+
+    Args:
+        client_name (str): name of the associated client.
+        client_type (str): type of the client the _Registrar is associated to.
+            Could be either producer or consumer.
+        threshold (int): The amount of time that should elapse in between the client sending
+            registration messages (seconds).
+    """
+    DEFAULT_REGISTRATION_THRESHOLD = 600  # Default period for sending registration msg is 10 min
+
+    def __init__(
+        self,
+        client_name,
+        client_type,
+        threshold=DEFAULT_REGISTRATION_THRESHOLD
+    ):
+        self.client_name = client_name
+        self.client_type = client_type
+        self.threshold = threshold
+
+        self.schema_time_map = {}
+
+    def register_schema_ids(self, id_list, timestamp):
+        """Used to notify Client of schema usage changes. Can be called on Client startup or
+            when Client decides to change which topics to listen/produce to.
+
+        Args:
+            id_list (list[int]): List of the schema IDs that the client will use.
+            timestamp (long): The utc time that this function was called.
+        """
+        for schema_id in id_list:
+            self.schema_time_map[schema_id] = timestamp
+        # TODO([DATAPIPE-1192|mkohli]): Send registration message
+
+    def register_active_schema(self, schema_id, timestamp):
+        """This function is called by the Client subclass whenever it receives a message. Updates
+            the internal mapping of schema IDs to the most recent time the Client has used them.
+
+        Args:
+            schema_id (int): Schema IDs of the message the Client received.
+            timestamp (long): The utc time of the message that the Client received.
+        """
+        if schema_id not in self.schema_time_map:
+            self.schema_time_map[schema_id] = timestamp
+        elif timestamp > self.schema_time_map[schema_id]:
+            self.schema_time_map[schema_id] = timestamp

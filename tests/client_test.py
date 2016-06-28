@@ -2,6 +2,8 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+from datetime import datetime
+
 import mock
 import pytest
 
@@ -84,3 +86,46 @@ class TestClient(object):
         with mock.patch.object(client.monitor, skipped_method) as uncalled_method:
             getattr(client.monitor, method)(**kwargs)
             assert uncalled_method.called == 0
+
+
+class TestClientRegistration(TestClient):
+    @pytest.fixture
+    def timestamp(self):
+        """Returns a sample timestamp coverted to long format"""
+        ts_str = "2016-01-01T19:10:26"
+        ts = datetime.strptime(ts_str, '%Y-%m-%dT%H:%M:%S')
+        ts_long = long((ts - datetime.utcfromtimestamp(0)).total_seconds())
+        return ts_long
+
+    def test_register_schema_ids(self, timestamp):
+        client = self._build_client()
+        id_list = [1, 4, 11]
+        client.registrar.register_schema_ids(id_list, timestamp)
+        schema_map = client.registrar.schema_time_map
+        for schema_id in id_list:
+            assert timestamp == schema_map[schema_id]
+        # TODO([DATAPIPE-1192|mkohli]): Assert that registration message was sent
+
+    def test_register_active_schemas(self, timestamp):
+        """
+        Tests 3 cases for register_active_schemas
+        1. Regular update of schema ID with later date
+        2. Updating with past date should have no effect
+        3. Updating schema ID which Client has not seen yet creates new entry
+
+        """
+        timestamp_after = timestamp + 500
+        timestamp_before = timestamp - 500
+
+        client = self._build_client()
+        id_list = [1, 4]
+        client.registrar.register_schema_ids(id_list, timestamp)
+        client.registrar.register_active_schema(1, timestamp_after)
+        client.registrar.register_active_schema(4, timestamp_before)
+        client.registrar.register_active_schema(11, timestamp_before)
+        schema_map = client.registrar.schema_time_map
+
+        assert schema_map[1] == timestamp_after
+        assert schema_map[4] == timestamp
+        assert schema_map[11] == timestamp_before
+        # TODO([DATAPIPE-1192|mkohli]): Assert that registration message was sent
