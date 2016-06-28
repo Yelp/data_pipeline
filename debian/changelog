@@ -1,3 +1,10 @@
+data-pipeline-tools (0.2.6) lucid; urgency=low
+
+  * Commit: [DATAPIPE-900] Changing avro version to internal release
+    1.10.0
+
+ -- Shahid Chohan <chohan@yelp.com>  Tue, 28 Jun 2016 12:01:08 -0700
+
 data-pipeline-tools (0.2.5) lucid; urgency=low
 
   * Commit: Merge branch 'PERF-663_Update_psutil_version_in_data-
