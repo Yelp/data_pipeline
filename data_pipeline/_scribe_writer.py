@@ -1,6 +1,5 @@
 import clog
 
-from data_pipeline.message import Message
 from data_pipeline.envelope import Envelope
 
 logger = get_config().logger
@@ -31,6 +30,7 @@ class ScribeWriter(object):
                         message.timestamp,
                         message.message_type.name
                     )
+                )
 
     def close(self):
         if self.scriber:
