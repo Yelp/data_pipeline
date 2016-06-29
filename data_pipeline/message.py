@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import time
 import warnings
 from collections import namedtuple
 from uuid import UUID
@@ -10,11 +11,13 @@ from yelp_lib.containers.lists import unlist
 
 from data_pipeline._avro_payload import _AvroPayload
 from data_pipeline._encryption_helper import EncryptionHelper
+from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
 from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
 from data_pipeline.meta_attribute import MetaAttribute
+from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 
 logger = get_config().logger
@@ -117,10 +120,17 @@ class Message(object):
         Ensure not to use these attributes for non-update type Message classes.
     """
 
+    _fast_uuid = FastUUID()
+    """UUID generator - this isn't a @cached_property so it can be serialized"""
+
     _message_type = None
     """Identifies the nature of the message. The valid value is one of the
     data_pipeline.message_type.MessageType. It must be set by child class.
     """
+
+    @property
+    def schematizer(self):
+        return get_schematizer()
 
     @property
     def topic(self):
@@ -137,7 +147,22 @@ class Message(object):
 
     @property
     def uuid(self):
-        return self._avro_payload.uuid
+        return self._uuid
+
+    def _set_uuid(self, uuid):
+        if uuid is None:
+            # UUID generation is expensive.  Using FastUUID instead of the built
+            # in UUID methods increases Messages that can be instantiated per
+            # second from ~25,000 to ~185,000.  Not generating UUIDs at all
+            # increases the throughput further still to about 730,000 per
+            # second.
+            uuid = self._fast_uuid.uuid4()
+        elif len(uuid) != 16:
+            raise TypeError(
+                "UUIDs should be exactly 16 bytes.  Conforming UUID's can be "
+                "generated with `import uuid; uuid.uuid4().bytes`."
+            )
+        self._uuid = uuid
 
     @property
     def uuid_hex(self):
@@ -146,7 +171,15 @@ class Message(object):
 
     @property
     def contains_pii(self):
-        return self._avro_payload.contains_pii
+        if self._contains_pii is not None:
+            return self._contains_pii
+        self._set_contains_pii()
+        return self._contains_pii
+
+    def _set_contains_pii(self):
+        self._contains_pii = self.schematizer.get_schema_by_id(
+            self.schema_id
+        ).topic.contains_pii
 
     @property
     def encryption_type(self):
@@ -211,7 +244,12 @@ class Message(object):
 
     @property
     def timestamp(self):
-        return self._avro_payload.timestamp
+        return self._timestamp
+
+    def _set_timestamp(self, timestamp):
+        if timestamp is None:
+            timestamp = int(time.time())
+        self._timestamp = timestamp
 
     @property
     def upstream_position_info(self):
@@ -301,25 +339,26 @@ class Message(object):
                 "contains_pii is deprecated. Please stop passing it in.",
                 DeprecationWarning
             )
+        if topic:
+            warnings.simplefilter("always", category=DeprecationWarning)
+            warnings.warn("Passing in topics explicitly is deprecated.", DeprecationWarning)
         self._avro_payload = _AvroPayload(
             schema_id=schema_id,
             topic=topic,
             payload=payload,
             payload_data=payload_data,
-            uuid=uuid,
-            timestamp=timestamp,
             dry_run=dry_run
         )
-
+        self._set_contains_pii()
+        self._set_uuid(uuid)
+        self._set_timestamp(timestamp)
         self._set_upstream_position_info(upstream_position_info)
         self._set_kafka_position_info(kafka_position_info)
         self._set_keys(keys)
         self._set_meta(meta)
-        if topic:
-            warnings.simplefilter("always", category=DeprecationWarning)
-            warnings.warn("Passing in topics explicitly is deprecated.", DeprecationWarning)
         self._should_be_encrypted_state = None
         self._encryption_type = None
+        self._contains_pii = None
 
     def _is_valid_optional_type(self, value, typ):
         return value is None or isinstance(value, typ)
@@ -587,8 +626,6 @@ class UpdateMessage(Message):
             topic=topic,
             payload=previous_payload,
             payload_data=previous_payload_data,
-            uuid=uuid,
-            timestamp=timestamp,
             dry_run=dry_run
         )
 

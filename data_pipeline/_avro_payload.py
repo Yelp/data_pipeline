@@ -2,9 +2,6 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import time
-
-from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
 from data_pipeline.helpers.yelp_avro_store import _AvroStringStore
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
@@ -15,33 +12,20 @@ logger = get_config().logger
 
 class _AvroPayload(object):
 
-    _fast_uuid = FastUUID()
-    """UUID generator - this isn't a @cached_property so it can be serialized"""
-
     def __init__(
         self,
         schema_id,
         topic=None,
         payload=None,
         payload_data=None,
-        uuid=None,
-        timestamp=None,
         dry_run=False
     ):
         self._set_schema_id(schema_id)
         self._set_topic(
             topic or str(self.schematizer.get_schema_by_id(schema_id).topic.name)
         )
-        self._set_contains_pii()
-        self._set_uuid(uuid)
-        self._set_timestamp(timestamp)
         self._set_dry_run(dry_run)
         self._set_payload_or_payload_data(payload, payload_data)
-        if topic:
-            logger.debug(
-                "Overriding message topic: {} for schema {}.".format(topic, schema_id)
-            )
-        self._contains_pii = None
 
     @property
     def schematizer(self):
@@ -66,46 +50,6 @@ class _AvroPayload(object):
         if not isinstance(schema_id, int):
             raise TypeError("Schema id should be an int")
         self._schema_id = schema_id
-
-    @property
-    def contains_pii(self):
-        if self._contains_pii is not None:
-            return self._contains_pii
-        self._set_contains_pii()
-        return self._contains_pii
-
-    def _set_contains_pii(self):
-        self._contains_pii = self.schematizer.get_schema_by_id(
-            self.schema_id
-        ).topic.contains_pii
-
-    @property
-    def uuid(self):
-        return self._uuid
-
-    def _set_uuid(self, uuid):
-        if uuid is None:
-            # UUID generation is expensive.  Using FastUUID instead of the built
-            # in UUID methods increases Messages that can be instantiated per
-            # second from ~25,000 to ~185,000.  Not generating UUIDs at all
-            # increases the throughput further still to about 730,000 per
-            # second.
-            uuid = self._fast_uuid.uuid4()
-        elif len(uuid) != 16:
-            raise TypeError(
-                "UUIDs should be exactly 16 bytes.  Conforming UUID's can be "
-                "generated with `import uuid; uuid.uuid4().bytes`."
-            )
-        self._uuid = uuid
-
-    @property
-    def timestamp(self):
-        return self._timestamp
-
-    def _set_timestamp(self, timestamp):
-        if timestamp is None:
-            timestamp = int(time.time())
-        self._timestamp = timestamp
 
     @property
     def dry_run(self):

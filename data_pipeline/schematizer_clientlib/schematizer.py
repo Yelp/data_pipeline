@@ -122,8 +122,6 @@ class SchematizerClient(object):
         _schema = _AvroSchemaElement.from_response(response)
         return _schema
 
-<<<<<<< HEAD
-=======
     def get_schemas_created_after_date(self, created_after):
         """Get the avro schemas created after given datetime timestamp.
 
@@ -146,34 +144,6 @@ class SchematizerClient(object):
             self._set_cache_by_schema(_schema)
         return _schemas
 
-    def _make_avro_schema_key(self, schema_json):
-        return simplejson.dumps(schema_json, sort_keys=True)
-
-    def get_schema_by_schema_json(self, schema_json):
-        """ Get schema object if one exists for a given avro schema.
-        If not, return None.
-
-        Args:
-            schema_json (dict or list): Python object representation of the
-                avro schema json.
-
-        Returns:
-            (data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
-                Avro Schema object.
-        """
-        cached_schema = self._avro_schema_cache.get(
-            self._make_avro_schema_key(schema_json)
-        )
-        if cached_schema:
-            _schema = _AvroSchema.from_cache_value(cached_schema)
-            _schema.topic = self._get_topic_by_name(cached_schema['topic_name'])
-            return _schema.to_result()
-        else:
-            # TODO(DATAPIPE-608|askatti): Add schematizer endpoint to return
-            # Schema object given a schema_json
-            return None
-
->>>>>>> master
     def get_schemas_by_topic(self, topic_name):
         """Get the list of schemas in the specified topic.
 

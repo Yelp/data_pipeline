@@ -18,25 +18,22 @@ class MetaAttribute(object):
     namespace, we could include the web request itself as one of the
     Meta Attribute in that message.
 
-    This is an base class to define a meta attribute. It serves 2 purposes:
-    1. To define a new MetaAttribute, you need to inherit from this class
-    and call the constructor of this class with `schema_id` and `payload_data`
+    1. Get a new meta attribute object from `schema_id` and `payload_data`
 
     **Examples**:
 
-        class ExampleMetaAttribute(MetaAttribute):
-
-            def __init__(self, param1, param2):
-                payload_data = {
-                    "param1": param1,
-                    "param2": param2
+        def get_transaction_id_meta_attribute(
+            schema_id, cluster_name, log_file, log_pos
+        ):
+            # additional operations, such as input validation, etc.
+            return MetaAttribute(
+                schema_id=schema_id,
+                payload_data={
+                    'cluster_name': self.cluster_name,
+                    'log_file': self.log_file,
+                    'log_pos': self.log_pos
                 }
-
-                super(ExampleMetaAttribute, self).__init__(
-                    schema_id=schema_id,
-                    payload_data=payload_data
-                )
-
+            )
 
     2. Recover a MetaAttribute object from serialized MetaAttribute payload.
     This will be usefull specifically in the case where we want to reconstruct

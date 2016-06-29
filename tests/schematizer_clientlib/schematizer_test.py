@@ -138,11 +138,10 @@ class SchematizerClientTestBase(object):
             assert getattr(actual, attr) == getattr(expected, attr)
 
 
-@pytest.mark.usefixtures('containers')
 class TestAPIClient(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
-    def biz_schema(self, yelp_namespace, biz_src_name):
+    def biz_schema(self, yelp_namespace, biz_src_name, containers):
         return self._register_avro_schema(yelp_namespace, biz_src_name)
 
     def test_retry_api_call(self, schematizer, biz_schema):
@@ -193,7 +192,6 @@ class TestGetSchemaById(SchematizerClientTestBase):
             assert source_api_spy.call_count == 0
 
 
-@pytest.mark.usefixtures('containers')
 class TestGetSchemaElementsBySchemaId(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
@@ -211,7 +209,6 @@ class TestGetSchemaElementsBySchemaId(SchematizerClientTestBase):
             assert api_spy.call_count == 1
 
 
-@pytest.mark.usefixtures('containers')
 class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
 
     def test_get_schemas_created_after_date(self, schematizer):
@@ -288,7 +285,6 @@ class TestGetSchemasByTopic(SchematizerClientTestBase):
             assert api_spy.call_count == 1
 
 
-@pytest.mark.usefixtures('containers')
 class TestGetNamespaces(SchematizerClientTestBase):
 
     def test_get_namespaces(self, schematizer, biz_src_resp):
@@ -300,7 +296,6 @@ class TestGetNamespaces(SchematizerClientTestBase):
         assert partial in actual
 
 
-@pytest.mark.usefixtures('containers')
 class TestGetSchemaBySchemaJson(SchematizerClientTestBase):
 
     @pytest.fixture
@@ -318,7 +313,6 @@ class TestGetSchemaBySchemaJson(SchematizerClientTestBase):
         return simplejson.dumps(schema_json)
 
 
-@pytest.mark.usefixtures('containers')
 class TestGetTopicByName(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
@@ -350,7 +344,6 @@ class TestGetTopicByName(SchematizerClientTestBase):
             assert source_api_spy.call_count == 0
 
 
-@pytest.mark.usefixtures('containers')
 class TestGetSourceById(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
@@ -381,7 +374,6 @@ class TestGetSourceById(SchematizerClientTestBase):
             assert source_api_spy.call_count == 0
 
 
-@pytest.mark.usefixtures('containers')
 class TestGetSourcesByNamespace(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
@@ -435,7 +427,6 @@ class TestGetSourcesByNamespace(SchematizerClientTestBase):
             assert source_api_spy.call_count == 0
 
 
-@pytest.mark.usefixtures('containers')
 class TestGetTopicsBySourceId(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
@@ -481,7 +472,6 @@ class TestGetTopicsBySourceId(SchematizerClientTestBase):
             assert source_api_spy.call_count == 0
 
 
-@pytest.mark.usefixtures('containers')
 class TestGetLatestTopicBySourceId(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
@@ -502,7 +492,6 @@ class TestGetLatestTopicBySourceId(SchematizerClientTestBase):
         assert e.value.response.status_code == 404
 
 
-@pytest.mark.usefixtures('containers')
 class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
@@ -556,7 +545,6 @@ class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
             assert source_api_spy.call_count == 0
 
 
-@pytest.mark.usefixtures('containers')
 class TestRegisterSchema(SchematizerClientTestBase):
 
     @pytest.fixture
@@ -739,7 +727,6 @@ class TestRegisterSchema(SchematizerClientTestBase):
         assert schema_one.topic.name != schema_two.topic.name
 
 
-@pytest.mark.usefixtures('containers')
 class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
 
     @property
@@ -847,7 +834,6 @@ class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
         self._assert_schema_values(actual, expected)
 
 
-@pytest.mark.usefixtures('containers')
 class TestGetTopicsByCriteria(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
@@ -963,7 +949,6 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
         self._assert_topics_values(actual, expected_topics=sorted_yelp_topics[1:])
 
 
-@pytest.mark.usefixtures('containers')
 class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
 
     @pytest.fixture(scope='class')
@@ -1027,7 +1012,6 @@ class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
         )
 
 
-@pytest.mark.usefixtures('containers')
 class TestFilterTopicsByPkeys(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
@@ -1062,7 +1046,6 @@ class TestFilterTopicsByPkeys(SchematizerClientTestBase):
         assert schematizer.filter_topics_by_pkeys(topics) == [pk_topic_resp.name]
 
 
-@pytest.mark.usefixtures('containers')
 class RegistrationTestBase(SchematizerClientTestBase):
 
     @pytest.fixture(scope="class")
@@ -1123,7 +1106,6 @@ class RegistrationTestBase(SchematizerClientTestBase):
         )
 
 
-@pytest.mark.usefixtures('containers')
 class TestCreateDataTarget(RegistrationTestBase):
 
     @property
@@ -1166,7 +1148,6 @@ class TestCreateDataTarget(RegistrationTestBase):
         ).result()
 
 
-@pytest.mark.usefixtures('containers')
 class TestGetDataTargetById(RegistrationTestBase):
 
     def test_get_non_cached_data_target(self, schematizer, dw_data_target_resp):
@@ -1199,7 +1180,6 @@ class TestGetDataTargetById(RegistrationTestBase):
         assert e.value.response.status_code == 404
 
 
-@pytest.mark.usefixtures('containers')
 class TestCreateConsumerGroup(RegistrationTestBase):
 
     @pytest.fixture
@@ -1261,7 +1241,6 @@ class TestCreateConsumerGroup(RegistrationTestBase):
         ).result()
 
 
-@pytest.mark.usefixtures('containers')
 class TestGetConsumerGroupById(RegistrationTestBase):
 
     def test_get_non_cached_consumer_group(self, schematizer, dw_con_group_resp):
@@ -1296,7 +1275,6 @@ class TestGetConsumerGroupById(RegistrationTestBase):
         assert e.value.response.status_code == 404
 
 
-@pytest.mark.usefixtures('containers')
 class TestCreateConsumerGroupDataSource(RegistrationTestBase):
 
     def test_create_consumer_group_data_source(
@@ -1333,7 +1311,6 @@ class TestCreateConsumerGroupDataSource(RegistrationTestBase):
         assert e.value.response.status_code == 404
 
 
-@pytest.mark.usefixtures('containers')
 class TestGetTopicsByDataTargetId(RegistrationTestBase):
 
     def test_data_target_with_topics(
@@ -1366,7 +1343,6 @@ class TestGetTopicsByDataTargetId(RegistrationTestBase):
         assert e.value.response.status_code == 404
 
 
-@pytest.mark.usefixtures('containers')
 class TestGetSchemaMigration(SchematizerClientTestBase):
 
     @pytest.fixture

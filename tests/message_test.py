@@ -243,7 +243,6 @@ class SharedMessageTest(object):
 
     def test_message_str_with_pii(self, pii_message):
         with reconfigure(encryption_type='AES_MODE_CBC-1'):
-            actual = str(pii_message)
             expected_payload_data = {u'good_field': u"<type 'int'>"}
             expected = {
                 'message_type': self.expected_message_type.name,
@@ -255,7 +254,7 @@ class SharedMessageTest(object):
                 'payload_data': expected_payload_data,
             }
             # only use eval to get the original dict when the string is trusted
-            assert eval(actual) == expected
+            assert pii_message._str_repr == expected
 
     def assert_equal_decrypted_payload(
         self,
@@ -561,7 +560,6 @@ class TestUpdateMessage(SharedMessageTest):
 
     def test_message_str_with_pii(self, pii_message):
         with reconfigure(encryption_type='AES_MODE_CBC-1'):
-            actual = str(pii_message)
 
             expected_payload_data = {u'good_field': u"<type 'int'>"}
             expected_previous_payload_data = {u'good_field': u"<type 'int'>"}
@@ -576,7 +574,7 @@ class TestUpdateMessage(SharedMessageTest):
                 'previous_payload_data': expected_previous_payload_data
             }
             # only use eval to get the original dict when the string is trusted
-            assert eval(actual) == expected
+            assert pii_message._str_repr == expected
 
 
 class TestCreateFromMessageAndOffset(object):
