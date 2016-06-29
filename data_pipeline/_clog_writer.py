@@ -1,5 +1,6 @@
 import clog
 
+from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
 
 logger = get_config().logger
