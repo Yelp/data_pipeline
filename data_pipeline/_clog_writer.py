@@ -10,12 +10,11 @@ class ScribeWriter(object):
     def __init__(self, dry_run=False, retry_interval=3):
         self.dry_run = dry_run
         self.envelope = Envelope()
-        self.scriber = clog.ScribeLogger(clog.config.scribe_host, clog.config.scribe_port, retry_interval)
 
     def publish(self, message):
         if not self.dry_run:
             try:
-                self.scriber.log_line(message.topic, self.envelope.pack(message))
+                clog.log_line(message.topic, self.envelope.pack(message))
             except:
                 # Unfortunately if our scribe failed the logger will likely fail
                 # but at least the clog handler will have a default error handling
@@ -31,7 +30,3 @@ class ScribeWriter(object):
                         message.message_type.name
                     )
                 )
-
-    def close(self):
-        if self.scriber:
-            self.scriber.close()
