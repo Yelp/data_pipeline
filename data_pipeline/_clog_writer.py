@@ -5,7 +5,7 @@ from data_pipeline.envelope import Envelope
 logger = get_config().logger
 
 # Since we are passing messages through scribe we don't support keys
-class ScribeWriter(object):
+class ClogWriter(object):
 
     def __init__(self, dry_run=False, retry_interval=3):
         self.dry_run = dry_run
