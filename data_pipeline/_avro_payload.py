@@ -87,6 +87,24 @@ class _AvroPayload(object):
         return self._payload_data
 
     def _set_payload_data(self, payload_data):
+        """We shold check to verify that payload data is not None
+        payload_data should not necessarily be a dict. example if the schema is something like
+        {
+          "type": "fixed",
+          "size": 16,
+          "namespace": "yelp.data_pipeline",
+          "name": "initialization_vector",
+          "doc": "Serializes an initialization vector for encrypting PII."
+        }
+
+        then the corresponding payload data will be 1234123412341234 which is not a dict
+
+        In ideal scenario we should be using avro.io.validate function to validate if
+        the given payload_data is a valid datum, but this check happens anyway when we
+        encode payload_data with avro_schema.
+        """
+        if payload_data is None:
+            raise TypeError("Payload Data cannot be None")
         self._payload_data = payload_data
         self._payload = None  # force payload to be re-encoded
 
