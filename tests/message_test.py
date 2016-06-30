@@ -617,7 +617,6 @@ class TestCreateFromMessageAndOffset(object):
 
     def test_create_from_offset_and_message(self, offset_and_message, message):
         extracted_message = create_from_offset_and_message(
-            topic=message.topic,
             offset_and_message=offset_and_message
         )
         assert extracted_message.message_type == message.message_type
