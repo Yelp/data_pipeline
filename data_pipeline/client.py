@@ -346,41 +346,47 @@ class _Registrar(object):
         threshold (int): The amount of time that should elapse in between the client sending
             registration messages (seconds).
     """
-    DEFAULT_REGISTRATION_THRESHOLD = 600  # Default period for sending registration msg is 10 min
+    # Default period for sending registration msg is 10 min
+    DEFAULT_REGISTRATION_THRESHOLD_SECONDS = 600
 
     def __init__(
         self,
         client_name,
         client_type,
-        threshold=DEFAULT_REGISTRATION_THRESHOLD
+        threshold=DEFAULT_REGISTRATION_THRESHOLD_SECONDS
     ):
         self.client_name = client_name
         self.client_type = client_type
         self.threshold = threshold
 
-        self.schema_time_map = {}
+        self.schema_to_last_seen_time_map = {}
 
-    def register_schema_ids(self, id_list, timestamp):
-        """Used to notify Client of schema usage changes. Can be called on Client startup or
-            when Client decides to change which topics to listen/produce to.
+    def register_schema_ids(self, schema_id_list):
+        """This function is used to specify the lsit of avro schema IDs that this Client
+            will use. When called it, it will reset the information about when each schema ID
+            in schema_id_list was used last.
 
         Args:
-            id_list (list[int]): List of the schema IDs that the client will use.
-            timestamp (long): The utc time that this function was called.
+            schema_id_list (list[int]): List of the schema IDs that the client will use.
         """
-        for schema_id in id_list:
-            self.schema_time_map[schema_id] = timestamp
+        for schema_id in schema_id_list:
+            self.schema_to_last_seen_time_map[schema_id] = None
         # TODO([DATAPIPE-1192|mkohli]): Send registration message
 
-    def register_active_schema(self, schema_id, timestamp):
-        """This function is called by the Client subclass whenever it receives a message. Updates
-            the internal mapping of schema IDs to the most recent time the Client has used them.
+    def update_active_schema(self, schema_id, timestamp):
+        """
+        This function updates the last time that the given schema_id was used to value
+        timestamp if the given timestamp occurred more recently than the last time the
+        schema_id was used.
+
+        Usage:
+            This function is called by the Client subclass whenever it receives a message.
 
         Args:
             schema_id (int): Schema IDs of the message the Client received.
             timestamp (long): The utc time of the message that the Client received.
         """
-        if schema_id not in self.schema_time_map:
-            self.schema_time_map[schema_id] = timestamp
-        elif timestamp > self.schema_time_map[schema_id]:
-            self.schema_time_map[schema_id] = timestamp
+
+        current_timestamp = self.schema_to_last_seen_time_map.get(schema_id)
+        if current_timestamp is None or timestamp > current_timestamp:
+            self.schema_to_last_seen_time_map[schema_id] = timestamp
