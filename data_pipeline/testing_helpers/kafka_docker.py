@@ -31,7 +31,7 @@ def capture_new_data_pipeline_messages(topic):
         def get_data_pipeline_messages(count=100):
             kafka_messages = get_kafka_messages(count)
             return [
-                create_from_offset_and_message(topic, kafka_message)
+                create_from_offset_and_message(kafka_message)
                 for kafka_message in kafka_messages
             ]
 

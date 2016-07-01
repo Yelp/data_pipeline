@@ -464,7 +464,6 @@ class Message(object):
     def create_from_unpacked_message(
         cls,
         unpacked_message,
-        topic,
         kafka_position_info=None
     ):
         encryption_type = unpacked_message['encryption_type']
@@ -481,13 +480,8 @@ class Message(object):
             ).iteritems()
         }
 
-        # TODO [clin|DATAPIPE-1004, DATAPIPE-1010] Right now it explicitly
-        # passes the topic via the constructor to avoid retrieving it from
-        # the schematizer. Later, once the topic is lazily retrieved, it
-        # should set the topic in the same way as setting encryption type.
         message_params = {
             'uuid': unpacked_message['uuid'],
-            'topic': topic,
             'schema_id': unpacked_message['schema_id'],
             'timestamp': unpacked_message['timestamp'],
             'meta': meta,
@@ -836,16 +830,12 @@ _message_type_to_class_map = {
 
 
 def create_from_kafka_message(
-    topic,
     kafka_message,
     force_payload_decoding=True
 ):
     """ Build a data_pipeline.message.Message from a yelp_kafka message
 
     Args:
-        topic (str): The topic name from which the message was received.
-            This parameter is deprecating and currently not used. The topic
-            will be retrieved from the given `kafka_message`.
         kafka_message (kafka.common.KafkaMessage): The message info which
             has the topic, partition, offset, key, and value(payload) of
             the received message.
@@ -863,7 +853,6 @@ def create_from_kafka_message(
         key=kafka_message.key,
     )
     return _create_message_from_packed_message(
-        topic=kafka_message.topic,
         packed_message=kafka_message,
         force_payload_decoding=force_payload_decoding,
         kafka_position_info=kafka_position_info
@@ -871,14 +860,12 @@ def create_from_kafka_message(
 
 
 def create_from_offset_and_message(
-    topic,
     offset_and_message,
     force_payload_decoding=True
 ):
     """ Build a data_pipeline.message.Message from a kafka.common.OffsetAndMessage
 
     Args:
-        topic (str): The topic name from which the message was received.
         offset_and_message (kafka.common.OffsetAndMessage): a namedtuple
             containing the offset and message. Message contains magic,
             attributes, keys and values.
@@ -891,21 +878,18 @@ def create_from_offset_and_message(
         The message object
     """
     return _create_message_from_packed_message(
-        topic=topic,
         packed_message=offset_and_message.message,
         force_payload_decoding=force_payload_decoding
     )
 
 
 def _create_message_from_packed_message(
-    topic,
     packed_message,
     force_payload_decoding,
     kafka_position_info=None
 ):
     """ Builds a data_pipeline.message.Message from packed_message
     Args:
-        topic (str): the topic name where the message comes from.
         packed_message (yelp_kafka.consumer.Message or kafka.common.KafkaMessage):
             The message info which has the payload, offset, partition,
             and key of the received message if of type yelp_kafka.consumer.message
@@ -925,7 +909,6 @@ def _create_message_from_packed_message(
     message_class = _message_type_to_class_map[unpacked_message['message_type']]
     message = message_class.create_from_unpacked_message(
         unpacked_message=unpacked_message,
-        topic=topic,
         kafka_position_info=kafka_position_info
     )
     if force_payload_decoding:
