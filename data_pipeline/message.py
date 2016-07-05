@@ -120,13 +120,13 @@ class Message(object):
         Ensure not to use these attributes for non-update type Message classes.
     """
 
-    _fast_uuid = FastUUID()
-    """UUID generator - this isn't a @cached_property so it can be serialized"""
-
     _message_type = None
     """Identifies the nature of the message. The valid value is one of the
     data_pipeline.message_type.MessageType. It must be set by child class.
     """
+
+    _fast_uuid = FastUUID()
+    """UUID generator - this isn't a @cached_property so it can be serialized"""
 
     @property
     def schematizer(self):
@@ -349,7 +349,6 @@ class Message(object):
             payload_data=payload_data,
             dry_run=dry_run
         )
-        self._set_contains_pii()
         self._set_uuid(uuid)
         self._set_timestamp(timestamp)
         self._set_upstream_position_info(upstream_position_info)
