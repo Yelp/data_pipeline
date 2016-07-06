@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 import math
 import os
 import socket
+import threading
 import time
 
 import simplejson
@@ -357,6 +358,7 @@ class _Registrar(object):
         self.client_name = client_name
         self.client_type = client_type
         self.threshold = threshold
+        self.send_messages = False
 
         self.schema_to_last_seen_time_map = {}
 
@@ -389,3 +391,22 @@ class _Registrar(object):
         current_timestamp = self.schema_to_last_seen_time_map.get(schema_id)
         if current_timestamp is None or timestamp > current_timestamp:
             self.schema_to_last_seen_time_map[schema_id] = timestamp
+
+    def is_sending_messages(self):
+        return self.send_messages
+
+    def start(self):
+        """Start periodically sending registration messages"""
+        if not self.send_messages:
+            self.send_messages = True
+            self._wake()
+
+    def stop(self):
+        """Force Client to stop periodically sending registration messages"""
+        self.send_messages = False
+
+    def _wake(self):
+        """This class periodically sends registration messages using Clog"""
+        if self.send_messages:
+            # TODO([DATAPIPE-1192|mkohli]): Send registration message
+            threading.Timer(self.threshold, self._wake).start()
