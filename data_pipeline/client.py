@@ -361,7 +361,7 @@ class _Registrar(object):
 
         self.schema_to_last_seen_time_map = {}
 
-    def register_schema_ids(self, schema_id_list):
+    def register_tracked_schema_ids(self, schema_id_list):
         """This function is used to specify the lsit of avro schema IDs that this Client
             will use. When called it, it will reset the information about when each schema ID
             in schema_id_list was used last.
@@ -373,7 +373,7 @@ class _Registrar(object):
             self.schema_to_last_seen_time_map[schema_id] = None
         # TODO([DATAPIPE-1192|mkohli]): Send registration message
 
-    def update_active_schema(self, schema_id, timestamp):
+    def update_schema_last_used_timestamp(self, schema_id, timestamp):
         """
         This function updates the last time that the given schema_id was used to value
         timestamp if the given timestamp occurred more recently than the last time the

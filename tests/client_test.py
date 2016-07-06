@@ -2,7 +2,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from datetime import datetime
+import time
 
 import mock
 import pytest
@@ -92,15 +92,12 @@ class TestClientRegistration(TestClient):
     @pytest.fixture
     def schema_last_used_timestamp(self):
         """Returns a sample timestamp coverted to long format"""
-        ts_str = "2016-01-01T19:10:26"
-        ts = datetime.strptime(ts_str, '%Y-%m-%dT%H:%M:%S')
-        ts_long = long((ts - datetime.utcfromtimestamp(0)).total_seconds())
-        return ts_long
+        return long(time.time())
 
-    def test_register_schema_ids(self):
+    def test_register_tracked_schema_ids(self):
         client = self._build_client()
         schema_id_list = [1, 4, 11]
-        client.registrar.register_schema_ids(schema_id_list)
+        client.registrar.register_tracked_schema_ids(schema_id_list)
         schema_map = client.registrar.schema_to_last_seen_time_map
         for schema_id in schema_id_list:
             assert schema_map[schema_id] is None
@@ -112,7 +109,7 @@ class TestClientRegistration(TestClient):
         creates a new internal entry.
         """
         client = self._build_client()
-        client.registrar.update_active_schema(11, schema_last_used_timestamp)
+        client.registrar.update_schema_last_used_timestamp(11, schema_last_used_timestamp)
         schema_map = client.registrar.schema_to_last_seen_time_map
         assert schema_map.get(11) == schema_last_used_timestamp
 
@@ -125,9 +122,9 @@ class TestClientRegistration(TestClient):
         timestamp_after = schema_last_used_timestamp + 500
         timestamp_before = schema_last_used_timestamp - 500
         schema_id_list = [1, 4]
-        client.registrar.register_schema_ids(schema_id_list)
-        client.registrar.update_active_schema(1, timestamp_before)
-        client.registrar.update_active_schema(1, timestamp_after)
+        client.registrar.register_tracked_schema_ids(schema_id_list)
+        client.registrar.update_schema_last_used_timestamp(1, timestamp_before)
+        client.registrar.update_schema_last_used_timestamp(1, timestamp_after)
         schema_map = client.registrar.schema_to_last_seen_time_map
         assert schema_map.get(1) == timestamp_after
 
@@ -140,8 +137,8 @@ class TestClientRegistration(TestClient):
         timestamp_after = schema_last_used_timestamp + 500
         timestamp_before = schema_last_used_timestamp - 500
         schema_id_list = [1, 4]
-        client.registrar.register_schema_ids(schema_id_list)
-        client.registrar.update_active_schema(4, timestamp_after)
-        client.registrar.update_active_schema(4, timestamp_before)
+        client.registrar.register_tracked_schema_ids(schema_id_list)
+        client.registrar.update_schema_last_used_timestamp(4, timestamp_after)
+        client.registrar.update_schema_last_used_timestamp(4, timestamp_before)
         schema_map = client.registrar.schema_to_last_seen_time_map
         assert schema_map.get(4) == timestamp_after
