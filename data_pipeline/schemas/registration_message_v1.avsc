@@ -1,0 +1,46 @@
+{
+  "type": "record",
+  "namespace": "yelp.data_pipeline",
+  "name": "client_registration_message",
+  "doc": "Message format for Proucer/Consumer registration.",
+  "fields": [
+    {
+      "name": "team_name",
+      "type": "string",
+      "doc": "Team name, as defined in `sensu_handlers::teams` (see y/sensu-teams)"
+    },
+    {
+      "name": "client_name",
+      "type": "string",
+      "doc": "Name associated with the client - this name will be used as the client's identifier for producer/consumer registration."
+    },
+    {
+      "name": "client_type",
+      "type": {
+        "name": "client_type",
+        "doc": "ENUM of Client Types",
+        "type": "enum",
+        "symbols": [
+          "producer",
+          "consumer"
+        ]
+      },
+      "doc": "identifies the type of client: a 'consumer' or a 'producer'"
+    },
+    {
+      "name": "timestamp",
+      "type": "timestamp-millis",
+      "doc": "The most recent time that the Client read/wrote a message with the schema_id"
+    },
+    {
+      "name": "expected_frequency_seconds",
+      "type": "int",
+      "doc": "How often(seconds) is this message getting sent?"
+    },
+    {
+      "name": "schema_id",
+      "type": "int",
+      "doc": "Schema Id for which this message contains information about last time used"
+    }
+  ]
+}

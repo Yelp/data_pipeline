@@ -360,6 +360,33 @@ class _Registrar(object):
 
         self.schema_to_last_seen_time_map = {}
 
+    def registration_schema(self):
+        return get_schematizer().register_schema(
+            namespace=self._registration_schema['namespace'],
+            source=self._registration_schema['name'],
+            schema_str=simplejson.dumps(self._registration_schema),
+            source_owner_email='bam+data_pipeline@yelp.com',
+            contains_pii=False
+        )
+
+    @cached_property
+    def _registration_schema(self):
+        schema_file = os.path.join(
+            os.path.dirname(__file__),
+            'schemas/registration_message_v1.avsc'
+        )
+        with open(schema_file, 'r') as f:
+            schema_string = f.read()
+        return simplejson.loads(schema_string)
+
+    @cached_property
+    def registration_schema_id(self):
+        return self.registration_schema().schema_id
+
+    @cached_property
+    def registration_topic(self):
+        return str(self.registration_schema().topic.name)
+
     def register_tracked_schema_ids(self, schema_id_list):
         """This function is used to specify the lsit of avro schema IDs that this Client
             will use. When called it, it will reset the information about when each schema ID
