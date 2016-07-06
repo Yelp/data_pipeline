@@ -19,7 +19,7 @@ class Envelope(object):
 
     Example:
         >>> from data_pipeline.message import CreateMessage
-        >>> message = CreateMessage(str('topic'), 1, bytes("FAKE MESSAGE"))
+        >>> message = CreateMessage(schema_id=1, payload=bytes("FAKE MESSAGE"))
         >>> envelope = Envelope()
         >>> packed_message = envelope.pack(message)
         >>> isinstance(packed_message, bytes)

@@ -311,7 +311,6 @@ class TestProducer(TestProducerBase):
         assert len(offsets_and_messages) == 1
 
         dp_message = create_from_offset_and_message(
-            message.topic,
             offsets_and_messages[0]
         )
         assert dp_message.payload == message.payload

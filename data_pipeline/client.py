@@ -227,7 +227,6 @@ class _Monitor(object):
         """
         self.producer.publish(
             MonitorMessage(
-                topic=self.monitor_topic,
                 schema_id=self.monitor_schema_id,
                 payload_data=tracking_info,
                 dry_run=self.dry_run
