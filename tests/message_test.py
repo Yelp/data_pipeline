@@ -115,10 +115,6 @@ class SharedMessageTest(object):
         with pytest.raises(ValueError):
             pii_message.encryption_type
 
-    @pytest.mark.parametrize('invalid_keys', [unicode('foo'), [], [str('foo')]])
-    def test_reject_non_unicode_keys(self, valid_message_data, invalid_keys):
-        self._assert_invalid_data(valid_message_data, keys=invalid_keys)
-
     def _assert_invalid_data(self, valid_data, error=TypeError, **data_overrides):
         invalid_data = self._make_message_data(valid_data, **data_overrides)
         with pytest.raises(error):
@@ -158,6 +154,19 @@ class SharedMessageTest(object):
             assert issubclass(contains_pii_warning.category, DeprecationWarning)
             assert ('contains_pii is deprecated. Please stop passing it in.'
                     in contains_pii_warning.message)
+
+    def test_specify_keys_triggers_warnings(self, valid_message_data):
+        message_data = self._make_message_data(
+            valid_message_data,
+            keys=tuple([1, 2])
+        )
+        with warnings.catch_warnings(record=True) as warns:
+            self.message_class(**message_data)
+            assert len(warns) == 1
+            keys_warning = warns[0]
+            assert issubclass(keys_warning.category, DeprecationWarning)
+            assert ('Passing in keys explicitly is deprecated.'
+                    in keys_warning.message)
 
     @pytest.mark.parametrize('invalid_meta', ['not list', ['not_MetaAttribute']])
     def test_rejects_invalid_meta_type(self, valid_message_data, invalid_meta):
@@ -319,6 +328,30 @@ class PayloadOnlyMessageTest(SharedMessageTest):
                     actual_encrypted_payload=message.avro_repr['payload'],
                     expected_decrypted_payload=payload
                 )
+
+    def test_keys(
+        self,
+        registered_schema_with_pkey,
+        example_payload_data_with_pkeys,
+        example_payload_with_pkeys
+    ):
+        test_params = [
+            (example_payload_with_pkeys, None),
+            (None, example_payload_data_with_pkeys)
+        ]
+        expected_keys = {
+            "field2": example_payload_data_with_pkeys["field2"],
+            "field1": example_payload_data_with_pkeys["field1"],
+            "field3": example_payload_data_with_pkeys["field3"],
+        }
+
+        for _payload, _payload_data in test_params:
+            message = self.message_class(
+                schema_id=registered_schema_with_pkey.schema_id,
+                payload=_payload,
+                payload_data=_payload_data,
+            )
+            assert message.keys == expected_keys
 
 
 class TestCreateMessage(PayloadOnlyMessageTest):

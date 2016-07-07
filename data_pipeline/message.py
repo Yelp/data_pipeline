@@ -7,6 +7,7 @@ import warnings
 from collections import namedtuple
 from uuid import UUID
 
+from cached_property import cached_property
 from yelp_lib.containers.lists import unlist
 
 from data_pipeline._encryption_helper import EncryptionHelper
@@ -336,14 +337,59 @@ class Message(object):
 
     @property
     def keys(self):
+        """Currently this support primary keys for flat record
+        type avro schema derived from MYSQL for example. Support
+        for primary keys in nested avro schema will be handled in
+        future versions.
+        """
+        if self._keys is not None:
+            return self._keys
+        self._set_keys()
         return self._keys
 
-    def _set_keys(self, keys):
-        if not self._is_valid_optional_type(keys, tuple):
-            raise TypeError("Keys must be None or a tuple.")
-        if self._any_invalid_type(keys, unicode):
-            raise TypeError("Element of keys must be unicode.")
+    def _set_keys(self):
+        keys = {}
+        for primary_key_field in self._primary_key_fields:
+            field_name = primary_key_field.get('name')
+            value = self.payload_data[field_name]
+            keys[field_name] = value
         self._keys = keys
+
+    @cached_property
+    def encoded_keys(self):
+        writer = _AvroStringStore().get_writer(
+            schema_id=self.schema_id,
+            avro_schema=self._keys_avro_json,
+            tag='keys'
+        )
+        return writer.encode(message_avro_representation=self.keys)
+
+    @cached_property
+    def _primary_key_fields(self):
+        primary_key_fields = []
+        schema_json = self._schematizer.get_schema_by_id(
+            self.schema_id
+        ).schema_json
+        fields = schema_json.get('fields')
+        if fields:
+            primary_key_fields = sorted([
+                field for field in fields
+                if field.get('pkey')
+            ], key=lambda field: field.get('pkey'))
+        return primary_key_fields
+
+    @cached_property
+    def _keys_avro_json(self):
+        avro_json = {
+            "type": "record",
+            "namespace": "yelp.data_pipeline",
+            "name": "primary_keys",
+            "doc": "Represents primary keys present in Message payload.",
+            "fields": []
+        }
+        for primary_key_field in self._primary_key_fields:
+            avro_json["fields"].append(primary_key_field)
+        return avro_json
 
     @property
     def payload_diff(self):
@@ -390,13 +436,16 @@ class Message(object):
         self._set_timestamp(timestamp)
         self._set_upstream_position_info(upstream_position_info)
         self._set_kafka_position_info(kafka_position_info)
-        self._set_keys(keys)
+        if keys:
+            warnings.simplefilter("always", category=DeprecationWarning)
+            warnings.warn("Passing in keys explicitly is deprecated.", DeprecationWarning)
         self._set_dry_run(dry_run)
         self._set_meta(meta)
         self._set_payload_or_payload_data(payload, payload_data)
         if topic:
             warnings.simplefilter("always", category=DeprecationWarning)
             warnings.warn("Passing in topics explicitly is deprecated.", DeprecationWarning)
+        self._keys = None
         self._should_be_encrypted_state = None
         self._encryption_type = None
         self._contains_pii = None
