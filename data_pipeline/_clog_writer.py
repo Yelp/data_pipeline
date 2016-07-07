@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import
+from __future__ import unicode_literals
+
 import clog
 
 from data_pipeline.config import get_config
@@ -6,9 +10,11 @@ from data_pipeline.envelope import Envelope
 logger = get_config().logger
 
 # Since we are passing messages through scribe we don't support keys
+
+
 class ClogWriter(object):
 
-    def __init__(self, dry_run=False, retry_interval=3):
+    def __init__(self, dry_run=False):
         self.dry_run = dry_run
         self.envelope = Envelope()
 
