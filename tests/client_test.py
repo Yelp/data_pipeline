@@ -9,6 +9,7 @@ import pytest
 
 from data_pipeline.client import Client
 from data_pipeline.expected_frequency import ExpectedFrequency
+from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 
 class ClientTester(Client):
@@ -88,11 +89,16 @@ class TestClient(object):
             assert uncalled_method.called == 0
 
 
+@pytest.mark.usefixtures("configure_teams")
 class TestClientRegistration(TestClient):
     @pytest.fixture
     def schema_last_used_timestamp(self):
         """Returns a sample timestamp coverted to long format"""
         return long(time.time())
+
+    @pytest.fixture
+    def schematizer(self):
+        return get_schematizer()
 
     def test_register_tracked_schema_ids(self):
         client = self._build_client()
@@ -142,3 +148,12 @@ class TestClientRegistration(TestClient):
         client.registrar.update_schema_last_used_timestamp(4, timestamp_before)
         schema_map = client.registrar.schema_to_last_seen_time_map
         assert schema_map.get(4) == timestamp_after
+
+    def test_registration_message_schema(self):
+        schematizer_client = get_schematizer()
+        client = self._build_client()
+        expected_schema = client.registrar.registration_schema
+        schema_id = client.registrar.registration_schema_id
+        actual_schema = schematizer_client.get_schema_by_id(schema_id)
+        assert expected_schema == actual_schema
+        assert schema_id != 0 and schema_id is not None and actual_schema is not None

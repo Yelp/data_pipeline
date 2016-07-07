@@ -29,7 +29,8 @@
     },
     {
       "name": "timestamp",
-      "type": "timestamp-millis",
+      "type": "long",
+      "logicalType": "timestamp-millis",
       "doc": "The most recent time that the Client read/wrote a message with the schema_id"
     },
     {

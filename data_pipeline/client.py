@@ -360,6 +360,7 @@ class _Registrar(object):
 
         self.schema_to_last_seen_time_map = {}
 
+    @cached_property
     def registration_schema(self):
         return get_schematizer().register_schema(
             namespace=self._registration_schema['namespace'],
@@ -381,11 +382,11 @@ class _Registrar(object):
 
     @cached_property
     def registration_schema_id(self):
-        return self.registration_schema().schema_id
+        return self.registration_schema.schema_id
 
     @cached_property
     def registration_topic(self):
-        return str(self.registration_schema().topic.name)
+        return str(self.registration_schema.topic.name)
 
     def register_tracked_schema_ids(self, schema_id_list):
         """This function is used to specify the lsit of avro schema IDs that this Client
