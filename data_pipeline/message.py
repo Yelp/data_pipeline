@@ -355,12 +355,12 @@ class Message(object):
             keys[field_name] = value
         self._keys = keys
 
-    @cached_property
+    @property
     def encoded_keys(self):
-        writer = _AvroStringStore().get_writer(
+        writer = _AvroStringStore().get_associated_writer(
             schema_id=self.schema_id,
             avro_schema=self._keys_avro_json,
-            tag='keys'
+            entity_type='primary_keys'
         )
         return writer.encode(message_avro_representation=self.keys)
 
