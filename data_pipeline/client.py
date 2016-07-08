@@ -363,7 +363,7 @@ class _Registrar(object):
         self.schema_to_last_seen_time_map = {}
 
     def register_tracked_schema_ids(self, schema_id_list):
-        """This function is used to specify the lsit of avro schema IDs that this Client
+        """This function is used to specify the list of avro schema IDs that this Client
             will use. When called it, it will reset the information about when each schema ID
             in schema_id_list was used last.
 
@@ -409,4 +409,6 @@ class _Registrar(object):
         """This class periodically sends registration messages using Clog"""
         if self.send_messages:
             # TODO([DATAPIPE-1192|mkohli]): Send registration message
+            # The purpose of the Timer is for _wake to ensure it is called
+            # every self.threshold amount of seconds until self.send_messages is False
             threading.Timer(self.threshold, self._wake).start()
