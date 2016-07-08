@@ -15,32 +15,19 @@ class _AvroPayload(object):
     def __init__(
         self,
         schema_id,
-        topic=None,
+        reader_schema_id=None,
         payload=None,
         payload_data=None,
         dry_run=False
     ):
         self._set_schema_id(schema_id)
-        self._set_topic(
-            topic or str(self.schematizer.get_schema_by_id(schema_id).topic.name)
-        )
+        self._set_reader_schema_id(reader_schema_id)
         self._set_dry_run(dry_run)
         self._set_payload_or_payload_data(payload, payload_data)
 
     @property
     def schematizer(self):
         return get_schematizer()
-
-    @property
-    def topic(self):
-        return self._topic
-
-    def _set_topic(self, topic):
-        if not isinstance(topic, str):
-            raise TypeError("Topic must be a non-empty string")
-        if len(topic) == 0:
-            raise ValueError("Topic must be a non-empty string")
-        self._topic = topic
 
     @property
     def schema_id(self):
@@ -50,6 +37,13 @@ class _AvroPayload(object):
         if not isinstance(schema_id, int):
             raise TypeError("Schema id should be an int")
         self._schema_id = schema_id
+
+    @property
+    def reader_schema_id(self):
+        return self._schema_id
+
+    def _set_reader_schema_id(self, reader_schema_id):
+        self._reader_schema_id = reader_schema_id
 
     @property
     def dry_run(self):
@@ -85,6 +79,18 @@ class _AvroPayload(object):
     def payload_data(self):
         self._set_payload_data_if_necessary(self._payload)
         return self._payload_data
+
+    @property
+    def printable_payload_data(self):
+        return self._get_printable_payload_data(self.payload_data)
+
+    def _get_printable_payload_data(self, data):
+        if not isinstance(data, dict):
+            return data.encode('hex') if isinstance(data, bytes) else data
+        return {
+            key: self._get_printable_payload_data(value)
+            for key, value in data.iteritems()
+        }
 
     def _set_payload_data(self, payload_data):
         """We shold check to verify that payload data is not None
@@ -137,7 +143,7 @@ class _AvroPayload(object):
     def _avro_string_reader(self):
         """get the reader from store if already exists"""
         return _AvroStringStore().get_reader(
-            reader_schema_id=self.schema_id,
+            reader_schema_id=self.reader_schema_id,
             writer_schema_id=self.schema_id
         )
 

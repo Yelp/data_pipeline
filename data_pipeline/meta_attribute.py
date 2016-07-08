@@ -2,8 +2,6 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from cached_property import cached_property
-
 from data_pipeline._avro_payload import _AvroPayload
 
 
@@ -78,7 +76,7 @@ class MetaAttribute(object):
     def payload_data(self):
         return self._avro_payload.payload_data
 
-    @cached_property
+    @property
     def schema_id(self):
         return self._avro_payload.schema_id
 
@@ -94,7 +92,7 @@ class MetaAttribute(object):
         """
         return {
             'schema_id': self.schema_id,
-            'payload_data': self.payload_data
+            'payload_data': self._avro_payload.printable_payload_data
         }
 
     def __repr__(self):

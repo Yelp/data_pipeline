@@ -134,7 +134,14 @@ class Message(object):
 
     @property
     def topic(self):
-        return self._avro_payload.topic
+        return self._topic
+
+    def _set_topic(self, topic):
+        if not isinstance(topic, str):
+            raise TypeError("Topic must be a non-empty string")
+        if len(topic) == 0:
+            raise ValueError("Topic must be a non-empty string")
+        self._topic = topic
 
     @property
     def schema_id(self):
@@ -344,10 +351,12 @@ class Message(object):
             warnings.warn("Passing in topics explicitly is deprecated.", DeprecationWarning)
         self._avro_payload = _AvroPayload(
             schema_id=schema_id,
-            topic=topic,
             payload=payload,
             payload_data=payload_data,
             dry_run=dry_run
+        )
+        self._set_topic(
+            topic or str(self.schematizer.get_schema_by_id(schema_id).topic.name)
         )
         self._set_uuid(uuid)
         self._set_timestamp(timestamp)
@@ -480,7 +489,9 @@ class Message(object):
     def _str_repr(self):
         cleaned_payload_data = self.payload_data
         if self.contains_pii:
-            cleaned_payload_data = self._get_cleaned_pii_data(self.payload_data)
+            cleaned_payload_data = self._get_cleaned_pii_data(
+                self._avro_payload.printable_payload_data
+            )
         return {
             'uuid': self.uuid_hex,
             'message_type': self.message_type.name,
@@ -622,7 +633,6 @@ class UpdateMessage(Message):
         )
         self._previous_avro_payload = _AvroPayload(
             schema_id=schema_id,
-            topic=topic,
             payload=previous_payload,
             payload_data=previous_payload_data,
             dry_run=dry_run

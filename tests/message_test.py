@@ -42,6 +42,12 @@ class SharedMessageTest(object):
     def invalid_payload(self, request):
         return request.param
 
+    @pytest.fixture(params=[
+        None
+    ])
+    def invalid_payload_data(self, request):
+        return request.param
+
     @pytest.fixture
     def pii_message(self, valid_message_data, pii_schema):
         message_data = self._make_message_data(
@@ -108,6 +114,17 @@ class SharedMessageTest(object):
             valid_message_data,
             payload=bytes(10),
             payload_data={'data': 'foo'}
+        )
+
+    def test_rejects_invalid_payload_data(
+        self,
+        valid_message_data,
+        invalid_payload_data
+    ):
+        self._assert_invalid_data(
+            valid_message_data,
+            payload=None,
+            payload_data=invalid_payload_data
         )
 
     def test_reject_encrypted_message_without_encryption(self, pii_message):
@@ -243,6 +260,7 @@ class SharedMessageTest(object):
 
     def test_message_str_with_pii(self, pii_message):
         with reconfigure(encryption_type='AES_MODE_CBC-1'):
+            actual = str(pii_message)
             expected_payload_data = {u'good_field': u"<type 'int'>"}
             expected = {
                 'message_type': self.expected_message_type.name,
@@ -254,7 +272,7 @@ class SharedMessageTest(object):
                 'payload_data': expected_payload_data,
             }
             # only use eval to get the original dict when the string is trusted
-            assert pii_message._str_repr == expected
+            assert eval(actual) == expected
 
     def assert_equal_decrypted_payload(
         self,
@@ -489,6 +507,17 @@ class TestUpdateMessage(SharedMessageTest):
             previous_payload_data={'foo': 'bar'}
         )
 
+    def test_rejects_invalid_previous_payload_data(
+        self,
+        valid_message_data,
+        invalid_payload_data
+    ):
+        self._assert_invalid_data(
+            valid_message_data,
+            previous_payload=None,
+            previous_payload_data=invalid_payload_data
+        )
+
     def test_encrypted_message(self, pii_schema, payload, example_payload_data):
         # TODO [clin|DATAPIPE-851] let's see if this can be refactored
         with reconfigure(encryption_type='AES_MODE_CBC-1'):
@@ -560,7 +589,7 @@ class TestUpdateMessage(SharedMessageTest):
 
     def test_message_str_with_pii(self, pii_message):
         with reconfigure(encryption_type='AES_MODE_CBC-1'):
-
+            actual = str(pii_message)
             expected_payload_data = {u'good_field': u"<type 'int'>"}
             expected_previous_payload_data = {u'good_field': u"<type 'int'>"}
             expected = {
@@ -574,7 +603,7 @@ class TestUpdateMessage(SharedMessageTest):
                 'previous_payload_data': expected_previous_payload_data
             }
             # only use eval to get the original dict when the string is trusted
-            assert pii_message._str_repr == expected
+            assert eval(actual) == expected
 
 
 class TestCreateFromMessageAndOffset(object):

@@ -22,8 +22,7 @@ _AVSCInfo = namedtuple('_AVSCInfo', (
     'source',
     'source_owner_email',
     'contains_pii'
-)
-)
+))
 
 
 initialization_vector_info = _AVSCInfo(
@@ -83,7 +82,9 @@ class _AVSCStore(object):
             return simplejson.loads(f.read())
 
     def _register_schema(self, avro_schema_info):
-        avro_schema_json = self._load_avro_schema_file(avro_schema_info.avsc_file_path)
+        avro_schema_json = self._load_avro_schema_file(
+            avro_schema_info.avsc_file_path
+        )
         return self._schematizer.register_schema_from_schema_json(
             namespace=avro_schema_info.namespace,
             source=avro_schema_info.source,
