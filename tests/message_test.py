@@ -637,11 +637,9 @@ class TestCreateFromMessageAndOffset(object):
         example_payload_data,
     ):
         unpacked_message = CreateMessage(
-            topic=str(registered_compatible_schema.topic.name),
             schema_id=registered_compatible_schema.schema_id,
             payload=payload,
             timestamp=1500,
-            contains_pii=False
         )
         offset_and_message = OffsetAndMessage(
             0,
@@ -664,11 +662,9 @@ class TestCreateFromMessageAndOffset(object):
         example_payload_data
     ):
         unpacked_message = CreateMessage(
-            topic=str(registered_schema.topic.name),
             schema_id=registered_schema.schema_id,
             payload=payload,
             timestamp=1500,
-            contains_pii=False
         )
         offset_and_message = OffsetAndMessage(
             0,

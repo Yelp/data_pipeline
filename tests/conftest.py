@@ -71,12 +71,13 @@ def registered_schema(schematizer_client, example_schema, namespace, source):
 @pytest.fixture(scope='module')
 def registered_compatible_schema(
     schematizer_client,
-    example_compatible_schema
+    example_compatible_schema,
+    namespace,
+    source
 ):
-    schema = simplejson.loads(example_compatible_schema)
     return schematizer_client.register_schema(
-        namespace=schema['namespace'],
-        source=schema['name'],
+        namespace=namespace,
+        source=source,
         schema_str=example_compatible_schema,
         source_owner_email='test@yelp.com',
         contains_pii=False

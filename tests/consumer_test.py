@@ -12,11 +12,11 @@ import mock
 import pytest
 
 from data_pipeline.consumer import Consumer
+from data_pipeline.consumer_source import FixedSchemas
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import CreateMessage
 from tests.base_consumer_test import BaseConsumerSourceBaseTest
 from tests.base_consumer_test import BaseConsumerTest
-from tests.base_consumer_test import FixedSchemasReaderSchemaMapSetupMixin
 from tests.base_consumer_test import FixedSchemasSetupMixin
 from tests.base_consumer_test import MultiTopicsSetupMixin
 from tests.base_consumer_test import RefreshDynamicTopicTests
@@ -246,7 +246,6 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
     @pytest.fixture
     def registered_auro_refresh_schema(
             self,
-            containers,
             schematizer_client,
             example_schema,
             refresh_namespace,
@@ -259,27 +258,29 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
             source_owner_email='test@yelp.com',
             contains_pii=False
         )
-        topic_name = str(schema.topic.name)
-        containers.create_kafka_topic(topic_name)
         return schema
 
     @pytest.fixture
-    def test_message(self, registered_auro_refresh_schema, payload):
+    def ensure_topic_exists(self, containers, registered_auro_refresh_schema):
+        topic_name = str(registered_auro_refresh_schema.topic.name)
+        containers.create_kafka_topic(topic_name)
+
+    @pytest.fixture
+    def simple_message(self, registered_auro_refresh_schema, payload):
         return CreateMessage(
             schema_id=registered_auro_refresh_schema.schema_id,
             payload=payload
         )
 
     @pytest.fixture
-    def register_message_in_new_topic(
+    def register_non_compatible_schema(
         self,
         schematizer_client,
         refresh_namespace,
         refresh_source,
         example_non_compatible_schema,
-        payload
     ):
-        def _register_message_in_new_topic():
+        def _register_not_compatible_schema():
             registered_schema = schematizer_client.register_schema(
                 namespace=refresh_namespace,
                 source=refresh_source,
@@ -287,11 +288,8 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
                 source_owner_email='test@yelp.com',
                 contains_pii=False
             )
-            return CreateMessage(
-                schema_id=registered_schema.schema_id,
-                payload=payload
-            )
-        return _register_message_in_new_topic
+            return registered_schema
+        return _register_not_compatible_schema
 
     @pytest.fixture
     def consumer_instance(
@@ -316,11 +314,13 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
 
     def test_auto_refresh_topics(
         self,
+        ensure_topic_exists,
         registered_auro_refresh_schema,
         publish_messages,
         consumer_instance,
-        test_message,
-        register_message_in_new_topic
+        simple_message,
+        register_non_compatible_schema,
+        payload
     ):
         """
         This test publishes 2 messages and starts the consumer. The consumer
@@ -330,17 +330,20 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
         those 3 messages.
         """
         with consumer_instance as consumer:
-            publish_messages(test_message, count=2)
+            publish_messages(simple_message, count=2)
             # consumer should return exactly 2 messages 'message'
             actual_messages = consumer.get_messages(
                 count=10, blocking=True, timeout=TIMEOUT
             )
-            self.assert_equal_messages(actual_messages, test_message, 2)
+            self.assert_equal_messages(actual_messages, simple_message, 2)
             assert len(consumer.topic_to_partition_map) == 1
 
             consumer.commit_messages(actual_messages)
-            new_message = register_message_in_new_topic()
-            time.sleep(0.5)
+            new_schema = register_non_compatible_schema()
+            new_message = CreateMessage(
+                schema_id=new_schema.schema_id,
+                payload=payload
+            )
 
             publish_messages(new_message, count=3)
             # consumer should refresh itself and include the new topic in the
@@ -367,7 +370,7 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
             assert actual_message.payload_data == expected_message.payload_data
 
 
-class ConsumerReaderSchemaMapBaseTest(BaseConsumerSourceBaseTest):
+class TestReaderSchemaMapFixedSchemas(BaseConsumerSourceBaseTest):
 
     @pytest.fixture(scope='class')
     def topic(self, registered_schema, containers):
@@ -384,8 +387,15 @@ class ConsumerReaderSchemaMapBaseTest(BaseConsumerSourceBaseTest):
         team_name,
         pre_rebalance_callback,
         post_rebalance_callback,
-        consumer_source
+        registered_schema,
+        registered_compatible_schema,
+        registered_non_compatible_schema
     ):
+        consumer_source = FixedSchemas(
+            registered_compatible_schema.schema_id,
+            registered_non_compatible_schema.schema_id
+        )
+
         return Consumer(
             consumer_name=consumer_group_name,
             team_name=team_name,
@@ -396,7 +406,33 @@ class ConsumerReaderSchemaMapBaseTest(BaseConsumerSourceBaseTest):
             auto_offset_reset='largest',  # start from the tail of the topic
             pre_rebalance_callback=pre_rebalance_callback,
             post_rebalance_callback=post_rebalance_callback,
+        )
 
+    @pytest.fixture
+    def registered_non_compatible_schema(
+        self,
+        schematizer_client,
+        example_non_compatible_schema,
+        namespace,
+        source
+    ):
+        return schematizer_client.register_schema(
+            namespace=namespace,
+            source=source,
+            schema_str=example_non_compatible_schema,
+            source_owner_email='test@yelp.com',
+            contains_pii=False
+        )
+
+    @pytest.fixture
+    def expected_message(
+        self,
+        registered_compatible_schema,
+        payload
+    ):
+        return CreateMessage(
+            schema_id=registered_compatible_schema.schema_id,
+            payload=payload
         )
 
     def test_get_messages_uses_correct_reader_schema(
@@ -420,13 +456,6 @@ class ConsumerReaderSchemaMapBaseTest(BaseConsumerSourceBaseTest):
             actual_message = consumer.get_message(blocking=True, timeout=TIMEOUT)
             assert actual_message.reader_schema_id == expected_message.schema_id
             assert actual_message.payload_data == expected_message.payload_data
-
-
-class TestReaderSchemaMapFixedSchemas(
-    ConsumerReaderSchemaMapBaseTest,
-    FixedSchemasReaderSchemaMapSetupMixin
-):
-    pass
 
 
 class TestAutoRefreshConsumerTopicsInFixedNamespaces(

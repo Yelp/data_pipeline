@@ -4,7 +4,6 @@ from __future__ import unicode_literals
 
 import copy
 import datetime
-import json
 import random
 import time
 from uuid import uuid4
@@ -23,7 +22,6 @@ from data_pipeline.consumer_source import TopicInDataTarget
 from data_pipeline.consumer_source import TopicInSource
 from data_pipeline.consumer_source import TopicsInFixedNamespaces
 from data_pipeline.expected_frequency import ExpectedFrequency
-from data_pipeline.message import CreateMessage
 from data_pipeline.message import UpdateMessage
 from data_pipeline.producer import Producer
 from data_pipeline.schematizer_clientlib.models.data_source_type_enum \
@@ -32,7 +30,7 @@ from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from tests.helpers.mock_utils import attach_spy_on_func
 
 
-TIMEOUT = 1.5
+TIMEOUT = 1.8
 """ TIMEOUT is used for all 'get_messages' calls in these tests. It's
 essential that this value is large enough for the background workers
 to have a chance to retrieve the messages, but otherwise as small
@@ -854,47 +852,6 @@ class RefreshFixedTopicTests(RefreshTopicsTestBase):
         self._assert_equal_partition_map(
             actual_map=consumer.topic_to_partition_map,
             expected_map={topic: partitions}
-        )
-
-
-class FixedSchemasReaderSchemaMapSetupMixin(object):
-
-    @pytest.fixture
-    def registered_non_compatible_schema(
-        self,
-        schematizer_client,
-        example_non_compatible_schema
-    ):
-        schema = json.loads(example_non_compatible_schema)
-        return schematizer_client.register_schema(
-            namespace=schema['namespace'],
-            source=schema['name'],
-            schema_str=example_non_compatible_schema,
-            source_owner_email='test@yelp.com',
-            contains_pii=False
-        )
-
-    @pytest.fixture
-    def consumer_source(
-        self,
-        registered_schema,
-        registered_compatible_schema,
-        registered_non_compatible_schema
-    ):
-        return FixedSchemas(
-            registered_compatible_schema.schema_id,
-            registered_non_compatible_schema.schema_id
-        )
-
-    @pytest.fixture
-    def expected_message(
-        self,
-        registered_compatible_schema,
-        payload
-    ):
-        return CreateMessage(
-            schema_id=registered_compatible_schema.schema_id,
-            payload=payload
         )
 
 

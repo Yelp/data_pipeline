@@ -80,8 +80,8 @@ class BaseConsumer(Client):
             In case of FixedSchema consumer source, at most one schema_id can
             be provided per topic. Consumer would use that schema as reader
             schema to decode the message. In case no schema id for a topic is
-            specified then the Consumer would use the schema id, the message
-            was encoded with, to decode the message.
+            specified, then the Consumer would use the schema id that the
+            message was encoded with to decode the message.
         auto_offset_reset (str): automatically resets the offset when there is
             no initial offset in Zookeeper or if an offset is out of range.
             If 'largest', reset the offset to the latest available message (tail).
@@ -105,12 +105,12 @@ class BaseConsumer(Client):
             passed a list of topics, and should return a dictionary where keys
             are topic names and values are either None if no offset should be
             manually set, or a map from partition to offset.
-                If implemented, this function will be called every time
+            If implemented, this function will be called every time
             consumer refreshes the topics, so that the consumer can provide a
             map of partitions to offsets for each topic, or None if the default
             behavior should be employed instead. The default behavior is
             picking up the last committed offsets of topics.
-                This method must be implemented if topic state is to be stored
+            This method must be implemented if topic state is to be stored
             in some system other than Kafka, for example when writing data from
             Kafka into a transactional store.
         pre_topic_refresh_callback: (Optional[Callable[[list[str], list[str]],
@@ -197,7 +197,7 @@ class BaseConsumer(Client):
             )
         return topic_to_consumer_topic_state_map
 
-    def _get_topic_to_consumer_topic_state_map(
+    def _get_topic_to_offset_map(
         self,
         topic_to_partition_map,
         consumer_source
@@ -207,13 +207,11 @@ class BaseConsumer(Client):
         topic_to_consumer_topic_state_map dictionary.
         """
         topics = consumer_source.get_topics() if consumer_source else []
-        for topic in topic_to_partition_map:
-            if topic not in topics:
-                topics.append(topic)
+        topics = set(topics + topic_to_partition_map.keys())
 
         if self.fetch_offsets_for_topics:
             topic_to_partition_offsets_map = self.fetch_offsets_for_topics(
-                topics
+                list(topics)
             )
             return {
                 topic: (

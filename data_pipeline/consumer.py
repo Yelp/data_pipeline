@@ -42,8 +42,8 @@ class Consumer(BaseConsumer):
             In case of FixedSchema consumer source, at most one schema_id can
             be provided per topic. Consumer would use that schema as reader
             schema to decode the message. In case no schema id for a topic is
-            specified then the Consumer would use the schema id, the message
-            was encoded with, to decode the message.
+            specified, then the Consumer would use the schema id that the
+            message was encoded with to decode the message.
         auto_offset_reset (str): automatically resets the offset when there is
             no initial offset in Zookeeper or if an offset is out of range.
             If 'largest', reset the offset to the latest available message (tail).
@@ -67,12 +67,12 @@ class Consumer(BaseConsumer):
             passed a list of topics, and should return a dictionary where keys
             are topic names and values are either None if no offset should be
             manually set, or a map from partition to offset.
-                If implemented, this function will be called every time
+            If implemented, this function will be called every time
             consumer refreshes the topics, so that the consumer can provide a
             map of partitions to offsets for each topic, or None if the default
             behavior should be employed instead. The default behavior is
             picking up the last committed offsets of topics.
-                This method must be implemented if topic state is to be stored
+            This method must be implemented if topic state is to be stored
             in some system other than Kafka, for example when writing data from
             Kafka into a transactional store.
         pre_topic_refresh_callback: (Optional[Callable[[list[str], list[str]],
@@ -178,6 +178,9 @@ class Consumer(BaseConsumer):
             maximum size `count`, but may be smaller or empty depending on
             how many messages were retrieved within the timeout.
         """
+        # TODO(tajinder|DATAPIPE-1231): Consumer should refresh topics
+        # periodically even if NO timeout is provided and there are no
+        # messages to consume.
         messages = []
         has_timeout = timeout is not None
         if has_timeout:
@@ -210,7 +213,7 @@ class Consumer(BaseConsumer):
 
         current_topics = self.topic_to_partition_map.keys()
 
-        refreshed_topic_to_state_map = self._get_topic_to_consumer_topic_state_map(
+        refreshed_topic_to_state_map = self._get_topic_to_offset_map(
             self.topic_to_partition_map,
             self.consumer_source
         )

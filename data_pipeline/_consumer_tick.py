@@ -19,5 +19,4 @@ class _ConsumerTick(object):
         self.next_tick_time = time.time() + self.refresh_time_seconds
 
     def should_tick(self):
-        """ Checks if it's time to tick """
         return time.time() >= self.next_tick_time
