@@ -88,7 +88,6 @@ class TestClient(object):
             assert uncalled_method.called == 0
 
 
-@pytest.mark.usefixtures("configure_teams")
 class TestClientRegistration(TestClient):
     @pytest.fixture
     def schema_last_used_timestamp(self):
