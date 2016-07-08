@@ -23,17 +23,4 @@ class ClogWriter(object):
             try:
                 clog.log_line(message.topic, self.envelope.pack(message))
             except:
-                # Unfortunately if our scribe failed the logger will likely fail
-                # but at least the clog handler will have a default error handling
-                logger.error(
-                    "Failed to scribe message - "
-                    "uuid hex: {0}, "
-                    "schema_id: {1}, "
-                    "timestamp: {2}, "
-                    "type: {3}".format(
-                        message.uuid_hex,
-                        message.schema_id,
-                        message.timestamp,
-                        message.message_type.name
-                    )
-                )
+                logger.error("Failed to scribe message - {}".format(str(message)))
