@@ -384,11 +384,14 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         )
 
     def count_inserted(self, session, offset):
-        select_query = self.build_select(
-            '*',
-            self.primary_key,
-            offset,
-            self.batch_size
+        select_query = """
+        SELECT temp.* FROM
+        ( SELECT id FROM {table} ORDER BY id LIMIT {offset}, {batch_size} )
+        og JOIN {table} temp ON temp.id = og.id
+        """.format(
+            table=self.table_name,
+            offset=offset,
+            batch_size=self.batch_size
         )
         query = 'SELECT COUNT(*) FROM ({query}) AS T'.format(
             query=select_query
