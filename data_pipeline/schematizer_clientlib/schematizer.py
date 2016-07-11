@@ -123,27 +123,49 @@ class SchematizerClient(object):
         _schema = _AvroSchemaElement.from_response(response)
         return _schema
 
-    def get_schemas_created_after_date(self, created_after):
-        """Get the avro schemas created after given datetime timestamp.
+    def get_schemas_created_after_date(
+        self,
+        created_after,
+        min_id=0,
+        page_size=10
+    ):
+        """ Get the avro schemas (excluding disabled schemas) created after the
+        given datetime timestamp. Limits the result to those with id greater
+        than or equal to the min_id.
 
         Args:
             created_after (long): get schemas created after given utc long (inclusive).
+            min_id (Optional[int]): Limits results to those schemas with an id
+                greater than or equal to given min_id (default: 0)
+            page_size (Optional[int]): Maximum number of schemas to retrieve
+                per page (default: 10)
 
         Returns:
             (List of data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
                 The list of avro schemas created after (inclusive) specified date.
         """
-        return [schema.to_result() for schema in self._get_schemas_created_after_date(created_after)]
+        return self._get_schemas_created_after_date(created_after, min_id, page_size)
 
-    def _get_schemas_created_after_date(self, created_after):
-        responses = self._call_api(
-            api=self._client.schemas.get_schemas_created_after,
-            params={'created_after': created_after}
-        )
-        _schemas = [_AvroSchema.from_response(response) for response in responses]
-        for _schema in _schemas:
-            self._set_cache_by_schema(_schema)
-        return _schemas
+    def _get_schemas_created_after_date(self, created_after, min_id, page_size):
+        last_page_size = page_size
+        result = []
+        while last_page_size == page_size:
+            response = self._call_api(
+                api=self._client.schemas.get_schemas_created_after,
+                params={
+                    'created_after': created_after,
+                    'count': page_size,
+                    'min_id': min_id
+                }
+            )
+
+            for resp_item in response:
+                _schema = _AvroSchema.from_response(resp_item)
+                result.append(_schema.to_result())
+                self._set_cache_by_schema(_schema)
+                min_id = _schema.schema_id + 1
+            last_page_size = len(response)
+        return result
 
     def _make_avro_schema_key(self, schema_json):
         return simplejson.dumps(schema_json, sort_keys=True)
