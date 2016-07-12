@@ -393,6 +393,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             offset=offset,
             batch_size=self.batch_size
         )
+        if self.where_clause is not None:
+            select_query += ' WHERE {clause}'.format(clause=self.where_clause)
         query = 'SELECT COUNT(*) FROM ({query}) AS T'.format(
             query=select_query
         )
