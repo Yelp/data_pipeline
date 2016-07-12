@@ -385,20 +385,16 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
     def count_inserted(self, session, offset):
         select_query = """
-        SELECT temp.* FROM
-        ( SELECT id FROM {table} ORDER BY id LIMIT {offset}, {batch_size} )
-        og JOIN {table} temp ON temp.id = og.id
+        SELECT COUNT(*) FROM {table}
+        WHERE id >= {offset}
         """.format(
             table=self.table_name,
             offset=offset,
-            batch_size=self.batch_size
         )
         if self.where_clause is not None:
-            select_query += ' WHERE {clause}'.format(clause=self.where_clause)
-        query = 'SELECT COUNT(*) FROM ({query}) AS T'.format(
-            query=select_query
-        )
-        inserted_rows = self._execute_query(session, query)
+            select_query += ' AND {clause}'.format(clause=self.where_clause)
+        select_query += ' LIMIT {batch}'.format(batch=self.batch_size)
+        inserted_rows = self._execute_query(session, select_query)
         return inserted_rows.scalar()
 
     def insert_batch(self, session, offset):
