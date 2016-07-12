@@ -76,6 +76,7 @@ def example_schema_with_pkey(namespace, source):
         "namespace": "%s",
         "name": "%s",
         "doc":"test",
+        "pkey": ["field2", "field1", "field3"],
         "fields":[
             {"type":"int", "name":"field1", "doc":"test", "pkey":2},
             {"type":"string", "name":"field2", "doc":"test", "pkey":1},

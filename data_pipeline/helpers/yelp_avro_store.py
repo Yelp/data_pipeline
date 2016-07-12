@@ -33,12 +33,12 @@ class _AvroStringStore(object):
             schema_id
         ).schema_json
 
-    def _get_writer(self, schema_id, avro_schema=None, entity_type=''):
-        key = tuple([schema_id, entity_type])
+    def get_writer(self, id_key, avro_schema=None):
+        key = id_key
         avro_string_writer = self._writer_cache.get(key)
         if not avro_string_writer:
-            avro_schema = avro_schema if avro_schema else self._get_avro_schema(
-                schema_id
+            avro_schema = avro_schema or self._get_avro_schema(
+                id_key
             )
             avro_string_writer = AvroStringWriter(
                 schema=avro_schema
@@ -46,66 +46,25 @@ class _AvroStringStore(object):
             self._writer_cache[key] = avro_string_writer
         return avro_string_writer
 
-    def get_writer(self, schema_id):
-        return self._get_writer(schema_id=schema_id)
-
-    def get_associated_writer(self, schema_id, avro_schema, entity_type):
-        if not (isinstance(entity_type, (unicode, str)) and entity_type.strip()):
-            raise TypeError("entity_type must be a non-empty string.")
-        return self._get_writer(
-            schema_id=schema_id,
-            avro_schema=avro_schema,
-            entity_type=entity_type
-        )
-
-    def _get_reader(
+    def get_reader(
         self,
-        reader_schema_id,
-        writer_schema_id,
+        reader_id_key,
+        writer_id_key,
         reader_avro_schema=None,
-        writer_avro_schema=None,
-        entity_type=''
+        writer_avro_schema=None
     ):
-        key = tuple([reader_schema_id, writer_schema_id, entity_type])
+        key = tuple([reader_id_key, writer_id_key])
         avro_string_reader = self._reader_cache.get(key)
         if not avro_string_reader:
-            reader_schema = (reader_avro_schema
-                             if reader_avro_schema else self._get_avro_schema(
-                                 reader_schema_id
-                             ))
-            writer_schema = (writer_avro_schema
-                             if writer_avro_schema else self._get_avro_schema(
-                                 writer_schema_id
-                             ))
+            reader_schema = (
+                reader_avro_schema or self._get_avro_schema(reader_id_key)
+            )
+            writer_schema = (
+                writer_avro_schema or self._get_avro_schema(writer_id_key)
+            )
             avro_string_reader = AvroStringReader(
                 reader_schema=reader_schema,
                 writer_schema=writer_schema
             )
             self._reader_cache[key] = avro_string_reader
         return avro_string_reader
-
-    def get_reader(self,
-                   reader_schema_id,
-                   writer_schema_id
-                   ):
-        return self._get_reader(
-            reader_schema_id=reader_schema_id,
-            writer_schema_id=writer_schema_id
-        )
-
-    def get_associated_reader(self,
-                              reader_schema_id,
-                              writer_schema_id,
-                              reader_avro_schema,
-                              writer_avro_schema,
-                              entity_type
-                              ):
-        if not (isinstance(entity_type, (unicode, str)) and entity_type.strip()):
-            raise TypeError("entity_type must be a non-empty string.")
-        return self._get_reader(
-            reader_schema_id=reader_schema_id,
-            writer_schema_id=writer_schema_id,
-            reader_avro_schema=reader_avro_schema,
-            writer_avro_schema=writer_avro_schema,
-            entity_type=entity_type
-        )

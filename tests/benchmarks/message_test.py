@@ -57,8 +57,8 @@ class TestBenchMessage(object):
 
         def decode_message(schema_id, payload):
             _AvroStringStore().get_reader(
-                reader_schema_id=schema_id,
-                writer_schema_id=schema_id
+                reader_id_key=schema_id,
+                writer_id_key=schema_id
             ).decode(
                 encoded_message=payload
             )

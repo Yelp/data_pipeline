@@ -7,7 +7,6 @@ import warnings
 from collections import namedtuple
 from uuid import UUID
 
-from cached_property import cached_property
 from yelp_lib.containers.lists import unlist
 
 from data_pipeline._encryption_helper import EncryptionHelper
@@ -309,8 +308,8 @@ class Message(object):
     def _avro_string_reader(self):
         """get the reader from store if already exists"""
         return _AvroStringStore().get_reader(
-            reader_schema_id=self.schema_id,
-            writer_schema_id=self.schema_id
+            reader_id_key=self.schema_id,
+            writer_id_key=self.schema_id
         )
 
     @property
@@ -338,9 +337,8 @@ class Message(object):
     @property
     def keys(self):
         """Currently this support primary keys for flat record
-        type avro schema derived from MYSQL for example. Support
-        for primary keys in nested avro schema will be handled in
-        future versions.
+        type avro schema. Support for primary keys in nested
+        avro schema will be handled in future versions.
         """
         if self._keys is not None:
             return self._keys
@@ -348,48 +346,41 @@ class Message(object):
         return self._keys
 
     def _set_keys(self):
-        keys = {}
-        for primary_key_field in self._primary_key_fields:
-            field_name = primary_key_field.get('name')
-            value = self.payload_data[field_name]
-            keys[field_name] = value
-        self._keys = keys
+        avro_schema = self._schematizer.get_schema_by_id(
+            self.schema_id
+        )
+        self._keys = {
+            key: self.payload_data[key] for key in avro_schema.primary_keys
+        }
 
     @property
     def encoded_keys(self):
-        writer = _AvroStringStore().get_associated_writer(
-            schema_id=self.schema_id,
-            avro_schema=self._keys_avro_json,
-            entity_type='primary_keys'
+        writer = _AvroStringStore().get_writer(
+            id_key="{0}_{1}".format("keys", self.schema_id),
+            avro_schema=self._keys_avro_json
         )
         return writer.encode(message_avro_representation=self.keys)
 
-    @cached_property
-    def _primary_key_fields(self):
-        primary_key_fields = []
-        schema_json = self._schematizer.get_schema_by_id(
+    def _extract_key_fields(self):
+        avro_schema = self._schematizer.get_schema_by_id(
             self.schema_id
-        ).schema_json
-        fields = schema_json.get('fields')
-        if fields:
-            primary_key_fields = sorted([
-                field for field in fields
-                if field.get('pkey')
-            ], key=lambda field: field.get('pkey'))
-        return primary_key_fields
+        )
+        schema_json = avro_schema.schema_json
 
-    @cached_property
+        fields = schema_json.get('fields', [])
+        field_name_to_field = {f['name']: f for f in fields}
+        key_fields = [field_name_to_field[pkey] for pkey in avro_schema.primary_keys]
+        return key_fields
+
+    @property
     def _keys_avro_json(self):
-        avro_json = {
+        return {
             "type": "record",
             "namespace": "yelp.data_pipeline",
             "name": "primary_keys",
             "doc": "Represents primary keys present in Message payload.",
-            "fields": []
+            "fields": self._extract_key_fields()
         }
-        for primary_key_field in self._primary_key_fields:
-            avro_json["fields"].append(primary_key_field)
-        return avro_json
 
     @property
     def payload_diff(self):
@@ -436,16 +427,16 @@ class Message(object):
         self._set_timestamp(timestamp)
         self._set_upstream_position_info(upstream_position_info)
         self._set_kafka_position_info(kafka_position_info)
-        if keys:
+        if keys is not None:
             warnings.simplefilter("always", category=DeprecationWarning)
             warnings.warn("Passing in keys explicitly is deprecated.", DeprecationWarning)
+        self._keys = None
         self._set_dry_run(dry_run)
         self._set_meta(meta)
         self._set_payload_or_payload_data(payload, payload_data)
         if topic:
             warnings.simplefilter("always", category=DeprecationWarning)
             warnings.warn("Passing in topics explicitly is deprecated.", DeprecationWarning)
-        self._keys = None
         self._should_be_encrypted_state = None
         self._encryption_type = None
         self._contains_pii = None
