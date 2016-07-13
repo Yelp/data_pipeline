@@ -328,18 +328,13 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
                                            '%Y-%m-%dT%H:%M:%S')
         creation_timestamp2 = long((created_after2 -
                                     datetime.utcfromtimestamp(0)).total_seconds())
-        with self.attach_spy_on_api(
-            schematizer._client.schemas,
-            'get_schemas_created_after'
-        ) as api_spy:
-            schemas = schematizer.get_schemas_created_after_date(
-                creation_timestamp
-            )
-            schemas_later = schematizer.get_schemas_created_after_date(
-                creation_timestamp2
-            )
-            assert len(schemas) >= len(schemas_later)
-            assert api_spy.call_count == len(schemas) / 10 + len(schemas_later) / 10 + 2
+        schemas = schematizer.get_schemas_created_after_date(
+            creation_timestamp
+        )
+        schemas_later = schematizer.get_schemas_created_after_date(
+            creation_timestamp2
+        )
+        assert len(schemas) >= len(schemas_later)
 
     def test_get_schemas_created_after_date_cached(self, schematizer):
         created_after_str = "2015-01-01T19:10:26"
