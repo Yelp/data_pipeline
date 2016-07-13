@@ -447,27 +447,34 @@ class TestFullRefreshRunner(object):
         mock_execute,
         clause
     ):
-        offset = 0
-        batch.insert_batch(session, offset)
+        min_pk = 1
+        max_pk = 2
+        batch.insert_batch(session, min_pk, max_pk)
+
+        # The queries below are formatted this way to match the whitespace of
+        # the original query that was being called for the purposes of
+        # assertion
         if clause is not None:
-            query = (
-                'INSERT INTO {0} SELECT * FROM {1} WHERE {2} '
-                'ORDER BY id LIMIT {3}, {4}'
-            ).format(
+            query = """INSERT INTO {0}
+        SELECT * FROM {1}
+        WHERE id>={2} AND id<{3}
+         AND {4} ORDER BY id LIMIT {5}""".format(
                 temp_name,
                 table_name,
+                min_pk,
+                max_pk,
                 clause,
-                offset,
                 batch.options.batch_size
             )
         else:
-            query = (
-                'INSERT INTO {0} SELECT * FROM {1} '
-                'ORDER BY id LIMIT {2}, {3}'
-            ).format(
+            query = """INSERT INTO {0}
+        SELECT * FROM {1}
+        WHERE id>={2} AND id<{3}
+         ORDER BY id LIMIT {4}""".format(
                 temp_name,
                 table_name,
-                offset,
+                min_pk,
+                max_pk,
                 batch.options.batch_size
             )
         mock_execute.assert_called_once_with(session, query)
@@ -514,7 +521,8 @@ class TestFullRefreshRunner(object):
         mock_row_count,
         mock_process_rows,
         sessions,
-        write_session
+        write_session,
+        read_session
     ):
         with mock.patch.object(
             refresh_batch,
@@ -524,16 +532,25 @@ class TestFullRefreshRunner(object):
             'count_inserted'
         ) as mock_rows, mock.patch.object(
             refresh_batch,
+            '_get_min_primary_key'
+        ) as mock_min_pk, mock.patch.object(
+            refresh_batch,
+            '_get_max_primary_key'
+        ) as mock_max_pk, mock.patch.object(
+            refresh_batch,
             'batch_size',
             10
         ):
+            mock_min_pk.return_value = 1
+            mock_max_pk.side_effect = [11, 21, 25]
             mock_rows.side_effect = [10, 10, 5]
             mock_row_count.return_value = 25
             refresh_batch.process_table()
             calls = [
-                mock.call(write_session, 0),
-                mock.call(write_session, 10),
-                mock.call(write_session, 20)
+                mock.call(write_session, 1, 11),
+                mock.call(write_session, 11, 21),
+                mock.call(write_session, 21, 25),
+                mock.call(write_session, 25, 26)
             ]
             mock_insert.assert_has_calls(calls)
 
@@ -553,16 +570,25 @@ class TestFullRefreshRunner(object):
             'count_inserted'
         ) as mock_rows, mock.patch.object(
             managed_refresh_batch,
+            '_get_min_primary_key'
+        ) as mock_min_pk, mock.patch.object(
+            managed_refresh_batch,
+            '_get_max_primary_key'
+        ) as mock_max_pk, mock.patch.object(
+            managed_refresh_batch,
             'batch_size',
             10
         ):
+            mock_min_pk.return_value = 1
+            mock_max_pk.side_effect = [11, 21, 25]
             mock_rows.side_effect = [10, 10, 5]
             mock_row_count.return_value = 25
             managed_refresh_batch.process_table()
             calls = [
-                mock.call(managed_write_session, 0),
-                mock.call(managed_write_session, 10),
-                mock.call(managed_write_session, 20)
+                mock.call(managed_write_session, 1, 11),
+                mock.call(managed_write_session, 11, 21),
+                mock.call(managed_write_session, 21, 25),
+                mock.call(managed_write_session, 25, 26)
             ]
             mock_insert.assert_has_calls(calls)
             managed_refresh_batch.schematizer.update_refresh.assert_called_once_with(

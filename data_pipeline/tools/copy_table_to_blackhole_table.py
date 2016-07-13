@@ -383,30 +383,65 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             )
         )
 
-    def count_inserted(self, session, offset):
+    def count_inserted(self, session, min_pk, max_pk):
+        select_query = self._get_select_query(session, min_pk, max_pk)
+        query = 'SELECT COUNT(*) FROM ({query}) AS T'.format(
+            query=select_query
+        )
+        inserted_rows = self._execute_query(session, query)
+        return inserted_rows.scalar()
+
+    def insert_batch(self, session, min_pk, max_pk):
+        insert_query = 'INSERT INTO {temp}'.format(temp=self.temp_table)
+        select_query = self._get_select_query(session, min_pk, max_pk)
+        insert_query += select_query
+        self._execute_query(session, insert_query)
+
+    def _get_select_query(self, session, min_pk, max_pk):
         select_query = """
-        SELECT COUNT(*) FROM {table}
-        WHERE id >= {offset}
+        SELECT * FROM {table}
+        WHERE {pk}>={min_pk} AND {pk}<{max_pk}
         """.format(
             table=self.table_name,
-            offset=offset,
+            pk=self.primary_key,
+            min_pk=min_pk,
+            max_pk=max_pk
         )
         if self.where_clause is not None:
             select_query += ' AND {clause}'.format(clause=self.where_clause)
-        select_query += ' LIMIT {batch}'.format(batch=self.batch_size)
-        inserted_rows = self._execute_query(session, select_query)
-        return inserted_rows.scalar()
 
-    def insert_batch(self, session, offset):
-        insert_query = 'INSERT INTO {temp} '.format(temp=self.temp_table)
-        select_query = self.build_select(
-            '*',
-            self.primary_key,
-            offset,
-            self.batch_size
+        select_query += ' ORDER BY {pk} LIMIT {batch_size}'.format(
+            pk=self.primary_key,
+            batch_size=self.batch_size
         )
-        insert_query += select_query
-        self._execute_query(session, insert_query)
+        return select_query
+
+    def _get_min_primary_key(self):
+        select_query = """
+        SELECT min({pk}) FROM {table}
+        """.format(
+            pk=self.primary_key,
+            table=self.table_name
+        )
+        with self.read_session() as session:
+            min_pk = self._execute_query(session, select_query)
+        return min_pk.scalar()
+
+    def _get_max_primary_key(self, session, min_pk):
+        temp_batch_size = self.batch_size + 1
+        select_query = """
+        SELECT MAX({pk}) FROM
+        ( SELECT {pk} FROM {table} WHERE {pk}>={min_pk}
+          ORDER BY {pk} LIMIT {batch_size}
+        ) AS TEMP_MAX
+        """.format(
+            pk=self.primary_key,
+            table=self.table_name,
+            min_pk=min_pk,
+            batch_size=temp_batch_size
+        )
+        max_pk = self._execute_query(session, select_query)
+        return max_pk.scalar()
 
     def process_table(self):
         self.log.info(
@@ -414,17 +449,26 @@ class FullRefreshRunner(Batch, BatchDBMixin):
                 row_count=self.total_row_count
             )
         )
-        offset = 0
+        min_pk = self._get_min_primary_key()
         count = self.batch_size
         while count >= self.batch_size:
             self.process_row_start_time = time.time()
             with self.write_session() as session:
                 self.setup_transaction(session)
-                count = self.count_inserted(session, offset)
-                self.insert_batch(session, offset)
+                max_pk = self._get_max_primary_key(session, min_pk)
+                count = self.count_inserted(session, min_pk, max_pk)
+                self.insert_batch(session, min_pk, max_pk)
                 self._after_processing_rows(session, count)
-            offset += count
+            min_pk = max_pk
             self.processed_row_count += count
+
+        # Insert the last row
+        with self.write_session() as session:
+            self.setup_transaction(session)
+            self.insert_batch(session, max_pk, max_pk + 1)
+            self._after_processing_rows(session, 1)
+
+        self.processed_row_count += 1
 
         if self.refresh_id:
             # Offset is 0 because it doesn't matter (was a success)
