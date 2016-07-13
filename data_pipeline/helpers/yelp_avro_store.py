@@ -36,14 +36,12 @@ class _AvroStringStore(object):
     def get_writer(self, id_key, avro_schema=None):
         key = id_key
         avro_string_writer = self._writer_cache.get(key)
-        if not avro_string_writer:
-            avro_schema = avro_schema or self._get_avro_schema(
-                id_key
-            )
-            avro_string_writer = AvroStringWriter(
-                schema=avro_schema
-            )
-            self._writer_cache[key] = avro_string_writer
+        if avro_string_writer:
+            return avro_string_writer
+
+        avro_schema = avro_schema or self._get_avro_schema(id_key)
+        avro_string_writer = AvroStringWriter(schema=avro_schema)
+        self._writer_cache[key] = avro_string_writer
         return avro_string_writer
 
     def get_reader(
@@ -53,18 +51,20 @@ class _AvroStringStore(object):
         reader_avro_schema=None,
         writer_avro_schema=None
     ):
-        key = tuple([reader_id_key, writer_id_key])
+        key = reader_id_key, writer_id_key
         avro_string_reader = self._reader_cache.get(key)
-        if not avro_string_reader:
-            reader_schema = (
-                reader_avro_schema or self._get_avro_schema(reader_id_key)
-            )
-            writer_schema = (
-                writer_avro_schema or self._get_avro_schema(writer_id_key)
-            )
-            avro_string_reader = AvroStringReader(
-                reader_schema=reader_schema,
-                writer_schema=writer_schema
-            )
-            self._reader_cache[key] = avro_string_reader
+        if avro_string_reader:
+            return avro_string_reader
+
+        reader_schema = (
+            reader_avro_schema or self._get_avro_schema(reader_id_key)
+        )
+        writer_schema = (
+            writer_avro_schema or self._get_avro_schema(writer_id_key)
+        )
+        avro_string_reader = AvroStringReader(
+            reader_schema=reader_schema,
+            writer_schema=writer_schema
+        )
+        self._reader_cache[key] = avro_string_reader
         return avro_string_reader

@@ -346,9 +346,7 @@ class Message(object):
         return self._keys
 
     def _set_keys(self):
-        avro_schema = self._schematizer.get_schema_by_id(
-            self.schema_id
-        )
+        avro_schema = self._schematizer.get_schema_by_id(self.schema_id)
         self._keys = {
             key: self.payload_data[key] for key in avro_schema.primary_keys
         }

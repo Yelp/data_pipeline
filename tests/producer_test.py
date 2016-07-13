@@ -336,41 +336,54 @@ class TestProducer(TestProducerBase):
         encrypted_payload = encryption_helper.encrypt_payload(message.payload)
         assert unpacked_message['payload'] == encrypted_payload
 
-    def test_publish_message_with_keys(
+    def test_publish_message_with_no_keys(
         self,
         message,
+        producer
+    ):
+        with capture_new_messages(message.topic) as get_messages:
+            producer.publish(message)
+            producer.flush()
+            offsets_and_messages = get_messages()
+        assert len(offsets_and_messages) == 1
+
+        dp_message = create_from_offset_and_message(
+            offsets_and_messages[0]
+        )
+        assert dp_message.keys == {}
+
+    def test_publish_message_with_keys(
+        self,
         message_with_pkeys,
         producer
     ):
-        for _message, _expected_keys in [
-            (message, {}),
-            (message_with_pkeys, {
-                "field2": message_with_pkeys.payload_data["field2"],
-                "field1": message_with_pkeys.payload_data["field1"],
-                "field3": message_with_pkeys.payload_data["field3"]})
-        ]:
-            with capture_new_messages(_message.topic) as get_messages:
-                producer.publish(_message)
-                producer.flush()
-                offsets_and_messages = get_messages()
-            assert len(offsets_and_messages) == 1
+        expected_keys = {
+            "field2": message_with_pkeys.payload_data["field2"],
+            "field1": message_with_pkeys.payload_data["field1"],
+            "field3": message_with_pkeys.payload_data["field3"]
+        }
+        with capture_new_messages(message_with_pkeys.topic) as get_messages:
+            producer.publish(message_with_pkeys)
+            producer.flush()
+            offsets_and_messages = get_messages()
+        assert len(offsets_and_messages) == 1
 
-            dp_message = create_from_offset_and_message(
-                offsets_and_messages[0]
+        dp_message = create_from_offset_and_message(
+            offsets_and_messages[0]
+        )
+        assert dp_message.keys == expected_keys
+
+        # offsets_and_messages[0].message.key is unset if the
+        # message.keys is empty dict
+        if dp_message.keys:
+            avro_string_reader = AvroStringReader(
+                reader_schema=dp_message._keys_avro_json,
+                writer_schema=dp_message._keys_avro_json
             )
-            assert dp_message.keys == _expected_keys
-
-            # offsets_and_messages[0].message.key is unset if the
-            # message.keys is empty dict
-            if dp_message.keys:
-                avro_string_reader = AvroStringReader(
-                    reader_schema=dp_message._keys_avro_json,
-                    writer_schema=dp_message._keys_avro_json
-                )
-                decoded_keys = avro_string_reader.decode(
-                    encoded_message=offsets_and_messages[0].message.key
-                )
-                assert decoded_keys == _expected_keys
+            decoded_keys = avro_string_reader.decode(
+                encoded_message=offsets_and_messages[0].message.key
+            )
+            assert decoded_keys == expected_keys
 
 
 class TestPublishMonitorMessage(TestProducerBase):

@@ -158,7 +158,7 @@ class SharedMessageTest(object):
     def test_specify_keys_triggers_warnings(self, valid_message_data):
         message_data = self._make_message_data(
             valid_message_data,
-            keys=tuple([1, 2])
+            keys=(1, 2)
         )
         with warnings.catch_warnings(record=True) as warns:
             self.message_class(**message_data)
