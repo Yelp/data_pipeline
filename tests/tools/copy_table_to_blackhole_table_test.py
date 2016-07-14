@@ -457,7 +457,7 @@ class TestFullRefreshRunner(object):
         if clause is not None:
             query = """INSERT INTO {0}
         SELECT * FROM {1}
-        WHERE id>={2} AND id<{3}
+        WHERE id>{2} AND id<={3}
          AND {4} ORDER BY id LIMIT {5}""".format(
                 temp_name,
                 table_name,
@@ -469,7 +469,7 @@ class TestFullRefreshRunner(object):
         else:
             query = """INSERT INTO {0}
         SELECT * FROM {1}
-        WHERE id>={2} AND id<{3}
+        WHERE id>{2} AND id<={3}
          ORDER BY id LIMIT {4}""".format(
                 temp_name,
                 table_name,
@@ -541,16 +541,15 @@ class TestFullRefreshRunner(object):
             'batch_size',
             10
         ):
-            mock_min_pk.return_value = 1
-            mock_max_pk.side_effect = [11, 21, 25]
+            mock_min_pk.side_effect = [1, 10, 20]
+            mock_max_pk.side_effect = [10, 20, 25]
             mock_rows.side_effect = [10, 10, 5]
             mock_row_count.return_value = 25
             refresh_batch.process_table()
             calls = [
-                mock.call(write_session, 1, 11),
-                mock.call(write_session, 11, 21),
-                mock.call(write_session, 21, 25),
-                mock.call(write_session, 25, 26)
+                mock.call(write_session, 0, 10),
+                mock.call(write_session, 10, 20),
+                mock.call(write_session, 20, 25)
             ]
             mock_insert.assert_has_calls(calls)
 
@@ -579,16 +578,15 @@ class TestFullRefreshRunner(object):
             'batch_size',
             10
         ):
-            mock_min_pk.return_value = 1
-            mock_max_pk.side_effect = [11, 21, 25]
+            mock_min_pk.side_effect = [1, 10, 20]
+            mock_max_pk.side_effect = [10, 20, 25]
             mock_rows.side_effect = [10, 10, 5]
             mock_row_count.return_value = 25
             managed_refresh_batch.process_table()
             calls = [
-                mock.call(managed_write_session, 1, 11),
-                mock.call(managed_write_session, 11, 21),
-                mock.call(managed_write_session, 21, 25),
-                mock.call(managed_write_session, 25, 26)
+                mock.call(managed_write_session, 0, 10),
+                mock.call(managed_write_session, 10, 20),
+                mock.call(managed_write_session, 20, 25)
             ]
             mock_insert.assert_has_calls(calls)
             managed_refresh_batch.schematizer.update_refresh.assert_called_once_with(

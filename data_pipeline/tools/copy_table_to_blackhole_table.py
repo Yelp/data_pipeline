@@ -400,7 +400,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
     def _get_select_query(self, session, min_pk, max_pk):
         select_query = """
         SELECT * FROM {table}
-        WHERE {pk}>={min_pk} AND {pk}<{max_pk}
+        WHERE {pk}>{min_pk} AND {pk}<={max_pk}
         """.format(
             table=self.table_name,
             pk=self.primary_key,
@@ -428,17 +428,16 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         return min_pk.scalar()
 
     def _get_max_primary_key(self, session, min_pk):
-        temp_batch_size = self.batch_size + 1
         select_query = """
         SELECT MAX({pk}) FROM
-        ( SELECT {pk} FROM {table} WHERE {pk}>={min_pk}
+        ( SELECT {pk} FROM {table} WHERE {pk}>{min_pk}
           ORDER BY {pk} LIMIT {batch_size}
         ) AS TEMP_MAX
         """.format(
             pk=self.primary_key,
             table=self.table_name,
             min_pk=min_pk,
-            batch_size=temp_batch_size
+            batch_size=self.batch_size
         )
         max_pk = self._execute_query(session, select_query)
         return max_pk.scalar()
@@ -449,7 +448,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
                 row_count=self.total_row_count
             )
         )
-        min_pk = self._get_min_primary_key()
+        min_pk = self._get_min_primary_key() - 1
         count = self.batch_size
         while count >= self.batch_size:
             self.process_row_start_time = time.time()
@@ -461,14 +460,6 @@ class FullRefreshRunner(Batch, BatchDBMixin):
                 self._after_processing_rows(session, count)
             min_pk = max_pk
             self.processed_row_count += count
-
-        # Insert the last row
-        with self.write_session() as session:
-            self.setup_transaction(session)
-            self.insert_batch(session, max_pk, max_pk + 1)
-            self._after_processing_rows(session, 1)
-
-        self.processed_row_count += 1
 
         if self.refresh_id:
             # Offset is 0 because it doesn't matter (was a success)
