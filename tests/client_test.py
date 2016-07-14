@@ -9,6 +9,7 @@ import pytest
 
 from data_pipeline.client import Client
 from data_pipeline.expected_frequency import ExpectedFrequency
+from tests.helpers.mock_utils import attach_spy_on_func
 
 
 class ClientTester(Client):
@@ -142,3 +143,20 @@ class TestClientRegistration(TestClient):
         client.registrar.update_schema_last_used_timestamp(4, timestamp_before)
         schema_map = client.registrar.schema_to_last_seen_time_map
         assert schema_map.get(4) == timestamp_after
+
+    def test_periodic_wake_calls(self):
+        """
+        Test that calling start() periodically publishes messages at the expected rate
+        until stop() is called.
+        """
+        client = self._build_client()
+        with attach_spy_on_func(
+            client.registrar,
+            'publish_registration_messages'
+        ) as func_spy:
+            client.registrar.threshold = 3
+            client.registrar.start()
+            time.sleep(10)
+            client.registrar.stop()
+            time.sleep(3)
+            assert func_spy.call_count == 4
