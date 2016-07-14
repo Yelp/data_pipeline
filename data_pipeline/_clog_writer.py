@@ -9,18 +9,14 @@ from data_pipeline.envelope import Envelope
 
 logger = get_config().logger
 
-# Since we are passing messages through scribe we don't support keys
-
 
 class ClogWriter(object):
 
-    def __init__(self, dry_run=False):
-        self.dry_run = dry_run
+    def __init__(self):
         self.envelope = Envelope()
 
     def publish(self, message):
-        if not self.dry_run:
-            try:
-                clog.log_line(message.topic, self.envelope.pack(message))
-            except:
-                logger.error("Failed to scribe message - {}".format(str(message)))
+        try:
+            clog.log_line(message.topic, self.envelope.pack(message))
+        except:
+            logger.error("Failed to scribe message - {}".format(str(message)))
