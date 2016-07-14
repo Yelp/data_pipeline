@@ -5,7 +5,6 @@ from __future__ import unicode_literals
 import os
 
 import simplejson
-from cached_property import cached_property
 
 from data_pipeline.config import get_config
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
@@ -43,17 +42,15 @@ class Registrar(object):
 
         self.schema_to_last_seen_time_map = {}
 
-    @cached_property
     def registration_schema(self):
         return get_schematizer().register_schema(
-            namespace=self._registration_schema['namespace'],
-            source=self._registration_schema['name'],
-            schema_str=simplejson.dumps(self._registration_schema),
+            namespace=self._registration_schema()['namespace'],
+            source=self._registration_schema()['name'],
+            schema_str=simplejson.dumps(self._registration_schema()),
             source_owner_email='bam+data_pipeline@yelp.com',
             contains_pii=False
         )
 
-    @cached_property
     def _registration_schema(self):
         schema_file = os.path.join(
             os.path.dirname(__file__),
@@ -62,14 +59,6 @@ class Registrar(object):
         with open(schema_file, 'r') as f:
             schema_string = f.read()
         return simplejson.loads(schema_string)
-
-    @cached_property
-    def registration_schema_id(self):
-        return self.registration_schema.schema_id
-
-    @cached_property
-    def registration_topic(self):
-        return str(self.registration_schema.topic.name)
 
     def register_tracked_schema_ids(self, schema_id_list):
         """This function is used to specify the lsit of avro schema IDs that this Client
