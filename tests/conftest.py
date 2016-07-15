@@ -69,6 +69,66 @@ def registered_schema(schematizer_client, example_schema, namespace, source):
 
 
 @pytest.fixture(scope="module")
+def example_schema_with_pkey(namespace, source):
+    return '''
+    {
+        "type":"record",
+        "namespace": "%s",
+        "name": "%s",
+        "doc":"test",
+        "pkey": ["field2", "field1", "field3"],
+        "fields":[
+            {"type":"int", "name":"field1", "doc":"test", "pkey":2},
+            {"type":"string", "name":"field2", "doc":"test", "pkey":1},
+            {"type":"int", "name":"field3", "doc":"test", "pkey":3},
+            {"type":"int", "name":"field4", "doc":"test"}
+        ]
+    }
+    ''' % (namespace, source)
+
+
+@pytest.fixture(scope="module")
+def registered_schema_with_pkey(
+    schematizer_client,
+    example_schema_with_pkey,
+    namespace,
+    source
+):
+    return schematizer_client.register_schema(
+        namespace=namespace,
+        source=source,
+        schema_str=example_schema_with_pkey,
+        source_owner_email='test@yelp.com',
+        contains_pii=False
+    )
+
+
+@pytest.fixture
+def example_payload_data_with_pkeys(example_schema_with_pkey):
+    return generate_payload_data(
+        get_avro_schema_object(example_schema_with_pkey)
+    )
+
+
+@pytest.fixture
+def example_payload_with_pkeys(
+    example_schema_with_pkey,
+    example_payload_data_with_pkeys
+):
+    return AvroStringWriter(
+        simplejson.loads(example_schema_with_pkey)
+    ).encode(example_payload_data_with_pkeys)
+
+
+@pytest.fixture
+def message_with_pkeys(registered_schema_with_pkey, example_payload_with_pkeys):
+    return CreateMessage(
+        schema_id=registered_schema_with_pkey.schema_id,
+        payload=example_payload_with_pkeys
+    )
+
+
+@pytest.fixture(scope="module")
 def pii_schema(schematizer_client, example_schema, namespace):
     return schematizer_client.register_schema(
         namespace=namespace,

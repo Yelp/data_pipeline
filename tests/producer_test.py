@@ -12,6 +12,7 @@ import simplejson as json
 from kafka.common import FailedPayloadsError
 from kafka.common import ProduceRequest
 from kafka.common import ProduceResponse
+from yelp_avro.avro_string_reader import AvroStringReader
 
 import data_pipeline.producer
 from data_pipeline._encryption_helper import EncryptionHelper
@@ -76,6 +77,12 @@ class TestProducerBase(object):
     @pytest.fixture(scope="module", autouse=True)
     def topic(self, registered_schema, containers):
         topic_name = str(registered_schema.topic.name)
+        containers.create_kafka_topic(topic_name)
+        return topic_name
+
+    @pytest.fixture(scope="module", autouse=True)
+    def topic_with_pkey(self, registered_schema_with_pkey, containers):
+        topic_name = str(registered_schema_with_pkey.topic.name)
         containers.create_kafka_topic(topic_name)
         return topic_name
 
@@ -329,18 +336,54 @@ class TestProducer(TestProducerBase):
         encrypted_payload = encryption_helper.encrypt_payload(message.payload)
         assert unpacked_message['payload'] == encrypted_payload
 
-    def test_publish_message_with_keys(self, create_message, producer):
-        sample_keys = (u'key1=\'', u'key2=\\', u'key3=哎ù\x1f')
-        expected_keys = '\'key1=\\\'\'\x1f\'key2=\\\\\'\x1f\'key3=哎ù\x1f\''.encode('utf-8')
-        message = create_message(keys=sample_keys)
-
+    def test_publish_message_with_no_keys(
+        self,
+        message,
+        producer
+    ):
         with capture_new_messages(message.topic) as get_messages:
             producer.publish(message)
             producer.flush()
             offsets_and_messages = get_messages()
-
         assert len(offsets_and_messages) == 1
-        assert offsets_and_messages[0].message.key == expected_keys
+
+        dp_message = create_from_offset_and_message(
+            offsets_and_messages[0]
+        )
+        assert dp_message.keys == {}
+
+    def test_publish_message_with_keys(
+        self,
+        message_with_pkeys,
+        producer
+    ):
+        expected_keys = {
+            "field2": message_with_pkeys.payload_data["field2"],
+            "field1": message_with_pkeys.payload_data["field1"],
+            "field3": message_with_pkeys.payload_data["field3"]
+        }
+        with capture_new_messages(message_with_pkeys.topic) as get_messages:
+            producer.publish(message_with_pkeys)
+            producer.flush()
+            offsets_and_messages = get_messages()
+        assert len(offsets_and_messages) == 1
+
+        dp_message = create_from_offset_and_message(
+            offsets_and_messages[0]
+        )
+        assert dp_message.keys == expected_keys
+
+        # offsets_and_messages[0].message.key is unset if the
+        # message.keys is empty dict
+        if dp_message.keys:
+            avro_string_reader = AvroStringReader(
+                reader_schema=dp_message._keys_avro_json,
+                writer_schema=dp_message._keys_avro_json
+            )
+            decoded_keys = avro_string_reader.decode(
+                encoded_message=offsets_and_messages[0].message.key
+            )
+            assert decoded_keys == expected_keys
 
 
 class TestPublishMonitorMessage(TestProducerBase):
