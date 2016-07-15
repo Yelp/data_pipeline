@@ -14,7 +14,9 @@ from kafka.common import ProduceRequest
 from kafka.common import ProduceResponse
 from yelp_avro.avro_string_reader import AvroStringReader
 
+import data_pipeline._clog_writer
 import data_pipeline.producer
+from data_pipeline._clog_writer import ClogWriter
 from data_pipeline._encryption_helper import EncryptionHelper
 from data_pipeline._kafka_producer import _EnvelopeAndMessage
 from data_pipeline._kafka_producer import _prepare
@@ -137,6 +139,45 @@ class TestProducerBase(object):
     @pytest.fixture
     def message(self, create_message):
         return create_message()
+
+
+class TestClogWriter(TestProducerBase):
+
+    def test_publish_clog(self, message):
+        with mock.patch.object(
+            data_pipeline._clog_writer.clog,
+            'log_line',
+            return_value=None
+        ) as mock_log_line:
+            writer = ClogWriter()
+            writer.publish(message)
+        assert mock_log_line.called
+
+    def test_publish_with_dryrun(self, message):
+        with mock.patch.object(
+            data_pipeline._clog_writer.clog,
+            'log_line',
+            return_value=None
+        ) as mock_log_line:
+            writer = ClogWriter(dry_run=True)
+            writer.publish(message)
+        assert not mock_log_line.called
+
+    def test_log_error_on_exception(self, message):
+        with mock.patch.object(
+            data_pipeline._clog_writer.clog,
+            'log_line',
+            side_effect=RandomException()
+        ) as mock_log_line, mock.patch.object(
+            data_pipeline._clog_writer,
+            'logger'
+        ) as mock_logger:
+            writer = ClogWriter()
+            writer.publish(message)
+
+        call_args = "Failed to scribe message - {}".format(str(message))
+
+        assert mock_logger.error.call_args_list[0] == mock.call(call_args)
 
 
 class TestProducer(TestProducerBase):
