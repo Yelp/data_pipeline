@@ -559,7 +559,6 @@ class RefreshNewTopicsTest(object):
             monitoring_enabled=False
         ) as producer:
             message = UpdateMessage(
-                topic=str(avro_schema.topic.name),
                 schema_id=avro_schema.schema_id,
                 payload_data={'id': 2},
                 previous_payload_data={'id': 1}
@@ -779,7 +778,6 @@ class RefreshTopicsTestBase(object):
             monitoring_enabled=False
         ) as producer:
             message = UpdateMessage(
-                topic=str(avro_schema.topic.name),
                 schema_id=avro_schema.schema_id,
                 payload_data={'id': 2},
                 previous_payload_data={'id': 1}

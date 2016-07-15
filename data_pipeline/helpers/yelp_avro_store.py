@@ -33,25 +33,38 @@ class _AvroStringStore(object):
             schema_id
         ).schema_json
 
-    def get_writer(self, schema_id):
-        avro_string_writer = self._writer_cache.get(schema_id)
-        if not avro_string_writer:
-            avro_schema = self._get_avro_schema(schema_id)
-            avro_string_writer = AvroStringWriter(
-                schema=avro_schema
-            )
-            self._writer_cache[schema_id] = avro_string_writer
+    def get_writer(self, id_key, avro_schema=None):
+        key = id_key
+        avro_string_writer = self._writer_cache.get(key)
+        if avro_string_writer:
+            return avro_string_writer
+
+        avro_schema = avro_schema or self._get_avro_schema(id_key)
+        avro_string_writer = AvroStringWriter(schema=avro_schema)
+        self._writer_cache[key] = avro_string_writer
         return avro_string_writer
 
-    def get_reader(self, reader_schema_id, writer_schema_id):
-        key = (reader_schema_id, writer_schema_id)
+    def get_reader(
+        self,
+        reader_id_key,
+        writer_id_key,
+        reader_avro_schema=None,
+        writer_avro_schema=None
+    ):
+        key = reader_id_key, writer_id_key
         avro_string_reader = self._reader_cache.get(key)
-        if not avro_string_reader:
-            reader_schema = self._get_avro_schema(reader_schema_id)
-            writer_schema = self._get_avro_schema(writer_schema_id)
-            avro_string_reader = AvroStringReader(
-                reader_schema=reader_schema,
-                writer_schema=writer_schema
-            )
-            self._reader_cache[key] = avro_string_reader
+        if avro_string_reader:
+            return avro_string_reader
+
+        reader_schema = (
+            reader_avro_schema or self._get_avro_schema(reader_id_key)
+        )
+        writer_schema = (
+            writer_avro_schema or self._get_avro_schema(writer_id_key)
+        )
+        avro_string_reader = AvroStringReader(
+            reader_schema=reader_schema,
+            writer_schema=writer_schema
+        )
+        self._reader_cache[key] = avro_string_reader
         return avro_string_reader

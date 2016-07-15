@@ -19,7 +19,7 @@ class Envelope(object):
 
     Example:
         >>> from data_pipeline.message import CreateMessage
-        >>> message = CreateMessage(str('topic'), 1, bytes("FAKE MESSAGE"))
+        >>> message = CreateMessage(schema_id=1, payload=bytes("FAKE MESSAGE"))
         >>> envelope = Envelope()
         >>> packed_message = envelope.pack(message)
         >>> isinstance(packed_message, bytes)
@@ -83,16 +83,3 @@ class Envelope(object):
         """
         # The initial "magic byte" is ignored, see the comment in `pack`.
         return self._avro_string_reader.decode(packed_message[1:])
-
-    def pack_keys(self, keys):
-        """Encode primary keys in message.
-
-        Args:
-            keys (tuple of str): a tuple of primary keys
-
-        Returns:
-            bytes: return bytes with encoded keys. All non-alphanumerics are
-                escaped.
-        """
-        escaped_keys = ('\'' + key.replace('\\', '\\\\').replace("'", "\\'") + '\'' for key in keys)
-        return '\x1f'.join(escaped_keys).encode('utf-8')

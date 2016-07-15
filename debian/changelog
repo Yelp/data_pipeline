@@ -1,3 +1,17 @@
+data-pipeline-tools (0.2.7) lucid; urgency=low
+
+  * Commit: Pin avro to 1.10.2 in the clientlib to pick up broken
+    tarball fix.
+
+ -- Shahid Chohan <chohan@yelp.com>  Thu, 30 Jun 2016 18:49:35 -0700
+
+data-pipeline-tools (0.2.6) lucid; urgency=low
+
+  * Commit: [DATAPIPE-900] Changing avro version to internal release
+    1.10.0
+
+ -- Shahid Chohan <chohan@yelp.com>  Tue, 28 Jun 2016 12:01:08 -0700
+
 data-pipeline-tools (0.2.5) lucid; urgency=low
 
   * Commit: Merge branch 'PERF-663_Update_psutil_version_in_data-

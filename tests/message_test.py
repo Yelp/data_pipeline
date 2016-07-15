@@ -4,7 +4,6 @@ from __future__ import unicode_literals
 
 import warnings
 
-import mock
 import pytest
 from kafka import create_message
 from kafka.common import OffsetAndMessage
@@ -20,8 +19,6 @@ from data_pipeline.message import NoEntryPayload
 from data_pipeline.message import PayloadFieldDiff
 from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
-from data_pipeline.schematizer_clientlib.models.avro_schema import AvroSchema
-from data_pipeline.schematizer_clientlib.models.topic import Topic
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from tests.helpers.config import reconfigure
 from tests.helpers.mock_utils import attach_spy_on_func
@@ -59,22 +56,6 @@ class SharedMessageTest(object):
             schema_id=pii_schema.schema_id
         )
         return self.message_class(**message_data)
-
-    def test_rejects_unicode_topic(self, valid_message_data):
-        self._assert_invalid_data(valid_message_data, topic=unicode('topic'))
-
-    def test_rejects_empty_topic(self, valid_message_data):
-        mock_date = '2015-01-01'
-        mock_topic = Topic(1, str(''), None, False, [], mock_date, mock_date)
-        mock_schema = AvroSchema(
-            1, 'schema', mock_topic, None, 'RW', None, None, mock_date, mock_date
-        )
-        with mock.patch(
-            'data_pipeline.schematizer_clientlib.schematizer.SchematizerClient'
-            '.get_schema_by_id',
-            return_value=mock_schema
-        ), pytest.raises(ValueError):
-            self._assert_invalid_data(valid_message_data, topic=str(''))
 
     def test_warning_from_explicit_topic(self, valid_message_data):
         data_with_topic = self._make_message_data(
@@ -135,10 +116,6 @@ class SharedMessageTest(object):
         with pytest.raises(ValueError):
             pii_message.encryption_type
 
-    @pytest.mark.parametrize('invalid_keys', [unicode('foo'), [], [str('foo')]])
-    def test_reject_non_unicode_keys(self, valid_message_data, invalid_keys):
-        self._assert_invalid_data(valid_message_data, keys=invalid_keys)
-
     def _assert_invalid_data(self, valid_data, error=TypeError, **data_overrides):
         invalid_data = self._make_message_data(valid_data, **data_overrides)
         with pytest.raises(error):
@@ -178,6 +155,19 @@ class SharedMessageTest(object):
             assert issubclass(contains_pii_warning.category, DeprecationWarning)
             assert ('contains_pii is deprecated. Please stop passing it in.'
                     in contains_pii_warning.message)
+
+    def test_specify_keys_triggers_warnings(self, valid_message_data):
+        message_data = self._make_message_data(
+            valid_message_data,
+            keys=(1, 2)
+        )
+        with warnings.catch_warnings(record=True) as warns:
+            self.message_class(**message_data)
+            assert len(warns) == 1
+            keys_warning = warns[0]
+            assert issubclass(keys_warning.category, DeprecationWarning)
+            assert ('Passing in keys explicitly is deprecated.'
+                    in keys_warning.message)
 
     @pytest.mark.parametrize('invalid_meta', ['not list', ['not_MetaAttribute']])
     def test_rejects_invalid_meta_type(self, valid_message_data, invalid_meta):
@@ -339,6 +329,30 @@ class PayloadOnlyMessageTest(SharedMessageTest):
                     actual_encrypted_payload=message.avro_repr['payload'],
                     expected_decrypted_payload=payload
                 )
+
+    def test_keys(
+        self,
+        registered_schema_with_pkey,
+        example_payload_data_with_pkeys,
+        example_payload_with_pkeys
+    ):
+        test_params = [
+            (example_payload_with_pkeys, None),
+            (None, example_payload_data_with_pkeys)
+        ]
+        expected_keys = {
+            "field2": example_payload_data_with_pkeys["field2"],
+            "field1": example_payload_data_with_pkeys["field1"],
+            "field3": example_payload_data_with_pkeys["field3"],
+        }
+
+        for _payload, _payload_data in test_params:
+            message = self.message_class(
+                schema_id=registered_schema_with_pkey.schema_id,
+                payload=_payload,
+                payload_data=_payload_data,
+            )
+            assert message.keys == expected_keys
 
 
 class TestCreateMessage(PayloadOnlyMessageTest):
@@ -618,7 +632,6 @@ class TestCreateFromMessageAndOffset(object):
 
     def test_create_from_offset_and_message(self, offset_and_message, message):
         extracted_message = create_from_offset_and_message(
-            topic=message.topic,
             offset_and_message=offset_and_message
         )
         assert extracted_message.message_type == message.message_type
@@ -646,12 +659,11 @@ class TestCreateFromMessageAndOffset(object):
             create_message(Envelope().pack(unpacked_message))
         )
         extracted_message = create_from_offset_and_message(
-            topic=str(registered_schema.topic.name),
             offset_and_message=offset_and_message,
             reader_schema_id=registered_schema.schema_id
         )
         assert extracted_message.schema_id == registered_compatible_schema.schema_id
-        assert extracted_message.topic == registered_schema.topic.name
+        assert extracted_message.topic == registered_compatible_schema.topic.name
         assert extracted_message.reader_schema_id == registered_schema.schema_id
         assert extracted_message.payload_data == example_payload_data
 
@@ -672,7 +684,6 @@ class TestCreateFromMessageAndOffset(object):
         )
 
         extracted_message = create_from_offset_and_message(
-            topic=str(registered_schema.topic.name),
             offset_and_message=offset_and_message,
             reader_schema_id=None
         )
