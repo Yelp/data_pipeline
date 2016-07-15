@@ -153,16 +153,6 @@ class TestClogWriter(TestProducerBase):
             writer.publish(message)
         assert mock_log_line.called
 
-    def test_publish_with_dryrun(self, message):
-        with mock.patch.object(
-            data_pipeline._clog_writer.clog,
-            'log_line',
-            return_value=None
-        ) as mock_log_line:
-            writer = ClogWriter(dry_run=True)
-            writer.publish(message)
-        assert not mock_log_line.called
-
     def test_log_error_on_exception(self, message):
         with mock.patch.object(
             data_pipeline._clog_writer.clog,
@@ -177,6 +167,7 @@ class TestClogWriter(TestProducerBase):
 
         call_args = "Failed to scribe message - {}".format(str(message))
 
+        assert mock_log_line.called
         assert mock_logger.error.call_args_list[0] == mock.call(call_args)
 
 
