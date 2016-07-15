@@ -15,7 +15,7 @@ To use a Consumer::
     ...     'bam',
     ...     ExpectedFrequency.constantly,
     ...     {'topic_name': None}
-    ...     ) # doctest: +ELLIPSIS
+    ... ) # doctest: +ELLIPSIS
     <data_pipeline.consumer.Consumer object at 0x...>
 
 And another thing::

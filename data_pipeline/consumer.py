@@ -80,8 +80,8 @@ class Consumer(BaseConsumer):
             consumer is about to refresh the topics. The callback function is
             passed in a list of topic names Consumer is currently consuming
             from (old topics) and a list of topic names Consumer will be
-            consuming from (new topics). The return value of the function is
-            ignored.
+            consuming from (old topics and new topics). The return value of the
+            function is ignored.
 
     Note:
         The Consumer leverages the yelp_kafka `KafkaConsumerGroup`.
@@ -186,7 +186,11 @@ class Consumer(BaseConsumer):
         if has_timeout:
             max_time = time() + timeout
         while len(messages) < count:
-            self._refresh_source_topics_if_necessary()
+            # Consumer refreshes the topics periodically only if consumer_source
+            # is specified and would use the `fetch_offsets_for_topics` callback
+            # to get the partition offsets corresponding to the topics.
+            if self.consumer_source:
+                self._refresh_source_topics_if_necessary()
             try:
                 default_iter_timeout = self.consumer_group.iter_timeout
                 # Converting seconds to milliseconds

@@ -126,11 +126,11 @@ class FixedSchemas(ConsumerSource):
         return list(topics)
 
     def get_schema_to_topic_map(self):
-        self.schema_to_topic_map = {}
-        for schema_id in self.schema_ids:
-            topic_name = get_schematizer().get_schema_by_id(schema_id).topic.name
-            self.schema_to_topic_map[schema_id] = topic_name
-        return self.schema_to_topic_map
+        schema_to_topic_map = {
+            schema_id: get_schematizer().get_schema_by_id(schema_id).topic.name
+            for schema_id in self.schema_ids
+        }
+        return schema_to_topic_map
 
 
 class TopicInDataTarget(ConsumerSource):

@@ -118,8 +118,8 @@ class BaseConsumer(Client):
             consumer is about to refresh the topics. The callback function is
             passed in a list of topic names Consumer is currently consuming
             from (old topics) and a list of topic names Consumer will be
-            consuming from (new topics). The return value of the function is
-            ignored.
+            consuming from (old topics and new topics). The return value of the
+            function is ignored.
     """
 
     def __init__(

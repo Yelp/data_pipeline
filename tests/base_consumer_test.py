@@ -858,20 +858,20 @@ class RefreshFixedTopicTests(RefreshTopicsTestBase):
 class TopicsInFixedNamespacesAutoRefreshSetupMixin(object):
 
     @pytest.fixture
-    def consumer_source(self, registered_auro_refresh_schema):
+    def consumer_source(self, registered_auto_refresh_schema):
         return TopicsInFixedNamespaces(
-            registered_auro_refresh_schema.topic.source.namespace.name
+            registered_auto_refresh_schema.topic.source.namespace.name
         )
 
 
 class TopicInSourceAutoRefreshSetupMixin(object):
 
     @pytest.fixture
-    def consumer_source(self, registered_auro_refresh_schema):
+    def consumer_source(self, registered_auto_refresh_schema):
         return TopicInSource(
-            namespace_name=registered_auro_refresh_schema.
+            namespace_name=registered_auto_refresh_schema.
             topic.source.namespace.name,
-            source_name=registered_auro_refresh_schema.topic.source.name
+            source_name=registered_auto_refresh_schema.topic.source.name
         )
 
 

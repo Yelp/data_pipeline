@@ -87,18 +87,22 @@ def registered_compatible_schema(
 @pytest.fixture(scope='module')
 def example_compatible_schema(example_schema):
     schema = simplejson.loads(example_schema)
-    schema['fields'][0]['name'] = 'good_field_two'
+    schema['fields'].append({
+        "type": "int",
+        "name": "good_compatible_field",
+        "doc": "test",
+        "default": 1
+    })
     return simplejson.dumps(schema)
 
 
 @pytest.fixture(scope='module')
 def example_non_compatible_schema(example_schema):
     schema = simplejson.loads(example_schema)
-    schema['fields'].pop()
     schema['fields'].append({
-        u'doc': u'test',
-        u'type': u'string',
-        u'name': u'good_non_compatible_field'
+        'doc': 'test',
+        'type': 'string',
+        'name': 'good_non_compatible_field'
     })
     return simplejson.dumps(schema)
 
@@ -155,6 +159,16 @@ def payload(example_schema, example_payload_data):
     return AvroStringWriter(
         simplejson.loads(example_schema)
     ).encode(example_payload_data)
+
+
+@pytest.fixture
+def compatible_payload(example_compatible_schema):
+    example_compatible_payload_data = generate_payload_data(
+        get_avro_schema_object(example_compatible_schema)
+    )
+    return AvroStringWriter(
+        simplejson.loads(example_compatible_schema)
+    ).encode(example_compatible_payload_data)
 
 
 @pytest.fixture

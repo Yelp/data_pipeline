@@ -10,6 +10,10 @@ from uuid import uuid4
 
 import mock
 import pytest
+import simplejson
+from yelp_avro.avro_string_writer import AvroStringWriter
+from yelp_avro.testing_helpers.generate_payload_data import generate_payload_data
+from yelp_avro.util import get_avro_schema_object
 
 from data_pipeline.consumer import Consumer
 from data_pipeline.consumer_source import FixedSchemas
@@ -244,31 +248,30 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
         return "auto_refresh_source_{}".format(uuid4())
 
     @pytest.fixture
-    def registered_auro_refresh_schema(
+    def registered_auto_refresh_schema(
             self,
             schematizer_client,
             example_schema,
             refresh_namespace,
             refresh_source
     ):
-        schema = schematizer_client.register_schema(
+        return schematizer_client.register_schema(
             namespace=refresh_namespace,
             source=refresh_source,
             schema_str=example_schema,
             source_owner_email='test@yelp.com',
             contains_pii=False
         )
-        return schema
 
     @pytest.fixture
-    def ensure_topic_exists(self, containers, registered_auro_refresh_schema):
-        topic_name = str(registered_auro_refresh_schema.topic.name)
+    def ensure_topic_exists(self, containers, registered_auto_refresh_schema):
+        topic_name = str(registered_auto_refresh_schema.topic.name)
         containers.create_kafka_topic(topic_name)
 
     @pytest.fixture
-    def simple_message(self, registered_auro_refresh_schema, payload):
+    def simple_message(self, registered_auto_refresh_schema, payload):
         return CreateMessage(
-            schema_id=registered_auro_refresh_schema.schema_id,
+            schema_id=registered_auto_refresh_schema.schema_id,
             payload=payload
         )
 
@@ -290,6 +293,15 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
             )
             return registered_schema
         return _register_not_compatible_schema
+
+    @pytest.fixture
+    def non_compatible_payload(self, example_non_compatible_schema):
+        example_compatible_payload_data = generate_payload_data(
+            get_avro_schema_object(example_non_compatible_schema)
+        )
+        return AvroStringWriter(
+            simplejson.loads(example_non_compatible_schema)
+        ).encode(example_compatible_payload_data)
 
     @pytest.fixture
     def consumer_instance(
@@ -315,12 +327,12 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
     def test_auto_refresh_topics(
         self,
         ensure_topic_exists,
-        registered_auro_refresh_schema,
+        registered_auto_refresh_schema,
         publish_messages,
         consumer_instance,
         simple_message,
         register_non_compatible_schema,
-        payload
+        non_compatible_payload
     ):
         """
         This test publishes 2 messages and starts the consumer. The consumer
@@ -342,9 +354,8 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
             new_schema = register_non_compatible_schema()
             new_message = CreateMessage(
                 schema_id=new_schema.schema_id,
-                payload=payload
+                payload=non_compatible_payload
             )
-
             publish_messages(new_message, count=3)
             # consumer should refresh itself and include the new topic in the
             # topic_to_partition_map
@@ -392,7 +403,7 @@ class TestReaderSchemaMapFixedSchemas(BaseConsumerSourceBaseTest):
         registered_non_compatible_schema
     ):
         consumer_source = FixedSchemas(
-            registered_compatible_schema.schema_id,
+            registered_schema.schema_id,
             registered_non_compatible_schema.schema_id
         )
 
@@ -425,13 +436,24 @@ class TestReaderSchemaMapFixedSchemas(BaseConsumerSourceBaseTest):
         )
 
     @pytest.fixture
-    def expected_message(
+    def input_message(
         self,
         registered_compatible_schema,
-        payload
+        compatible_payload
     ):
         return CreateMessage(
             schema_id=registered_compatible_schema.schema_id,
+            payload=compatible_payload
+        )
+
+    @pytest.fixture
+    def expected_message(
+        self,
+        registered_schema,
+        payload
+    ):
+        return CreateMessage(
+            schema_id=registered_schema.schema_id,
             payload=payload
         )
 
@@ -440,7 +462,7 @@ class TestReaderSchemaMapFixedSchemas(BaseConsumerSourceBaseTest):
         topic,
         publish_messages,
         consumer_instance,
-        message,
+        input_message,
         expected_message,
         containers
     ):
@@ -452,7 +474,7 @@ class TestReaderSchemaMapFixedSchemas(BaseConsumerSourceBaseTest):
         message gets decoded using the schema_id the message was encoded with.
         """
         with consumer_instance as consumer:
-            publish_messages(message, count=1)
+            publish_messages(input_message, count=1)
             actual_message = consumer.get_message(blocking=True, timeout=TIMEOUT)
             assert actual_message.reader_schema_id == expected_message.schema_id
             assert actual_message.payload_data == expected_message.payload_data

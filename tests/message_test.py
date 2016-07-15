@@ -633,12 +633,12 @@ class TestCreateFromMessageAndOffset(object):
         self,
         registered_schema,
         registered_compatible_schema,
-        payload,
+        compatible_payload,
         example_payload_data,
     ):
         unpacked_message = CreateMessage(
             schema_id=registered_compatible_schema.schema_id,
-            payload=payload,
+            payload=compatible_payload,
             timestamp=1500,
         )
         offset_and_message = OffsetAndMessage(
