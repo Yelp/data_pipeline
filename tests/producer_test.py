@@ -390,11 +390,23 @@ class TestProducer(TestProducerBase):
         message_with_pkeys,
         producer
     ):
+        expected_keys_avro_json = {
+            "type": "record",
+            "namespace": "yelp.data_pipeline",
+            "name": "primary_keys",
+            "doc": "Represents primary keys present in Message payload.",
+            "fields": [
+                {"type":"string", "name":"field2", "doc":"test", "pkey":1},
+                {"type":"int", "name":"field1", "doc":"test", "pkey":2},
+                {"type":"int", "name":"field3", "doc":"test", "pkey":3},
+            ]
+        }
         expected_keys = {
             "field2": message_with_pkeys.payload_data["field2"],
             "field1": message_with_pkeys.payload_data["field1"],
             "field3": message_with_pkeys.payload_data["field3"]
         }
+
         with capture_new_messages(message_with_pkeys.topic) as get_messages:
             producer.publish(message_with_pkeys)
             producer.flush()
@@ -407,7 +419,7 @@ class TestProducer(TestProducerBase):
         assert dp_message.keys == expected_keys
 
         avro_string_writer = AvroStringWriter(
-            schema=dp_message._keys_avro_json
+            schema=expected_keys_avro_json
         )
         expected_encoded_keys = avro_string_writer.encode(
             message_avro_representation=expected_keys
@@ -415,8 +427,8 @@ class TestProducer(TestProducerBase):
         assert offsets_and_messages[0].message.key == expected_encoded_keys
 
         avro_string_reader = AvroStringReader(
-            reader_schema=dp_message._keys_avro_json,
-            writer_schema=dp_message._keys_avro_json
+            reader_schema=expected_keys_avro_json,
+            writer_schema=expected_keys_avro_json
         )
         decoded_keys = avro_string_reader.decode(
             encoded_message=offsets_and_messages[0].message.key
