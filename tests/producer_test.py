@@ -13,6 +13,7 @@ from kafka.common import FailedPayloadsError
 from kafka.common import ProduceRequest
 from kafka.common import ProduceResponse
 from yelp_avro.avro_string_reader import AvroStringReader
+from yelp_avro.avro_string_writer import AvroStringWriter
 
 import data_pipeline._clog_writer
 import data_pipeline.producer
@@ -405,17 +406,22 @@ class TestProducer(TestProducerBase):
         )
         assert dp_message.keys == expected_keys
 
-        # offsets_and_messages[0].message.key is unset if the
-        # message.keys is empty dict
-        if dp_message.keys:
-            avro_string_reader = AvroStringReader(
-                reader_schema=dp_message._keys_avro_json,
-                writer_schema=dp_message._keys_avro_json
-            )
-            decoded_keys = avro_string_reader.decode(
-                encoded_message=offsets_and_messages[0].message.key
-            )
-            assert decoded_keys == expected_keys
+        avro_string_writer = AvroStringWriter(
+            schema=dp_message._keys_avro_json
+        )
+        expected_encoded_keys = avro_string_writer.encode(
+            message_avro_representation=expected_keys
+        )
+        assert offsets_and_messages[0].message.key == expected_encoded_keys
+
+        avro_string_reader = AvroStringReader(
+            reader_schema=dp_message._keys_avro_json,
+            writer_schema=dp_message._keys_avro_json
+        )
+        decoded_keys = avro_string_reader.decode(
+            encoded_message=offsets_and_messages[0].message.key
+        )
+        assert decoded_keys == expected_keys
 
 
 class TestPublishMonitorMessage(TestProducerBase):
