@@ -396,9 +396,9 @@ class TestProducer(TestProducerBase):
             "name": "primary_keys",
             "doc": "Represents primary keys present in Message payload.",
             "fields": [
-                {"type":"string", "name":"field2", "doc":"test", "pkey":1},
-                {"type":"int", "name":"field1", "doc":"test", "pkey":2},
-                {"type":"int", "name":"field3", "doc":"test", "pkey":3},
+                {"type": "string", "name": "field2", "doc": "test", "pkey": 1},
+                {"type": "int", "name": "field1", "doc": "test", "pkey": 2},
+                {"type": "int", "name": "field3", "doc": "test", "pkey": 3},
             ]
         }
         expected_keys = {
