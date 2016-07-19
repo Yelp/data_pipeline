@@ -646,12 +646,12 @@ class TestCreateFromMessageAndOffset(object):
         self,
         registered_schema,
         registered_compatible_schema,
-        compatible_payload,
+        compatible_payload_data,
         example_payload_data,
     ):
         unpacked_message = CreateMessage(
-            schema_id=registered_compatible_schema.schema_id,
-            payload=compatible_payload,
+            schema_id=registered_schema.schema_id,
+            payload_data=example_payload_data,
             timestamp=1500,
         )
         offset_and_message = OffsetAndMessage(
@@ -660,12 +660,12 @@ class TestCreateFromMessageAndOffset(object):
         )
         extracted_message = create_from_offset_and_message(
             offset_and_message=offset_and_message,
-            reader_schema_id=registered_schema.schema_id
+            reader_schema_id=registered_compatible_schema.schema_id
         )
-        assert extracted_message.schema_id == registered_compatible_schema.schema_id
-        assert extracted_message.topic == registered_compatible_schema.topic.name
-        assert extracted_message.reader_schema_id == registered_schema.schema_id
-        assert extracted_message.payload_data == example_payload_data
+        assert extracted_message.schema_id == registered_schema.schema_id
+        assert extracted_message.topic == registered_schema.topic.name
+        assert extracted_message.reader_schema_id == registered_compatible_schema.schema_id
+        assert extracted_message.payload_data == compatible_payload_data
 
     def test_create_from_offset_and_message_with_no_reader_schema_specified(
         self,

@@ -10,10 +10,6 @@ from uuid import uuid4
 
 import mock
 import pytest
-import simplejson
-from yelp_avro.avro_string_writer import AvroStringWriter
-from yelp_avro.testing_helpers.generate_payload_data import generate_payload_data
-from yelp_avro.util import get_avro_schema_object
 
 from data_pipeline.consumer import Consumer
 from data_pipeline.consumer_source import FixedSchemas
@@ -295,13 +291,11 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
         return _register_not_compatible_schema
 
     @pytest.fixture
-    def non_compatible_payload(self, example_non_compatible_schema):
-        example_compatible_payload_data = generate_payload_data(
-            get_avro_schema_object(example_non_compatible_schema)
-        )
-        return AvroStringWriter(
-            simplejson.loads(example_non_compatible_schema)
-        ).encode(example_compatible_payload_data)
+    def non_compatible_payload_data(self, example_non_compatible_schema):
+        return {
+            "good_field": 11,
+            "good_non_compatible_field": "non_compatible_value"
+        }
 
     @pytest.fixture
     def consumer_instance(
@@ -332,7 +326,7 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
         consumer_instance,
         simple_message,
         register_non_compatible_schema,
-        non_compatible_payload
+        non_compatible_payload_data
     ):
         """
         This test publishes 2 messages and starts the consumer. The consumer
@@ -354,7 +348,7 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
             new_schema = register_non_compatible_schema()
             new_message = CreateMessage(
                 schema_id=new_schema.schema_id,
-                payload=non_compatible_payload
+                payload_data=non_compatible_payload_data
             )
             publish_messages(new_message, count=3)
             # consumer should refresh itself and include the new topic in the
@@ -436,17 +430,6 @@ class TestReaderSchemaMapFixedSchemas(BaseConsumerSourceBaseTest):
         )
 
     @pytest.fixture
-    def input_message(
-        self,
-        registered_compatible_schema,
-        compatible_payload
-    ):
-        return CreateMessage(
-            schema_id=registered_compatible_schema.schema_id,
-            payload=compatible_payload
-        )
-
-    @pytest.fixture
     def expected_message(
         self,
         registered_schema,
@@ -457,12 +440,23 @@ class TestReaderSchemaMapFixedSchemas(BaseConsumerSourceBaseTest):
             payload=payload
         )
 
+    @pytest.fixture
+    def input_compatible_message(
+        self,
+        registered_compatible_schema,
+        compatible_payload_data
+    ):
+        return CreateMessage(
+            schema_id=registered_compatible_schema.schema_id,
+            payload_data=compatible_payload_data
+        )
+
     def test_get_messages_uses_correct_reader_schema(
         self,
         topic,
         publish_messages,
         consumer_instance,
-        input_message,
+        input_compatible_message,
         expected_message,
         containers
     ):
@@ -474,7 +468,7 @@ class TestReaderSchemaMapFixedSchemas(BaseConsumerSourceBaseTest):
         message gets decoded using the schema_id the message was encoded with.
         """
         with consumer_instance as consumer:
-            publish_messages(input_message, count=1)
+            publish_messages(input_compatible_message, count=1)
             actual_message = consumer.get_message(blocking=True, timeout=TIMEOUT)
             assert actual_message.reader_schema_id == expected_message.schema_id
             assert actual_message.payload_data == expected_message.payload_data

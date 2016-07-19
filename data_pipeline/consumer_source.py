@@ -127,7 +127,7 @@ class FixedSchemas(ConsumerSource):
 
     def get_schema_to_topic_map(self):
         schema_to_topic_map = {
-            schema_id: get_schematizer().get_schema_by_id(schema_id).topic.name
+            schema_id: self.schematizer.get_schema_by_id(schema_id).topic.name
             for schema_id in self.schema_ids
         }
         return schema_to_topic_map

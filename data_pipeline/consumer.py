@@ -211,6 +211,8 @@ class Consumer(BaseConsumer):
         return messages
 
     def _refresh_source_topics_if_necessary(self):
+        # TODO(tajinder|DATAPIPE-1265): Consumer after refreshing topics should
+        # only tail new topics.
         if not self._refresh_timer.should_tick():
             return
 

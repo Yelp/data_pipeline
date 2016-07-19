@@ -222,13 +222,11 @@ def payload(example_schema, example_payload_data):
 
 
 @pytest.fixture
-def compatible_payload(example_compatible_schema):
-    example_compatible_payload_data = generate_payload_data(
-        get_avro_schema_object(example_compatible_schema)
-    )
-    return AvroStringWriter(
-        simplejson.loads(example_compatible_schema)
-    ).encode(example_compatible_payload_data)
+def compatible_payload_data(example_compatible_schema):
+    return {
+        "good_field": 1,
+        "good_compatible_field": 1
+    }
 
 
 @pytest.fixture
