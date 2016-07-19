@@ -43,10 +43,11 @@ class Registrar(object):
         self.schema_to_last_seen_time_map = {}
 
     def registration_schema(self):
+        schema_json = self._registration_schema()
         return get_schematizer().register_schema(
-            namespace=self._registration_schema()['namespace'],
-            source=self._registration_schema()['name'],
-            schema_str=simplejson.dumps(self._registration_schema()),
+            namespace=schema_json['namespace'],
+            source=schema_json['name'],
+            schema_str=simplejson.dumps(schema_json),
             source_owner_email='bam+data_pipeline@yelp.com',
             contains_pii=False
         )

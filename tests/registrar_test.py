@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 import pytest
 
 from data_pipeline.client import Client
+from data_pipeline.expected_frequency import ExpectedFrequency
 
 
 class ClientTester(Client):
@@ -25,7 +26,7 @@ class TestRegistration(object):
 
     @property
     def expected_frequency_seconds(self):
-        return 0
+        return ExpectedFrequency.constantly
 
     def _build_client(self, **override_kwargs):
         args = {
@@ -39,10 +40,10 @@ class TestRegistration(object):
 
     def test_registration_message_schema(self, schematizer_client):
         client = self._build_client()
-        expected_schema = client.registrar.registration_schema()
+        actual_schema = client.registrar.registration_schema()
         schema_id = client.registrar.registration_schema().schema_id
         # _registration_schema() returns the actual json read from the file
-        actual_schema_json = client.registrar._registration_schema()
-        expected_schema_json = expected_schema.schema_json
+        expected_schema_json = client.registrar._registration_schema()
+        actual_schema_json = actual_schema.schema_json
         assert expected_schema_json == actual_schema_json
         assert schema_id > 0

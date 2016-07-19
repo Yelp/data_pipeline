@@ -36,7 +36,7 @@
     {
       "name": "expected_frequency_seconds",
       "type": "int",
-      "doc": "How often(seconds) is this message getting sent?"
+      "doc": "How often(seconds) on average the client publishes/receives a messsage to/from the data pipeline"
     },
     {
       "name": "schema_id",
