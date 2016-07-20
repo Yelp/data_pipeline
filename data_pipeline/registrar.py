@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import os
+import threading
 
 import simplejson
 
@@ -39,8 +40,13 @@ class Registrar(object):
         self.client_name = client_name
         self.client_type = client_type
         self.threshold = threshold
+        self.send_messages = False
 
         self.schema_to_last_seen_time_map = {}
+
+    def publish_registration_messages(self):
+        # TODO([DATAPIPE-1192|mkohli]): Send registration messages
+        pass
 
     def registration_schema(self):
         schema_json = self._registration_schema()
@@ -90,3 +96,21 @@ class Registrar(object):
         current_timestamp = self.schema_to_last_seen_time_map.get(schema_id)
         if current_timestamp is None or timestamp > current_timestamp:
             self.schema_to_last_seen_time_map[schema_id] = timestamp
+
+    def start(self):
+        """Start periodically sending registration messages"""
+        if not self.send_messages:
+            self.send_messages = True
+            self._wake()
+
+    def stop(self):
+        """Force Client to stop periodically sending registration messages"""
+        self.send_messages = False
+
+    def _wake(self):
+        """This class periodically sends registration messages using Clog"""
+        if self.send_messages:
+            self.publish_registration_messages()
+            # The purpose of the Timer is for _wake to ensure it is called
+            # every self.threshold amount of seconds until self.send_messages is False
+            threading.Timer(self.threshold, self._wake).start()
