@@ -155,7 +155,7 @@ class Producer(Client):
         # for more information.
         return False
 
-    def publish(self, message):
+    def publish(self, message, monitors=None, timestamp=None):
         """Adds the message to the buffer to be published.  Messages are
         published after a number of messages are accumulated or after a
         slight time delay, whichever passes first.  Passing a message to
@@ -173,6 +173,13 @@ class Producer(Client):
             message (data_pipeline.message.Message): message to publish
         """
         self._kafka_producer.publish(message)
+        #
+        # these new two lines allow for monitoring to be tightly coupled
+        # with the producer, particulary the SensuAlertManager, and the
+        # MeteoriteGaugeManager, which I've added to the datapipeline
+        #
+        for monitor in monitors:
+            monitor.process(timestamp)
         self.monitor.record_message(message)
 
     def ensure_messages_published(self, messages, topic_offsets):
