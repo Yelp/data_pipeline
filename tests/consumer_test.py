@@ -260,8 +260,21 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
         )
 
     @pytest.fixture
-    def ensure_topic_exists(self, containers, registered_auto_refresh_schema):
+    def user_topic(self, registered_schema):
+        return str(registered_schema.topic.name)
+
+    @pytest.fixture
+    def simple_topic(self, registered_auto_refresh_schema):
+        return str(registered_auto_refresh_schema.topic.name)
+
+    @pytest.fixture
+    def ensure_simple_topic_exists(self, containers, registered_auto_refresh_schema):
         topic_name = str(registered_auto_refresh_schema.topic.name)
+        containers.create_kafka_topic(topic_name)
+
+    @pytest.fixture
+    def ensure_user_topic_exists(self, containers, registered_schema):
+        topic_name = str(registered_schema.topic.name)
         containers.create_kafka_topic(topic_name)
 
     @pytest.fixture
@@ -300,17 +313,19 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
     @pytest.fixture
     def consumer_instance(
         self,
+        ensure_user_topic_exists,
+        user_topic,
         consumer_group_name,
         team_name,
         consumer_source,
         pre_rebalance_callback,
-        post_rebalance_callback,
+        post_rebalance_callback
     ):
         return Consumer(
             consumer_name=consumer_group_name,
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
-            topic_to_consumer_topic_state_map=None,
+            topic_to_consumer_topic_state_map={user_topic: None},
             consumer_source=consumer_source,
             topic_refresh_frequency_seconds=0.5,
             auto_offset_reset='smallest',
@@ -320,29 +335,49 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
 
     def test_auto_refresh_topics(
         self,
-        ensure_topic_exists,
+        ensure_simple_topic_exists,
         registered_auto_refresh_schema,
         publish_messages,
         consumer_instance,
+        simple_topic,
         simple_message,
+        user_topic,
+        message,
         register_non_compatible_schema,
         non_compatible_payload_data
     ):
         """
-        This test publishes 2 messages and starts the consumer. The consumer
-        should receive exactly those 2 messages. It then commits those messages
-        and publishes 3 new messages in a different topic. Verifies that the
-        consumer refreshes itself to include the new topic and receives exactly
-        those 3 messages.
+        This test initializes a Consumer with both consumer_source and
+        topic_to_consumer_topic_state_map and publishes messages. Verifies that
+        after refresh, consumer commits all the topics (current topics and
+        refreshed topics) but tails only the refreshed topics and updates the
+        topic_to_partition_map accordingly.
         """
         with consumer_instance as consumer:
-            publish_messages(simple_message, count=2)
-            # consumer should return exactly 2 messages 'message'
-            actual_messages = consumer.get_messages(
-                count=10, blocking=True, timeout=TIMEOUT
-            )
-            self.assert_equal_messages(actual_messages, simple_message, 2)
-            assert len(consumer.topic_to_partition_map) == 1
+            with attach_spy_on_func(
+                consumer,
+                '_commit_topic_map_offsets'
+            ) as commit_offsets_spy:
+                publish_messages(simple_message, count=2)
+                publish_messages(message, count=3)
+                assert set(consumer.topic_to_partition_map.keys()) == {
+                    user_topic,
+                    simple_topic
+                }
+
+                # After refresh, Consumer should tails only the refreshed_topics
+                # and drop other topics(user_topic) from the topic_to_partition_map
+                actual_messages = consumer.get_messages(
+                    count=10, blocking=True, timeout=TIMEOUT
+                )
+
+                # consumer should return exactly 2 'simple_message' messages
+                self.assert_equal_messages(actual_messages, simple_message, 2)
+                assert commit_offsets_spy.call_args_list == [
+                    mock.call(
+                        {simple_topic: None, user_topic: None}
+                    )]
+                assert consumer.topic_to_partition_map.keys() == [simple_topic]
 
             consumer.commit_messages(actual_messages)
             new_schema = register_non_compatible_schema()
@@ -350,14 +385,18 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
                 schema_id=new_schema.schema_id,
                 payload_data=non_compatible_payload_data
             )
-            publish_messages(new_message, count=3)
-            # consumer should refresh itself and include the new topic in the
+            publish_messages(new_message, count=2)
+
+            # After refresh, Consumer should include the new topic in the
             # topic_to_partition_map
-            new_messages = consumer.get_messages(
+            actual_messages = consumer.get_messages(
                 count=10, blocking=True, timeout=TIMEOUT
             )
-            self.assert_equal_messages(new_messages, new_message, 3)
-            assert len(consumer.topic_to_partition_map) == 2
+            self.assert_equal_messages(actual_messages, new_message, 2)
+            assert set(consumer.topic_to_partition_map.keys()) == {
+                new_message.topic,
+                simple_topic
+            }
 
     def assert_equal_messages(
         self,

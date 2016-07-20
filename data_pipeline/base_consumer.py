@@ -197,18 +197,11 @@ class BaseConsumer(Client):
             )
         return topic_to_consumer_topic_state_map
 
-    def _get_topic_to_offset_map(
-        self,
-        topic_to_partition_map,
-        consumer_source
-    ):
+    def _get_topic_to_offset_map(self, topics):
         """ This function constructs a new topic_to_consumer_topic_state_map
-        from the given topic_to_partition_map and consumer_source. Return the
-        topic_to_consumer_topic_state_map dictionary.
+        from the given topics set. Return the topic_to_consumer_topic_state_map
+        dictionary.
         """
-        topics = consumer_source.get_topics() if consumer_source else []
-        topics = set(topics + topic_to_partition_map.keys())
-
         if self.fetch_offsets_for_topics:
             topic_to_partition_offsets_map = self.fetch_offsets_for_topics(
                 list(topics)

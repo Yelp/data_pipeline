@@ -211,22 +211,27 @@ class Consumer(BaseConsumer):
         return messages
 
     def _refresh_source_topics_if_necessary(self):
-        # TODO(tajinder|DATAPIPE-1265): Consumer after refreshing topics should
-        # only tail new topics.
         if not self._refresh_timer.should_tick():
             return
 
-        current_topics = self.topic_to_partition_map.keys()
-
-        refreshed_topic_to_state_map = self._get_topic_to_offset_map(
-            self.topic_to_partition_map,
-            self.consumer_source
-        )
-        refreshed_topics = refreshed_topic_to_state_map.keys()
+        current_topics = set(self.topic_to_partition_map.keys())
+        refreshed_topics = set(self.consumer_source.get_topics())
 
         if set(current_topics) == set(refreshed_topics):
             return
 
+        all_topics_to_state_map = self._get_topic_to_offset_map(
+            current_topics.union(refreshed_topics)
+        )
+        refreshed_topics_to_state_map = {
+            topic: all_topics_to_state_map.get(topic)
+            for topic in refreshed_topics
+        }
+
         if self.pre_topic_refresh_callback:
             self.pre_topic_refresh_callback(current_topics, refreshed_topics)
-        self.reset_topics(refreshed_topic_to_state_map)
+
+        self.stop()
+        self._commit_topic_map_offsets(all_topics_to_state_map)
+        self._set_topic_to_partition_map(refreshed_topics_to_state_map)
+        self._start_consumer()
