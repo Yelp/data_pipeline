@@ -154,9 +154,9 @@ class TestClientRegistration(TestClient):
             client.registrar,
             'publish_registration_messages'
         ) as func_spy:
-            client.registrar.threshold = 3
+            client.registrar.threshold = 0.3
             client.registrar.start()
-            time.sleep(10)
+            time.sleep(1.0)
             client.registrar.stop()
-            time.sleep(3)
+            time.sleep(1.0)
             assert func_spy.call_count == 4
