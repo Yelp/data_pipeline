@@ -6,8 +6,11 @@ import os
 import threading
 
 import simplejson
+import staticconf
 
+from data_pipeline._clog_writer import ClogWriter
 from data_pipeline.config import get_config
+from data_pipeline.message import RegistrationMessage
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 logger = get_config().logger
@@ -22,9 +25,11 @@ class Registrar(object):
     reached, the Client will send a serialized message using clog.
 
     Args:
+        team_name (str): Team name, as defined in `sensu_handlers::teams` (see y/sensu-teams).
         client_name (str): name of the associated client.
         client_type (str): type of the client the _Registrar is associated to.
             Could be either producer or consumer.
+        expected_frequency_seconds (int):
         threshold (int): The amount of time that should elapse in between the client sending
             registration messages (seconds).
     """
@@ -33,20 +38,66 @@ class Registrar(object):
 
     def __init__(
         self,
+        team_name,
         client_name,
         client_type,
+        expected_frequency_seconds,
         threshold=DEFAULT_REGISTRATION_THRESHOLD_SECONDS
     ):
+        self.team_name = team_name
         self.client_name = client_name
         self.client_type = client_type
         self.threshold = threshold
         self.send_messages = False
-
         self.schema_to_last_seen_time_map = {}
+        self.expected_frequency_seconds = expected_frequency_seconds
+
+        # Set up configuration for clog in the data pipeline.
+        # The call is being made here because it should be done before clog is
+        # imported in ClogWriter
+        staticconf.YamlConfiguration(
+            '/nail/srv/configs/clog.yaml',
+            namespace='clog'
+        )
+        self.clog_writer = ClogWriter()
 
     def publish_registration_messages(self):
-        # TODO([DATAPIPE-1192|mkohli]): Send registration messages
-        pass
+        """
+        Publish all registration messages to Scribe.
+        """
+        for message in self.get_registration_messages():
+            self.clog_writer.publish(message)
+
+    def get_registration_messages(self):
+        """
+        This function will convert the internal state of the registrar into instances of
+        the RegistrationMessage class.
+        """
+        registration_messages = []
+        for schema_id in self.schema_to_last_seen_time_map:
+            last_seen_timestamp = self.schema_to_last_seen_time_map.get(schema_id)
+            registration_messages.append(self._create_registration_message(schema_id,
+                                                                           last_seen_timestamp))
+        return registration_messages
+
+    def _create_registration_message(self, schema_id, last_seen_timestamp):
+        """
+        Return single instance of a RegistrationMessage using passed in schema_id and
+        timestamp.
+        """
+        payload_data = self._registration_message_payload(schema_id, last_seen_timestamp)
+        return RegistrationMessage(schema_id=self.registration_schema().schema_id,
+                                   payload_data=payload_data)
+
+    def _registration_message_payload(self, schema_id, last_seen_timestamp):
+        return {
+            "team_name": self.team_name,
+            "client_name": self.client_name,
+            "client_type": self.client_type,
+            "timestamp": last_seen_timestamp,
+            "expected_frequency_seconds": self.expected_frequency_seconds,
+            "schema_id": schema_id
+        }
 
     def registration_schema(self):
         schema_json = self._registration_schema()
@@ -77,7 +128,7 @@ class Registrar(object):
         """
         for schema_id in schema_id_list:
             self.schema_to_last_seen_time_map[schema_id] = None
-        # TODO([DATAPIPE-1192|mkohli]): Send registration message
+        self.publish_registration_messages()
 
     def update_schema_last_used_timestamp(self, schema_id, timestamp):
         """
@@ -90,7 +141,7 @@ class Registrar(object):
 
         Args:
             schema_id (int): Schema IDs of the message the Client received.
-            timestamp (long): The utc time of the message that the Client received.
+            timestamp (long): The utc time of the message that the Client received in milliseconds.
         """
 
         current_timestamp = self.schema_to_last_seen_time_map.get(schema_id)
@@ -112,5 +163,4 @@ class Registrar(object):
         if self.send_messages:
             self.publish_registration_messages()
             # The purpose of the Timer is for _wake to ensure it is called
-            # every self.threshold amount of seconds until self.send_messages is False
             threading.Timer(self.threshold, self._wake).start()

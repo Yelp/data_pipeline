@@ -21,9 +21,10 @@
 
 argparse==1.4.0
 avro==1.10.0
-boto==2.38.0
+boto==2.40.0
 cached-property==1.2.0
 cffi==1.2.1
+clog==0.1.0
 contextdecorator==0.10.0
 crochet==1.4.0
 dateglob==0.1
@@ -31,6 +32,7 @@ enum34==1.0.4
 future==0.14.3
 geogrid==1.0.9
 ipaddress==1.0.14
+ipython==5.0.0
 iso8601==0.1.10
 jsonschema==2.5.1
 kafka-python==0.9.5.post3
@@ -40,7 +42,7 @@ ply==3.4
 psutil==4.2.0
 pycparser==2.14
 pycrypto==2.6.1
-PyStaticConfiguration==0.9.0
+PyStaticConfiguration==0.10.0
 pysubnettree==0.23
 python-dateutil==2.4.2
 pytz==2014.10
@@ -48,7 +50,8 @@ PyYAML==3.11
 replication-delay-client==1.1.1
 repoze.lru==0.6
 requests==2.8.1
-retrying==1.3.3
+retrying==1.3.
+scribe==2.0.post1
 send-nsca==0.1.4.1
 setproctitle==1.1.8
 simplejson==3.6.5
@@ -56,14 +59,15 @@ six==1.9.0
 SQLAlchemy==0.9.8
 subprocess32==3.2.6
 swaggerpy==0.7.10
-thriftpy==0.1.15
+thrift==0.2.post1
+thriftpy==0.3.2
 tornado==2.4.1
 Twisted==15.4.0
 yelp_avro==0.1.7
 yelp-batch==0.19.8
 yelp-bytes==0.2.0
 yelp-cgeom==1.3.1
-yelp-clog==2.4.1
+yelp-clog==2.5.2
 yelp-conn==7.1.3
 yelp-encodings==0.1.3
 yelp-kafka==4.7.0

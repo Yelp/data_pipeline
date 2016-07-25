@@ -256,11 +256,15 @@ class BaseConsumer(Client):
         and corresponding partition lists as values.
         """
         self.topic_to_partition_map = {}
+        schema_id_list = []
         for topic, consumer_topic_state in topic_to_consumer_topic_state_map.iteritems():
+            if consumer_topic_state and consumer_topic_state.last_seen_schema_id:
+                schema_id_list.append(consumer_topic_state.last_seen_schema_id)
             self.topic_to_partition_map[topic] = (
                 consumer_topic_state.partition_offset_map.keys()
                 if consumer_topic_state else None
             )
+        self.registrar.register_tracked_schema_ids(schema_id_list)
 
     @cached_property
     def kafka_client(self):

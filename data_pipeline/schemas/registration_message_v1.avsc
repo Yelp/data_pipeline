@@ -2,7 +2,7 @@
   "type": "record",
   "namespace": "yelp.data_pipeline",
   "name": "client_registration_message",
-  "doc": "Message format for Proucer/Consumer registration.",
+  "doc": "Message format for Producer/Consumer registration.",
   "fields": [
     {
       "name": "team_name",
@@ -29,13 +29,13 @@
     },
     {
       "name": "timestamp",
-      "type": "long",
+      "type": ["long", "null"],
       "logicalType": "timestamp-millis",
       "doc": "The most recent time that the Client read/wrote a message with the schema_id"
     },
     {
       "name": "expected_frequency_seconds",
-      "type": "int",
+      "type": ["int", "null"],
       "doc": "How often(seconds) on average the client publishes/receives a messsage to/from the data pipeline"
     },
     {
