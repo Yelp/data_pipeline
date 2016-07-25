@@ -42,9 +42,7 @@ class SharedMessageTest(object):
     def invalid_payload(self, request):
         return request.param
 
-    @pytest.fixture(params=[
-        None
-    ])
+    @pytest.fixture(params=[None])
     def invalid_payload_data(self, request):
         return request.param
 

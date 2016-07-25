@@ -6,7 +6,6 @@ import os
 from collections import namedtuple
 
 import simplejson
-from cached_property import cached_property
 from Crypto.Cipher import AES
 
 from data_pipeline.config import get_config
@@ -51,6 +50,7 @@ class _AVSCStore(object):
     __metaclass__ = Singleton
 
     def __init__(self):
+        self._schematizer = get_schematizer()
         self._schema_id_cache = {}
 
     def get_schema_id(self, avro_schema_info):
@@ -62,10 +62,6 @@ class _AVSCStore(object):
 
     def update_schema_cache(self, avro_schema_info, schema_id):
         self._schema_id_cache[avro_schema_info.id] = schema_id
-
-    @cached_property
-    def _schematizer(self):
-        return get_schematizer()
 
     def _load_schema(self, avro_schema_info):
         schema_info = self._register_schema(avro_schema_info)

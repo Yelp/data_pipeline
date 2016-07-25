@@ -129,7 +129,7 @@ class Message(object):
     """UUID generator - this isn't a @cached_property so it can be serialized"""
 
     @property
-    def schematizer(self):
+    def _schematizer(self):
         return get_schematizer()
 
     @property
@@ -184,7 +184,7 @@ class Message(object):
         return self._contains_pii
 
     def _set_contains_pii(self):
-        self._contains_pii = self.schematizer.get_schema_by_id(
+        self._contains_pii = self._schematizer.get_schema_by_id(
             self.schema_id
         ).topic.contains_pii
 
@@ -356,7 +356,7 @@ class Message(object):
             dry_run=dry_run
         )
         self._set_topic(
-            topic or str(self.schematizer.get_schema_by_id(schema_id).topic.name)
+            topic or str(self._schematizer.get_schema_by_id(schema_id).topic.name)
         )
         self._set_uuid(uuid)
         self._set_timestamp(timestamp)

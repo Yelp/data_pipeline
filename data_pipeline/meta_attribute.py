@@ -9,8 +9,8 @@ class MetaAttribute(object):
     """Messages flowing through data pipeline can contain an
     additional array of avro encoded payloads under the “meta” key.
     These avro encoded payloads are known as Meta Attributes within the
-    data pipeline domain. Meta Attributes contains additional information
-    about a particular message originating from a namespace and source.
+    data pipeline domain. Meta Attributes may contains additional information
+    alongside messages originating from data pipeline producer.
 
     For example for messages coming from metrics source within yelp_web_metric
     namespace, we could include the web request itself as one of the
@@ -20,26 +20,24 @@ class MetaAttribute(object):
 
     **Examples**:
 
-        def get_transaction_id_meta_attribute(
-            schema_id, cluster_name, log_file, log_pos
-        ):
-            # additional operations, such as input validation, etc.
-            return MetaAttribute(
-                schema_id=schema_id,
-                payload_data={
-                    'cluster_name': self.cluster_name,
-                    'log_file': self.log_file,
-                    'log_pos': self.log_pos
-                }
-            )
+        MetaAttribute(
+            schema_id=schema_id,
+            payload_data={
+                'cluster_name': self.cluster_name,
+                'log_file': self.log_file,
+                'log_pos': self.log_pos
+            }
 
     2. Recover a MetaAttribute object from serialized MetaAttribute payload.
     This will be usefull specifically in the case where we want to reconstruct
-    Meta Attribute object from serialized payload coming out of Kafka.
+    MetaAttribute object from serialized payload coming out of Kafka.
 
     **Examples**:
 
-        MetaAttribute(schema_id=schema_id, payload=payload)
+        MetaAttribute(
+            schema_id=schema_id,
+            payload=byte(10)
+        )
 
     Args:
         schema_id (int): Identifies the schema used to encode the payload.
