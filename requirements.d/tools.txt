@@ -1,6 +1,6 @@
 psutil==4.2.0
 sqlparse
 yelp_batch
-yelp_clog==1.1
+yelp_clog==2.5.2
 yelp_conn
 yelp_kafka_tool==0.8.2
