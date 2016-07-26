@@ -7,11 +7,11 @@ import time
 
 import pytest
 
+from data_pipeline.consumer_source import FixedSchemas
 from data_pipeline.consumer_source import FixedTopics
 from data_pipeline.consumer_source import NewTopicOnlyInDataTarget
 from data_pipeline.consumer_source import NewTopicOnlyInSource
 from data_pipeline.consumer_source import NewTopicsOnlyInFixedNamespaces
-from data_pipeline.consumer_source import SingleSchema
 from data_pipeline.consumer_source import TopicInDataTarget
 from data_pipeline.consumer_source import TopicInSource
 from data_pipeline.consumer_source import TopicsInFixedNamespaces
@@ -153,19 +153,31 @@ class TestMultiTopics(FixedTopicsSourceTestBase):
             FixedTopics('', '')
 
 
-class TestSingleSchema(FixedTopicsSourceTestBase):
+class TestFixedSchemasSource(FixedTopicsSourceTestBase):
 
     @pytest.fixture
-    def consumer_source(self, foo_schema):
-        return SingleSchema(foo_schema.schema_id)
+    def consumer_source(self, foo_schema, bar_schema):
+        return FixedSchemas(
+            foo_schema.schema_id,
+            bar_schema.schema_id
+        )
 
     @pytest.fixture
-    def expected(self, foo_topic):
-        return {foo_topic}
+    def expected(self, foo_schema, bar_schema):
+        return {
+            foo_schema.topic.name,
+            bar_schema.topic.name
+        }
 
     def test_invalid_schema(self):
         with pytest.raises(ValueError):
-            SingleSchema(schema_id=0)
+            FixedSchemas()
+        with pytest.raises(ValueError):
+            FixedSchemas(0)
+        with pytest.raises(ValueError):
+            FixedSchemas('')
+        with pytest.raises(ValueError):
+            FixedSchemas('', '')
 
 
 class NamespaceSrcSetupMixin(ConsumerSourceTestBase):

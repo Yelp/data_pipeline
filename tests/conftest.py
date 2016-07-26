@@ -51,7 +51,7 @@ def example_schema(namespace, source):
         "name": "%s",
         "doc":"test",
         "fields":[
-            {"type":"int", "name":"good_field", "doc":"test"}
+            {"type":"int", "name":"good_field", "doc":"test", "default": 1}
         ]
     }
     ''' % (namespace, source)
@@ -66,6 +66,45 @@ def registered_schema(schematizer_client, example_schema, namespace, source):
         source_owner_email='test@yelp.com',
         contains_pii=False
     )
+
+
+@pytest.fixture(scope='module')
+def registered_compatible_schema(
+    schematizer_client,
+    example_compatible_schema,
+    namespace,
+    source
+):
+    return schematizer_client.register_schema(
+        namespace=namespace,
+        source=source,
+        schema_str=example_compatible_schema,
+        source_owner_email='test@yelp.com',
+        contains_pii=False
+    )
+
+
+@pytest.fixture(scope='module')
+def example_compatible_schema(example_schema):
+    schema = simplejson.loads(example_schema)
+    schema['fields'].append({
+        "type": "int",
+        "name": "good_compatible_field",
+        "doc": "test",
+        "default": 1
+    })
+    return simplejson.dumps(schema)
+
+
+@pytest.fixture(scope='module')
+def example_non_compatible_schema(example_schema):
+    schema = simplejson.loads(example_schema)
+    schema['fields'].append({
+        'doc': 'test',
+        'type': 'string',
+        'name': 'good_non_compatible_field'
+    })
+    return simplejson.dumps(schema)
 
 
 @pytest.fixture(scope="module")
@@ -180,6 +219,14 @@ def payload(example_schema, example_payload_data):
     return AvroStringWriter(
         simplejson.loads(example_schema)
     ).encode(example_payload_data)
+
+
+@pytest.fixture
+def compatible_payload_data(example_compatible_schema):
+    return {
+        "good_field": 1,
+        "good_compatible_field": 1
+    }
 
 
 @pytest.fixture

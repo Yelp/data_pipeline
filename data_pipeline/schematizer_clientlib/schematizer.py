@@ -355,7 +355,7 @@ class SchematizerClient(object):
         """Get the latest enabled schema of given topic.
 
         Args:
-            topic_name (str): The topic name of which
+            topic_name (str): The name of the topic to look up
 
         Returns:
             (data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):

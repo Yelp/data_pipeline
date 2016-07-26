@@ -12,6 +12,7 @@ from data_pipeline import message as dp_message
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import create_from_offset_and_message
+from data_pipeline.message import CreateMessage
 from data_pipeline.message import InvalidOperation
 from data_pipeline.message import MetaAttribute
 from data_pipeline.message import NoEntryPayload
@@ -640,3 +641,53 @@ class TestCreateFromMessageAndOffset(object):
         assert extracted_message.timestamp == message.timestamp
         assert extracted_message.topic == message.topic
         assert extracted_message.uuid == message.uuid
+
+    def test_create_from_offset_and_message_with_reader_schema_specified(
+        self,
+        registered_schema,
+        registered_compatible_schema,
+        compatible_payload_data,
+        example_payload_data,
+    ):
+        unpacked_message = CreateMessage(
+            schema_id=registered_schema.schema_id,
+            payload_data=example_payload_data,
+            timestamp=1500,
+        )
+        offset_and_message = OffsetAndMessage(
+            0,
+            create_message(Envelope().pack(unpacked_message))
+        )
+        extracted_message = create_from_offset_and_message(
+            offset_and_message=offset_and_message,
+            reader_schema_id=registered_compatible_schema.schema_id
+        )
+        assert extracted_message.schema_id == registered_schema.schema_id
+        assert extracted_message.topic == registered_schema.topic.name
+        assert extracted_message.reader_schema_id == registered_compatible_schema.schema_id
+        assert extracted_message.payload_data == compatible_payload_data
+
+    def test_create_from_offset_and_message_with_no_reader_schema_specified(
+        self,
+        registered_schema,
+        payload,
+        example_payload_data
+    ):
+        unpacked_message = CreateMessage(
+            schema_id=registered_schema.schema_id,
+            payload=payload,
+            timestamp=1500,
+        )
+        offset_and_message = OffsetAndMessage(
+            0,
+            create_message(Envelope().pack(unpacked_message))
+        )
+
+        extracted_message = create_from_offset_and_message(
+            offset_and_message=offset_and_message,
+            reader_schema_id=None
+        )
+        assert extracted_message.schema_id == registered_schema.schema_id
+        assert extracted_message.topic == registered_schema.topic.name
+        assert extracted_message.reader_schema_id == registered_schema.schema_id
+        assert extracted_message.payload_data == example_payload_data
