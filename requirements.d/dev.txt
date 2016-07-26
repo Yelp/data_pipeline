@@ -26,3 +26,4 @@ wheel>=0.22
 factory_boy==2.5.2
 pytest-benchmark==3.0.0
 yelp-clog==2.5.2
+yelp_kafka<=4.14.0
