@@ -25,6 +25,10 @@ from data_pipeline.schematizer_clientlib.models.refresh import RefreshStatus
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 
+# WARNING: This batch will not work for non-numeric or compound primary
+# keys cause of the logic in process_table(). There is another way of
+# doing the same but its much slower and resource intensive.
+# https://goo.gl/Drz0uj
 class FullRefreshRunner(Batch, BatchDBMixin):
     """The FullRefreshManager spawns off a child process which executes this
     batch to copy rows from the source table into a black hole table.
@@ -410,10 +414,6 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         if self.where_clause is not None:
             select_query += ' AND {clause}'.format(clause=self.where_clause)
 
-        select_query += ' ORDER BY {pk} LIMIT {batch_size}'.format(
-            pk=self.primary_key,
-            batch_size=self.batch_size
-        )
         return select_query
 
     def _get_min_primary_key(self):
@@ -427,19 +427,15 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             min_pk = self._execute_query(session, select_query)
         return min_pk.scalar()
 
-    def _get_max_primary_key(self, session, min_pk):
+    def _get_max_primary_key(self):
         select_query = """
-        SELECT MAX({pk}) FROM
-        ( SELECT {pk} FROM {table} WHERE {pk}>{min_pk}
-          ORDER BY {pk} LIMIT {batch_size}
-        ) AS TEMP_MAX
+        SELECT MAX({pk}) FROM {table}
         """.format(
             pk=self.primary_key,
-            table=self.table_name,
-            min_pk=min_pk,
-            batch_size=self.batch_size
+            table=self.table_name
         )
-        max_pk = self._execute_query(session, select_query)
+        with self.read_session() as session:
+            max_pk = self._execute_query(session, select_query)
         return max_pk.scalar()
 
     def process_table(self):
@@ -449,17 +445,18 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             )
         )
         min_pk = self._get_min_primary_key() - 1
+        max_pk = self._get_max_primary_key()
         count = self.batch_size
-        while count >= self.batch_size:
+        while min_pk <= max_pk:
             self.process_row_start_time = time.time()
             with self.write_session() as session:
                 self.setup_transaction(session)
-                max_pk = self._get_max_primary_key(session, min_pk)
-                count = self.count_inserted(session, min_pk, max_pk)
-                self.insert_batch(session, min_pk, max_pk)
-                self._after_processing_rows(session, count)
-            min_pk = max_pk
-            self.processed_row_count += count
+                inserted = self.count_inserted(session, min_pk, count)
+                self.insert_batch(session, min_pk, count)
+                self._after_processing_rows(session, inserted)
+            min_pk = count
+            count += self.batch_size
+            self.processed_row_count += inserted
 
         if self.refresh_id:
             # Offset is 0 because it doesn't matter (was a success)
