@@ -1,3 +1,9 @@
+data-pipeline-tools (0.4.0) lucid; urgency=low
+
+  * Commit: Merge branch 'enrico_fix_yelp_kafka_deps'
+
+ -- Shahid Chohan <chohan@yelp.com>  Tue, 26 Jul 2016 17:43:02 -0700
+
 data-pipeline-tools (0.3.0) lucid; urgency=low
 
   * Commit: Remove uneccessary test
