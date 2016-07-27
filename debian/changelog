@@ -1,3 +1,15 @@
+data-pipeline-tools (0.4.0) lucid; urgency=low
+
+  * Commit: Merge branch 'enrico_fix_yelp_kafka_deps'
+
+ -- Shahid Chohan <chohan@yelp.com>  Tue, 26 Jul 2016 17:43:02 -0700
+
+data-pipeline-tools (0.3.0) lucid; urgency=low
+
+  * Commit: Remove uneccessary test
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Fri, 15 Jul 2016 12:57:47 -0700
+
 data-pipeline-tools (0.2.7) lucid; urgency=low
 
   * Commit: Pin avro to 1.10.2 in the clientlib to pick up broken

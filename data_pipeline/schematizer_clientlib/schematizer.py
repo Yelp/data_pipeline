@@ -113,7 +113,11 @@ class SchematizerClient(object):
                 The list requested avro Schema elements by schema_id.
         """
         # Filter out elements that represent the whole record (when element.element_name == None)
-        return [element.to_result() for element in self._get_schema_elements_by_schema_id(schema_id) if element.element_name]
+        return [
+            element.to_result()
+            for element in self._get_schema_elements_by_schema_id(schema_id)
+            if element.element_name
+        ]
 
     def _get_schema_elements_by_schema_id(self, schema_id):
         response = self._call_api(
@@ -123,27 +127,54 @@ class SchematizerClient(object):
         _schema = _AvroSchemaElement.from_response(response)
         return _schema
 
-    def get_schemas_created_after_date(self, created_after):
-        """Get the avro schemas created after given datetime timestamp.
+    def get_schemas_created_after_date(
+        self,
+        created_after,
+        min_id=0,
+        page_size=10
+    ):
+        """ Get the avro schemas (excluding disabled schemas) created after the
+        given datetime timestamp in ascending order of schema id. Limits the
+        result to those with id greater than or equal to the min_id.
 
         Args:
-            created_after (long): get schemas created after given utc long (inclusive).
+            created_after (long): get schemas created at or after the given
+                epoch timestamp.
+            min_id (Optional[int]): Limits the result to those schemas with an
+                id greater than or equal to given min_id (default: 0)
+            page_size (Optional[int]): Limits the number of api calls and
+                number of schemas to retrieve per call to avoid timeouts
+                (default: 10).
 
         Returns:
             (List of data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
                 The list of avro schemas created after (inclusive) specified date.
         """
-        return [schema.to_result() for schema in self._get_schemas_created_after_date(created_after)]
+        return self._get_schemas_created_after_date(created_after, min_id, page_size)
 
-    def _get_schemas_created_after_date(self, created_after):
-        responses = self._call_api(
-            api=self._client.schemas.get_schemas_created_after,
-            params={'created_after': created_after}
-        )
-        _schemas = [_AvroSchema.from_response(response) for response in responses]
-        for _schema in _schemas:
-            self._set_cache_by_schema(_schema)
-        return _schemas
+    def _get_schemas_created_after_date(self, created_after, min_id, page_size):
+        last_page_size = page_size
+        result = []
+        # Exit the loop when the number of schemas returned are not equal to
+        # page_size. Denoting there are no more schemas to fetch from the
+        # Schematizer.
+        while last_page_size == page_size:
+            response = self._call_api(
+                api=self._client.schemas.get_schemas_created_after,
+                params={
+                    'created_after': created_after,
+                    'count': page_size,
+                    'min_id': min_id
+                }
+            )
+
+            for resp_item in response:
+                _schema = _AvroSchema.from_response(resp_item)
+                result.append(_schema.to_result())
+                self._set_cache_by_schema(_schema)
+                min_id = _schema.schema_id + 1
+            last_page_size = len(response)
+        return result
 
     def _make_avro_schema_key(self, schema_json):
         return simplejson.dumps(schema_json, sort_keys=True)
@@ -324,7 +355,7 @@ class SchematizerClient(object):
         """Get the latest enabled schema of given topic.
 
         Args:
-            topic_name (str): The topic name of which
+            topic_name (str): The name of the topic to look up
 
         Returns:
             (data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
