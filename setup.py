@@ -34,13 +34,14 @@ setup(
         'kafka-python==0.9.5.post3',
         'psutil==4.2.0',
         'pycrypto>=2.6.1',
-        'PyStaticConfiguration>=0.10.0',
+        'PyStaticConfiguration>=0.9.0',
         'simplejson>=2.1.2',
         'swaggerpy>=0.7.6',
         'yelp-avro>=0.1.1',
         'yelp-kafka>=4.2.0',
         'yelp-lib>=10.0.5',
         'yelp-servlib>=4.3.0',
+        'cryptography<=1.3.4',
     ],
     extras_require={
         'tools': [

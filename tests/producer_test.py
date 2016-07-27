@@ -190,11 +190,10 @@ class TestProducerRegistration(TestProducerBase):
                 producer.publish(CreateMessage(schema_id=1, payload=bytes("FAKE MESSAGE")))
                 producer.registrar.threshold = 1
                 producer.registrar.start()
-                time.sleep(1.2)
                 producer.publish(CreateMessage(schema_id=2, payload=bytes("DIFFERENT FAKE MESSAGE")))
-                time.sleep(1)
+                time.sleep(1.5)
                 producer.registrar.stop()
-                assert func_spy.call_count == 4
+                assert func_spy.call_count == 3
 
 
 class TestProducer(TestProducerBase):

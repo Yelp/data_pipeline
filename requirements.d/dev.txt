@@ -4,26 +4,19 @@
 # and remove this extra-index-url
 --extra-index-url https://pypi.python.org/simple/
 -r tools.txt
-clog==0.1.0
 flake8
 honcho
 ipdb
-ipython==5.0.0
+ipython>=5.0.0
 mock
 pre-commit>=0.4.2
 # Later versions should be ok once INFRA-3779 is fixed
-PyStaticConfiguration==0.10.0
 pytest<2.8.2
 pytest-cov==1.8.1
 pytest-raisesregexp
-PyYAML==3.11
-scribe==2.0.post1
 Sphinx==1.3.1
 SQLAlchemy==1.0.8
 terminaltables>=1.0.2
-thrift==0.2.post1
 wheel>=0.22
 factory_boy==2.5.2
 pytest-benchmark==3.0.0
-yelp-clog==2.5.2
-yelp_kafka<=4.14.0
