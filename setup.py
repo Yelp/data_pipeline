@@ -41,6 +41,7 @@ setup(
         'yelp-kafka>=4.2.0',
         'yelp-lib>=10.0.5',
         'yelp-servlib>=4.3.0',
+        'cryptography<=1.3.4',
     ],
     extras_require={
         'tools': [
