@@ -17,6 +17,7 @@ NamespacesArgs = namedtuple(
     "Namespace", [
         "sort_by",
         "descending_order",
+        "active_namespaces",
         "verbosity"
     ]
 )
@@ -26,6 +27,7 @@ SourcesArgs = namedtuple(
         "namespace",
         "sort_by",
         "descending_order",
+        "active_sources",
         "verbosity"
     ]
 )
@@ -94,6 +96,7 @@ class TestListCommand(TestIntrospectorBase):
             namespace=namespace_one,
             sort_by="bad_field",
             descending_order=False,
+            active_sources=True,
             verbosity=0
         )
 
@@ -103,6 +106,7 @@ class TestListCommand(TestIntrospectorBase):
             namespace=namespace_one,
             sort_by="active_topic_count",
             descending_order=False,
+            active_sources=True,
             verbosity=0
         )
 
@@ -111,6 +115,7 @@ class TestListCommand(TestIntrospectorBase):
         return NamespacesArgs(
             sort_by="bad_field",
             descending_order=False,
+            active_namespaces=True,
             verbosity=0
         )
 
@@ -119,6 +124,7 @@ class TestListCommand(TestIntrospectorBase):
         return NamespacesArgs(
             sort_by="active_source_count",
             descending_order=False,
+            active_namespaces=True,
             verbosity=0
         )
 
@@ -133,7 +139,7 @@ class TestListCommand(TestIntrospectorBase):
     def _assert_good_fields(self, list_command, args, parser):
         list_command.run(args, parser)
         for field in args._fields:
-            if field != "verbosity":
+            if field not in ["verbosity", "active_namespaces", "active_sources"]:
                 assert getattr(list_command, field) == getattr(args, field)
 
     def test_bad_topics(

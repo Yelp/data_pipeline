@@ -90,7 +90,8 @@ class TestSourceInfoCommand(TestIntrospectorBase):
         source_dict = command.info_source(
             source_id=source_obj.source_id,
             source_name=None,
-            namespace_name=None
+            namespace_name=None,
+            active_sources=True
         )
         self._assert_source_equals_source_dict(
             source=source_obj,
@@ -149,7 +150,8 @@ class TestSourceInfoCommand(TestIntrospectorBase):
         source_dict = command.info_source(
             source_id=None,
             source_name=source_one_active,
-            namespace_name=namespace_one
+            namespace_name=namespace_one,
+            active_sources=True
         )
         source_obj = topic_one_active.source
         self._assert_source_equals_source_dict(
@@ -198,7 +200,10 @@ class TestNamespaceInfoCommand(TestIntrospectorBase):
         topic_two_active
     ):
         namespace_obj = topic_two_active.source.namespace
-        namespace_dict = command.info_namespace(namespace_two)
+        namespace_dict = command.info_namespace(
+            namespace_two,
+            active_namespaces=True
+        )
         self._assert_namespace_equals_namespace_dict(
             namespace=namespace_obj,
             namespace_dict=namespace_dict,
