@@ -23,7 +23,8 @@ class SourceInfoCommand(IntrospectorCommand):
             action='store_true',
             help=(
                 'If set, this command will also return information about active '
-                'topics for this source.'
+                'topics for this source. '
+                'This operation is a time expensive.'
             )
         )
 

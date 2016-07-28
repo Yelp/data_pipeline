@@ -23,7 +23,8 @@ class NamespaceInfoCommand(IntrospectorCommand):
             action='store_true',
             help=(
                 'If set, this command will also return information about active '
-                'sources count and topic count for this namespace.'
+                'sources and topics for this namespace. '
+                'This operation is a time expensive.'
             )
         )
 

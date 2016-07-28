@@ -29,7 +29,8 @@ class NamespacesListCommand(_BaseListCommand):
             action='store_true',
             help=(
                 'If set, this command will also return information about active '
-                'namespaces.'
+                'sources and topics within each namespace. '
+                'This operation is a time expensive.'
             )
         )
 
