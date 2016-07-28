@@ -552,6 +552,44 @@ class TestFullRefreshRunner(object):
             ]
             mock_insert.assert_has_calls(calls)
 
+    def test_process_table_min_pk_greater_batch_size(
+        self,
+        refresh_batch,
+        mock_row_count,
+        mock_process_rows,
+        sessions,
+        write_session,
+        read_session
+    ):
+        with mock.patch.object(
+            refresh_batch,
+            'insert_batch'
+        ) as mock_insert, mock.patch.object(
+            refresh_batch,
+            'count_inserted'
+        ) as mock_rows, mock.patch.object(
+            refresh_batch,
+            '_get_min_primary_key'
+        ) as mock_min_pk, mock.patch.object(
+            refresh_batch,
+            '_get_max_primary_key'
+        ) as mock_max_pk, mock.patch.object(
+            refresh_batch,
+            'batch_size',
+            10
+        ):
+            mock_min_pk.return_value = 101
+            mock_max_pk.return_value = 125
+            mock_rows.side_effect = [10, 10, 5]
+            mock_row_count.return_value = 25
+            refresh_batch.process_table()
+            calls = [
+                mock.call(write_session, 100, 110),
+                mock.call(write_session, 110, 120),
+                mock.call(write_session, 120, 130)
+            ]
+            mock_insert.assert_has_calls(calls)
+
     def test_process_table_managed_refresh(
         self,
         managed_refresh_batch,

@@ -446,16 +446,15 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         )
         min_pk = self._get_min_primary_key() - 1
         max_pk = self._get_max_primary_key()
-        count = self.batch_size
         while min_pk <= max_pk:
             self.process_row_start_time = time.time()
             with self.write_session() as session:
                 self.setup_transaction(session)
-                inserted = self.count_inserted(session, min_pk, count)
-                self.insert_batch(session, min_pk, count)
+                min_batch = min_pk + self.batch_size
+                inserted = self.count_inserted(session, min_pk, min_batch)
+                self.insert_batch(session, min_pk, min_batch)
                 self._after_processing_rows(session, inserted)
-            min_pk = count
-            count += self.batch_size
+            min_pk = min_batch
             self.processed_row_count += inserted
 
         if self.refresh_id:
