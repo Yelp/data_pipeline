@@ -29,7 +29,7 @@ class SourcesListCommand(_BaseListCommand):
             action='store_true',
             help=(
                 'If set, this command will also return information about active '
-                'topics within each source. This operation is a time expensive.'
+                'topics within each source. This is a time expensive operation.'
             )
         )
 

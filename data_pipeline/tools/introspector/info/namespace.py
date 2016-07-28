@@ -24,7 +24,7 @@ class NamespaceInfoCommand(IntrospectorCommand):
             help=(
                 'If set, this command will also return information about active '
                 'sources and topics for this namespace. '
-                'This operation is a time expensive.'
+                'This is a time expensive operation.'
             )
         )
 

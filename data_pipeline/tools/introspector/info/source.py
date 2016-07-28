@@ -24,7 +24,7 @@ class SourceInfoCommand(IntrospectorCommand):
             help=(
                 'If set, this command will also return information about active '
                 'topics for this source. '
-                'This operation is a time expensive.'
+                'This is a time expensive operation.'
             )
         )
 

@@ -30,7 +30,7 @@ class NamespacesListCommand(_BaseListCommand):
             help=(
                 'If set, this command will also return information about active '
                 'sources and topics within each namespace. '
-                'This operation is a time expensive.'
+                'This is a time expensive operation.'
             )
         )
 
