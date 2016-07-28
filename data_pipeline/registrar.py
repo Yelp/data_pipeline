@@ -6,7 +6,6 @@ import os
 import threading
 
 import simplejson
-import staticconf
 
 from data_pipeline._clog_writer import ClogWriter
 from data_pipeline.config import get_config
@@ -51,14 +50,6 @@ class Registrar(object):
         self.send_messages = False
         self.schema_to_last_seen_time_map = {}
         self.expected_frequency_seconds = expected_frequency_seconds
-
-        # Set up configuration for clog in the data pipeline.
-        # The call is being made here because it should be done before clog is
-        # imported in ClogWriter
-        staticconf.YamlConfiguration(
-            '/nail/srv/configs/clog.yaml',
-            namespace='clog'
-        )
         self.clog_writer = ClogWriter()
 
     def publish_registration_messages(self):
