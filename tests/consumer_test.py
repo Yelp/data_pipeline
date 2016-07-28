@@ -260,25 +260,25 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
         )
 
     @pytest.fixture
-    def user_topic(self, registered_schema):
+    def previous_auto_topic(self, registered_schema):
         return str(registered_schema.topic.name)
 
     @pytest.fixture
-    def simple_topic(self, registered_auto_refresh_schema):
+    def current_auto_topic(self, registered_auto_refresh_schema):
         return str(registered_auto_refresh_schema.topic.name)
 
     @pytest.fixture
-    def ensure_simple_topic_exists(self, containers, registered_auto_refresh_schema):
+    def ensure_current_auto_topic_exists(self, containers, registered_auto_refresh_schema):
         topic_name = str(registered_auto_refresh_schema.topic.name)
         containers.create_kafka_topic(topic_name)
 
     @pytest.fixture
-    def ensure_user_topic_exists(self, containers, registered_schema):
+    def ensure_previous_auto_topic_exists(self, containers, registered_schema):
         topic_name = str(registered_schema.topic.name)
         containers.create_kafka_topic(topic_name)
 
     @pytest.fixture
-    def simple_message(self, registered_auto_refresh_schema, payload):
+    def current_message(self, registered_auto_refresh_schema, payload):
         return CreateMessage(
             schema_id=registered_auto_refresh_schema.schema_id,
             payload=payload
@@ -313,8 +313,8 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
     @pytest.fixture
     def consumer_instance(
         self,
-        ensure_user_topic_exists,
-        user_topic,
+        ensure_previous_auto_topic_exists,
+        previous_auto_topic,
         consumer_group_name,
         team_name,
         consumer_source,
@@ -325,7 +325,7 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
             consumer_name=consumer_group_name,
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
-            topic_to_consumer_topic_state_map={user_topic: None},
+            topic_to_consumer_topic_state_map={previous_auto_topic: None},
             consumer_source=consumer_source,
             topic_refresh_frequency_seconds=0.5,
             auto_offset_reset='smallest',
@@ -333,70 +333,91 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
             post_rebalance_callback=post_rebalance_callback,
         )
 
-    def test_auto_refresh_topics(
+    def test_consumer_pick_up_new_topics_after_refresh(
         self,
-        ensure_simple_topic_exists,
-        registered_auto_refresh_schema,
+        ensure_current_auto_topic_exists,
         publish_messages,
         consumer_instance,
-        simple_topic,
-        simple_message,
-        user_topic,
-        message,
+        current_message,
         register_non_compatible_schema,
         non_compatible_payload_data
     ):
         """
-        This test initializes a Consumer with both consumer_source and
-        topic_to_consumer_topic_state_map and publishes messages. Verifies that
-        after refresh, consumer commits all the topics (current topics and
-        refreshed topics) but tails only the refreshed topics and updates the
-        topic_to_partition_map accordingly.
+        This test publishes 2 messages and starts the consumer. The consumer
+        should receive exactly those 2 messages. It then commits those messages
+        and publishes 3 new messages in a different topic. Verifies that the
+        consumer refreshes itself to include the new topic and receives exactly
+        those 3 messages.
+        """
+        with consumer_instance as consumer:
+            publish_messages(current_message, count=2)
+            # consumer should return exactly 2 messages 'message'
+            actual_messages = consumer.get_messages(
+                count=10, blocking=True, timeout=TIMEOUT
+            )
+            self.assert_equal_messages(actual_messages, current_message, 2)
+            assert len(consumer.topic_to_partition_map) == 1
+
+            consumer.commit_messages(actual_messages)
+            next_auto_schema = register_non_compatible_schema()
+            next_auto_message = CreateMessage(
+                schema_id=next_auto_schema.schema_id,
+                payload_data=non_compatible_payload_data
+            )
+            publish_messages(next_auto_message, count=3)
+            # consumer should refresh itself and include the new topic in the
+            # topic_to_partition_map
+            new_messages = consumer.get_messages(
+                count=10, blocking=True, timeout=TIMEOUT
+            )
+            self.assert_equal_messages(new_messages, next_auto_message, 3)
+            assert len(consumer.topic_to_partition_map) == 2
+
+    def test_consumer_commit_and_drop_inactive_topics_after_refresh(
+        self,
+        ensure_current_auto_topic_exists,
+        publish_messages,
+        consumer_instance,
+        current_auto_topic,
+        current_message,
+        previous_auto_topic,
+        message
+    ):
+        """
+        This test publishes messages into 2 topics and starts a consumer
+        tailing those topics. Then consumer refreshes itself and drop the topic
+        that does not exist in the consumer_source. Verifies that the consumer
+        commits offsets for both the topics but tails only the consumer_source
+        topic.
         """
         with consumer_instance as consumer:
             with attach_spy_on_func(
                 consumer,
                 '_commit_topic_map_offsets'
             ) as commit_offsets_spy:
-                publish_messages(simple_message, count=2)
+                publish_messages(current_message, count=2)
                 publish_messages(message, count=3)
                 assert set(consumer.topic_to_partition_map.keys()) == {
-                    user_topic,
-                    simple_topic
+                    previous_auto_topic,
+                    current_auto_topic
                 }
 
-                # After refresh, Consumer should tails only the refreshed_topics
-                # and drop other topics(user_topic) from the topic_to_partition_map
+                # After refresh, Consumer should tail only the refreshed_topics
+                # and drop other topics(i.e., previous_auto_topic) from the
+                # topic_to_partition_map
                 actual_messages = consumer.get_messages(
                     count=10, blocking=True, timeout=TIMEOUT
                 )
 
-                # consumer should return exactly 2 'simple_message' messages
-                self.assert_equal_messages(actual_messages, simple_message, 2)
+                # consumer should return exactly 2 'current_message' messages
+                self.assert_equal_messages(actual_messages, current_message, 2)
+                assert consumer.topic_to_partition_map.keys() == [
+                    current_auto_topic
+                ]
                 assert commit_offsets_spy.call_args_list == [
                     mock.call(
-                        {simple_topic: None, user_topic: None}
+                        {current_auto_topic: None, previous_auto_topic: None}
                     )]
-                assert consumer.topic_to_partition_map.keys() == [simple_topic]
-
-            consumer.commit_messages(actual_messages)
-            new_schema = register_non_compatible_schema()
-            new_message = CreateMessage(
-                schema_id=new_schema.schema_id,
-                payload_data=non_compatible_payload_data
-            )
-            publish_messages(new_message, count=2)
-
-            # After refresh, Consumer should include the new topic in the
-            # topic_to_partition_map
-            actual_messages = consumer.get_messages(
-                count=10, blocking=True, timeout=TIMEOUT
-            )
-            self.assert_equal_messages(actual_messages, new_message, 2)
-            assert set(consumer.topic_to_partition_map.keys()) == {
-                new_message.topic,
-                simple_topic
-            }
 
     def assert_equal_messages(
         self,
