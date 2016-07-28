@@ -17,6 +17,7 @@ NamespacesArgs = namedtuple(
     "Namespace", [
         "sort_by",
         "descending_order",
+        "active_namespaces",
         "verbosity"
     ]
 )
@@ -26,6 +27,7 @@ SourcesArgs = namedtuple(
         "namespace",
         "sort_by",
         "descending_order",
+        "active_sources",
         "verbosity"
     ]
 )
@@ -94,15 +96,20 @@ class TestListCommand(TestIntrospectorBase):
             namespace=namespace_one,
             sort_by="bad_field",
             descending_order=False,
+            active_sources=True,
             verbosity=0
         )
 
-    @pytest.fixture
-    def good_source_args(self, namespace_one):
+    @pytest.fixture(
+        params=[True, False],
+        ids=['with_active_sources', 'without_active_sources']
+    )
+    def good_source_args(self, request, namespace_one):
         return SourcesArgs(
             namespace=namespace_one,
-            sort_by="active_topic_count",
+            sort_by="name",
             descending_order=False,
+            active_sources=request.param,
             verbosity=0
         )
 
@@ -111,14 +118,19 @@ class TestListCommand(TestIntrospectorBase):
         return NamespacesArgs(
             sort_by="bad_field",
             descending_order=False,
+            active_namespaces=True,
             verbosity=0
         )
 
-    @pytest.fixture
-    def good_namespace_args(self):
+    @pytest.fixture(
+        params=[True, False],
+        ids=['with_active_namespaces', 'without_active_namespaces']
+    )
+    def good_namespace_args(self, request):
         return NamespacesArgs(
-            sort_by="active_source_count",
+            sort_by="name",
             descending_order=False,
+            active_namespaces=request.param,
             verbosity=0
         )
 
@@ -133,7 +145,7 @@ class TestListCommand(TestIntrospectorBase):
     def _assert_good_fields(self, list_command, args, parser):
         list_command.run(args, parser)
         for field in args._fields:
-            if field != "verbosity":
+            if field not in {"verbosity", "active_namespaces", "active_sources"}:
                 assert getattr(list_command, field) == getattr(args, field)
 
     def test_bad_topics(

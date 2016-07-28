@@ -17,6 +17,17 @@ class NamespaceInfoCommand(IntrospectorCommand):
             add_help=False
         )
 
+        info_command_parser.add_argument(
+            '--active-namespaces',
+            default=False,
+            action='store_true',
+            help=(
+                'If set, this command will also return information about active '
+                'sources and topics for this namespace. '
+                'This is a time expensive operation.'
+            )
+        )
+
         cls.add_base_arguments(info_command_parser)
 
         info_command_parser.add_argument(
@@ -32,7 +43,7 @@ class NamespaceInfoCommand(IntrospectorCommand):
             )
         )
 
-    def info_namespace(self, name):
+    def info_namespace(self, name, active_namespaces=False):
         namespaces = self.schematizer.get_namespaces()
         info_namespace = None
         for namespace in namespaces:
@@ -42,7 +53,7 @@ class NamespaceInfoCommand(IntrospectorCommand):
         if info_namespace:
             namespace = IntrospectorNamespace(
                 namespace,
-                active_namespaces=self.active_namespaces
+                active_namespaces=(self.active_namespaces if active_namespaces else None)
             ).to_ordered_dict()
             namespace['sources'] = self.list_sources(
                 namespace_name=namespace['name']
@@ -58,5 +69,8 @@ class NamespaceInfoCommand(IntrospectorCommand):
     def run(self, args, parser):
         self.process_args(args, parser)
         print simplejson.dumps(
-            self.info_namespace(self.namespace_name)
+            self.info_namespace(
+                self.namespace_name,
+                active_namespaces=args.active_namespaces
+            )
         )

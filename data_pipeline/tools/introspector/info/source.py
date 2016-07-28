@@ -17,6 +17,17 @@ class SourceInfoCommand(IntrospectorCommand):
             add_help=False
         )
 
+        info_command_parser.add_argument(
+            '--active-sources',
+            default=False,
+            action='store_true',
+            help=(
+                'If set, this command will also return information about active '
+                'topics for this source. '
+                'This is a time expensive operation.'
+            )
+        )
+
         cls.add_base_arguments(info_command_parser)
         cls.add_source_and_namespace_arguments(info_command_parser)
 
@@ -35,7 +46,8 @@ class SourceInfoCommand(IntrospectorCommand):
         self,
         source_id=None,
         source_name=None,
-        namespace_name=None
+        namespace_name=None,
+        active_sources=False
     ):
         info_source = None
         if source_id:
@@ -54,9 +66,10 @@ class SourceInfoCommand(IntrospectorCommand):
         topics = self.list_topics(
             source_id=info_source["source_id"]
         )
-        info_source['active_topic_count'] = len(
-            [topic for topic in topics if topic['message_count']]
-        )
+        if active_sources:
+            info_source['active_topic_count'] = len(
+                [topic for topic in topics if topic['message_count']]
+            )
         info_source['topics'] = topics
         return info_source
 
@@ -66,6 +79,7 @@ class SourceInfoCommand(IntrospectorCommand):
             self.info_source(
                 source_id=self.source_id,
                 source_name=self.source_name,
-                namespace_name=self.namespace
+                namespace_name=self.namespace,
+                active_sources=args.active_sources
             )
         )
