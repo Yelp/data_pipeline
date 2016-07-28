@@ -1,3 +1,9 @@
+data-pipeline-tools (0.4.2) lucid; urgency=low
+
+  * Commit: restored .keep file in the logs directory
+
+ -- Chia-Chi Lin <clin@yelp.com>  Wed, 27 Jul 2016 17:25:52 -0700
+
 data-pipeline-tools (0.4.1) lucid; urgency=low
 
   * Commit: pind avro version to 1.9.0-yelp1
