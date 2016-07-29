@@ -268,10 +268,11 @@ class BaseConsumer(Client):
         Register what schema ids to track based on the topic map passed in
         on initialization and during topic change.
         """
-        schema_id_list = []
-        for topic, consumer_topic_state in topic_to_consumer_topic_state_map.iteritems():
-            if consumer_topic_state and consumer_topic_state.last_seen_schema_id:
-                schema_id_list.append(consumer_topic_state.last_seen_schema_id)
+        schema_id_list = [
+            consumer_topic_state.last_seen_schema_id
+            for consumer_topic_state in topic_to_consumer_topic_state_map.itervalues()
+            if consumer_topic_state and consumer_topic_state.last_seen_schema_id
+        ]
         self.registrar.register_tracked_schema_ids(schema_id_list)
 
     @cached_property
