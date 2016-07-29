@@ -96,7 +96,8 @@ class Producer(Client):
         use_work_pool=False,
         dry_run=False,
         position_data_callback=None,
-        monitoring_enabled=True
+        monitoring_enabled=True,
+        schema_id_list=[]
     ):
         super(Producer, self).__init__(
             producer_name,
@@ -108,6 +109,9 @@ class Producer(Client):
         self.use_work_pool = use_work_pool
         self.dry_run = dry_run
         self.position_data_callback = position_data_callback
+
+        # Send initial producer registration messages
+        self.registrar.register_tracked_schema_ids(schema_id_list)
 
     @cached_property
     def _kafka_producer(self):
