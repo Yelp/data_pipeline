@@ -153,6 +153,8 @@ class Registrar(object):
     def stop(self):
         """Force Client to stop periodically sending registration messages"""
         self.send_messages = False
+        # Send registration messages when the Registrar is stopped
+        self.publish_registration_messages()
 
     def _wake(self):
         """This class periodically sends registration messages using Clog"""

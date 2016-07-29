@@ -6,6 +6,7 @@ import multiprocessing
 import random
 import time
 
+import clog
 import mock
 import pytest
 import simplejson as json
@@ -193,8 +194,23 @@ class TestProducerRegistration(TestProducerBase):
                     payload=bytes("DIFFERENT FAKE MESSAGE")
                 ))
                 time.sleep(1.5)
-                producer.registrar.stop()
                 assert func_spy.call_count == 3
+                producer.registrar.stop()
+
+    def test_producer_registration_message_on_exit(self, producer_instance):
+        """
+        TODO(mkohli|DATAPIPE-1257): This will send one extra message when merge with
+                                    this ticket, because of intitial Producer registration
+                                    messages.
+        """
+        with attach_spy_on_func(
+            clog,
+            'log_line'
+        ) as func_spy:
+            with producer_instance as producer:
+                producer.publish(CreateMessage(schema_id=1, payload=bytes("Test message")))
+                producer.publish(CreateMessage(schema_id=2, payload=bytes("Test message 2")))
+            assert func_spy.call_count == 2
 
 
 class TestProducer(TestProducerBase):
