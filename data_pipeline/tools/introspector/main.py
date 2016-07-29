@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 import argparse
 
+from data_pipeline import __version__
 from data_pipeline.tools.introspector.info_command_parser import InfoCommandParser
 from data_pipeline.tools.introspector.list_command_parser import ListCommandParser
 from data_pipeline.tools.introspector.register_command_parser import RegisterCommandParser
@@ -14,6 +15,11 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="data_pipeline_introspector provides ability to view the current "
         "state of the data pipeline from a top-down view of namespaces."
+    )
+    parser.add_argument(
+        '--version',
+        action='version',
+        version="data_pipeline {}".format(__version__)
     )
 
     subparsers = parser.add_subparsers()

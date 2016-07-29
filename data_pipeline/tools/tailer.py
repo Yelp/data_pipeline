@@ -17,7 +17,7 @@ from yelp_batch.batch import batch_configure
 from yelp_kafka import offsets
 from yelp_servlib.config_util import load_default_config
 
-import data_pipeline
+from data_pipeline import __version__
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.base_consumer import ConsumerTopicState
 from data_pipeline.config import get_config
@@ -40,7 +40,7 @@ class Tailer(Batch):
         """Overriding this so we'll get the clientlib version number when
         the tailer is run with --version.
         """
-        return "data_pipeline {}".format(data_pipeline.__version__)
+        return "data_pipeline {}".format(__version__)
 
     @batch_command_line_options
     def _define_tailer_options(self, option_parser):
