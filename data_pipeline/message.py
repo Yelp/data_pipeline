@@ -702,6 +702,13 @@ class MonitorMessage(Message):
         raise InvalidOperation()
 
 
+class RegistrationMessage(Message):
+    _message_type = _ProtectedMessageType.registration
+
+    def _get_field_diff(self, field):
+        raise InvalidOperation()
+
+
 class UpdateMessage(Message):
     """Message for update type. This type of message requires previous
     payload in addition to the payload.

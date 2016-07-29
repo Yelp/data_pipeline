@@ -49,3 +49,4 @@ class _ProtectedMessageType(_EnumRepr):
     """
     heartbeat = 5
     monitor = 6
+    registration = 7
