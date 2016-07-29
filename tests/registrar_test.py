@@ -43,10 +43,10 @@ class TestRegistration(object):
 
     def test_registration_message_schema(self, schematizer_client):
         client = self._build_client()
-        actual_schema = client.registrar.registration_schema()
-        schema_id = client.registrar.registration_schema().schema_id
-        # _registration_schema() returns the actual json read from the file
-        expected_schema_json = client.registrar._registration_schema()
+        actual_schema = client.registrar.registration_schema
+        schema_id = client.registrar.registration_schema.schema_id
+        # _registration_schema returns the actual json read from the file
+        expected_schema_json = client.registrar._registration_schema
         actual_schema_json = actual_schema.schema_json
         assert expected_schema_json == actual_schema_json
         assert schema_id > 0

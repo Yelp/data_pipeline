@@ -6,6 +6,7 @@ import os
 import threading
 
 import simplejson
+from cached_property import cached_property
 
 from data_pipeline._clog_writer import ClogWriter
 from data_pipeline.config import get_config
@@ -77,7 +78,7 @@ class Registrar(object):
         timestamp.
         """
         payload_data = self._registration_message_payload(schema_id, last_seen_timestamp)
-        return RegistrationMessage(schema_id=self.registration_schema().schema_id,
+        return RegistrationMessage(schema_id=self.registration_schema.schema_id,
                                    payload_data=payload_data)
 
     def _registration_message_payload(self, schema_id, last_seen_timestamp):
@@ -90,8 +91,9 @@ class Registrar(object):
             "schema_id": schema_id
         }
 
+    @cached_property
     def registration_schema(self):
-        schema_json = self._registration_schema()
+        schema_json = self._registration_schema
         return get_schematizer().register_schema(
             namespace=schema_json['namespace'],
             source=schema_json['name'],
@@ -100,6 +102,7 @@ class Registrar(object):
             contains_pii=False
         )
 
+    @cached_property
     def _registration_schema(self):
         schema_file = os.path.join(
             os.path.dirname(__file__),

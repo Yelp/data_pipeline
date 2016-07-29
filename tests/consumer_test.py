@@ -492,7 +492,8 @@ class TestConsumerRegistration(TestReaderSchemaMapFixedSchemas):
                 consumer_name='test_consumer',
                 team_name='bam',
                 expected_frequency_seconds=ExpectedFrequency.constantly,
-                topic_to_consumer_topic_state_map={'topic': fake_topic}
+                topic_to_consumer_topic_state_map={'topic': fake_topic,
+                                                   'topic2': None}
             )
             assert func_spy.call_count == 1
 
