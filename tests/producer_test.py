@@ -176,11 +176,9 @@ class TestProducerRegistration(TestProducerBase):
 
     def test_producer_periodic_registration_messages(self, producer_instance):
         """
-        Tests that published messages by the Producer causes the internal state of the
-        Producer to update, and asserts that the registration messages from the Producer
-        are sent periodically.
-
-        Note: Tests fails when threshold is set significanly below 1 second
+        Note: Tests fails when threshold is set significanly below 1 second, presumably
+              because of the nature of threading. Should be irrelevant if the threshold
+              in registrar is set significantly higher.
         """
         with producer_instance as producer:
             with attach_spy_on_func(
@@ -190,7 +188,10 @@ class TestProducerRegistration(TestProducerBase):
                 producer.publish(CreateMessage(schema_id=1, payload=bytes("FAKE MESSAGE")))
                 producer.registrar.threshold = 1
                 producer.registrar.start()
-                producer.publish(CreateMessage(schema_id=2, payload=bytes("DIFFERENT FAKE MESSAGE")))
+                producer.publish(CreateMessage(
+                    schema_id=2,
+                    payload=bytes("DIFFERENT FAKE MESSAGE")
+                ))
                 time.sleep(1.5)
                 producer.registrar.stop()
                 assert func_spy.call_count == 3

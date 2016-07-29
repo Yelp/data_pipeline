@@ -7,7 +7,7 @@
 flake8
 honcho
 ipdb
-ipython>=5.0.0
+ipython
 mock
 pre-commit>=0.4.2
 # Later versions should be ok once INFRA-3779 is fixed

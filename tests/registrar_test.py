@@ -61,9 +61,8 @@ class TestRegistration(object):
         schema_id_list = [1, 4, 11]
         client.registrar.register_tracked_schema_ids(schema_id_list)
         schema_map = client.registrar.schema_to_last_seen_time_map
-        for schema_id in schema_id_list:
-            assert schema_map[schema_id] is None
-        # TODO([DATAPIPE-1192|mkohli]): Assert that registration message was sent
+        expected = {1: None, 4: None, 11: None}
+        assert schema_map == expected
 
     def test_update_first_time_used_timestamp(self, schema_last_used_timestamp):
         """
@@ -73,7 +72,7 @@ class TestRegistration(object):
         client = self._build_client()
         client.registrar.update_schema_last_used_timestamp(11, schema_last_used_timestamp)
         schema_map = client.registrar.schema_to_last_seen_time_map
-        assert schema_map.get(11) == schema_last_used_timestamp
+        assert schema_map[11] == schema_last_used_timestamp
 
     def test_update_to_later_used_timestamp(self, schema_last_used_timestamp):
         """
@@ -88,7 +87,7 @@ class TestRegistration(object):
         client.registrar.update_schema_last_used_timestamp(1, timestamp_before)
         client.registrar.update_schema_last_used_timestamp(1, timestamp_after)
         schema_map = client.registrar.schema_to_last_seen_time_map
-        assert schema_map.get(1) == timestamp_after
+        assert schema_map[1] == timestamp_after
 
     def test_update_with_earlier_used_timestamp(self, schema_last_used_timestamp):
         """
@@ -103,7 +102,7 @@ class TestRegistration(object):
         client.registrar.update_schema_last_used_timestamp(4, timestamp_after)
         client.registrar.update_schema_last_used_timestamp(4, timestamp_before)
         schema_map = client.registrar.schema_to_last_seen_time_map
-        assert schema_map.get(4) == timestamp_after
+        assert schema_map[4] == timestamp_after
 
     def test_periodic_wake_calls(self):
         """

@@ -175,10 +175,10 @@ class Producer(Client):
         """
         self._kafka_producer.publish(message)
         self.monitor.record_message(message)
-
-        # Update state in registrar for Producer/Consumer registration (in millis)
-        self.registrar.update_schema_last_used_timestamp(message.schema_id,
-                                                         long(1000 * time.time()))
+        self.registrar.update_schema_last_used_timestamp(
+            message.schema_id,
+            timestamp_in_milliseconds=long(1000 * time.time())
+        )
 
     def ensure_messages_published(self, messages, topic_offsets):
         """This method should only be used when recovering after an unclean

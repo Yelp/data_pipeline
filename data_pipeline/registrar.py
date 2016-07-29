@@ -29,10 +29,12 @@ class Registrar(object):
         client_name (str): name of the associated client.
         client_type (str): type of the client the _Registrar is associated to.
             Could be either producer or consumer.
-        expected_frequency_seconds (int):
+        expected_frequency_seconds (int): How frequently, in seconds, that the client expects
+            to run to produce or consume messages.
         threshold (int): The amount of time that should elapse in between the client sending
             registration messages (seconds).
     """
+
     # Default period for sending registration msg is 10 min
     DEFAULT_REGISTRATION_THRESHOLD_SECONDS = 600
 
@@ -65,11 +67,10 @@ class Registrar(object):
         This function will convert the internal state of the registrar into instances of
         the RegistrationMessage class.
         """
-        registration_messages = []
-        for schema_id in self.schema_to_last_seen_time_map:
-            last_seen_timestamp = self.schema_to_last_seen_time_map.get(schema_id)
-            registration_messages.append(self._create_registration_message(schema_id,
-                                                                           last_seen_timestamp))
+        registration_messages = [
+            self._create_registration_message(schema_id, timestamp)
+            for schema_id, timestamp in self.schema_to_last_seen_time_map.iteritems()
+        ]
         return registration_messages
 
     def _create_registration_message(self, schema_id, last_seen_timestamp):
@@ -78,8 +79,10 @@ class Registrar(object):
         timestamp.
         """
         payload_data = self._registration_message_payload(schema_id, last_seen_timestamp)
-        return RegistrationMessage(schema_id=self.registration_schema.schema_id,
-                                   payload_data=payload_data)
+        return RegistrationMessage(
+            schema_id=self.registration_schema.schema_id,
+            payload_data=payload_data
+        )
 
     def _registration_message_payload(self, schema_id, last_seen_timestamp):
         return {
@@ -113,9 +116,8 @@ class Registrar(object):
         return simplejson.loads(schema_string)
 
     def register_tracked_schema_ids(self, schema_id_list):
-        """This function is used to specify the lsit of avro schema IDs that this Client
-            will use. When called it, it will reset the information about when each schema ID
-            in schema_id_list was used last.
+        """This function is used to specify the list of avro schema IDs that this Client
+            will use. When called it, it will immediately publish registration messages.
 
         Args:
             schema_id_list (list[int]): List of the schema IDs that the client will use.
@@ -124,7 +126,7 @@ class Registrar(object):
             self.schema_to_last_seen_time_map[schema_id] = None
         self.publish_registration_messages()
 
-    def update_schema_last_used_timestamp(self, schema_id, timestamp):
+    def update_schema_last_used_timestamp(self, schema_id, timestamp_in_milliseconds):
         """
         This function updates the last time that the given schema_id was used to value
         timestamp if the given timestamp occurred more recently than the last time the
@@ -135,12 +137,12 @@ class Registrar(object):
 
         Args:
             schema_id (int): Schema IDs of the message the Client received.
-            timestamp (long): The utc time of the message that the Client received in milliseconds.
+            timestamp_in_milliseconds (long): The utc time of the message that the Client
+                                              received in milliseconds.
         """
-
         current_timestamp = self.schema_to_last_seen_time_map.get(schema_id)
-        if current_timestamp is None or timestamp > current_timestamp:
-            self.schema_to_last_seen_time_map[schema_id] = timestamp
+        if current_timestamp is None or timestamp_in_milliseconds > current_timestamp:
+            self.schema_to_last_seen_time_map[schema_id] = timestamp_in_milliseconds
 
     def start(self):
         """Start periodically sending registration messages"""

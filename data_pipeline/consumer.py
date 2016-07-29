@@ -207,7 +207,10 @@ class Consumer(BaseConsumer):
             )
             messages.append(message)
             # Update state in registrar for Producer/Consumer registration in milliseconds
-            self.registrar.update_schema_last_used_timestamp(message.schema_id, long(1000 * time()))
+            self.registrar.update_schema_last_used_timestamp(
+                message.reader_schema_id,
+                timestamp_in_milliseconds=long(1000 * time())
+            )
 
             if not blocking or (has_timeout and time() > max_time):
                 break
