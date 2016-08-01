@@ -276,7 +276,8 @@ class IntrospectorCommand(object):
         self,
         namespace_name=None,
         sort_by=None,
-        descending_order=False
+        descending_order=False,
+        active_sources=False
     ):
         if namespace_name:
             sources = self.schematizer.get_sources_by_namespace(namespace_name)
@@ -290,7 +291,7 @@ class IntrospectorCommand(object):
         sources = [
             IntrospectorSource(
                 source,
-                active_sources=self.active_sources
+                active_sources=(self.active_sources if active_sources else None)
             ).to_ordered_dict() for source in sources
         ]
         sources.sort(key=lambda source: source['source_id'], reverse=True)
@@ -301,13 +302,14 @@ class IntrospectorCommand(object):
     def list_namespaces(
         self,
         sort_by=None,
-        descending_order=False
+        descending_order=False,
+        active_namespaces=False
     ):
         namespaces = self.schematizer.get_namespaces()
         namespaces = [
             IntrospectorNamespace(
                 namespace,
-                active_namespaces=self.active_namespaces
+                active_namespaces=(self.active_namespaces if active_namespaces else None)
             ).to_ordered_dict() for namespace in namespaces
         ]
         namespaces.sort(key=lambda namespace: namespace['namespace_id'], reverse=True)

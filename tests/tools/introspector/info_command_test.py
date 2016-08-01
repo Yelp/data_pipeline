@@ -90,14 +90,14 @@ class TestSourceInfoCommand(TestIntrospectorBase):
         source_dict = command.info_source(
             source_id=source_obj.source_id,
             source_name=None,
-            namespace_name=None
+            namespace_name=None,
+            active_sources=False
         )
         self._assert_source_equals_source_dict(
             source=source_obj,
             source_dict=source_dict,
             namespace_name=namespace_one,
-            source_name=source_one_inactive,
-            active_topic_count=0
+            source_name=source_one_inactive
         )
         source_topics = source_dict['topics']
         assert len(source_topics) == 2
@@ -149,7 +149,8 @@ class TestSourceInfoCommand(TestIntrospectorBase):
         source_dict = command.info_source(
             source_id=None,
             source_name=source_one_active,
-            namespace_name=namespace_one
+            namespace_name=namespace_one,
+            active_sources=True
         )
         source_obj = topic_one_active.source
         self._assert_source_equals_source_dict(
@@ -189,20 +190,30 @@ class TestNamespaceInfoCommand(TestIntrospectorBase):
         assert e.value.args
         assert "Given namespace doesn't exist" in e.value.args[0]
 
+    @pytest.mark.parametrize(
+        "assert_active_counts",
+        [True, False],
+        ids=['with_active_namespaces', 'without_active_namespaces']
+    )
     def test_info_namespace(
         self,
         command,
         namespace_two,
         source_two_inactive,
         source_two_active,
-        topic_two_active
+        topic_two_active,
+        assert_active_counts
     ):
         namespace_obj = topic_two_active.source.namespace
-        namespace_dict = command.info_namespace(namespace_two)
+        namespace_dict = command.info_namespace(
+            namespace_two,
+            active_namespaces=assert_active_counts
+        )
         self._assert_namespace_equals_namespace_dict(
             namespace=namespace_obj,
             namespace_dict=namespace_dict,
-            namespace_name=namespace_two
+            namespace_name=namespace_two,
+            assert_active_counts=assert_active_counts
         )
         namespace_sources = namespace_dict['sources']
         assert len(namespace_sources) == 2

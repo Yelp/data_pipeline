@@ -261,6 +261,19 @@ class BaseConsumer(Client):
                 consumer_topic_state.partition_offset_map.keys()
                 if consumer_topic_state else None
             )
+        self._set_registrar_tracked_schema_ids(topic_to_consumer_topic_state_map)
+
+    def _set_registrar_tracked_schema_ids(self, topic_to_consumer_topic_state_map):
+        """
+        Register what schema ids to track based on the topic map passed in
+        on initialization and during topic change.
+        """
+        schema_id_list = [
+            consumer_topic_state.last_seen_schema_id
+            for consumer_topic_state in topic_to_consumer_topic_state_map.itervalues()
+            if consumer_topic_state and consumer_topic_state.last_seen_schema_id
+        ]
+        self.registrar.register_tracked_schema_ids(schema_id_list)
 
     @cached_property
     def kafka_client(self):
