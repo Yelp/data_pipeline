@@ -36,6 +36,8 @@ class Config(object):
                     kafka_cluster_type: datapipe
                     kafka_cluster_name: uswest2-devc
                     skip_messages_with_pii: True
+                - namespace: clog
+                  file: /nail/srv/configs/clog.yaml
     """
     YOCALHOST = '169.254.255.254'
 
@@ -85,6 +87,15 @@ class Config(object):
                 'schematizer_host_and_port',
                 default='{0}:49256'.format(self.YOCALHOST)
             )
+
+    @property
+    def topic_refresh_frequency_seconds(self):
+        """The frequency how often the Consumer refreshes the consumer source
+        topics from the Schematizer.  The frequency is specified in seconds,
+        default to 300 seconds (5 minutes).  The Consumer will automatically
+        start consuming messages from newly picked-up topics.
+        """
+        return data_pipeline_conf.read_float('topic_refresh_frequency_seconds', 300)
 
     @property
     def load_schematizer_host_and_port_from_smartstack(self):

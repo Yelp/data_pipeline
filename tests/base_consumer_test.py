@@ -13,11 +13,11 @@ import pytest
 
 from data_pipeline.base_consumer import ConsumerTopicState
 from data_pipeline.base_consumer import TopicFilter
+from data_pipeline.consumer_source import FixedSchemas
 from data_pipeline.consumer_source import FixedTopics
 from data_pipeline.consumer_source import NewTopicOnlyInDataTarget
 from data_pipeline.consumer_source import NewTopicOnlyInSource
 from data_pipeline.consumer_source import NewTopicsOnlyInFixedNamespaces
-from data_pipeline.consumer_source import SingleSchema
 from data_pipeline.consumer_source import TopicInDataTarget
 from data_pipeline.consumer_source import TopicInSource
 from data_pipeline.consumer_source import TopicsInFixedNamespaces
@@ -30,7 +30,7 @@ from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from tests.helpers.mock_utils import attach_spy_on_func
 
 
-TIMEOUT = 1.0
+TIMEOUT = 1.8
 """ TIMEOUT is used for all 'get_messages' calls in these tests. It's
 essential that this value is large enough for the background workers
 to have a chance to retrieve the messages, but otherwise as small
@@ -273,7 +273,11 @@ class BaseConsumerTest(object):
                 consumer=consumer,
                 expected_message=message
             )
-            messages = consumer.get_messages(count=2, blocking=True, timeout=TIMEOUT)
+            messages = consumer.get_messages(
+                count=2,
+                blocking=True,
+                timeout=TIMEOUT
+            )
             asserter.assert_messages(messages, expected_count=2)
 
     def test_get_messages_then_reset(
@@ -319,6 +323,44 @@ class BaseConsumerTest(object):
                 timeout=TIMEOUT
             )
             asserter.assert_messages(messages, expected_count=2)
+
+
+class BaseConsumerSourceBaseTest(object):
+
+    @pytest.fixture
+    def consumer_group_name(self):
+        return 'test_consumer_{}'.format(random.random())
+
+    @pytest.fixture
+    def pre_rebalance_callback(self):
+        return mock.Mock()
+
+    @pytest.fixture
+    def post_rebalance_callback(self):
+        return mock.Mock()
+
+    @pytest.fixture(params=[False, True])
+    def force_payload_decode(self, request):
+        return request.param
+
+    @pytest.yield_fixture
+    def producer(self, team_name):
+        with Producer(
+            producer_name='producer_1',
+            team_name=team_name,
+            expected_frequency_seconds=ExpectedFrequency.constantly,
+            use_work_pool=False
+        ) as producer:
+            yield producer
+
+    @pytest.fixture
+    def publish_messages(self, producer):
+        def _publish_messages(message, count):
+            assert count > 0
+            for _ in range(count):
+                producer.publish(message)
+            producer.flush()
+        return _publish_messages
 
 
 class ConsumerAsserter(object):
@@ -517,7 +559,6 @@ class RefreshNewTopicsTest(object):
             monitoring_enabled=False
         ) as producer:
             message = UpdateMessage(
-                topic=str(avro_schema.topic.name),
                 schema_id=avro_schema.schema_id,
                 payload_data={'id': 2},
                 previous_payload_data={'id': 1}
@@ -590,7 +631,10 @@ class RefreshNewTopicsTest(object):
         )
         biz_topic = biz_schema.topic
         assert new_topics == [biz_topic]
-        mock_pre_topic_refresh_callback_handler.assert_called_once_with(old_topic_names, [biz_topic.name])
+        mock_pre_topic_refresh_callback_handler.assert_called_once_with(
+            old_topic_names,
+            [biz_topic.name]
+        )
 
     def _get_utc_timestamp(self, dt):
         return int((dt - datetime.datetime(1970, 1, 1)).total_seconds())
@@ -734,7 +778,6 @@ class RefreshTopicsTestBase(object):
             monitoring_enabled=False
         ) as producer:
             message = UpdateMessage(
-                topic=str(avro_schema.topic.name),
                 schema_id=avro_schema.schema_id,
                 payload_data={'id': 2},
                 previous_payload_data={'id': 1}
@@ -756,7 +799,14 @@ class RefreshTopicsTestBase(object):
 
 class RefreshFixedTopicTests(RefreshTopicsTestBase):
 
-    def test_get_topics(self, consumer, consumer_source, expected_topics, topic, partitions):
+    def test_get_topics(
+        self,
+        consumer,
+        consumer_source,
+        expected_topics,
+        topic,
+        partitions
+    ):
         expected_map = {topic: partitions}
         expected_map.update({topic: partitions for topic in expected_topics})
 
@@ -800,6 +850,26 @@ class RefreshFixedTopicTests(RefreshTopicsTestBase):
         self._assert_equal_partition_map(
             actual_map=consumer.topic_to_partition_map,
             expected_map={topic: partitions}
+        )
+
+
+class TopicsInFixedNamespacesAutoRefreshSetupMixin(object):
+
+    @pytest.fixture
+    def consumer_source(self, registered_auto_refresh_schema):
+        return TopicsInFixedNamespaces(
+            registered_auto_refresh_schema.topic.source.namespace.name
+        )
+
+
+class TopicInSourceAutoRefreshSetupMixin(object):
+
+    @pytest.fixture
+    def consumer_source(self, registered_auto_refresh_schema):
+        return TopicInSource(
+            namespace_name=registered_auto_refresh_schema.
+            topic.source.namespace.name,
+            source_name=registered_auto_refresh_schema.topic.source.name
         )
 
 
@@ -848,24 +918,61 @@ class MultiTopicsSetupMixin(RefreshFixedTopicTests):
         return FixedTopics('bad_topic_1', 'bad_topic_2')
 
 
-class SingleSchemaSetupMixin(RefreshFixedTopicTests):
+class FixedSchemasSetupMixin(RefreshFixedTopicTests):
 
     @pytest.fixture
-    def expected_topics(self, foo_schema):
-        return [foo_schema.topic.name]
+    def consumer_source(self, foo_schema, foo_schema2):
+        return FixedSchemas(
+            foo_schema.schema_id,
+            foo_schema2.schema_id,
+        )
 
     @pytest.fixture
-    def consumer_source(self, foo_schema):
-        return SingleSchema(schema_id=foo_schema.schema_id)
+    def foo_schema(
+        self,
+        foo_namespace,
+        foo_src,
+        _register_schema
+    ):
+        return _register_schema(foo_namespace, foo_src)
+
+    @pytest.fixture
+    def foo_schema2(
+        self,
+        foo_namespace,
+        foo_src,
+        _register_schema,
+    ):
+        avro_schema2 = {
+            'type': 'record',
+            'name': foo_src,
+            'doc': 'test',
+            'namespace': foo_namespace,
+            'fields': [{'type': 'int', 'name': 'id1', 'doc': 'test'}]
+        }
+        return _register_schema(foo_namespace, foo_src, avro_schema2)
+
+    @pytest.fixture
+    def expected_topics(self, foo_schema, foo_schema2):
+        return {
+            foo_schema.topic.name,
+            foo_schema2.topic.name
+        }
 
     @pytest.fixture
     def bad_consumer_source(self, schema_with_bad_topic):
-        return SingleSchema(schema_id=schema_with_bad_topic.schema_id)
+        return FixedSchemas(schema_with_bad_topic.schema_id)
 
 
 class RefreshDynamicTopicTests(RefreshTopicsTestBase):
 
-    def test_no_topics_in_consumer_source(self, consumer, consumer_source, topic, partitions):
+    def test_no_topics_in_consumer_source(
+        self,
+        consumer,
+        consumer_source,
+        topic,
+        partitions
+    ):
         actual = consumer.refresh_topics(consumer_source)
         assert actual == []
         self._assert_equal_partition_map(
@@ -932,7 +1039,13 @@ class RefreshDynamicTopicTests(RefreshTopicsTestBase):
             expected_map={topic: partitions, foo_topic: partitions}
         )
 
-    def test_bad_consumer_source(self, consumer, bad_consumer_source, topic, partitions):
+    def test_bad_consumer_source(
+        self,
+        consumer,
+        bad_consumer_source,
+        topic,
+        partitions
+    ):
         actual = consumer.refresh_topics(bad_consumer_source)
 
         assert actual == []
@@ -959,7 +1072,10 @@ class RefreshDynamicTopicTests(RefreshTopicsTestBase):
 
 class TopicsInFixedNamespacesSetupMixin(RefreshDynamicTopicTests):
 
-    @pytest.fixture(params=[TopicsInFixedNamespaces, NewTopicsOnlyInFixedNamespaces])
+    @pytest.fixture(params=[
+        TopicsInFixedNamespaces,
+        NewTopicsOnlyInFixedNamespaces
+    ])
     def consumer_source_cls(self, request):
         return request.param
 

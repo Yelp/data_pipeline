@@ -59,7 +59,7 @@ install-hooks:
 itest_%:
 	make -C yelp_package $@
 
-# Steps to release (Don't do this if your not a pushmaster - see "Pushing Code"
+# Steps to release (Don't do this if you are not a pushmaster - see "Pushing Code"
 # on y/datapipeline)
 # 1. `make prepare-release`
 # 2. `make release`

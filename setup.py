@@ -27,11 +27,11 @@ setup(
     packages=find_packages(exclude=['tests*', 'benchmarks*']),
     include_package_data=True,
     install_requires=[
-        'avro==1.10.0',
+        'avro==1.9.0-yelp3',
         'cached-property>=0.1.5',
         'cffi>=1.1.2',
         'enum34>=1.0.4',
-        'kafka-python==0.9.5.post3',
+        'kafka-python==0.9.5.post4',
         'psutil==4.2.0',
         'pycrypto>=2.6.1',
         'PyStaticConfiguration>=0.9.0',
@@ -41,6 +41,7 @@ setup(
         'yelp-kafka>=4.2.0',
         'yelp-lib>=10.0.5',
         'yelp-servlib>=4.3.0',
+        'cryptography<=1.3.4',
     ],
     extras_require={
         'tools': [

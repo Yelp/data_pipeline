@@ -12,8 +12,12 @@ import simplejson as json
 from kafka.common import FailedPayloadsError
 from kafka.common import ProduceRequest
 from kafka.common import ProduceResponse
+from yelp_avro.avro_string_reader import AvroStringReader
+from yelp_avro.avro_string_writer import AvroStringWriter
 
+import data_pipeline._clog_writer
 import data_pipeline.producer
+from data_pipeline._clog_writer import ClogWriter
 from data_pipeline._encryption_helper import EncryptionHelper
 from data_pipeline._kafka_producer import _EnvelopeAndMessage
 from data_pipeline._kafka_producer import _prepare
@@ -80,6 +84,12 @@ class TestProducerBase(object):
         return topic_name
 
     @pytest.fixture(scope="module", autouse=True)
+    def topic_with_pkey(self, registered_schema_with_pkey, containers):
+        topic_name = str(registered_schema_with_pkey.topic.name)
+        containers.create_kafka_topic(topic_name)
+        return topic_name
+
+    @pytest.fixture(scope="module", autouse=True)
     def pii_topic(self, pii_schema, containers):
         topic_name = str(pii_schema.topic.name)
         containers.create_kafka_topic(topic_name)
@@ -130,6 +140,61 @@ class TestProducerBase(object):
     @pytest.fixture
     def message(self, create_message):
         return create_message()
+
+
+class TestClogWriter(TestProducerBase):
+
+    def test_publish_clog(self, message):
+        with mock.patch.object(
+            data_pipeline._clog_writer.clog,
+            'log_line',
+            return_value=None
+        ) as mock_log_line:
+            writer = ClogWriter()
+            writer.publish(message)
+        assert mock_log_line.called
+
+    def test_log_error_on_exception(self, message):
+        with mock.patch.object(
+            data_pipeline._clog_writer.clog,
+            'log_line',
+            side_effect=RandomException()
+        ) as mock_log_line, mock.patch.object(
+            data_pipeline._clog_writer,
+            'logger'
+        ) as mock_logger:
+            writer = ClogWriter()
+            writer.publish(message)
+
+        call_args = "Failed to scribe message - {}".format(str(message))
+
+        assert mock_log_line.called
+        assert mock_logger.error.call_args_list[0] == mock.call(call_args)
+
+
+class TestProducerRegistration(TestProducerBase):
+
+    def test_producer_periodic_registration_messages(self, producer_instance):
+        """
+        Note: Tests fails when threshold is set significanly below 1 second, presumably
+              because of the nature of threading. Should be irrelevant if the threshold
+              in registrar is set significantly higher.
+        """
+        with producer_instance as producer:
+            with attach_spy_on_func(
+                producer.registrar.clog_writer,
+                'publish'
+            ) as func_spy:
+                producer.publish(CreateMessage(schema_id=1, payload=bytes("FAKE MESSAGE")))
+                producer.registrar.threshold = 1
+                producer.registrar.start()
+                producer.publish(CreateMessage(
+                    schema_id=2,
+                    payload=bytes("DIFFERENT FAKE MESSAGE")
+                ))
+                time.sleep(1.5)
+                producer.registrar.stop()
+                assert func_spy.call_count == 3
 
 
 class TestProducer(TestProducerBase):
@@ -311,7 +376,6 @@ class TestProducer(TestProducerBase):
         assert len(offsets_and_messages) == 1
 
         dp_message = create_from_offset_and_message(
-            message.topic,
             offsets_and_messages[0]
         )
         assert dp_message.payload == message.payload
@@ -330,18 +394,71 @@ class TestProducer(TestProducerBase):
         encrypted_payload = encryption_helper.encrypt_payload(message.payload)
         assert unpacked_message['payload'] == encrypted_payload
 
-    def test_publish_message_with_keys(self, create_message, producer):
-        sample_keys = (u'key1=\'', u'key2=\\', u'key3=哎ù\x1f')
-        expected_keys = '\'key1=\\\'\'\x1f\'key2=\\\\\'\x1f\'key3=哎ù\x1f\''.encode('utf-8')
-        message = create_message(keys=sample_keys)
-
+    def test_publish_message_with_no_keys(
+        self,
+        message,
+        producer
+    ):
         with capture_new_messages(message.topic) as get_messages:
             producer.publish(message)
             producer.flush()
             offsets_and_messages = get_messages()
-
         assert len(offsets_and_messages) == 1
-        assert offsets_and_messages[0].message.key == expected_keys
+
+        dp_message = create_from_offset_and_message(
+            offsets_and_messages[0]
+        )
+        assert dp_message.keys == {}
+
+    def test_publish_message_with_keys(
+        self,
+        message_with_pkeys,
+        producer
+    ):
+        expected_keys_avro_json = {
+            "type": "record",
+            "namespace": "yelp.data_pipeline",
+            "name": "primary_keys",
+            "doc": "Represents primary keys present in Message payload.",
+            "fields": [
+                {"type": "string", "name": "field2", "doc": "test", "pkey": 1},
+                {"type": "int", "name": "field1", "doc": "test", "pkey": 2},
+                {"type": "int", "name": "field3", "doc": "test", "pkey": 3},
+            ]
+        }
+        expected_keys = {
+            "field2": message_with_pkeys.payload_data["field2"],
+            "field1": message_with_pkeys.payload_data["field1"],
+            "field3": message_with_pkeys.payload_data["field3"]
+        }
+
+        with capture_new_messages(message_with_pkeys.topic) as get_messages:
+            producer.publish(message_with_pkeys)
+            producer.flush()
+            offsets_and_messages = get_messages()
+        assert len(offsets_and_messages) == 1
+
+        dp_message = create_from_offset_and_message(
+            offsets_and_messages[0]
+        )
+        assert dp_message.keys == expected_keys
+
+        avro_string_writer = AvroStringWriter(
+            schema=expected_keys_avro_json
+        )
+        expected_encoded_keys = avro_string_writer.encode(
+            message_avro_representation=expected_keys
+        )
+        assert offsets_and_messages[0].message.key == expected_encoded_keys
+
+        avro_string_reader = AvroStringReader(
+            reader_schema=expected_keys_avro_json,
+            writer_schema=expected_keys_avro_json
+        )
+        decoded_keys = avro_string_reader.decode(
+            encoded_message=offsets_and_messages[0].message.key
+        )
+        assert decoded_keys == expected_keys
 
 
 class TestPublishMonitorMessage(TestProducerBase):

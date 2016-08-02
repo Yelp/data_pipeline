@@ -53,13 +53,11 @@ class TestIntrospectorBase(object):
 
     def _create_message(
         self,
-        topic,
         schema,
         payload,
         **kwargs
     ):
         return CreateMessage(
-            topic=str(topic.name),
             schema_id=schema.schema_id,
             payload=payload,
             timestamp=1500,
@@ -184,7 +182,6 @@ class TestIntrospectorBase(object):
         payload_one
     ):
         message = self._create_message(
-            topic=topic_one_active,
             schema=schema_one_active,
             payload=payload_one
         )
@@ -202,7 +199,6 @@ class TestIntrospectorBase(object):
         payload_two
     ):
         message = self._create_message(
-            topic=topic_two_active,
             schema=schema_two_active,
             payload=payload_two
         )

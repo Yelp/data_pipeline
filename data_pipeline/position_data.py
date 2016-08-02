@@ -33,9 +33,8 @@ class PositionData(namedtuple("PositionData", [
         >>> from data_pipeline.message import CreateMessage
         >>> with Producer() as producer:
         ...     producer.publish(CreateMessage(
-        ...         str('my-topic'),
-        ...         10,
-        ...         bytes(10),
+        ...         schema_id=10,
+        ...         payload=bytes(10),
         ...         upstream_position_info={str('upstream_offset'): str('offset-info')}
         ...     ))
         ...     producer.flush()

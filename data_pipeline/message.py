@@ -14,6 +14,7 @@ from data_pipeline._encryption_helper import EncryptionHelper
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
+from data_pipeline.helpers.yelp_avro_store import _AvroStringStore
 from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType
 from data_pipeline.meta_attribute import MetaAttribute
@@ -56,7 +57,9 @@ class Message(object):
     :class:`data_pipeline.message.RefreshMessage`.
 
     Args:
-        schema_id (int): Identifies the schema used to encode the payload
+        schema_id (int): Identifies the schema used to encode the payload.
+        reader_schema_id (Optional[int]): Identifies the schema used to decode
+            the payload.
         topic (Optional[str]): Kafka topic to publish into.  It is highly
             recommended to leave it unassigned and let the Schematizer decide
             the topic of the schema.  Use caution when overriding the topic.
@@ -147,6 +150,10 @@ class Message(object):
     @property
     def schema_id(self):
         return self._avro_payload.schema_id
+
+    @property
+    def reader_schema_id(self):
+        return self._avro_payload.reader_schema_id
 
     @property
     def message_type(self):
@@ -294,14 +301,49 @@ class Message(object):
 
     @property
     def keys(self):
+        """Currently this support primary keys for flat record
+        type avro schema. Support for primary keys in nested
+        avro schema will be handled in future versions.
+        """
+        if self._keys is not None:
+            return self._keys
+        self._set_keys()
         return self._keys
 
-    def _set_keys(self, keys):
-        if not self._is_valid_optional_type(keys, tuple):
-            raise TypeError("Keys must be None or a tuple.")
-        if self._any_invalid_type(keys, unicode):
-            raise TypeError("Element of keys must be unicode.")
-        self._keys = keys
+    def _set_keys(self):
+        avro_schema = self._schematizer.get_schema_by_id(self.schema_id)
+        self._keys = {
+            key: self.payload_data[key] for key in avro_schema.primary_keys
+        }
+
+    @property
+    def encoded_keys(self):
+        writer = _AvroStringStore().get_writer(
+            id_key="{0}_{1}".format("keys", self.schema_id),
+            avro_schema=self._keys_avro_json
+        )
+        return writer.encode(message_avro_representation=self.keys)
+
+    def _extract_key_fields(self):
+        avro_schema = self._schematizer.get_schema_by_id(
+            self.schema_id
+        )
+        schema_json = avro_schema.schema_json
+
+        fields = schema_json.get('fields', [])
+        field_name_to_field = {f['name']: f for f in fields}
+        key_fields = [field_name_to_field[pkey] for pkey in avro_schema.primary_keys]
+        return key_fields
+
+    @property
+    def _keys_avro_json(self):
+        return {
+            "type": "record",
+            "namespace": "yelp.data_pipeline",
+            "name": "primary_keys",
+            "doc": "Represents primary keys present in Message payload.",
+            "fields": self._extract_key_fields()
+        }
 
     @property
     def payload(self):
@@ -320,6 +362,7 @@ class Message(object):
     def __init__(
         self,
         schema_id,
+        reader_schema_id=None,
         topic=None,
         payload=None,
         payload_data=None,
@@ -352,6 +395,7 @@ class Message(object):
             warnings.warn("Passing in topics explicitly is deprecated.", DeprecationWarning)
         self._avro_payload = _AvroPayload(
             schema_id=schema_id,
+            reader_schema_id=reader_schema_id,
             payload=payload,
             payload_data=payload_data,
             dry_run=dry_run
@@ -363,7 +407,10 @@ class Message(object):
         self._set_timestamp(timestamp)
         self._set_upstream_position_info(upstream_position_info)
         self._set_kafka_position_info(kafka_position_info)
-        self._set_keys(keys)
+        if keys is not None:
+            warnings.simplefilter("always", category=DeprecationWarning)
+            warnings.warn("Passing in keys explicitly is deprecated.", DeprecationWarning)
+        self._keys = None
         self._set_meta(meta)
         self._should_be_encrypted_state = None
         self._encryption_type = None
@@ -398,7 +445,7 @@ class Message(object):
     def create_from_unpacked_message(
         cls,
         unpacked_message,
-        topic,
+        reader_schema_id=None,
         kafka_position_info=None
     ):
         encryption_type = unpacked_message['encryption_type']
@@ -415,14 +462,10 @@ class Message(object):
             ).iteritems()
         }
 
-        # TODO [clin|DATAPIPE-1004, DATAPIPE-1010] Right now it explicitly
-        # passes the topic via the constructor to avoid retrieving it from
-        # the schematizer. Later, once the topic is lazily retrieved, it
-        # should set the topic in the same way as setting encryption type.
         message_params = {
             'uuid': unpacked_message['uuid'],
-            'topic': topic,
             'schema_id': unpacked_message['schema_id'],
+            'reader_schema_id': reader_schema_id,
             'timestamp': unpacked_message['timestamp'],
             'meta': meta,
             'kafka_position_info': kafka_position_info
@@ -582,6 +625,13 @@ class MonitorMessage(Message):
         raise InvalidOperation()
 
 
+class RegistrationMessage(Message):
+    _message_type = _ProtectedMessageType.registration
+
+    def _get_field_diff(self, field):
+        raise InvalidOperation()
+
+
 class UpdateMessage(Message):
     """Message for update type. This type of message requires previous
     payload in addition to the payload.
@@ -604,6 +654,7 @@ class UpdateMessage(Message):
     def __init__(
         self,
         schema_id,
+        reader_schema_id=None,
         topic=None,
         payload=None,
         payload_data=None,
@@ -620,6 +671,7 @@ class UpdateMessage(Message):
     ):
         super(UpdateMessage, self).__init__(
             schema_id,
+            reader_schema_id,
             topic=topic,
             payload=payload,
             payload_data=payload_data,
@@ -634,6 +686,7 @@ class UpdateMessage(Message):
         )
         self._previous_avro_payload = _AvroPayload(
             schema_id=schema_id,
+            reader_schema_id=reader_schema_id,
             payload=previous_payload,
             payload_data=previous_payload_data,
             dry_run=dry_run
@@ -724,16 +777,15 @@ _message_type_to_class_map = {
 
 
 def create_from_kafka_message(
-    topic,
     kafka_message,
-    force_payload_decoding=True
+    force_payload_decoding=True,
+    reader_schema_id=None
 ):
-    """ Build a data_pipeline.message.Message from a yelp_kafka message
+    """ Build a data_pipeline.message.Message from a yelp_kafka message. If no
+    reader schema id is provided, the schema used for encoding will be used for
+    decoding.
 
     Args:
-        topic (str): The topic name from which the message was received.
-            This parameter is deprecating and currently not used. The topic
-            will be retrieved from the given `kafka_message`.
         kafka_message (kafka.common.KafkaMessage): The message info which
             has the topic, partition, offset, key, and value(payload) of
             the received message.
@@ -741,6 +793,10 @@ def create_from_kafka_message(
             we will decode the payload/previous_payload immediately.
             Otherwise the decoding will happen whenever the lazy *_data
             properties are accessed.
+        reader_schema_id (Optional[int]): Schema id used to decode the
+            kafka_message and build data_pipeline.message.Message message.
+            Defaults to None.
+
 
     Returns (class:`data_pipeline.message.Message`):
         The message object
@@ -751,22 +807,24 @@ def create_from_kafka_message(
         key=kafka_message.key,
     )
     return _create_message_from_packed_message(
-        topic=kafka_message.topic,
         packed_message=kafka_message,
         force_payload_decoding=force_payload_decoding,
-        kafka_position_info=kafka_position_info
+        kafka_position_info=kafka_position_info,
+        reader_schema_id=reader_schema_id
     )
 
 
 def create_from_offset_and_message(
-    topic,
     offset_and_message,
-    force_payload_decoding=True
+    force_payload_decoding=True,
+    reader_schema_id=None
 ):
-    """ Build a data_pipeline.message.Message from a kafka.common.OffsetAndMessage
+    """
+    Build a data_pipeline.message.Message from a kafka.common.OffsetAndMessage.
+    If no reader schema id is provided, the schema used for encoding will be
+    used for decoding.
 
     Args:
-        topic (str): The topic name from which the message was received.
         offset_and_message (kafka.common.OffsetAndMessage): a namedtuple
             containing the offset and message. Message contains magic,
             attributes, keys and values.
@@ -774,26 +832,31 @@ def create_from_offset_and_message(
             we will decode the payload/previous_payload immediately.
             Otherwise the decoding will happen whenever the lazy *_data
             properties are accessed.
+        reader_schema_id (Optional[int]): Schema id used to decode the incoming
+            kafka message and build data_pipeline.message.Message message.
+            Defaults to None.
 
     Returns (data_pipeline.message.Message):
         The message object
     """
     return _create_message_from_packed_message(
-        topic=topic,
         packed_message=offset_and_message.message,
-        force_payload_decoding=force_payload_decoding
+        force_payload_decoding=force_payload_decoding,
+        reader_schema_id=reader_schema_id
     )
 
 
 def _create_message_from_packed_message(
-    topic,
     packed_message,
     force_payload_decoding,
-    kafka_position_info=None
+    kafka_position_info=None,
+    reader_schema_id=None
 ):
-    """ Builds a data_pipeline.message.Message from packed_message
+    """ Builds a data_pipeline.message.Message from packed_message. If no
+    reader schema id is provided, the schema used for encoding will be used for
+    decoding.
+
     Args:
-        topic (str): the topic name where the message comes from.
         packed_message (yelp_kafka.consumer.Message or kafka.common.KafkaMessage):
             The message info which has the payload, offset, partition,
             and key of the received message if of type yelp_kafka.consumer.message
@@ -805,6 +868,9 @@ def _create_message_from_packed_message(
         kafka_position_info (Optional[KafkaPositionInfo]): The specified kafka
             position information.  The kafka_position_info may be constructed
             from the unpacked yelp_kafka message.
+        reader_schema_id (Optional[int]): Schema id used to decode the incoming
+            kafka message and build data_pipeline.message.Message message.
+            Defaults to None.
 
     Returns (data_pipeline.message.Message):
         The message object
@@ -813,8 +879,8 @@ def _create_message_from_packed_message(
     message_class = _message_type_to_class_map[unpacked_message['message_type']]
     message = message_class.create_from_unpacked_message(
         unpacked_message=unpacked_message,
-        topic=topic,
-        kafka_position_info=kafka_position_info
+        kafka_position_info=kafka_position_info,
+        reader_schema_id=reader_schema_id
     )
     if force_payload_decoding:
         # Access the cached, but lazily-calculated, properties

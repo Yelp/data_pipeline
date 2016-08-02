@@ -37,13 +37,13 @@ class _AvroPayload(object):
 
     @property
     def reader_schema_id(self):
-        return self._schema_id
+        return self._reader_schema_id
 
     def _set_reader_schema_id(self, reader_schema_id):
         if (reader_schema_id is not None and
                 not isinstance(reader_schema_id, int)):
             raise TypeError("Reader Schema id should be an int")
-        self._reader_schema_id = reader_schema_id
+        self._reader_schema_id = reader_schema_id or self.schema_id
 
     @property
     def dry_run(self):
@@ -145,8 +145,8 @@ class _AvroPayload(object):
     def _avro_string_reader(self):
         """get the reader from store if already exists"""
         return _AvroStringStore().get_reader(
-            reader_schema_id=self.reader_schema_id,
-            writer_schema_id=self.schema_id
+            reader_id_key=self.reader_schema_id,
+            writer_id_key=self.schema_id
         )
 
     def reload_data(self):

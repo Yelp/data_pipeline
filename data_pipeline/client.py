@@ -14,6 +14,7 @@ from data_pipeline._kafka_producer import LoggingKafkaProducer
 from data_pipeline.config import get_config
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import MonitorMessage
+from data_pipeline.registrar import Registrar
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.team import Team
 
@@ -29,7 +30,7 @@ class Client(object):
     Note:
 
         Client will be responsible for producer/consumer registration,
-        which will be implemented in DATAPIPE-157.
+        which will be implemented in DATAPIPE-1154.
 
     Args:
         client_name (str): Name associated with the client - this name will
@@ -98,6 +99,12 @@ class Client(object):
         self.client_name = client_name
         self.team_name = team_name
         self.expected_frequency_seconds = expected_frequency_seconds
+        self.registrar = Registrar(
+            team_name,
+            client_name,
+            self.client_type,
+            self.expected_frequency_seconds
+        )
 
     @property
     def client_name(self):
@@ -227,7 +234,6 @@ class _Monitor(object):
         """
         self.producer.publish(
             MonitorMessage(
-                topic=self.monitor_topic,
                 schema_id=self.monitor_schema_id,
                 payload_data=tracking_info,
                 dry_run=self.dry_run

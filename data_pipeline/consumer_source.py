@@ -103,20 +103,34 @@ class TopicInSource(ConsumerSource):
         return [topic.name for topic in topics]
 
 
-class SingleSchema(ConsumerSource):
-    """Consumer only wants to fetch messages encoded with single Avro schema.
+class FixedSchemas(ConsumerSource):
+    """Consumer tails the topics given a list of schema ids. FixedSchema
+    consumer source has `schema_to_topic_map` map that provides mapping
+    from schema_id to its corresponding topic name.
 
     Args:
-        schema_id (int): the ID of the avro schema registered in the Schematizer.
+        schema_ids (tuple(int)): Variable number of schema IDs of avro schemas
+        registered in the Schematizer.
     """
 
-    def __init__(self, schema_id):
-        if not schema_id:
-            raise ValueError("schema_id must be specified.")
-        self.schema_id = schema_id
+    def __init__(self, *schema_ids):
+        if not any(schema_ids):
+            raise ValueError("At least one schema id must be specified.")
+        self.schema_ids = schema_ids
 
     def get_topics(self):
-        return [self.schematizer.get_schema_by_id(self.schema_id).topic.name]
+        topics = {
+            self.schematizer.get_schema_by_id(schema_id).topic.name
+            for schema_id in self.schema_ids
+        }
+        return list(topics)
+
+    def get_schema_to_topic_map(self):
+        schema_to_topic_map = {
+            schema_id: self.schematizer.get_schema_by_id(schema_id).topic.name
+            for schema_id in self.schema_ids
+        }
+        return schema_to_topic_map
 
 
 class TopicInDataTarget(ConsumerSource):

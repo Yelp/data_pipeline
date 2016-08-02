@@ -78,8 +78,8 @@ class SchematizerClientTestBase(object):
         """
         return get_config().schematizer_client
 
-    def _register_avro_schema(self, namespace, source, **overrides):
-        schema_json = {
+    def _register_avro_schema(self, namespace, source, schema_json=None, **overrides):
+        schema_json = schema_json or {
             'type': 'record',
             'name': source,
             'namespace': namespace,
@@ -203,13 +203,99 @@ class TestGetSchemaElementsBySchemaId(SchematizerClientTestBase):
             schematizer._client.schemas,
             'get_schema_elements_by_schema_id'
         ) as api_spy:
-            actual = schematizer.get_schema_elements_by_schema_id(biz_schema.schema_id)
+            actual = schematizer.get_schema_elements_by_schema_id(
+                biz_schema.schema_id
+            )
             for element in actual:
                 assert element.schema_id == biz_schema.schema_id
             assert api_spy.call_count == 1
 
 
 class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
+
+    @pytest.fixture(autouse=True, scope='class')
+    def sorted_schemas(self, yelp_namespace, biz_src_name):
+        biz_schema = self._register_avro_schema(
+            namespace=yelp_namespace,
+            source=biz_src_name
+        )
+
+        time.sleep(1)
+        schema_json = {
+            'type': 'record',
+            'name': biz_src_name,
+            'namespace': yelp_namespace,
+            'doc': 'test',
+            'fields': [{'type': 'int', 'doc': 'test', 'name': 'simple'}]
+        }
+        simple_schema = self._register_avro_schema(
+            namespace=yelp_namespace,
+            source=biz_src_name,
+            schema_json=schema_json
+        )
+
+        time.sleep(1)
+        schema_json = {
+            'type': 'record',
+            'name': biz_src_name,
+            'namespace': yelp_namespace,
+            'doc': 'test',
+            'fields': [{'type': 'int', 'doc': 'test', 'name': 'baz'}]
+        }
+        baz_schema = self._register_avro_schema(
+            namespace=yelp_namespace,
+            source=biz_src_name,
+            schema_json=schema_json
+        )
+
+        return [biz_schema, simple_schema, baz_schema]
+
+    def test_get_schemas_created_after_date_filter_by_min_id(
+        self,
+        sorted_schemas,
+        schematizer
+    ):
+        created_at = sorted_schemas[0].created_at
+        creation_timestamp = long(
+            (created_at - datetime.utcfromtimestamp(0)).total_seconds()
+        )
+        min_id = sorted_schemas[1].schema_id
+        with self.attach_spy_on_api(
+            schematizer._client.schemas,
+            'get_schemas_created_after'
+        ) as schemas_api_spy:
+            schemas = schematizer.get_schemas_created_after_date(
+                created_after=creation_timestamp,
+                min_id=min_id
+            )
+            for schema in schemas:
+                assert schema.schema_id >= min_id
+            # By default, Schematizer will fetch only 10 schemas at a time.
+            assert schemas_api_spy.call_count == len(schemas) / 10 + 1
+
+    def test_get_schemas_created_after_with_page_size(
+        self,
+        sorted_schemas,
+        schematizer
+    ):
+        created_at = sorted_schemas[0].created_at
+        creation_timestamp = long(
+            (created_at - datetime.utcfromtimestamp(0)).total_seconds()
+        )
+
+        with self.attach_spy_on_api(
+            schematizer._client.schemas,
+            'get_schemas_created_after'
+        ) as schemas_api_spy:
+            schemas = schematizer.get_schemas_created_after_date(
+                created_after=creation_timestamp,
+                min_id=1,
+                page_size=1
+            )
+            # Since page size is 1, we would need to call api endpoint
+            # len(schemas) + 1 times before we get a page with schemas less
+            # than the page size.
+            assert schemas_api_spy.call_count == len(schemas) + 1
 
     def test_get_schemas_created_after_date(self, schematizer):
         created_after_str = "2015-01-01T19:10:26"
@@ -221,10 +307,13 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
             schematizer._client.schemas,
             'get_schemas_created_after'
         ) as api_spy:
-            schemas = schematizer.get_schemas_created_after_date(creation_timestamp)
+            schemas = schematizer.get_schemas_created_after_date(
+                creation_timestamp
+            )
             for schema in schemas:
                 assert schema.created_at >= created_after
-            assert api_spy.call_count == 1
+            # By default, Schematizer will fetch only 10 schemas at a time
+            assert api_spy.call_count == len(schemas) / 10 + 1
 
     def test_get_schemas_created_after_date_filter(self, schematizer):
         created_after_str = "2015-01-01T19:10:26"
@@ -238,14 +327,13 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
                                            '%Y-%m-%dT%H:%M:%S')
         creation_timestamp2 = long((created_after2 -
                                     datetime.utcfromtimestamp(0)).total_seconds())
-        with self.attach_spy_on_api(
-            schematizer._client.schemas,
-            'get_schemas_created_after'
-        ) as api_spy:
-            schemas = schematizer.get_schemas_created_after_date(creation_timestamp)
-            schemas_later = schematizer.get_schemas_created_after_date(creation_timestamp2)
-            assert len(schemas) >= len(schemas_later)
-            assert api_spy.call_count == 2
+        schemas = schematizer.get_schemas_created_after_date(
+            creation_timestamp
+        )
+        schemas_later = schematizer.get_schemas_created_after_date(
+            creation_timestamp2
+        )
+        assert len(schemas) >= len(schemas_later)
 
     def test_get_schemas_created_after_date_cached(self, schematizer):
         created_after_str = "2015-01-01T19:10:26"

@@ -51,7 +51,7 @@ def example_schema(namespace, source):
         "name": "%s",
         "doc":"test",
         "fields":[
-            {"type":"int", "name":"good_field", "doc":"test"}
+            {"type":"int", "name":"good_field", "doc":"test", "default": 1}
         ]
     }
     ''' % (namespace, source)
@@ -65,6 +65,105 @@ def registered_schema(schematizer_client, example_schema, namespace, source):
         schema_str=example_schema,
         source_owner_email='test@yelp.com',
         contains_pii=False
+    )
+
+
+@pytest.fixture(scope='module')
+def registered_compatible_schema(
+    schematizer_client,
+    example_compatible_schema,
+    namespace,
+    source
+):
+    return schematizer_client.register_schema(
+        namespace=namespace,
+        source=source,
+        schema_str=example_compatible_schema,
+        source_owner_email='test@yelp.com',
+        contains_pii=False
+    )
+
+
+@pytest.fixture(scope='module')
+def example_compatible_schema(example_schema):
+    schema = simplejson.loads(example_schema)
+    schema['fields'].append({
+        "type": "int",
+        "name": "good_compatible_field",
+        "doc": "test",
+        "default": 1
+    })
+    return simplejson.dumps(schema)
+
+
+@pytest.fixture(scope='module')
+def example_non_compatible_schema(example_schema):
+    schema = simplejson.loads(example_schema)
+    schema['fields'].append({
+        'doc': 'test',
+        'type': 'string',
+        'name': 'good_non_compatible_field'
+    })
+    return simplejson.dumps(schema)
+
+
+@pytest.fixture(scope="module")
+def example_schema_with_pkey(namespace, source):
+    return '''
+    {
+        "type":"record",
+        "namespace": "%s",
+        "name": "%s",
+        "doc":"test",
+        "pkey": ["field2", "field1", "field3"],
+        "fields":[
+            {"type":"int", "name":"field1", "doc":"test", "pkey":2},
+            {"type":"string", "name":"field2", "doc":"test", "pkey":1},
+            {"type":"int", "name":"field3", "doc":"test", "pkey":3},
+            {"type":"int", "name":"field4", "doc":"test"}
+        ]
+    }
+    ''' % (namespace, source)
+
+
+@pytest.fixture(scope="module")
+def registered_schema_with_pkey(
+    schematizer_client,
+    example_schema_with_pkey,
+    namespace,
+    source
+):
+    return schematizer_client.register_schema(
+        namespace=namespace,
+        source=source,
+        schema_str=example_schema_with_pkey,
+        source_owner_email='test@yelp.com',
+        contains_pii=False
+    )
+
+
+@pytest.fixture
+def example_payload_data_with_pkeys(example_schema_with_pkey):
+    return generate_payload_data(
+        get_avro_schema_object(example_schema_with_pkey)
+    )
+
+
+@pytest.fixture
+def example_payload_with_pkeys(
+    example_schema_with_pkey,
+    example_payload_data_with_pkeys
+):
+    return AvroStringWriter(
+        simplejson.loads(example_schema_with_pkey)
+    ).encode(example_payload_data_with_pkeys)
+
+
+@pytest.fixture
+def message_with_pkeys(registered_schema_with_pkey, example_payload_with_pkeys):
+    return CreateMessage(
+        schema_id=registered_schema_with_pkey.schema_id,
+        payload=example_payload_with_pkeys
     )
 
 
@@ -120,6 +219,14 @@ def payload(example_schema, example_payload_data):
     return AvroStringWriter(
         simplejson.loads(example_schema)
     ).encode(example_payload_data)
+
+
+@pytest.fixture
+def compatible_payload_data(example_compatible_schema):
+    return {
+        "good_field": 1,
+        "good_compatible_field": 1
+    }
 
 
 @pytest.fixture
