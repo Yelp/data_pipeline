@@ -119,4 +119,5 @@ class TestRegistration(object):
             time.sleep(3.5)
             client.registrar.stop()
             time.sleep(.5)
-            assert func_spy.call_count == 4
+            # One call to publish_registration_messages happens on stop()
+            assert func_spy.call_count == 5

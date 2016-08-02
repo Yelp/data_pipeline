@@ -315,6 +315,7 @@ class Producer(Client):
                 ...
                 producer.publish(message)
         """
+        self.registrar.stop()
         self.monitor.close()
         self._kafka_producer.close()
         assert len(multiprocessing.active_children()) == 0
