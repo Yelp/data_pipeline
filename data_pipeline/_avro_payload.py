@@ -24,7 +24,10 @@ class _AvroPayload(object):
         self._set_reader_schema_id(reader_schema_id)
         self._set_dry_run(dry_run)
         self._set_payload_or_payload_data(payload, payload_data)
-        self._schematizer = get_schematizer()
+
+    @property
+    def _schematizer(self):
+        return get_schematizer()
 
     @property
     def schema_id(self):
