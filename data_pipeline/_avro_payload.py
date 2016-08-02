@@ -24,10 +24,7 @@ class _AvroPayload(object):
         self._set_reader_schema_id(reader_schema_id)
         self._set_dry_run(dry_run)
         self._set_payload_or_payload_data(payload, payload_data)
-
-    @property
-    def schematizer(self):
-        return get_schematizer()
+        self._schematizer = get_schematizer()
 
     @property
     def schema_id(self):
@@ -43,6 +40,9 @@ class _AvroPayload(object):
         return self._schema_id
 
     def _set_reader_schema_id(self, reader_schema_id):
+        if (reader_schema_id is not None and
+                not isinstance(reader_schema_id, int)):
+            raise TypeError("Reader Schema id should be an int")
         self._reader_schema_id = reader_schema_id
 
     @property

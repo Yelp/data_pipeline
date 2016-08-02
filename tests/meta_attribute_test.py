@@ -61,10 +61,11 @@ class TestMetaAttribute(object):
             schema_id=meta_attribute_avro_schema.schema_id,
             payload_data=meta_attribute_payload_data
         )
-        assert isinstance(meta_attribute.avro_repr, dict)
-        assert isinstance(meta_attribute.avro_repr['schema_id'], int)
-        assert isinstance(meta_attribute.avro_repr['payload'], bytes)
-        assert meta_attribute.payload == meta_attribute_payload
+        expected_avro_repr = {
+            'schema_id': meta_attribute_avro_schema.schema_id,
+            'payload': meta_attribute_payload
+        }
+        assert meta_attribute.avro_repr == expected_avro_repr
 
     def test_meta_attribute_from_payload(
         self,
@@ -76,9 +77,11 @@ class TestMetaAttribute(object):
             schema_id=meta_attribute_avro_schema.schema_id,
             payload=meta_attribute_payload
         )
-        assert isinstance(meta_attribute.avro_repr, dict)
-        assert isinstance(meta_attribute.avro_repr['schema_id'], int)
-        assert isinstance(meta_attribute.avro_repr['payload'], bytes)
+        expected_avro_repr = {
+            'schema_id': meta_attribute_avro_schema.schema_id,
+            'payload': meta_attribute_payload
+        }
+        assert meta_attribute.avro_repr == expected_avro_repr
         assert meta_attribute.payload_data == meta_attribute_payload_data
 
     @pytest.fixture(params=[

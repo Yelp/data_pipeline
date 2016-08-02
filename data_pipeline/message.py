@@ -64,9 +64,10 @@ class Message(object):
             by `schema_id`. This is expected to be None for messages on their
             way to being published. Either `payload` or `payload_data` must be
             provided but not both.
-        payload_data (dict): The contents of message, which will be lazily
-            encoded with schema identified by `schema_id`.  Either `payload` or
-            `payload_data` must be provided but not both.
+        payload_data: The contents of message, which will be lazily
+            encoded with schema identified by `schema_id`. Either `payload` or
+            `payload_data` must be provided but not both. Type of payload_data
+            should match the avro type specified schema.
         uuid (bytes, optional): Globally-unique 16-byte identifier for the
             message.  A uuid4 will be generated automatically if this isn't
             provided.

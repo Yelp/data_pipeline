@@ -23,9 +23,9 @@ class MetaAttribute(object):
         MetaAttribute(
             schema_id=schema_id,
             payload_data={
-                'cluster_name': self.cluster_name,
-                'log_file': self.log_file,
-                'log_pos': self.log_pos
+                'cluster_name': 'cluster1',
+                'log_file': 'binlog.0001',
+                'log_pos': 12332
             }
 
     2. Recover a MetaAttribute object from serialized MetaAttribute payload.
@@ -44,9 +44,10 @@ class MetaAttribute(object):
         payload (bytes): Avro-encoded meta attribute - encoded with schema identified
             by `schema_id`. Either `payload` or `payload_data` must be
             provided but not both.
-        payload_data (dict): The contents of meta attribute, which will be
-            encoded with schema identified by `schema_id`.  Either `payload` or
-            `payload_data` must be provided but not both.
+        payload_data: The contents of meta attribute, which will be
+            encoded with schema identified by `schema_id`. Either `payload` or
+            `payload_data` must be provided but not both. Type of payload_data
+            should match the avro type specified schema.
         dry_run (boolean): When set to True, MetaAttribute will return a string
             representation of the payload, instead of the avro encoded MetaAttribute.
             Defaults to False.
