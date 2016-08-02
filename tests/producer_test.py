@@ -952,10 +952,7 @@ class TestPublishMessagesWithRetry(TestProducerBase):
         ) as send_request_spy, capture_new_messages(
             topic
         ) as get_messages:
-            orig_topic_to_offset_map = self.get_orig_topic_to_offset_map(
-                producer,
-                message.topic
-            )
+            orig_topic_to_offset_map = self.get_orig_topic_to_offset_map(producer)
 
             producer.publish(message)
             producer.flush()
@@ -963,7 +960,7 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             messages = get_messages()
             self.assert_equal_msgs(expected_msgs=[message], actual_msgs=messages)
             assert send_request_spy.call_count == 1
-            self.assert_new_offset_map(
+            self.assert_new_topic_to_offset_map(
                 producer,
                 message.topic,
                 orig_topic_to_offset_map,
@@ -981,17 +978,14 @@ class TestPublishMessagesWithRetry(TestProducerBase):
         ) as get_messages, pytest.raises(
             MaxRetryError
         ):
-            orig_topic_to_offset_map = self.get_orig_topic_to_offset_map(
-                producer,
-                message.topic
-            )
+            orig_topic_to_offset_map = self.get_orig_topic_to_offset_map(producer)
             producer.publish(message)
             producer.flush()
 
             messages = get_messages()
             assert len(messages) == 0
             assert mock_send_request.call_count == self.max_retry_count
-            self.assert_new_offset_map(
+            self.assert_new_topic_to_offset_map(
                 producer,
                 message.topic,
                 orig_topic_to_offset_map,
@@ -1006,10 +1000,7 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             producer._kafka_producer.kafka_client,
             'send_produce_request'
         ) as send_request_spy:
-            orig_topic_to_offset_map = self.get_orig_topic_to_offset_map(
-                producer,
-                message.topic
-            )
+            orig_topic_to_offset_map = self.get_orig_topic_to_offset_map(producer)
             send_request_spy.reset()
 
             producer.publish(message)
@@ -1022,7 +1013,7 @@ class TestPublishMessagesWithRetry(TestProducerBase):
 
         messages = self.get_messages_from_start(message.topic)
         self.assert_equal_msgs(expected_msgs=[message], actual_msgs=messages)
-        self.assert_new_offset_map(
+        self.assert_new_topic_to_offset_map(
             producer,
             message.topic,
             orig_topic_to_offset_map,
@@ -1073,10 +1064,7 @@ class TestPublishMessagesWithRetry(TestProducerBase):
         ) as mock_send_request, capture_new_messages(
             message.topic
         ) as get_messages:
-            orig_topic_to_offset_map = self.get_orig_topic_to_offset_map(
-                producer,
-                message.topic
-            )
+            orig_topic_to_offset_map = self.get_orig_topic_to_offset_map(producer)
             mock_send_request.reset()
             producer.publish(message)
             producer.flush()
@@ -1084,7 +1072,7 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             messages = get_messages()
             self.assert_equal_msgs(expected_msgs=[message], actual_msgs=messages)
             assert mock_send_request.call_count == 1  # should be no retry
-            self.assert_new_offset_map(
+            self.assert_new_topic_to_offset_map(
                 producer,
                 message.topic,
                 orig_topic_to_offset_map,
@@ -1105,10 +1093,7 @@ class TestPublishMessagesWithRetry(TestProducerBase):
         ) as get_messages, pytest.raises(
             MaxRetryError
         ) as e:
-            orig_topic_to_offset_map = self.get_orig_topic_to_offset_map(
-                producer,
-                message.topic
-            )
+            orig_topic_to_offset_map = self.get_orig_topic_to_offset_map(producer)
 
             producer.publish(message)
             producer.flush()
@@ -1122,7 +1107,7 @@ class TestPublishMessagesWithRetry(TestProducerBase):
 
             messages = get_messages()
             assert len(messages) == 0
-            self.assert_new_offset_map(
+            self.assert_new_topic_to_offset_map(
                 producer,
                 message.topic,
                 orig_topic_to_offset_map,
@@ -1153,12 +1138,19 @@ class TestPublishMessagesWithRetry(TestProducerBase):
         assert last_retry_result.unpublished_requests == expected_requests
         assert last_retry_result.total_published_message_count == expected_published_msgs_count
 
-    def get_orig_topic_to_offset_map(self, producer, topic):
+    def get_orig_topic_to_offset_map(self, producer):
         pos_data = producer.get_checkpoint_position_data()
         return pos_data.topic_to_kafka_offset_map
 
-    def assert_new_offset_map(self, producer, topic, original_offset_map, published_message_count):
-        expected_offset_map = dict(original_offset_map)
-        expected_offset_map[topic] = original_offset_map.get(topic, 0) + published_message_count
+    def assert_new_topic_to_offset_map(
+        self,
+        producer,
+        topic,
+        original_topic_to_offset_map,
+        published_message_count
+    ):
+        expected_map = dict(original_topic_to_offset_map)
+        original_offset = original_topic_to_offset_map.get(topic, 0)
+        expected_map[topic] = original_offset + published_message_count
         new_pos_data = producer.get_checkpoint_position_data()
-        assert new_pos_data.topic_to_kafka_offset_map == expected_offset_map
+        assert new_pos_data.topic_to_kafka_offset_map == expected_map
