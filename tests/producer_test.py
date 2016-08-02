@@ -952,12 +952,23 @@ class TestPublishMessagesWithRetry(TestProducerBase):
         ) as send_request_spy, capture_new_messages(
             topic
         ) as get_messages:
+            orig_topic_to_offset_map = self.get_orig_topic_to_offset_map(
+                producer,
+                message.topic
+            )
+
             producer.publish(message)
             producer.flush()
 
             messages = get_messages()
             self.assert_equal_msgs(expected_msgs=[message], actual_msgs=messages)
             assert send_request_spy.call_count == 1
+            self.assert_new_offset_map(
+                producer,
+                message.topic,
+                orig_topic_to_offset_map,
+                published_message_count=1
+            )
 
     def test_publish_fails_after_retry(self, message, producer):
         # TODO(DATAPIPE-606|clin) investigate better way than mocking response
@@ -970,12 +981,22 @@ class TestPublishMessagesWithRetry(TestProducerBase):
         ) as get_messages, pytest.raises(
             MaxRetryError
         ):
+            orig_topic_to_offset_map = self.get_orig_topic_to_offset_map(
+                producer,
+                message.topic
+            )
             producer.publish(message)
             producer.flush()
 
             messages = get_messages()
             assert len(messages) == 0
             assert mock_send_request.call_count == self.max_retry_count
+            self.assert_new_offset_map(
+                producer,
+                message.topic,
+                orig_topic_to_offset_map,
+                published_message_count=0
+            )
 
     def test_publish_to_new_topic(self, create_new_schema, producer):
         new_schema = create_new_schema(source='retry_source')
@@ -985,9 +1006,15 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             producer._kafka_producer.kafka_client,
             'send_produce_request'
         ) as send_request_spy:
+            orig_topic_to_offset_map = self.get_orig_topic_to_offset_map(
+                producer,
+                message.topic
+            )
             send_request_spy.reset()
+
             producer.publish(message)
             producer.flush()
+
             # it should fail at least the 1st time because the topic doesn't
             # exist. Depending on how fast the topic is created, it could retry
             # more than 2 times.
@@ -995,6 +1022,12 @@ class TestPublishMessagesWithRetry(TestProducerBase):
 
         messages = self.get_messages_from_start(message.topic)
         self.assert_equal_msgs(expected_msgs=[message], actual_msgs=messages)
+        self.assert_new_offset_map(
+            producer,
+            message.topic,
+            orig_topic_to_offset_map,
+            published_message_count=1
+        )
 
     def test_publish_one_msg_succeeds_one_fails_after_retry(
         self,
@@ -1040,6 +1073,10 @@ class TestPublishMessagesWithRetry(TestProducerBase):
         ) as mock_send_request, capture_new_messages(
             message.topic
         ) as get_messages:
+            orig_topic_to_offset_map = self.get_orig_topic_to_offset_map(
+                producer,
+                message.topic
+            )
             mock_send_request.reset()
             producer.publish(message)
             producer.flush()
@@ -1047,6 +1084,12 @@ class TestPublishMessagesWithRetry(TestProducerBase):
             messages = get_messages()
             self.assert_equal_msgs(expected_msgs=[message], actual_msgs=messages)
             assert mock_send_request.call_count == 1  # should be no retry
+            self.assert_new_offset_map(
+                producer,
+                message.topic,
+                orig_topic_to_offset_map,
+                published_message_count=1
+            )
 
     def test_retry_failed_publish_without_highwatermark(self, message, producer):
         # TODO(DATAPIPE-606|clin) investigate better way than mocking response
@@ -1062,6 +1105,11 @@ class TestPublishMessagesWithRetry(TestProducerBase):
         ) as get_messages, pytest.raises(
             MaxRetryError
         ) as e:
+            orig_topic_to_offset_map = self.get_orig_topic_to_offset_map(
+                producer,
+                message.topic
+            )
+
             producer.publish(message)
             producer.flush()
 
@@ -1074,6 +1122,12 @@ class TestPublishMessagesWithRetry(TestProducerBase):
 
             messages = get_messages()
             assert len(messages) == 0
+            self.assert_new_offset_map(
+                producer,
+                message.topic,
+                orig_topic_to_offset_map,
+                published_message_count=0
+            )
 
     def get_messages_from_start(self, topic_name):
         with setup_capture_new_messages_consumer(topic_name) as consumer:
@@ -1098,3 +1152,13 @@ class TestPublishMessagesWithRetry(TestProducerBase):
         )]
         assert last_retry_result.unpublished_requests == expected_requests
         assert last_retry_result.total_published_message_count == expected_published_msgs_count
+
+    def get_orig_topic_to_offset_map(self, producer, topic):
+        pos_data = producer.get_checkpoint_position_data()
+        return pos_data.topic_to_kafka_offset_map
+
+    def assert_new_offset_map(self, producer, topic, original_offset_map, published_message_count):
+        expected_offset_map = dict(original_offset_map)
+        expected_offset_map[topic] = original_offset_map.get(topic, 0) + published_message_count
+        new_pos_data = producer.get_checkpoint_position_data()
+        assert new_pos_data.topic_to_kafka_offset_map == expected_offset_map
