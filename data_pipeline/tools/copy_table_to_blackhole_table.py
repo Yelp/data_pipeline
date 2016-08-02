@@ -418,13 +418,14 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
     def _get_min_primary_key(self):
         select_query = """
-        SELECT min({pk}) FROM {table}
+        SELECT MIN({pk}) FROM {table}
         """.format(
             pk=self.primary_key,
             table=self.table_name
         )
         with self.read_session() as session:
             min_pk = self._execute_query(session, select_query)
+            session.commit()
         return min_pk.scalar()
 
     def _get_max_primary_key(self):
@@ -434,8 +435,12 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             pk=self.primary_key,
             table=self.table_name
         )
+        if self.where_clause is not None:
+            select_query += ' WHERE {clause}'.format(clause=self.where_clause)
+
         with self.read_session() as session:
             max_pk = self._execute_query(session, select_query)
+            session.commit()
         return max_pk.scalar()
 
     def process_table(self):
@@ -446,11 +451,11 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         )
         min_pk = self._get_min_primary_key() - 1
         max_pk = self._get_max_primary_key()
-        while min_pk < max_pk:
+        while min_pk <= max_pk:
             self.process_row_start_time = time.time()
             with self.write_session() as session:
                 self.setup_transaction(session)
-                min_batch = min(min_pk + self.batch_size, max_pk)
+                min_batch = min_pk + self.batch_size
                 inserted = self.count_inserted(session, min_pk, min_batch)
                 self.insert_batch(session, min_pk, min_batch)
                 self._after_processing_rows(session, inserted)
