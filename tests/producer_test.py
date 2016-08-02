@@ -172,6 +172,41 @@ class TestClogWriter(TestProducerBase):
         assert mock_logger.error.call_args_list[0] == mock.call(call_args)
 
 
+class TestProducerRegistration(TestProducerBase):
+
+    def test_producer_periodic_registration_messages(self, producer_instance):
+        """
+        Note: Tests fails when threshold is set significanly below 1 second, presumably
+              because of the nature of threading. Should be irrelevant if the threshold
+              in registrar is set significantly higher.
+        """
+        with producer_instance as producer:
+            with attach_spy_on_func(
+                producer.registrar.clog_writer,
+                'publish'
+            ) as func_spy:
+                producer.publish(CreateMessage(schema_id=1, payload=bytes("FAKE MESSAGE")))
+                producer.registrar.threshold = 1
+                producer.registrar.start()
+                producer.publish(CreateMessage(
+                    schema_id=2,
+                    payload=bytes("DIFFERENT FAKE MESSAGE")
+                ))
+                time.sleep(1.5)
+                assert func_spy.call_count == 3
+                producer.registrar.stop()
+
+    def test_producer_registration_message_on_exit(self, producer_instance):
+        producer = producer_instance.__enter__()
+        with attach_spy_on_func(
+            producer.registrar,
+            'stop'
+        ) as func_spy:
+            producer.publish(CreateMessage(schema_id=1, payload=bytes("Test message")))
+            producer.__exit__(None, None, None)
+            assert func_spy.call_count == 1
+
+
 class TestProducer(TestProducerBase):
 
     def test_basic_publish(self, message, producer):

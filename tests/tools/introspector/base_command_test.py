@@ -142,6 +142,7 @@ class TestBaseCommand(TestIntrospectorBase):
     ):
         actual_sources = command.list_sources(
             namespace_name=namespace_one,
+            active_sources=True,
             sort_by='name'
         )
         active_source_obj = topic_one_active.source
@@ -191,6 +192,7 @@ class TestBaseCommand(TestIntrospectorBase):
         namespace_one_obj = topic_one_active.source.namespace
         namespace_two_obj = topic_two_active.source.namespace
         actual_namespaces = command.list_namespaces(
+            active_namespaces=True,
             sort_by='name'
         )
         one_pos = -1
