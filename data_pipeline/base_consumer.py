@@ -144,9 +144,11 @@ class BaseConsumer(Client):
             expected_frequency_seconds,
             monitoring_enabled=False
         )
-        if not (topic_to_consumer_topic_state_map or consumer_source):
-            raise ValueError("At least one of topic_to_consumer_topic_state_map"
-                             " or consumer_source must be specified")
+
+        if (topic_to_consumer_topic_state_map and consumer_source or
+                not topic_to_consumer_topic_state_map and not consumer_source):
+            raise ValueError("Exactly one of topic_to_consumer_topic_state_map "
+                             "or consumer_source must be specified")
 
         self.consumer_source = consumer_source
         self.force_payload_decode = force_payload_decode
@@ -183,19 +185,9 @@ class BaseConsumer(Client):
         topic_to_consumer_state_map,
         consumer_source
     ):
-        """ Return the topic_to_consumer_topic_state_map after updating the
-        given topic_to_consumer_state_map with the consumer_source topics.
-        """
-        topic_to_consumer_topic_state_map = {}
-        if consumer_source:
-            topic_to_consumer_topic_state_map = {
-                topic: None for topic in consumer_source.get_topics()
-            }
         if topic_to_consumer_state_map:
-            topic_to_consumer_topic_state_map.update(
-                topic_to_consumer_state_map
-            )
-        return topic_to_consumer_topic_state_map
+            return topic_to_consumer_state_map
+        return self._get_topic_to_offset_map(consumer_source.get_topics())
 
     def _get_topic_to_offset_map(self, topics):
         """ This function constructs a new topic_to_consumer_topic_state_map
@@ -307,13 +299,7 @@ class BaseConsumer(Client):
             The derived class must implement _start().
         """
         self.reset_topic_to_partition_offset_cache()
-        logger.info("Committing offsets for Consumer '{0}'...".format(
-            self.client_name
-        ))
         self._commit_topic_map_offsets(self._temp_topic_to_consumer_topic_state_map)
-        logger.info("Offsets committed for Consumer '{0}'...".format(
-            self.client_name
-        ))
         self._temp_topic_to_consumer_topic_state_map = None
         self._start_consumer()
 
@@ -603,12 +589,18 @@ class BaseConsumer(Client):
 
     def _commit_topic_map_offsets(self, topic_to_consumer_topic_state_map):
         if topic_to_consumer_topic_state_map:
+            logger.info("Committing offsets for Consumer '{0}'...".format(
+                self.client_name
+            ))
             topic_to_partition_offset_map = {}
             for topic, consumer_topic_state in topic_to_consumer_topic_state_map.iteritems():
                 if consumer_topic_state is None:
                     continue
                 topic_to_partition_offset_map[topic] = consumer_topic_state.partition_offset_map
             self.commit_offsets(topic_to_partition_offset_map)
+            logger.info("Offsets committed for Consumer '{0}'...".format(
+                self.client_name
+            ))
 
     def _send_offset_commit_requests(self, offset_commit_request_list):
         if len(offset_commit_request_list) > 0:

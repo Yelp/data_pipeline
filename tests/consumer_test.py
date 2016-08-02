@@ -264,21 +264,12 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
         )
 
     @pytest.fixture
-    def previous_auto_topic(self, registered_schema):
-        return str(registered_schema.topic.name)
-
-    @pytest.fixture
     def current_auto_topic(self, registered_auto_refresh_schema):
         return str(registered_auto_refresh_schema.topic.name)
 
     @pytest.fixture
     def ensure_current_auto_topic_exists(self, containers, registered_auto_refresh_schema):
         topic_name = str(registered_auto_refresh_schema.topic.name)
-        containers.create_kafka_topic(topic_name)
-
-    @pytest.fixture
-    def ensure_previous_auto_topic_exists(self, containers, registered_schema):
-        topic_name = str(registered_schema.topic.name)
         containers.create_kafka_topic(topic_name)
 
     @pytest.fixture
@@ -289,23 +280,30 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
         )
 
     @pytest.fixture
-    def register_non_compatible_schema(
+    def setup_new_topic_and_publish_message(
         self,
+        non_compatible_payload_data,
+        publish_messages,
         schematizer_client,
         refresh_namespace,
         refresh_source,
         example_non_compatible_schema,
     ):
-        def _register_not_compatible_schema():
-            registered_schema = schematizer_client.register_schema(
+        def _setup_new_topic_and_publish_message():
+            registered_non_compatible_schema = schematizer_client.register_schema(
                 namespace=refresh_namespace,
                 source=refresh_source,
                 schema_str=example_non_compatible_schema,
                 source_owner_email='test@yelp.com',
                 contains_pii=False
             )
-            return registered_schema
-        return _register_not_compatible_schema
+            message = CreateMessage(
+                schema_id=registered_non_compatible_schema.schema_id,
+                payload_data=non_compatible_payload_data
+            )
+            publish_messages(message, count=3)
+            return message
+        return _setup_new_topic_and_publish_message
 
     @pytest.fixture
     def non_compatible_payload_data(self, example_non_compatible_schema):
@@ -317,8 +315,6 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
     @pytest.fixture
     def consumer_instance(
         self,
-        ensure_previous_auto_topic_exists,
-        previous_auto_topic,
         consumer_group_name,
         team_name,
         consumer_source,
@@ -329,7 +325,6 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
             consumer_name=consumer_group_name,
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
-            topic_to_consumer_topic_state_map={previous_auto_topic: None},
             consumer_source=consumer_source,
             topic_refresh_frequency_seconds=0.5,
             auto_offset_reset='smallest',
@@ -343,8 +338,7 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
         publish_messages,
         consumer_instance,
         current_message,
-        register_non_compatible_schema,
-        non_compatible_payload_data
+        setup_new_topic_and_publish_message,
     ):
         """
         This test publishes 2 messages and starts the consumer. The consumer
@@ -363,12 +357,8 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
             assert len(consumer.topic_to_partition_map) == 1
 
             consumer.commit_messages(actual_messages)
-            next_auto_schema = register_non_compatible_schema()
-            next_auto_message = CreateMessage(
-                schema_id=next_auto_schema.schema_id,
-                payload_data=non_compatible_payload_data
-            )
-            publish_messages(next_auto_message, count=3)
+            next_auto_message = setup_new_topic_and_publish_message()
+
             # consumer should refresh itself and include the new topic in the
             # topic_to_partition_map
             new_messages = consumer.get_messages(
@@ -376,52 +366,6 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
             )
             self.assert_equal_messages(new_messages, next_auto_message, 3)
             assert len(consumer.topic_to_partition_map) == 2
-
-    def test_consumer_commit_and_drop_inactive_topics_after_refresh(
-        self,
-        ensure_current_auto_topic_exists,
-        publish_messages,
-        consumer_instance,
-        current_auto_topic,
-        current_message,
-        previous_auto_topic,
-        message
-    ):
-        """
-        This test publishes messages into 2 topics and starts a consumer
-        tailing those topics. Then consumer refreshes itself and drop the topic
-        that does not exist in the consumer_source. Verifies that the consumer
-        commits offsets for both the topics but tails only the consumer_source
-        topic.
-        """
-        with consumer_instance as consumer:
-            with attach_spy_on_func(
-                consumer,
-                '_commit_topic_map_offsets'
-            ) as commit_offsets_spy:
-                publish_messages(current_message, count=2)
-                publish_messages(message, count=3)
-                assert set(consumer.topic_to_partition_map.keys()) == {
-                    previous_auto_topic,
-                    current_auto_topic
-                }
-
-                # After refresh, Consumer should tail only the refreshed_topics
-                # and drop other topics(i.e., previous_auto_topic) from the
-                # topic_to_partition_map
-                actual_messages = consumer.get_messages(
-                    count=10, blocking=True, timeout=TIMEOUT
-                )
-
-                # consumer should return exactly 2 'current_message' messages
-                self.assert_equal_messages(actual_messages, current_message, 2)
-                assert consumer.topic_to_partition_map.keys() == [
-                    current_auto_topic
-                ]
-                assert commit_offsets_spy.call_args_list == [
-                    mock.call(
-                        {current_auto_topic: None, previous_auto_topic: None}
-                    )]
 
     def assert_equal_messages(
         self,
