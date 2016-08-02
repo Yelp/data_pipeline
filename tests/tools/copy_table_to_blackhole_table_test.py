@@ -548,7 +548,7 @@ class TestFullRefreshRunner(object):
             calls = [
                 mock.call(write_session, 0, 10),
                 mock.call(write_session, 10, 20),
-                mock.call(write_session, 20, 30)
+                mock.call(write_session, 20, 25)
             ]
             mock_insert.assert_has_calls(calls)
 
@@ -586,7 +586,7 @@ class TestFullRefreshRunner(object):
             calls = [
                 mock.call(write_session, 100, 110),
                 mock.call(write_session, 110, 120),
-                mock.call(write_session, 120, 130)
+                mock.call(write_session, 120, 125)
             ]
             mock_insert.assert_has_calls(calls)
 
@@ -623,7 +623,7 @@ class TestFullRefreshRunner(object):
             calls = [
                 mock.call(managed_write_session, 0, 10),
                 mock.call(managed_write_session, 10, 20),
-                mock.call(managed_write_session, 20, 30)
+                mock.call(managed_write_session, 20, 25)
             ]
             mock_insert.assert_has_calls(calls)
             managed_refresh_batch.schematizer.update_refresh.assert_called_once_with(
