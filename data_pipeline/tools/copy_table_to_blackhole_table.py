@@ -435,8 +435,6 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             pk=self.primary_key,
             table=self.table_name
         )
-        if self.where_clause is not None:
-            select_query += ' WHERE {clause}'.format(clause=self.where_clause)
 
         with self.read_session() as session:
             max_pk = self._execute_query(session, select_query)

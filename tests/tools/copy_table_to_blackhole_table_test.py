@@ -541,9 +541,9 @@ class TestFullRefreshRunner(object):
             10
         ):
             mock_min_pk.return_value = 1
-            mock_max_pk.return_value = 25
-            mock_rows.side_effect = [10, 10, 5]
-            mock_row_count.return_value = 25
+            mock_max_pk.return_value = 26
+            mock_rows.side_effect = [10, 10, 10]
+            mock_row_count.return_value = 26
             refresh_batch.process_table()
             calls = [
                 mock.call(write_session, 0, 10),
@@ -579,9 +579,9 @@ class TestFullRefreshRunner(object):
             10
         ):
             mock_min_pk.return_value = 101
-            mock_max_pk.return_value = 125
-            mock_rows.side_effect = [10, 10, 5]
-            mock_row_count.return_value = 25
+            mock_max_pk.return_value = 124
+            mock_rows.side_effect = [10, 10, 10]
+            mock_row_count.return_value = 24
             refresh_batch.process_table()
             calls = [
                 mock.call(write_session, 100, 110),
