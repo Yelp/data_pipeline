@@ -514,7 +514,7 @@ class TestFullRefreshRunner(object):
             clause
         )
 
-    def test_process_table(
+    def test_process_table_case_one(
         self,
         refresh_batch,
         mock_row_count,
@@ -541,9 +541,9 @@ class TestFullRefreshRunner(object):
             10
         ):
             mock_min_pk.return_value = 1
-            mock_max_pk.return_value = 26
-            mock_rows.side_effect = [10, 10, 10]
-            mock_row_count.return_value = 26
+            mock_max_pk.return_value = 30
+            mock_rows.side_effect = [10, 10, 10, 0]
+            mock_row_count.return_value = 30
             refresh_batch.process_table()
             calls = [
                 mock.call(write_session, 0, 10),
@@ -552,7 +552,7 @@ class TestFullRefreshRunner(object):
             ]
             mock_insert.assert_has_calls(calls)
 
-    def test_process_table_min_pk_greater_batch_size(
+    def test_process_table_case_two(
         self,
         refresh_batch,
         mock_row_count,
@@ -578,15 +578,54 @@ class TestFullRefreshRunner(object):
             'batch_size',
             10
         ):
-            mock_min_pk.return_value = 101
-            mock_max_pk.return_value = 124
-            mock_rows.side_effect = [10, 10, 10]
-            mock_row_count.return_value = 24
+            mock_min_pk.return_value = 1
+            mock_max_pk.return_value = 29
+            mock_rows.side_effect = [10, 10, 9]
+            mock_row_count.return_value = 29
             refresh_batch.process_table()
             calls = [
-                mock.call(write_session, 100, 110),
-                mock.call(write_session, 110, 120),
-                mock.call(write_session, 120, 130)
+                mock.call(write_session, 0, 10),
+                mock.call(write_session, 10, 20),
+                mock.call(write_session, 20, 30)
+            ]
+            mock_insert.assert_has_calls(calls)
+
+    def test_process_table_case_three(
+        self,
+        refresh_batch,
+        mock_row_count,
+        mock_process_rows,
+        sessions,
+        write_session,
+        read_session
+    ):
+        with mock.patch.object(
+            refresh_batch,
+            'insert_batch'
+        ) as mock_insert, mock.patch.object(
+            refresh_batch,
+            'count_inserted'
+        ) as mock_rows, mock.patch.object(
+            refresh_batch,
+            '_get_min_primary_key'
+        ) as mock_min_pk, mock.patch.object(
+            refresh_batch,
+            '_get_max_primary_key'
+        ) as mock_max_pk, mock.patch.object(
+            refresh_batch,
+            'batch_size',
+            10
+        ):
+            mock_min_pk.return_value = 1
+            mock_max_pk.return_value = 31
+            mock_rows.side_effect = [10, 10, 10, 1]
+            mock_row_count.return_value = 31
+            refresh_batch.process_table()
+            calls = [
+                mock.call(write_session, 0, 10),
+                mock.call(write_session, 10, 20),
+                mock.call(write_session, 20, 30),
+                mock.call(write_session, 30, 40)
             ]
             mock_insert.assert_has_calls(calls)
 
