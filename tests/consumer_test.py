@@ -533,13 +533,14 @@ class TestConsumerRegistration(TestReaderSchemaMapFixedSchemas):
         consumer_instance
     ):
         TIMEOUT = 1.8
+        consumer = consumer_instance.__enter__()
         with attach_spy_on_func(
-            clog,
-            'log_line'
+            consumer.registrar,
+            'stop'
         ) as func_spy:
-            with consumer_instance as consumer:
-                publish_messages(input_compatible_message, count=1)
-                consumer.get_message(blocking=True, timeout=TIMEOUT)
+            publish_messages(input_compatible_message, count=1)
+            consumer.get_message(blocking=True, timeout=TIMEOUT)
+            consumer.__exit__(None, None, None)
             assert func_spy.call_count == 1
 
 
