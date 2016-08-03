@@ -543,7 +543,7 @@ class TestFullRefreshRunner(object):
             'row_count': 5,
             'calls': [(0, 10)]
         }
-        ]
+    ]
     )
     def inputs(self, request):
         return request.param
