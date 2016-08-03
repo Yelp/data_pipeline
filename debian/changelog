@@ -1,3 +1,9 @@
+data-pipeline-tools (0.4.7) lucid; urgency=low
+
+  * Commit: Merge branch 'bump_kafka_python'
+
+ -- Shahid Chohan <chohan@yelp.com>  Wed, 03 Aug 2016 10:55:18 -0700
+
 data-pipeline-tools (0.4.6) lucid; urgency=low
 
   * Commit: Merge branch 'DATAPIPE-723-abrar-refractor_meta'
