@@ -25,6 +25,10 @@ from data_pipeline.schematizer_clientlib.models.refresh import RefreshStatus
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 
+# WARNING: This batch will not work for non-numeric or compound primary
+# keys cause of the logic in process_table(). There is another way of
+# doing the same but its much slower and resource intensive.
+# https://goo.gl/Drz0uj
 class FullRefreshRunner(Batch, BatchDBMixin):
     """The FullRefreshManager spawns off a child process which executes this
     batch to copy rows from the source table into a black hole table.
@@ -383,29 +387,59 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             )
         )
 
-    def count_inserted(self, session, offset):
-        select_query = self.build_select(
-            '*',
-            self.primary_key,
-            offset,
-            self.batch_size
-        )
+    def count_inserted(self, session, min_pk, max_pk):
+        select_query = self._get_select_query(session, min_pk, max_pk)
         query = 'SELECT COUNT(*) FROM ({query}) AS T'.format(
             query=select_query
         )
         inserted_rows = self._execute_query(session, query)
         return inserted_rows.scalar()
 
-    def insert_batch(self, session, offset):
-        insert_query = 'INSERT INTO {temp} '.format(temp=self.temp_table)
-        select_query = self.build_select(
-            '*',
-            self.primary_key,
-            offset,
-            self.batch_size
-        )
+    def insert_batch(self, session, min_pk, max_pk):
+        insert_query = 'INSERT INTO {temp}'.format(temp=self.temp_table)
+        select_query = self._get_select_query(session, min_pk, max_pk)
         insert_query += select_query
         self._execute_query(session, insert_query)
+
+    def _get_select_query(self, session, min_pk, max_pk):
+        select_query = """
+        SELECT * FROM {table}
+        WHERE {pk}>{min_pk} AND {pk}<={max_pk}
+        """.format(
+            table=self.table_name,
+            pk=self.primary_key,
+            min_pk=min_pk,
+            max_pk=max_pk
+        )
+        if self.where_clause is not None:
+            select_query += ' AND {clause}'.format(clause=self.where_clause)
+
+        return select_query
+
+    def _get_min_primary_key(self):
+        select_query = """
+        SELECT MIN({pk}) FROM {table}
+        """.format(
+            pk=self.primary_key,
+            table=self.table_name
+        )
+        with self.read_session() as session:
+            min_pk = self._execute_query(session, select_query)
+            session.commit()
+        return min_pk.scalar()
+
+    def _get_max_primary_key(self):
+        select_query = """
+        SELECT MAX({pk}) FROM {table}
+        """.format(
+            pk=self.primary_key,
+            table=self.table_name
+        )
+
+        with self.read_session() as session:
+            max_pk = self._execute_query(session, select_query)
+            session.commit()
+        return max_pk.scalar()
 
     def process_table(self):
         self.log.info(
@@ -413,17 +447,18 @@ class FullRefreshRunner(Batch, BatchDBMixin):
                 row_count=self.total_row_count
             )
         )
-        offset = 0
-        count = self.batch_size
-        while count >= self.batch_size:
+        min_pk = self._get_min_primary_key() - 1
+        max_pk = self._get_max_primary_key()
+        while min_pk < max_pk:
             self.process_row_start_time = time.time()
             with self.write_session() as session:
                 self.setup_transaction(session)
-                count = self.count_inserted(session, offset)
-                self.insert_batch(session, offset)
-                self._after_processing_rows(session, count)
-            offset += count
-            self.processed_row_count += count
+                min_batch = min_pk + self.batch_size
+                inserted = self.count_inserted(session, min_pk, min_batch)
+                self.insert_batch(session, min_pk, min_batch)
+                self._after_processing_rows(session, inserted)
+            min_pk = min_batch
+            self.processed_row_count += inserted
 
         if self.refresh_id:
             # Offset is 0 because it doesn't matter (was a success)
