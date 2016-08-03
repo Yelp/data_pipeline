@@ -20,7 +20,7 @@
 # should be at least 1.2.1 for trusty compatibility.
 
 argparse==1.4.0
-avro==1.10.0
+avro==1.9.0-yelp3
 boto==2.38.0
 bravado==8.3.0
 bravado-core==4.2.2

@@ -523,8 +523,25 @@ class TestConsumerRegistration(TestReaderSchemaMapFixedSchemas):
                 consumer.registrar.threshold = 1
                 consumer.registrar.start()
                 time.sleep(1.5)
-                consumer.registrar.stop()
                 assert func_spy.call_count == 2
+                consumer.registrar.stop()
+
+    def test_consumer_registration_message_on_exit(
+        self,
+        publish_messages,
+        input_compatible_message,
+        consumer_instance
+    ):
+        TIMEOUT = 1.8
+        consumer = consumer_instance.__enter__()
+        with attach_spy_on_func(
+            consumer.registrar,
+            'stop'
+        ) as func_spy:
+            publish_messages(input_compatible_message, count=1)
+            consumer.get_message(blocking=True, timeout=TIMEOUT)
+            consumer.__exit__(None, None, None)
+            assert func_spy.call_count == 1
 
 
 class TestAutoRefreshConsumerTopicsInFixedNamespaces(
