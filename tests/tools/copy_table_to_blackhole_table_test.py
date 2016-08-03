@@ -525,9 +525,9 @@ class TestFullRefreshRunner(object):
         {
             'min_ret_val': 1,
             'max_ret_val': 30,
-            'row_side_eff': [10, 10, 10, 0],
+            'row_side_eff': [10, 10, 10],
             'row_count': 30,
-            'calls': [(0, 10), (10, 20), (20, 30), (30, 40)]
+            'calls': [(0, 10), (10, 20), (20, 30)]
         },
         {
             'min_ret_val': 1,
@@ -535,6 +535,13 @@ class TestFullRefreshRunner(object):
             'row_side_eff': [10, 10, 9],
             'row_count': 29,
             'calls': [(0, 10), (10, 20), (20, 30)]
+        },
+        {
+            'min_ret_val': 1,
+            'max_ret_val': 5,
+            'row_side_eff': [5],
+            'row_count': 5,
+            'calls': [(0, 10)]
         }
         ]
     )
@@ -580,7 +587,7 @@ class TestFullRefreshRunner(object):
                     mock.call(write_session, x, y)
                 )
             mock_insert.assert_has_calls(calls)
-            
+
     def test_process_table_managed_refresh(
         self,
         managed_refresh_batch,

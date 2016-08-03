@@ -449,7 +449,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         )
         min_pk = self._get_min_primary_key() - 1
         max_pk = self._get_max_primary_key()
-        while min_pk <= max_pk:
+        while min_pk < max_pk:
             self.process_row_start_time = time.time()
             with self.write_session() as session:
                 self.setup_transaction(session)
