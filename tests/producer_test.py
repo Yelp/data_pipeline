@@ -193,8 +193,18 @@ class TestProducerRegistration(TestProducerBase):
                     payload=bytes("DIFFERENT FAKE MESSAGE")
                 ))
                 time.sleep(1.5)
-                producer.registrar.stop()
                 assert func_spy.call_count == 3
+                producer.registrar.stop()
+
+    def test_producer_registration_message_on_exit(self, producer_instance):
+        producer = producer_instance.__enter__()
+        with attach_spy_on_func(
+            producer.registrar,
+            'stop'
+        ) as func_spy:
+            producer.publish(CreateMessage(schema_id=1, payload=bytes("Test message")))
+            producer.__exit__(None, None, None)
+            assert func_spy.call_count == 1
 
 
 class TestProducer(TestProducerBase):

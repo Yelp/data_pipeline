@@ -345,6 +345,7 @@ class BaseConsumer(Client):
         logger.info("Stopping Consumer '{0}'...".format(self.client_name))
         if self.running:
             self._stop()
+        self.registrar.stop()
         self.kafka_client.close()
         self.reset_topic_to_partition_offset_cache()
         self.running = False
