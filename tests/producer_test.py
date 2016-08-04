@@ -6,6 +6,7 @@ import multiprocessing
 import random
 import time
 
+import clog
 import mock
 import pytest
 import simplejson as json
@@ -173,6 +174,20 @@ class TestClogWriter(TestProducerBase):
 
 
 class TestProducerRegistration(TestProducerBase):
+
+    def test_producer_initial_registration_messages(self, use_work_pool):
+        with attach_spy_on_func(
+            clog,
+            'log_line'
+        ) as func_spy:
+            with Producer(
+                producer_name='producer_1',
+                team_name='bam',
+                expected_frequency_seconds=ExpectedFrequency.constantly,
+                use_work_pool=use_work_pool,
+                schema_id_list=[1, 2, 3]
+            ):
+                assert func_spy.call_count == 3
 
     def test_producer_periodic_registration_messages(self, producer_instance):
         """
