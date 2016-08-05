@@ -513,7 +513,6 @@ class TestConsumerRegistration(TestReaderSchemaMapFixedSchemas):
         Note: Tests fails when threshold is set significanly below 1 second
         """
         TIMEOUT = 1.8
-        consumer_instance.registrar.threshold = 1
         with consumer_instance as consumer:
             with attach_spy_on_func(
                 consumer.registrar.clog_writer,
@@ -521,8 +520,11 @@ class TestConsumerRegistration(TestReaderSchemaMapFixedSchemas):
             ) as func_spy:
                 publish_messages(input_compatible_message, count=1)
                 consumer.get_message(blocking=True, timeout=TIMEOUT)
-                time.sleep(2.5)
+                consumer.registrar.threshold = 1
+                consumer.registrar.start()
+                time.sleep(1.5)
                 assert func_spy.call_count == 2
+                consumer.registrar.stop()
 
     def test_consumer_registration_message_on_exit(
         self,
@@ -531,7 +533,6 @@ class TestConsumerRegistration(TestReaderSchemaMapFixedSchemas):
         consumer_instance
     ):
         TIMEOUT = 1.8
-        consumer_instance.threshold = 1
         consumer = consumer_instance.__enter__()
         with attach_spy_on_func(
             consumer.registrar,

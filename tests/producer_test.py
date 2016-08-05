@@ -195,23 +195,23 @@ class TestProducerRegistration(TestProducerBase):
               because of the nature of threading. Should be irrelevant if the threshold
               in registrar is set significantly higher.
         """
-        producer_instance.registrar.threshold = 1
         with producer_instance as producer:
             with attach_spy_on_func(
                 producer.registrar.clog_writer,
                 'publish'
             ) as func_spy:
-                assert producer.registrar.threshold == 1
                 producer.publish(CreateMessage(schema_id=1, payload=bytes("FAKE MESSAGE")))
+                producer.registrar.threshold = 1
+                producer.registrar.start()
                 producer.publish(CreateMessage(
                     schema_id=2,
                     payload=bytes("DIFFERENT FAKE MESSAGE")
                 ))
-                time.sleep(2.5)
-                assert func_spy.call_count == 4
+                time.sleep(1.5)
+                assert func_spy.call_count == 3
+                producer.registrar.stop()
 
     def test_producer_registration_message_on_exit(self, producer_instance):
-        producer_instance.registrar.threshold = 1
         producer = producer_instance.__enter__()
         with attach_spy_on_func(
             producer.registrar,

@@ -54,7 +54,6 @@ class Registrar(object):
         self.schema_to_last_seen_time_map = {}
         self.expected_frequency_seconds = expected_frequency_seconds
         self.clog_writer = ClogWriter()
-        self.current_thread = None
 
     def publish_registration_messages(self):
         """
@@ -146,17 +145,14 @@ class Registrar(object):
             self.schema_to_last_seen_time_map[schema_id] = timestamp_in_milliseconds
 
     def start(self):
-        """Start periodically sending registration messages after threshold amount of time"""
+        """Start periodically sending registration messages"""
         if not self.send_messages:
             self.send_messages = True
-            self.current_thread = threading.Timer(self.threshold, self._wake)
-            self.current_thread.start()
+            self._wake()
 
     def stop(self):
         """Force Client to stop periodically sending registration messages"""
         self.send_messages = False
-        if self.current_thread:
-            self.current_thread.cancel()
         # Send registration messages when the Registrar is stopped
         self.publish_registration_messages()
 
@@ -165,5 +161,4 @@ class Registrar(object):
         if self.send_messages:
             self.publish_registration_messages()
             # The purpose of the Timer is for _wake to ensure it is called
-            self.current_thread = threading.Timer(self.threshold, self._wake)
-            self.current_thread.start()
+            threading.Timer(self.threshold, self._wake).start()
