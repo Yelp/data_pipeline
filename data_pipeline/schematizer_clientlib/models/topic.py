@@ -72,7 +72,8 @@ class _Topic(BaseModel):
             source_id=cache_value['source_id'],
             name=None,
             owner_email=None,
-            namespace=None
+            namespace=None,
+            category=None
         )
         return cls(
             topic_id=cache_value['topic_id'],

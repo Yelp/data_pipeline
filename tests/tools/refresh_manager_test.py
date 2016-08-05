@@ -76,7 +76,8 @@ class TestFullRefreshManager(object):
             source_id=1,
             name=fake_source,
             owner_email='fake_email@yelp.com',
-            namespace=namespace_response
+            namespace=namespace_response,
+            category='fake_category'
         )
 
     @pytest.fixture

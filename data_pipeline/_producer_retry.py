@@ -21,7 +21,7 @@ logger = get_config().logger
 _TopicPartition = namedtuple('_TopicPartition', ['topic_name', 'partition'])
 
 
-_Stats = namedtuple('_Stats', ['offset', 'message_count'])
+_Stats = namedtuple('_Stats', ['original_offset', 'message_count'])
 
 
 class RetryHandler(object):
@@ -145,8 +145,7 @@ class RetryHandler(object):
 
                 # Update stats for the request that actually succeeds
                 logger.debug("{} actually succeeded.".format(topic_desc))
-                offset = published_count + topic_offsets[topic]
-                new_stats = _Stats(offset, published_count)
+                new_stats = _Stats(topic_offsets[topic], published_count)
                 self._update_success_topic_stats(topic, partition, new_stats)
 
             except LeaderNotAvailableError:

@@ -30,7 +30,7 @@ class Client(object):
     Note:
 
         Client will be responsible for producer/consumer registration,
-        which will be implemented in DATAPIPE-157.
+        which will be implemented in DATAPIPE-1154.
 
     Args:
         client_name (str): Name associated with the client - this name will
@@ -100,8 +100,10 @@ class Client(object):
         self.team_name = team_name
         self.expected_frequency_seconds = expected_frequency_seconds
         self.registrar = Registrar(
+            team_name,
             client_name,
-            self.client_type
+            self.client_type,
+            self.expected_frequency_seconds
         )
 
     @property

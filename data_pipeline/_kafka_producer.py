@@ -188,7 +188,7 @@ class KafkaProducer(object):
             assert stats.message_count == len(self.message_buffer[topic])
             self.position_data_tracker.record_messages_published(
                 topic=topic,
-                offset=stats.offset,
+                offset=stats.original_offset,
                 message_count=stats.message_count
             )
             self.message_buffer.pop(topic)

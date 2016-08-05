@@ -37,6 +37,8 @@ class Config(object):
                     kafka_cluster_type: datapipe
                     kafka_cluster_name: uswest2-devc
                     skip_messages_with_pii: True
+                - namespace: clog
+                  file: /nail/srv/configs/clog.yaml
     """
     YOCALHOST = '169.254.255.254'
 

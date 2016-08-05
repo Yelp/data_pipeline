@@ -98,7 +98,8 @@ class Producer(Client):
         use_work_pool=False,
         dry_run=False,
         position_data_callback=None,
-        monitoring_enabled=True
+        monitoring_enabled=True,
+        schema_id_list=None
     ):
         super(Producer, self).__init__(
             producer_name,
@@ -110,6 +111,11 @@ class Producer(Client):
         self.use_work_pool = use_work_pool
         self.dry_run = dry_run
         self.position_data_callback = position_data_callback
+        if schema_id_list is None:
+            schema_id_list = []
+        # Send initial producer registration messages
+        self.registrar.register_tracked_schema_ids(schema_id_list)
+
         self.disable_meteorite = True
         self.disable_sensu = True
         self.monitors = {}
@@ -217,6 +223,10 @@ class Producer(Client):
             self.monitors['sensu'].process()
 
         self.monitor.record_message(message)
+        self.registrar.update_schema_last_used_timestamp(
+            message.schema_id,
+            timestamp_in_milliseconds=long(1000 * time.time())
+        )
 
     def ensure_messages_published(self, messages, topic_offsets):
         """This method should only be used when recovering after an unclean
@@ -353,6 +363,7 @@ class Producer(Client):
                 ...
                 producer.publish(message)
         """
+        self.registrar.stop()
         self.monitor.close()
         self._kafka_producer.close()
         assert len(multiprocessing.active_children()) == 0
