@@ -18,20 +18,22 @@ Args:
     owner_email (str): The email of the source owner.
     namespace (data_pipeline.schematizer_clientlib.models.namespace.Namespace):
         The namespace of the source.
+    category (str): The category of the source. (e.g. Content, Deals etc.)
 """
 Source = namedtuple(
     'Source',
-    ['source_id', 'name', 'owner_email', 'namespace']
+    ['source_id', 'name', 'owner_email', 'namespace', 'category']
 )
 
 
 class _Source(BaseModel):
 
-    def __init__(self, source_id, name, owner_email, namespace):
+    def __init__(self, source_id, name, owner_email, namespace, category):
         self.source_id = source_id
         self.name = name
         self.owner_email = owner_email
         self.namespace = namespace
+        self.category = category
 
     @classmethod
     def from_response(cls, response):
@@ -39,7 +41,8 @@ class _Source(BaseModel):
             source_id=response.source_id,
             name=response.name,
             owner_email=response.owner_email,
-            namespace=_Namespace.from_response(response.namespace)
+            namespace=_Namespace.from_response(response.namespace),
+            category=response.category
         )
 
     def to_cache_value(self):
@@ -47,7 +50,8 @@ class _Source(BaseModel):
             'source_id': self.source_id,
             'name': self.name,
             'owner_email': self.owner_email,
-            'namespace': self.namespace
+            'namespace': self.namespace,
+            'category': self.category
         }
 
     @classmethod
@@ -56,7 +60,8 @@ class _Source(BaseModel):
             source_id=cache_value['source_id'],
             name=cache_value['name'],
             owner_email=cache_value['owner_email'],
-            namespace=cache_value['namespace']
+            namespace=cache_value['namespace'],
+            category=cache_value['category']
         )
 
     def to_result(self):
@@ -64,5 +69,6 @@ class _Source(BaseModel):
             source_id=self.source_id,
             name=self.name,
             owner_email=self.owner_email,
-            namespace=self.namespace.to_result()
+            namespace=self.namespace.to_result(),
+            category=self.category
         )
