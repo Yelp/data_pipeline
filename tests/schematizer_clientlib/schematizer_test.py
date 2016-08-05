@@ -463,6 +463,75 @@ class TestGetTopicByName(SchematizerClientTestBase):
             assert source_api_spy.call_count == 0
 
 
+class TestGetSources(SchematizerClientTestBase):
+
+    @pytest.fixture(scope='class')
+    def sorted_sources(self, yelp_namespace, biz_src_name, usr_src_name, cta_src_name):
+        biz_src = self._register_avro_schema(
+            yelp_namespace,
+            biz_src_name
+        ).topic.source
+
+        usr_src = self._register_avro_schema(
+            yelp_namespace,
+            usr_src_name
+        ).topic.source
+
+        cta_src = self._register_avro_schema(
+            yelp_namespace,
+            cta_src_name
+        ).topic.source
+
+        return [biz_src, usr_src, cta_src]
+
+    def test_get_all_sources(
+        self,
+        schematizer,
+        sorted_sources
+    ):
+        actual_sources = schematizer.get_sources()
+        print len(actual_sources)
+        for actual_src, expected_resp in zip(actual_sources, sorted_sources):
+            self._assert_source_values(actual_src, expected_resp)
+
+    def test_get_sources_filter_by_min_id(
+        self,
+        sorted_sources,
+        schematizer
+    ):
+        min_id = sorted_sources[1].source_id
+        expected_sources = sorted_sources[1:]
+        actual_sources = schematizer.get_sources(
+            min_id=min_id
+        )
+        for actual_source, expected_source in zip(
+            actual_sources,
+            expected_sources
+        ):
+            self._assert_source_values(actual_source, expected_source)
+
+    def test_get_sources_with_page_size(
+        self,
+        sorted_sources,
+        schematizer
+    ):
+        with self.attach_spy_on_api(
+            schematizer._client.sources,
+            'list_sources'
+        ) as sources_api_spy:
+            actual_sources = schematizer.get_sources(
+                min_id=1,
+                page_size=1
+            )
+            for actual_src, expected_resp in zip(actual_sources, sorted_sources):
+                self._assert_source_values(actual_src, expected_resp)
+
+            # Since page size is 1, we would need to call api endpoint
+            # len(sources) + 1 times before we get a page with sources less
+            # than the page size.
+            assert sources_api_spy.call_count == len(sorted_sources) + 1
+
+
 class TestGetSourceById(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')

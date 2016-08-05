@@ -312,6 +312,42 @@ class SchematizerClient(object):
             self._set_cache_by_source(_source)
         return result
 
+    def get_sources(
+        self,
+        min_id=0,
+        page_size=10
+    ):
+        """Get the sources that match specified criteria (min_id and
+        page_size).  If no criterion is specified, it returns all the sources.
+
+        Args:
+            min_id (Optional[int]): Limits results to those sources with an id
+                greater than or equal to given min_id (default: 0)
+            page_size (Optional[int]): Maximum number of sources to retrieve
+                per page. (default: 10)
+
+        Returns:
+            (List[data_pipeline.schematizer_clientlib.models.Source]):
+                list of topics that match given criteria.
+        """
+        last_page_size = page_size
+        result = []
+        while last_page_size == page_size:
+            response = self._call_api(
+                api=self._client.sources.list_sources,
+                params={
+                    'min_id': min_id,
+                    'count': page_size
+                }
+            )
+            for resp_item in response:
+                _source = _Source.from_response(resp_item)
+                result.append(_source.to_result())
+                self._set_cache_by_source(_source)
+                min_id = _source.source_id + 1
+            last_page_size = len(response)
+        return result
+
     def get_topics_by_source_id(self, source_id):
         """Get the list of topics of specified source id.
 
