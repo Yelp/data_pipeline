@@ -8,7 +8,14 @@ from collections import defaultdict
 import yelp_meteorite
 
 
-class StatsCounter(object):
+class StatsBase(object):
+    """ This class simply guarantees the other Stats classes will have a process method"""
+
+    def process(self, topic):
+        raise NotImplementedError
+
+
+class StatsCounter(StatsBase):
     """ This class provides an easy way to send batched multi-dimension stats to meteorite/signalFX.
     Args:
       stats_counter_name(str): the name of this stat.
@@ -47,8 +54,11 @@ class StatsCounter(object):
             self._meteorite_counter.count(count, {'topic': topic})
         self._reset()
 
+    def process(self, topic):
+        self.increment(topic)
 
-class StatTimer(object):
+
+class StatTimer(StatsBase):
     """This class exists primarily because we currently do not know if any sort
     of batching and/or sampling mechanisms will be necessary to avoid data loss
     in meteorite.
@@ -69,7 +79,7 @@ class StatTimer(object):
         self._meteorite_timer.stop(tmp_dimensions)
 
 
-class StatGauge(object):
+class StatGauge(StatsBase):
     """This class exists for the same reason as StatTimer."""
 
     def __init__(self, stat_gauge_name, **kwargs):
@@ -82,3 +92,6 @@ class StatGauge(object):
 
     def set(self, value, tmp_dimensions=None):
         self._meteorite_gauge.set(value, tmp_dimensions)
+
+    def process(self, value, tmp_dimensions):
+        self.set(value, tmp_dimensions)

@@ -539,6 +539,30 @@ class TestPublishMonitorMessage(TestProducerBase):
                 expected_start_timestamp=producer.monitor.start_time
             )
 
+    @pytest.mark.parametrize(
+        "disable_meteorite,expected_call_count", [
+            (True, 0), (False, 1)
+        ]
+    )
+    def test_meteorite_on_off(
+        self,
+        create_message,
+        registered_schema,
+        producer,
+        disable_meteorite,
+        expected_call_count
+    ):
+        with mock.patch.object(
+            data_pipeline.producer.StatsCounter,
+            'process',
+            autospec=True,
+            return_value=None
+        ) as mock_stats_counter:
+            producer.disable_meteorite = disable_meteorite
+            m = create_message(registered_schema, timeslot=1.0)
+            producer.publish(m)
+            assert mock_stats_counter.call_count == expected_call_count
+
     def test_publish_messages_with_diff_timestamps(
         self, producer, create_message, registered_schema
     ):

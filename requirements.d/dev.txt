@@ -11,6 +11,7 @@ ipython
 mock
 pre-commit>=0.4.2
 # Later versions should be ok once INFRA-3779 is fixed
+pysensu_yelp==0.2.3
 pytest<2.8.2
 pytest-cov==1.8.1
 pytest-raisesregexp

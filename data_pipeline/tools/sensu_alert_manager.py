@@ -76,4 +76,7 @@ class SensuAlertManager(HeartbeatPeriodicProcessor):
             self._result_dict['status'],
             self._result_dict['output']))
 
+        self.send_event()
+
+    def send_event(self):
         pysensu_yelp.send_event(**self._result_dict)

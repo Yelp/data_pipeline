@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import multiprocessing
+import time
 from collections import defaultdict
 
 import simplejson as json
@@ -13,6 +14,8 @@ from data_pipeline._kafka_util import get_actual_published_messages_count
 from data_pipeline._pooled_kafka_producer import PooledKafkaProducer
 from data_pipeline.client import Client
 from data_pipeline.config import get_config
+from data_pipeline.tools.meteorite_wrappers import StatsCounter
+from data_pipeline.tools.sensu_ttl_alerter import SensuTTLManager
 
 
 logger = get_config().logger
@@ -107,6 +110,11 @@ class Producer(Client):
         self.use_work_pool = use_work_pool
         self.dry_run = dry_run
         self.position_data_callback = position_data_callback
+        self.disable_meteorite = True
+        self.disable_sensu = True
+        self.monitors = {}
+        self.next_sensu_update = 0
+        self._setup_monitors()
 
     @cached_property
     def _kafka_producer(self):
@@ -155,7 +163,30 @@ class Producer(Client):
         # for more information.
         return False
 
-    def publish(self, message, monitors=None, timestamp=None):
+    def _setup_monitors(self):
+        self.monitors["meteorite"] = StatsCounter(
+            stat_counter_name=self.client_name,
+            container_name=get_config().container_name,
+            container_env=get_config().container_env
+        )
+        base_result_dict = {
+            'name': "{0}_outage_check".format("_".join(self.client_name)),
+            'output': "{0} is back on track".format(self.client_name),
+            'runbook': "y/datapipeline",
+            'team': self.registrar.team_name,
+            'page': False,
+            'status': 0,
+            'ttl': "{0}s".format(get_config().sensu_ttl),
+            'sensu_host': get_config().sensu_host,
+            'source': "{0}_{1}".format(self.client_name, get_config().sensu_source),
+            'tip': "either the producer has died or there are no hearbeats upstream"
+        }
+        self.monitors["sensu"] = SensuTTLManager(
+            result_dict=base_result_dict,
+            disable=self.disable_sensu
+        )
+
+    def publish(self, message):
         """Adds the message to the buffer to be published.  Messages are
         published after a number of messages are accumulated or after a
         slight time delay, whichever passes first.  Passing a message to
@@ -177,9 +208,14 @@ class Producer(Client):
         # these new two lines allow for monitoring to be tightly coupled
         # with the producer, particulary the SensuAlertManager, and the
         # MeteoriteGaugeManager, which I've added to the datapipeline
-        #
-        for monitor in monitors:
-            monitor.process(timestamp)
+
+        if not self.disable_meteorite:
+            self.monitors['meteorite'].process(message.topic)
+
+        if not self.disable_sensu and time.time() > self.next_sensu_update:
+            self.next_sensu_update = time.time() + self.sensu_window
+            self.monitors['sensu'].process()
+
         self.monitor.record_message(message)
 
     def ensure_messages_published(self, messages, topic_offsets):
