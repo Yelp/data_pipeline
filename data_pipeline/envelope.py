@@ -81,7 +81,7 @@ class Envelope(object):
         msg = bytes(0) + self._avro_string_writer.encode(message.avro_repr)
 
         if ascii_encoded:
-            return self.ASCII_MAGIC_BYTE + base64.b64encode(msg)
+            return self.ASCII_MAGIC_BYTE + base64.urlsafe_b64encode(msg)
         else:
             return msg
 
@@ -101,6 +101,6 @@ class Envelope(object):
 
         # If the magic byte is ASCII_MAGIC_BYTE, decode it from base64 to ASCII
         if packed_message[0] == self.ASCII_MAGIC_BYTE:
-            packed_message = base64.b64decode(packed_message[1:])
+            packed_message = base64.urlsafe_b64decode(packed_message[1:])
 
         return self._avro_string_reader.decode(packed_message[1:])
