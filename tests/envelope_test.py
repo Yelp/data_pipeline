@@ -76,3 +76,7 @@ class TestEnvelope(object):
     def test_pack_unpack(self, message, envelope, expected_unpacked_message):
         unpacked = envelope.unpack(envelope.pack(message))
         assert unpacked == expected_unpacked_message
+
+    def test_pack_unpack_ascii(self, message, envelope, expected_unpacked_message):
+        unpacked = envelope.unpack(envelope.pack(message, ascii_encoded=True))
+        assert unpacked == expected_unpacked_message

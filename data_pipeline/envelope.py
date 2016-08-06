@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import base64
 import os
 
 import avro.io
@@ -32,6 +33,10 @@ class Envelope(object):
         >>> unpacked['payload']
         'FAKE MESSAGE'
     """
+
+    # Magic byte value of packed message specifying that it is base64 encoded
+    ASCII_MAGIC_BYTE = bytes('a')
+
     @cached_property
     def _schema(self):
         # Keeping this as an instance method because of issues with sharing
@@ -50,7 +55,7 @@ class Envelope(object):
     def _avro_string_reader(self):
         return AvroStringReader(self._schema, self._schema)
 
-    def pack(self, message):
+    def pack(self, message, ascii_encoded=False):
         """Packs a message for transport as described in y/cep342.
 
         Use :func:`unpack` to decode the packed message.
@@ -60,12 +65,18 @@ class Envelope(object):
 
         Returns:
             bytes: Avro byte string prepended by magic envelope version byte
+
+        The initial "magic byte" is meant to specify the envelope schema version.
+        See y/cep342 for details.  In other words, the version number of the current
+        schema is the null byte.  In the event we need to add additional envelope
+        versions, we'll use this byte to identify it.
+
+        In addition, the "magic byte" is used as a protocol to encode the serialized
+        message in base64. See DATAPIPE-1350 for more detail.
         """
-        # The initial "magic byte" is currently unused, but is meant to specify
-        # the envelope schema version.  see y/cep342 for details.  In other
-        # words, the version number of the current schema is the null byte.  In
-        # the event we need to add additional envelope versions, we'll use this
-        # byte to identify it.
+        if ascii_encoded:
+            msg = self._avro_string_writer.encode(message.avro_repr)
+            return self.ASCII_MAGIC_BYTE + base64.b64encode(msg)
         return bytes(0) + self._avro_string_writer.encode(message.avro_repr)
 
     def unpack(self, packed_message):
@@ -81,5 +92,10 @@ class Envelope(object):
         Returns:
             dict: A dictionary with the decoded Avro representation.
         """
-        # The initial "magic byte" is ignored, see the comment in `pack`.
+
+        # If the magic byte is ASCII_MAGIC_BYTE, decode it from base64 to ASCII
+        if packed_message[0] == self.ASCII_MAGIC_BYTE:
+            return self._avro_string_reader.decode(
+                base64.b64decode(packed_message[1:])
+            )
         return self._avro_string_reader.decode(packed_message[1:])
