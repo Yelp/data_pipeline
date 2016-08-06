@@ -72,12 +72,17 @@ class Envelope(object):
         versions, we'll use this byte to identify it.
 
         In addition, the "magic byte" is used as a protocol to encode the serialized
-        message in base64. See DATAPIPE-1350 for more detail.
+        message in base64. See DATAPIPE-1350 for more detail. This option has been 
+        added because as of now, yelp_clog doesn't support sending ASCII strings.
+        Producer/Consumer registration will make use of this to instead send base64 
+        encoded strings, which are supported by yelp_clog.
         """
+        msg = bytes(0) + self._avro_string_writer.encode(message.avro_repr)
+
         if ascii_encoded:
-            msg = self._avro_string_writer.encode(message.avro_repr)
             return self.ASCII_MAGIC_BYTE + base64.b64encode(msg)
-        return bytes(0) + self._avro_string_writer.encode(message.avro_repr)
+        else:
+            return msg
 
     def unpack(self, packed_message):
         """Decodes a message packed with :func:`pack`.
@@ -95,7 +100,6 @@ class Envelope(object):
 
         # If the magic byte is ASCII_MAGIC_BYTE, decode it from base64 to ASCII
         if packed_message[0] == self.ASCII_MAGIC_BYTE:
-            return self._avro_string_reader.decode(
-                base64.b64decode(packed_message[1:])
-            )
+            packed_message = base64.b64decode(packed_message[1:])
+            
         return self._avro_string_reader.decode(packed_message[1:])
