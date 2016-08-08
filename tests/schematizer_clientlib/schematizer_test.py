@@ -463,25 +463,34 @@ class TestGetTopicByName(SchematizerClientTestBase):
             assert source_api_spy.call_count == 0
 
 
-class TestGetSources(SchematizerClientTestBase):
+class GetSourcesTestBase(SchematizerClientTestBase):
 
-    @pytest.fixture(scope='class')
-    def sorted_sources(self, yelp_namespace, biz_src_name, usr_src_name, cta_src_name):
-        biz_src = self._register_avro_schema(
+    @pytest.fixture(autouse=True, scope='class')
+    def biz_src(self, yelp_namespace, biz_src_name):
+        return self._register_avro_schema(
             yelp_namespace,
             biz_src_name
         ).topic.source
 
-        usr_src = self._register_avro_schema(
+    @pytest.fixture(autouse=True, scope='class')
+    def usr_src(self, yelp_namespace, usr_src_name):
+        return self._register_avro_schema(
             yelp_namespace,
             usr_src_name
         ).topic.source
 
-        cta_src = self._register_avro_schema(
-            yelp_namespace,
+    @pytest.fixture(autouse=True, scope='class')
+    def cta_src(self, aux_namespace, cta_src_name):
+        return self._register_avro_schema(
+            aux_namespace,
             cta_src_name
         ).topic.source
 
+
+class TestGetSources(GetSourcesTestBase):
+
+    @pytest.fixture(scope='class')
+    def sorted_sources(self, biz_src, usr_src, cta_src):
         return [biz_src, usr_src, cta_src]
 
     def test_get_all_sources(
@@ -562,28 +571,7 @@ class TestGetSourceById(SchematizerClientTestBase):
             assert source_api_spy.call_count == 0
 
 
-class TestGetSourcesByNamespace(SchematizerClientTestBase):
-
-    @pytest.fixture(autouse=True, scope='class')
-    def biz_src(self, yelp_namespace, biz_src_name):
-        return self._register_avro_schema(
-            yelp_namespace,
-            biz_src_name
-        ).topic.source
-
-    @pytest.fixture(autouse=True, scope='class')
-    def usr_src(self, yelp_namespace, usr_src_name):
-        return self._register_avro_schema(
-            yelp_namespace,
-            usr_src_name
-        ).topic.source
-
-    @pytest.fixture(autouse=True, scope='class')
-    def cta_src(self, aux_namespace, cta_src_name):
-        return self._register_avro_schema(
-            aux_namespace,
-            cta_src_name
-        ).topic.source
+class TestGetSourcesByNamespace(GetSourcesTestBase):
 
     def test_get_sources_in_yelp_namespace(
         self,
