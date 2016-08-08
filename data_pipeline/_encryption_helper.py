@@ -2,10 +2,92 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import os
+from collections import namedtuple
+
+import simplejson
 from Crypto.Cipher import AES
 
 from data_pipeline.config import get_config
-from data_pipeline.initialization_vector import InitializationVector
+from data_pipeline.helpers.singleton import Singleton
+from data_pipeline.initialization_vector import get_initialization_vector
+from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+
+
+_AVSCInfo = namedtuple('_AVSCInfo', (
+    'id',
+    'avsc_file_path',
+    'namespace',
+    'source',
+    'source_owner_email',
+    'contains_pii'
+))
+
+
+initialization_vector_info = _AVSCInfo(
+    1,
+    'data_pipeline/schemas/initialization_vector_v1.avsc',
+    'yelp.data_pipeline',
+    'initialization_vector',
+    'bam+data_pipeline@yelp.com',
+    False
+)
+
+
+class _AVSCStore(object):
+    """Services/Applications are responsible for registering the
+    meta attribute avro schemas and caching them if necessary.
+    For the meta attributes such as encryption
+    (or initialization_vector) which is added by the clientlib
+    internally, this class is then designed to register
+    and cache the avro schemas for such meta attributes inside
+    the clientlib.
+
+    This may be replcaced with something better in the future. This class
+    is not meant to be used outside of this file.
+    """
+
+    __metaclass__ = Singleton
+
+    def __init__(self):
+        self._schematizer = get_schematizer()
+        self._schema_id_cache = {}
+
+    def get_schema_id(self, avro_schema_info):
+        key = avro_schema_info.id
+        schema_id = self._schema_id_cache.get(key)
+        if not schema_id:
+            schema_id = self._load_schema(avro_schema_info)
+        return schema_id
+
+    def update_schema_cache(self, avro_schema_info, schema_id):
+        self._schema_id_cache[avro_schema_info.id] = schema_id
+
+    def _load_schema(self, avro_schema_info):
+        schema_info = self._register_schema(avro_schema_info)
+        self.update_schema_cache(avro_schema_info, schema_info.schema_id)
+        return schema_info.schema_id
+
+    def _load_avro_schema_file(self, avsc_file_path):
+        schema_path = os.path.join(
+            os.path.dirname(__file__),
+            os.pardir,
+            avsc_file_path
+        )
+        with open(schema_path, 'r') as f:
+            return simplejson.loads(f.read())
+
+    def _register_schema(self, avro_schema_info):
+        avro_schema_json = self._load_avro_schema_file(
+            avro_schema_info.avsc_file_path
+        )
+        return self._schematizer.register_schema_from_schema_json(
+            namespace=avro_schema_info.namespace,
+            source=avro_schema_info.source,
+            schema_json=avro_schema_json,
+            source_owner_email=avro_schema_info.source_owner_email,
+            contains_pii=avro_schema_info.contains_pii
+        )
 
 
 class EncryptionHelper(object):
@@ -63,7 +145,8 @@ class EncryptionHelper(object):
         """
         algorithm, _ = cls._get_algorithm_and_key_id(encryption_type)
         if algorithm:
-            return InitializationVector()
+            schema_id = _AVSCStore().get_schema_id(initialization_vector_info)
+            return get_initialization_vector(schema_id)
         raise Exception(
             "Encryption algorithm {} is not supported.".format(algorithm)
         )
