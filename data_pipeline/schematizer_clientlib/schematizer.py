@@ -3,7 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import simplejson
-from requests import ConnectionError
+from requests.exceptions import RequestException
 from swaggerpy.exception import HTTPError
 
 from data_pipeline._retry_util import ExpBackoffPolicy
@@ -912,7 +912,7 @@ class SchematizerClient(object):
         )
         response = retry_on_exception(
             retry_policy=retry_policy,
-            retry_exceptions=ConnectionError,
+            retry_exceptions=RequestException,
             func_to_retry=self._get_api_result,
             request=request
         )

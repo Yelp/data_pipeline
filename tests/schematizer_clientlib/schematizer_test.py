@@ -9,7 +9,8 @@ from datetime import datetime
 import mock
 import pytest
 import simplejson
-from requests import ConnectionError
+from requests.exceptions import ConnectionError
+from requests.exceptions import ReadTimeout
 from swaggerpy import exception as swaggerpy_exc
 
 from data_pipeline.config import get_config
@@ -149,7 +150,7 @@ class TestAPIClient(SchematizerClientTestBase):
         with mock.patch.object(
             schematizer,
             '_get_api_result',
-            side_effect=[ConnectionError, ConnectionError, None]
+            side_effect=[ConnectionError, ReadTimeout, None]
         ) as api_spy:
             schematizer._call_api(
                 api=schematizer._client.schemas.get_schema_by_id,
