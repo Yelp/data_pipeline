@@ -63,6 +63,7 @@ class Envelope(object):
 
         Args:
             message (data_pipeline.message.Message): The message to pack
+            ascii_decoded (Optional[bool]): Set to True if message is not valid ASCII
 
         Returns:
             bytes: Avro byte string prepended by magic envelope version byte
@@ -73,9 +74,9 @@ class Envelope(object):
         versions, we'll use this byte to identify it.
 
         In addition, the "magic byte" is used as a protocol to encode the serialized
-        message in base64. See DATAPIPE-1350 for more detail. This option has been 
+        message in base64. See DATAPIPE-1350 for more detail. This option has been
         added because as of now, yelp_clog only supports sending valid ASCII strings.
-        Producer/Consumer registration will make use of this to instead send base64 
+        Producer/Consumer registration will make use of this to instead send base64
         encoded strings.
         """
         msg = bytes(0) + self._avro_string_writer.encode(message.avro_repr)
