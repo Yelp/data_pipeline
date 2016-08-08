@@ -130,7 +130,7 @@ class SchematizerClientTestBase(object):
         self._assert_source_values(actual.source, expected_resp.source)
 
     def _assert_source_values(self, actual, expected_resp):
-        attrs = ('source_id', 'name', 'owner_email')
+        attrs = ('source_id', 'name', 'owner_email', 'category')
         self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
         assert actual.namespace.namespace_id == expected_resp.namespace.namespace_id
 

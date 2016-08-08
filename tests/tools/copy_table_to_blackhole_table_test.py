@@ -447,28 +447,34 @@ class TestFullRefreshRunner(object):
         mock_execute,
         clause
     ):
-        offset = 0
-        batch.insert_batch(session, offset)
+        min_pk = 1
+        max_pk = 2
+        batch.insert_batch(session, min_pk, max_pk)
+
+        # The queries below are formatted this way to match the whitespace of
+        # the original query that was being called for the purposes of
+        # assertion
         if clause is not None:
-            query = (
-                'INSERT INTO {0} SELECT * FROM {1} WHERE {2} '
-                'ORDER BY id LIMIT {3}, {4}'
-            ).format(
+            query = """INSERT INTO {0}
+        SELECT * FROM {1}
+        WHERE id>{2} AND id<={3}
+         AND {4}""".format(
                 temp_name,
                 table_name,
+                min_pk,
+                max_pk,
                 clause,
-                offset,
                 batch.options.batch_size
             )
         else:
-            query = (
-                'INSERT INTO {0} SELECT * FROM {1} '
-                'ORDER BY id LIMIT {2}, {3}'
-            ).format(
+            query = """INSERT INTO {0}
+        SELECT * FROM {1}
+        WHERE id>{2} AND id<={3}
+        """.format(
                 temp_name,
                 table_name,
-                offset,
-                batch.options.batch_size
+                min_pk,
+                max_pk,
             )
         mock_execute.assert_called_once_with(session, query)
 
@@ -508,13 +514,49 @@ class TestFullRefreshRunner(object):
             clause
         )
 
+    @pytest.fixture(params=[
+        {
+            'min_ret_val': 1,
+            'max_ret_val': 31,
+            'row_side_eff': [10, 10, 10, 1],
+            'row_count': 31,
+            'calls': [(0, 10), (10, 20), (20, 30), (30, 40)]
+        },
+        {
+            'min_ret_val': 1,
+            'max_ret_val': 30,
+            'row_side_eff': [10, 10, 10],
+            'row_count': 30,
+            'calls': [(0, 10), (10, 20), (20, 30)]
+        },
+        {
+            'min_ret_val': 1,
+            'max_ret_val': 29,
+            'row_side_eff': [10, 10, 9],
+            'row_count': 29,
+            'calls': [(0, 10), (10, 20), (20, 30)]
+        },
+        {
+            'min_ret_val': 1,
+            'max_ret_val': 5,
+            'row_side_eff': [5],
+            'row_count': 5,
+            'calls': [(0, 10)]
+        }
+    ]
+    )
+    def inputs(self, request):
+        return request.param
+
     def test_process_table(
         self,
         refresh_batch,
         mock_row_count,
         mock_process_rows,
         sessions,
-        write_session
+        write_session,
+        read_session,
+        inputs
     ):
         with mock.patch.object(
             refresh_batch,
@@ -524,17 +566,26 @@ class TestFullRefreshRunner(object):
             'count_inserted'
         ) as mock_rows, mock.patch.object(
             refresh_batch,
+            '_get_min_primary_key'
+        ) as mock_min_pk, mock.patch.object(
+            refresh_batch,
+            '_get_max_primary_key'
+        ) as mock_max_pk, mock.patch.object(
+            refresh_batch,
             'batch_size',
             10
         ):
-            mock_rows.side_effect = [10, 10, 5]
-            mock_row_count.return_value = 25
+            mock_min_pk.return_value = inputs['min_ret_val']
+            mock_max_pk.return_value = inputs['max_ret_val']
+            mock_rows.side_effect = inputs['row_side_eff']
+            mock_row_count.return_value = inputs['row_count']
             refresh_batch.process_table()
-            calls = [
-                mock.call(write_session, 0),
-                mock.call(write_session, 10),
-                mock.call(write_session, 20)
-            ]
+            call_inputs = inputs['calls']
+            calls = []
+            for x, y in call_inputs:
+                calls.append(
+                    mock.call(write_session, x, y)
+                )
             mock_insert.assert_has_calls(calls)
 
     def test_process_table_managed_refresh(
@@ -553,16 +604,24 @@ class TestFullRefreshRunner(object):
             'count_inserted'
         ) as mock_rows, mock.patch.object(
             managed_refresh_batch,
+            '_get_min_primary_key'
+        ) as mock_min_pk, mock.patch.object(
+            managed_refresh_batch,
+            '_get_max_primary_key'
+        ) as mock_max_pk, mock.patch.object(
+            managed_refresh_batch,
             'batch_size',
             10
         ):
+            mock_min_pk.return_value = 1
+            mock_max_pk.return_value = 25
             mock_rows.side_effect = [10, 10, 5]
             mock_row_count.return_value = 25
             managed_refresh_batch.process_table()
             calls = [
-                mock.call(managed_write_session, 0),
-                mock.call(managed_write_session, 10),
-                mock.call(managed_write_session, 20)
+                mock.call(managed_write_session, 0, 10),
+                mock.call(managed_write_session, 10, 20),
+                mock.call(managed_write_session, 20, 30)
             ]
             mock_insert.assert_has_calls(calls)
             managed_refresh_batch.schematizer.update_refresh.assert_called_once_with(

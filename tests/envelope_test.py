@@ -73,6 +73,13 @@ class TestEnvelope(object):
     def test_pack_create_bytes(self, message, envelope):
         assert isinstance(envelope.pack(message), bytes)
 
+    def test_pack_create_str(self, message, envelope):
+        assert isinstance(envelope.pack(message, ascii_encoded=True), str)
+
     def test_pack_unpack(self, message, envelope, expected_unpacked_message):
         unpacked = envelope.unpack(envelope.pack(message))
+        assert unpacked == expected_unpacked_message
+
+    def test_pack_unpack_ascii(self, message, envelope, expected_unpacked_message):
+        unpacked = envelope.unpack(envelope.pack(message, ascii_encoded=True))
         assert unpacked == expected_unpacked_message

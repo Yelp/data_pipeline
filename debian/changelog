@@ -1,3 +1,29 @@
+data-pipeline-tools (0.4.9) lucid; urgency=low
+
+  * Commit: Merge branch 'master' of
+    git.yelpcorp.com:clientlibs/data_pipeline into DATAPIPE-1271-fix-
+    incorrect-calc-offset-in-producer-retry
+
+ -- Chia-Chi Lin <clin@yelp.com>  Thu, 04 Aug 2016 14:56:21 -0700
+
+data-pipeline-tools (0.4.8) lucid; urgency=low
+
+  * Commit: Uplifted kafka version in requirements.txt
+
+ -- Shahid Chohan <chohan@yelp.com>  Thu, 04 Aug 2016 11:21:02 -0700
+
+data-pipeline-tools (0.4.7) lucid; urgency=low
+
+  * Commit: Merge branch 'bump_kafka_python'
+
+ -- Shahid Chohan <chohan@yelp.com>  Wed, 03 Aug 2016 10:55:18 -0700
+
+data-pipeline-tools (0.4.6) lucid; urgency=low
+
+  * Commit: Merge branch 'DATAPIPE-723-abrar-refractor_meta'
+
+ -- Shahid Chohan <chohan@yelp.com>  Tue, 02 Aug 2016 17:52:44 -0700
+
 data-pipeline-tools (0.4.5) lucid; urgency=low
 
   * Commit: Merge branch 'DATAPIPE-
