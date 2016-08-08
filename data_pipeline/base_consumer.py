@@ -113,12 +113,12 @@ class BaseConsumer(Client):
             This method must be implemented if topic state is to be stored
             in some system other than Kafka, for example when writing data from
             Kafka into a transactional store.
-        pre_topic_refresh_callback: (Optional[Callable[[list[str], list[str]],
+        pre_topic_refresh_callback: (Optional[Callable[[set[str], set[str]],
             Any]]): Optional callback that gets executed right before the
             consumer is about to refresh the topics. The callback function is
-            passed in a list of topic names Consumer is currently consuming
-            from (old topics) and a list of topic names Consumer will be
-            consuming from (old topics and new topics). The return value of the
+            passed in a set of topic names Consumer is currently consuming
+            from (current_topics) and a set of topic names Consumer will be
+            consuming from (refreshed_topics). The return value of the
             function is ignored.
     """
 
@@ -145,8 +145,8 @@ class BaseConsumer(Client):
             monitoring_enabled=False
         )
 
-        if (topic_to_consumer_topic_state_map and consumer_source or
-                not topic_to_consumer_topic_state_map and not consumer_source):
+        if ((topic_to_consumer_topic_state_map and consumer_source) or
+                (not topic_to_consumer_topic_state_map and not consumer_source)):
             raise ValueError("Exactly one of topic_to_consumer_topic_state_map "
                              "or consumer_source must be specified")
 
@@ -299,7 +299,7 @@ class BaseConsumer(Client):
             The derived class must implement _start().
         """
         self.reset_topic_to_partition_offset_cache()
-        self._commit_topic_map_offsets(self._temp_topic_to_consumer_topic_state_map)
+        self._commit_topic_offsets(self._temp_topic_to_consumer_topic_state_map)
         self._temp_topic_to_consumer_topic_state_map = None
         self._start_consumer()
 
@@ -583,11 +583,11 @@ class BaseConsumer(Client):
                 `auto_offset_reset` offset in the topic.
         """
         self.stop()
-        self._commit_topic_map_offsets(topic_to_consumer_topic_state_map)
+        self._commit_topic_offsets(topic_to_consumer_topic_state_map)
         self._set_topic_to_partition_map(topic_to_consumer_topic_state_map)
         self._start_consumer()
 
-    def _commit_topic_map_offsets(self, topic_to_consumer_topic_state_map):
+    def _commit_topic_offsets(self, topic_to_consumer_topic_state_map):
         if topic_to_consumer_topic_state_map:
             logger.info("Committing offsets for Consumer '{0}'...".format(
                 self.client_name

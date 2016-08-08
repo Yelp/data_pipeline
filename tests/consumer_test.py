@@ -249,11 +249,11 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
 
     @pytest.fixture
     def registered_auto_refresh_schema(
-            self,
-            schematizer_client,
-            example_schema,
-            refresh_namespace,
-            refresh_source
+        self,
+        schematizer_client,
+        example_schema,
+        refresh_namespace,
+        refresh_source
     ):
         return schematizer_client.register_schema(
             namespace=refresh_namespace,
@@ -268,42 +268,34 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
         return str(registered_auto_refresh_schema.topic.name)
 
     @pytest.fixture
-    def ensure_current_auto_topic_exists(self, containers, registered_auto_refresh_schema):
-        topic_name = str(registered_auto_refresh_schema.topic.name)
-        containers.create_kafka_topic(topic_name)
-
-    @pytest.fixture
     def current_message(self, registered_auto_refresh_schema, payload):
         return CreateMessage(
             schema_id=registered_auto_refresh_schema.schema_id,
             payload=payload
         )
 
-    @pytest.fixture
-    def setup_new_topic_and_publish_message(
+    def _setup_new_topic_and_publish_message_helper(
         self,
-        non_compatible_payload_data,
-        publish_messages,
         schematizer_client,
-        refresh_namespace,
-        refresh_source,
-        example_non_compatible_schema,
+        publish_messages,
+        schema,
+        payload_data,
+        namespace,
+        source
     ):
-        def _setup_new_topic_and_publish_message():
-            registered_non_compatible_schema = schematizer_client.register_schema(
-                namespace=refresh_namespace,
-                source=refresh_source,
-                schema_str=example_non_compatible_schema,
-                source_owner_email='test@yelp.com',
-                contains_pii=False
-            )
-            message = CreateMessage(
-                schema_id=registered_non_compatible_schema.schema_id,
-                payload_data=non_compatible_payload_data
-            )
-            publish_messages(message, count=3)
-            return message
-        return _setup_new_topic_and_publish_message
+        registered_non_compatible_schema = schematizer_client.register_schema(
+            namespace=namespace,
+            source=source,
+            schema_str=schema,
+            source_owner_email='test@yelp.com',
+            contains_pii=False
+        )
+        message = CreateMessage(
+            schema_id=registered_non_compatible_schema.schema_id,
+            payload_data=payload_data
+        )
+        publish_messages(message, count=3)
+        return message
 
     @pytest.fixture
     def non_compatible_payload_data(self, example_non_compatible_schema):
@@ -334,11 +326,14 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
 
     def test_consumer_pick_up_new_topics_after_refresh(
         self,
-        ensure_current_auto_topic_exists,
+        schematizer_client,
         publish_messages,
         consumer_instance,
+        example_non_compatible_schema,
+        non_compatible_payload_data,
         current_message,
-        setup_new_topic_and_publish_message,
+        refresh_namespace,
+        refresh_source
     ):
         """
         This test publishes 2 messages and starts the consumer. The consumer
@@ -347,9 +342,9 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
         consumer refreshes itself to include the new topic and receives exactly
         those 3 messages.
         """
+        publish_messages(current_message, count=2)
         with consumer_instance as consumer:
-            publish_messages(current_message, count=2)
-            # consumer should return exactly 2 messages 'message'
+            # consumer should return exactly 2 messages
             actual_messages = consumer.get_messages(
                 count=10, blocking=True, timeout=TIMEOUT
             )
@@ -357,7 +352,15 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
             assert len(consumer.topic_to_partition_map) == 1
 
             consumer.commit_messages(actual_messages)
-            next_auto_message = setup_new_topic_and_publish_message()
+
+            next_auto_message = self._setup_new_topic_and_publish_message_helper(
+                schematizer_client,
+                publish_messages,
+                schema=example_non_compatible_schema,
+                payload_data=non_compatible_payload_data,
+                namespace=refresh_namespace,
+                source=refresh_source
+            )
 
             # consumer should refresh itself and include the new topic in the
             # topic_to_partition_map
