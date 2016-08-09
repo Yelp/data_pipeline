@@ -140,90 +140,6 @@ class SchematizerClientTestBase(object):
             assert getattr(actual, attr) == getattr(expected, attr)
 
 
-class GetSourcesTestBase(SchematizerClientTestBase):
-
-    @pytest.fixture(scope='class')
-    def biz_src(self, yelp_namespace, biz_src_name):
-        return self._register_avro_schema(
-            yelp_namespace,
-            biz_src_name
-        ).topic.source
-
-    @pytest.fixture(scope='class')
-    def usr_src(self, yelp_namespace, usr_src_name):
-        return self._register_avro_schema(
-            yelp_namespace,
-            usr_src_name
-        ).topic.source
-
-    @pytest.fixture(scope='class')
-    def cta_src(self, aux_namespace, cta_src_name):
-        return self._register_avro_schema(
-            aux_namespace,
-            cta_src_name
-        ).topic.source
-
-
-class TestGetSources(GetSourcesTestBase):
-
-    @pytest.fixture(scope='class')
-    def sorted_sources(self, biz_src, usr_src, cta_src):
-        return [biz_src, usr_src, cta_src]
-
-    def test_get_all_sources(
-        self,
-        schematizer,
-        sorted_sources
-    ):
-        actual = set(schematizer.get_sources())
-        partial = {
-            Source(
-                source_id=source.source_id,
-                name=source.name,
-                owner_email=source.owner_email,
-                namespace=Namespace(
-                    source.namespace.namespace_id,
-                    name=source.namespace.name
-                ),
-                category=source.category
-            ) for source in sorted_sources
-        }
-        partial.issubset(actual)
-
-    def test_get_sources_filter_by_min_id(
-        self,
-        sorted_sources,
-        schematizer
-    ):
-        min_id = sorted_sources[1].source_id
-        expected_sources = sorted_sources[1:]
-        actual_sources = schematizer.get_sources(
-            min_id=min_id
-        )
-        for actual_source, expected_source in zip(
-            actual_sources,
-            expected_sources
-        ):
-            self._assert_source_values(actual_source, expected_source)
-
-    def test_get_sources_with_page_size(
-        self,
-        schematizer
-    ):
-        with self.attach_spy_on_api(
-            schematizer._client.sources,
-            'list_sources'
-        ) as sources_api_spy:
-            actual_sources = schematizer.get_sources(
-                min_id=1,
-                page_size=1
-            )
-            # Since page size is 1, we would need to call api endpoint
-            # len(sources) + 1 times before we get a page with sources less
-            # than the page size.
-            assert sources_api_spy.call_count == len(actual_sources) + 1
-
-
 class TestAPIClient(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
@@ -546,6 +462,90 @@ class TestGetTopicByName(SchematizerClientTestBase):
             self._assert_topic_values(actual, biz_topic)
             assert topic_api_spy.call_count == 0
             assert source_api_spy.call_count == 0
+
+
+class GetSourcesTestBase(SchematizerClientTestBase):
+
+    @pytest.fixture(scope='class')
+    def biz_src(self, yelp_namespace, biz_src_name):
+        return self._register_avro_schema(
+            yelp_namespace,
+            biz_src_name
+        ).topic.source
+
+    @pytest.fixture(scope='class')
+    def usr_src(self, yelp_namespace, usr_src_name):
+        return self._register_avro_schema(
+            yelp_namespace,
+            usr_src_name
+        ).topic.source
+
+    @pytest.fixture(scope='class')
+    def cta_src(self, aux_namespace, cta_src_name):
+        return self._register_avro_schema(
+            aux_namespace,
+            cta_src_name
+        ).topic.source
+
+
+class TestGetSources(GetSourcesTestBase):
+
+    @pytest.fixture(scope='class')
+    def sorted_sources(self, biz_src, usr_src, cta_src):
+        return [biz_src, usr_src, cta_src]
+
+    def test_get_all_sources(
+        self,
+        schematizer,
+        sorted_sources
+    ):
+        actual = set(schematizer.get_sources())
+        partial = {
+            Source(
+                source_id=source.source_id,
+                name=source.name,
+                owner_email=source.owner_email,
+                namespace=Namespace(
+                    source.namespace.namespace_id,
+                    name=source.namespace.name
+                ),
+                category=source.category
+            ) for source in sorted_sources
+        }
+        partial.issubset(actual)
+
+    def test_get_sources_filter_by_min_id(
+        self,
+        sorted_sources,
+        schematizer
+    ):
+        min_id = sorted_sources[1].source_id
+        expected_sources = sorted_sources[1:]
+        actual_sources = schematizer.get_sources(
+            min_id=min_id
+        )
+        for actual_source, expected_source in zip(
+            actual_sources,
+            expected_sources
+        ):
+            self._assert_source_values(actual_source, expected_source)
+
+    def test_get_sources_with_page_size(
+        self,
+        schematizer
+    ):
+        with self.attach_spy_on_api(
+            schematizer._client.sources,
+            'list_sources'
+        ) as sources_api_spy:
+            actual_sources = schematizer.get_sources(
+                min_id=1,
+                page_size=1
+            )
+            # Since page size is 1, we would need to call api endpoint
+            # len(sources) + 1 times before we get a page with sources less
+            # than the page size.
+            assert sources_api_spy.call_count == len(actual_sources) + 1
 
 
 class TestGetSourceById(SchematizerClientTestBase):
