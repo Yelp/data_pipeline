@@ -9,6 +9,8 @@ import pysensu_yelp
 
 from data_pipeline.tools.heartbeat_periodic_processor import HeartbeatPeriodicProcessor
 
+SENSU_DELAY_ALERT_INTERVAL_SECONDS = 30
+
 
 class SensuAlertManager(HeartbeatPeriodicProcessor):
     """ This class triggers sensu alert if the producer falls behind real time.
@@ -26,8 +28,6 @@ class SensuAlertManager(HeartbeatPeriodicProcessor):
             'status': 0,
             'team': 'bam',
             'page': False,
-            'notification_email': 'bam+sensu@yelp.com',
-            'check_every': '{time}s'.format(time=self.interval_in_seconds),
             'alert_after': '5m',
             'ttl': '300s',
             'sensu_host': config.env_config.sensu_host,
@@ -58,7 +58,7 @@ class SensuAlertManager(HeartbeatPeriodicProcessor):
         self._max_delay_allowed_in_minutes = max_delay_minutes
 
     def process(self, timestamp):
-        if self.disable:
+        if timestamp is None or self.disable:
             return
 
         # This timestamp param has to be timezone aware, otherwise it will not be

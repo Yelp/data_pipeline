@@ -15,6 +15,8 @@ from data_pipeline._pooled_kafka_producer import PooledKafkaProducer
 from data_pipeline.client import Client
 from data_pipeline.config import get_config
 from data_pipeline.tools.meteorite_wrappers import StatsCounter
+from data_pipeline.tools.sensu_alert_manager import SENSU_DELAY_ALERT_INTERVAL_SECONDS
+from data_pipeline.tools.sensu_alert_manager import SensuAlertManager
 from data_pipeline.tools.sensu_ttl_alerter import SensuTTLManager
 
 
@@ -119,7 +121,8 @@ class Producer(Client):
         self.disable_meteorite = True
         self.disable_sensu = True
         self.monitors = {}
-        self.next_sensu_update = 0
+        self._next_sensu_update = 0
+        self._sensu_window = 0
         self._setup_monitors()
 
     @cached_property
@@ -170,13 +173,21 @@ class Producer(Client):
         return False
 
     def _setup_monitors(self):
+        """This method sets up the meteorite monitor as well as the two sensu
+        monitors, first for ttl, and second for delay.  The ttl monitor tracks
+        the health of the producer and upstream heartbeat.  The delay monitor
+        tracks whether the producer has fallen too far behind the upstream
+        data"""
+
         self.monitors["meteorite"] = StatsCounter(
             stat_counter_name=self.client_name,
             container_name=get_config().container_name,
             container_env=get_config().container_env
         )
-        base_result_dict = {
-            'name': "{0}_outage_check".format("_".join(self.client_name)),
+
+        underscored_client_name = "_".join(self.client_name.split())
+        ttl_sensu_dict = {
+            'name': "{0}_outage_check".format(underscored_client_name),
             'output': "{0} is back on track".format(self.client_name),
             'runbook': "y/datapipeline",
             'team': self.registrar.team_name,
@@ -184,15 +195,31 @@ class Producer(Client):
             'status': 0,
             'ttl': "{0}s".format(get_config().sensu_ttl),
             'sensu_host': get_config().sensu_host,
-            'source': "{0}_{1}".format(self.client_name, get_config().sensu_source),
+            'source': "{0}_{1}".format(
+                self.client_name,
+                get_config().sensu_source
+            ),
             'tip': "either the producer has died or there are no hearbeats upstream"
         }
-        self.monitors["sensu"] = SensuTTLManager(
-            result_dict=base_result_dict,
+        delay_sensu_dict = dict(ttl_sensu_dict)
+        delay_sensu_dict['name'] = "{0}_delay_check".format(underscored_client_name)
+        delay_sensu_dict['alert_after'] = '5m'
+
+        self._sensu_window = get_config().sensu_ping_window
+        self.monitors["sensu_ttl"] = SensuTTLManager(
+            result_dict=ttl_sensu_dict,
             disable=self.disable_sensu
         )
 
-    def publish(self, message):
+        self.monitors["sensu_delay"] = SensuAlertManager(
+            SENSU_DELAY_ALERT_INTERVAL_SECONDS,
+            self.client_name,
+            delay_sensu_dict,
+            get_config().max_producer_delay_minutes,
+            disable=self.disable_sensu
+        )
+
+    def publish(self, message, timestamp=None):
         """Adds the message to the buffer to be published.  Messages are
         published after a number of messages are accumulated or after a
         slight time delay, whichever passes first.  Passing a message to
@@ -208,19 +235,17 @@ class Producer(Client):
 
         Args:
             message (data_pipeline.message.Message): message to publish
+            timestamp (timezone aware timestamp): utc datetime of event
         """
         self._kafka_producer.publish(message)
-        #
-        # these new two lines allow for monitoring to be tightly coupled
-        # with the producer, particulary the SensuAlertManager, and the
-        # MeteoriteGaugeManager, which I've added to the datapipeline
 
         if not self.disable_meteorite:
             self.monitors['meteorite'].process(message.topic)
 
-        if not self.disable_sensu and time.time() > self.next_sensu_update:
-            self.next_sensu_update = time.time() + self.sensu_window
-            self.monitors['sensu'].process()
+        if not self.disable_sensu and time.time() > self._next_sensu_update:
+            self._next_sensu_update = time.time() + self._sensu_window
+            self.monitors['sensu_ttl'].process()
+            self.monitors['sensu_delay'].process(timestamp)
 
         self.monitor.record_message(message)
         self.registrar.update_schema_last_used_timestamp(

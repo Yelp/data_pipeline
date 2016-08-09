@@ -613,6 +613,50 @@ class TestPublishMonitorMessage(TestProducerBase):
             producer.publish(m)
             assert mock_stats_counter.call_count == expected_call_count
 
+    @pytest.mark.parametrize(
+        "disable_sensu,expected_call_count", [
+            (True, 0), (False, 1)
+        ]
+    )
+    def test_sensu_on_off(
+        self,
+        create_message,
+        registered_schema,
+        producer,
+        disable_sensu,
+        expected_call_count
+    ):
+        with mock.patch.object(
+            data_pipeline.producer.SensuTTLManager,
+            'process',
+            autospec=True,
+            return_value=None
+        ) as mock_sensu_ttl_process:
+            producer.disable_sensu = disable_sensu
+            m = create_message(registered_schema, timeslot=1.0)
+            producer.publish(m)
+            assert mock_sensu_ttl_process.call_count == expected_call_count
+
+    @pytest.mark.parametrize("message_count", [1, 2])
+    def test_sensu_outside_inside_window(
+        self,
+        create_message,
+        registered_schema,
+        producer,
+        message_count
+    ):
+        with mock.patch.object(
+            data_pipeline.producer.SensuTTLManager,
+            'process',
+            autospec=True,
+            return_value=None
+        ) as mock_sensu_ttl_process:
+            producer.disable_sensu = False
+            m1 = create_message(registered_schema, timeslot=1.0)
+            for i in range(message_count):
+                producer.publish(m1)
+            assert mock_sensu_ttl_process.call_count == 1
+
     def test_publish_messages_with_diff_timestamps(
         self, producer, create_message, registered_schema
     ):

@@ -437,6 +437,7 @@ class Config(object):
 
     @property
     def container_name(self):
+        """this is the name of the paasta instance in which the client is running"""
         return os.environ.get(
             'PAASTA_INSTANCE',
             data_pipeline_conf.read_string('container_name', "no_paasta_container")
@@ -444,6 +445,7 @@ class Config(object):
 
     @property
     def container_env(self):
+        """this is the name of the paasta cluster in which the client is running"""
         return os.environ.get(
             'PAASTA_CLUSTER',
             data_pipeline_conf.read_string('container_env', "no_paasta_environment")
@@ -458,6 +460,16 @@ class Config(object):
         return '{container_env}_{container_name}'.format(
             container_env=self.container_env,
             container_name=self.container_name
+        )
+
+    @property
+    def max_producer_delay_minutes(self):
+        """This is the maximum number of minutes allowed between the event times
+        and the time the producer is to publish the message to kafka.  Anything
+        greater than this time will producer an alert"""
+        return data_pipeline_conf.read_int(
+            'sensu_max_delay_minutes',
+            5
         )
 
 
