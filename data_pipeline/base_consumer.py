@@ -262,6 +262,7 @@ class BaseConsumer(Client):
 
     def __enter__(self):
         self.start()
+        self.registrar.start()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
