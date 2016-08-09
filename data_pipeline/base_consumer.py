@@ -151,6 +151,7 @@ class BaseConsumer(Client):
                              "or consumer_source must be specified")
 
         self.consumer_source = consumer_source
+        self.topic_to_consumer_topic_state_map = topic_to_consumer_topic_state_map
         self.force_payload_decode = force_payload_decode
         self.auto_offset_reset = auto_offset_reset
         self.partitioner_cooldown = partitioner_cooldown
@@ -167,27 +168,16 @@ class BaseConsumer(Client):
             consumer_source
         )
 
-        # Storing the topic_to_consumer_topic_state_map to a temp instance
-        # variable which will be used to commit partition offsets when starting
-        # the consumer. After committing partition offsets, the temp variable
-        # would be set to `None` to prevent committing these offsets again.
-        self._temp_topic_to_consumer_topic_state_map = (
-            self._get_temp_topic_to_consumer_topic_state_map(
-                topic_to_consumer_topic_state_map, consumer_source
-            )
-        )
-        self._set_topic_to_partition_map(
-            self._temp_topic_to_consumer_topic_state_map
-        )
-
-    def _get_temp_topic_to_consumer_topic_state_map(
+    def _get_refreshed_topic_to_consumer_topic_state_map(
         self,
         topic_to_consumer_state_map,
         consumer_source
     ):
         if topic_to_consumer_state_map:
             return topic_to_consumer_state_map
-        return self._get_topic_to_offset_map(consumer_source.get_topics())
+        if consumer_source:
+            return self._get_topic_to_offset_map(consumer_source.get_topics())
+        return {}
 
     def _get_topic_to_offset_map(self, topics):
         """ This function constructs a new topic_to_consumer_topic_state_map
@@ -299,9 +289,27 @@ class BaseConsumer(Client):
             The derived class must implement _start().
         """
         self.reset_topic_to_partition_offset_cache()
-        self._commit_topic_offsets(self._temp_topic_to_consumer_topic_state_map)
-        self._temp_topic_to_consumer_topic_state_map = None
+        refreshed_topic_to_consumer_topic_state_map = (
+            self._get_refreshed_topic_to_consumer_topic_state_map(
+                self.topic_to_consumer_topic_state_map,
+                self.consumer_source
+            ))
+        if refreshed_topic_to_consumer_topic_state_map:
+            self._commit_topic_offsets(
+                refreshed_topic_to_consumer_topic_state_map
+            )
+            # After committing partition offsets, the
+            # self.topic_to_consumer_topic_state_map is set to `None` to
+            # prevent committing these offsets again.
+            self.topic_to_consumer_topic_state_map = None
+            self._set_topic_to_partition_map(
+                refreshed_topic_to_consumer_topic_state_map
+            )
         self._start_consumer()
+        #
+        # self._commit_topic_offsets(self._temp_topic_to_consumer_topic_state_map)
+        # self._temp_topic_to_consumer_topic_state_map = None
+        # self._start_consumer()
 
     def _start_consumer(self):
         logger.info("Starting Consumer '{0}'...".format(self.client_name))

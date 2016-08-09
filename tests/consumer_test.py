@@ -487,24 +487,23 @@ class TestReaderSchemaMapFixedSchemas(BaseConsumerSourceBaseTest):
 
 class TestConsumerRegistration(TestReaderSchemaMapFixedSchemas):
 
-    def test_consumer_initial_registration_message(self):
+    def test_consumer_initial_registration_message(self, topic):
         """
-        Assert that an initial RegistrationMessage is sent upon initialization
-        of a Consumer with a non-empty topic_to_consumer_topic_state_map.
+        Assert that an initial RegistrationMessage is sent upon starting
+        the Consumer with a non-empty topic_to_consumer_topic_state_map.
         """
         with attach_spy_on_func(
             clog,
             'log_line'
         ) as func_spy:
             fake_topic = ConsumerTopicState({}, 23)
-            Consumer(
+            with Consumer(
                 consumer_name='test_consumer',
                 team_name='bam',
                 expected_frequency_seconds=ExpectedFrequency.constantly,
-                topic_to_consumer_topic_state_map={'topic': fake_topic,
-                                                   'topic2': None}
-            )
-            assert func_spy.call_count == 1
+                topic_to_consumer_topic_state_map={topic: fake_topic}
+            ):
+                assert func_spy.call_count == 1
 
     def test_consumer_periodic_registration_messages(
         self,
