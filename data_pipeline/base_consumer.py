@@ -307,10 +307,6 @@ class BaseConsumer(Client):
                 refreshed_topic_to_consumer_topic_state_map
             )
         self._start_consumer()
-        #
-        # self._commit_topic_offsets(self._temp_topic_to_consumer_topic_state_map)
-        # self._temp_topic_to_consumer_topic_state_map = None
-        # self._start_consumer()
 
     def _start_consumer(self):
         logger.info("Starting Consumer '{0}'...".format(self.client_name))
