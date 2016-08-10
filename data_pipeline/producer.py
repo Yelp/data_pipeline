@@ -141,6 +141,7 @@ class Producer(Client):
         # it, checkpoint position data won't be passed to the producer until
         # the user starts publishing messages.
         self.wake()
+        self.registrar.start()
 
         return self
 
