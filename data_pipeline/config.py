@@ -392,10 +392,7 @@ class Config(object):
         is published after we will not send another OK to sensu.  The purpose of this is
         to throtte the number events each producer sends to sensu.
         """
-        return data_pipeline_conf.read_int(
-            'sensu_ping_window',
-            default=30
-        )
+        return data_pipeline_conf.read_int('sensu_ping_window', default=30)
 
     @property
     def expected_heartbeat_interval(self):
@@ -403,10 +400,7 @@ class Config(object):
         of this number of seconds.  For example, if this returns 300 then we expect the
         upstream to create at least one event every 300 seconds.
         """
-        return data_pipeline_conf.read_int(
-            'expected_heartbeat_interval',
-            default=300
-        )
+        return data_pipeline_conf.read_int('expected_heartbeat_interval', default=300)
 
     @property
     def sensu_ttl(self):
@@ -416,7 +410,7 @@ class Config(object):
         if the ping window is 30 seconds and the hearbeat interval is 300 seconds the TTL
         will be 331 seconds, which guarantees if things are working correctly we'll have be
         sending OK's to sensu on time.  If either the producer goes down or the upstream
-        stops sending heartbeats the producer the team owning the producer will be alerted
+        stops sending heartbeats to the producer the team owning the producer will be alerted
         within one TTL period.
         """
         return self.expected_heartbeat_interval + self.sensu_ping_window + 1
@@ -436,8 +430,14 @@ class Config(object):
             return data_pipeline_conf.read_string('sensu_host', self.YOCALHOST)
 
     @property
+    def sensu_page_on_critical(self):
+        """If this is true the client will page on a sensu critical alert"""
+        return data_pipeline_conf.read_bool('sensu_page_on_critical', default=False)
+
+    @property
     def container_name(self):
-        """this is the name of the paasta instance in which the client is running"""
+        """This is the name of the paasta instance in which the client is running.
+        For example: canary"""
         return os.environ.get(
             'PAASTA_INSTANCE',
             data_pipeline_conf.read_string('container_name', "no_paasta_container")
@@ -445,7 +445,9 @@ class Config(object):
 
     @property
     def container_env(self):
-        """this is the name of the paasta cluster in which the client is running"""
+        """This is the name of the paasta cluster in which the client is running.
+        For example: norcal-prod.
+        """
         return os.environ.get(
             'PAASTA_CLUSTER',
             data_pipeline_conf.read_string('container_env', "no_paasta_environment")
@@ -454,8 +456,8 @@ class Config(object):
     @property
     def sensu_source(self):
         """This ensures that the alert tracks both the paasta environment and
-        the running instance, so we can have separate alerts for the pnw-prod
-        canary and the pnw-devc main instances.
+        the running instance, so we can have separate alerts for the canary
+        and the main instances.
         """
         return '{container_env}_{container_name}'.format(
             container_env=self.container_env,
@@ -463,14 +465,34 @@ class Config(object):
         )
 
     @property
-    def max_producer_delay_minutes(self):
+    def sensu_alert_after_seconds(self):
+        """This ensures that the alert tracks both the paasta environment and
+        the running instance, so we can have separate alerts for the canary
+        and the main instances.
+        """
+        return "{}s".format(
+            data_pipeline_conf.read_int(
+                'sensu_alert_after_seconds',
+                default=300
+            )
+        )
+
+    @property
+    def enable_sensu(self):
+        """enable sensu alerting"""
+        return data_pipeline_conf.read_bool('enable_sensu', False)
+
+    @property
+    def enable_meteorite(self):
+        """enable meteorite monitoring"""
+        return data_pipeline_conf.read_bool('enable_meteorite', False)
+
+    @property
+    def max_producer_delay_seconds(self):
         """This is the maximum number of minutes allowed between the event times
         and the time the producer is to publish the message to kafka.  Anything
-        greater than this time will producer an alert"""
-        return data_pipeline_conf.read_int(
-            'sensu_max_delay_minutes',
-            5
-        )
+        greater than this time will produce an alert"""
+        return data_pipeline_conf.read_int('sensu_max_delay_seconds', 300)
 
 
 def configure_from_dict(config_dict):

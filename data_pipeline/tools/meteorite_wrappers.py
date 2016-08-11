@@ -55,6 +55,11 @@ class StatsCounter(StatsBase):
         self._reset()
 
     def process(self, topic):
+        """increments the counter for the topic specified
+
+        Args:
+            topic(str): the name of the topic to which a message is published
+        """
         self.increment(topic)
 
 
@@ -94,4 +99,10 @@ class StatGauge(StatsBase):
         self._meteorite_gauge.set(value, tmp_dimensions)
 
     def process(self, value, tmp_dimensions):
+        """sets the value of a gauge in meteorite
+
+        Args:
+            value(int): the value for the dimensions specified
+            tmp_dimensions(dict): the dimensions for each emission
+        """
         self.set(value, tmp_dimensions)

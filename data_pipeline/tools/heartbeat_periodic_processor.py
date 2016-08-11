@@ -9,8 +9,9 @@ from dateutil.tz import tzutc
 
 
 class HeartbeatPeriodicProcessor(object):
-    """ This class provides an interface for handling periodic events that
-    can be triggered by a heartbeat event, like sensu alert and data event checkpoint.
+    """ This class provides an interface for handling periodic events that can
+    be triggered by a heartbeat event, like sensu alert and data event checkpoint.
+    That is, it serves as a base class and must be subclassed.
 
     Args:
       interval_in_seconds(int): the time interval between two events.

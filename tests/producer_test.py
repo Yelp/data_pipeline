@@ -590,8 +590,8 @@ class TestPublishMonitorMessage(TestProducerBase):
             )
 
     @pytest.mark.parametrize(
-        "disable_meteorite,expected_call_count", [
-            (True, 0), (False, 1)
+        "enable_meteorite,expected_call_count", [
+            (False, 0), (True, 1)
         ]
     )
     def test_meteorite_on_off(
@@ -599,7 +599,7 @@ class TestPublishMonitorMessage(TestProducerBase):
         create_message,
         registered_schema,
         producer,
-        disable_meteorite,
+        enable_meteorite,
         expected_call_count
     ):
         with mock.patch.object(
@@ -608,14 +608,14 @@ class TestPublishMonitorMessage(TestProducerBase):
             autospec=True,
             return_value=None
         ) as mock_stats_counter:
-            producer.disable_meteorite = disable_meteorite
+            producer.enable_meteorite = enable_meteorite
             m = create_message(registered_schema, timeslot=1.0)
             producer.publish(m)
             assert mock_stats_counter.call_count == expected_call_count
 
     @pytest.mark.parametrize(
-        "disable_sensu,expected_call_count", [
-            (True, 0), (False, 1)
+        "enable_sensu,expected_call_count", [
+            (False, 0), (True, 1)
         ]
     )
     def test_sensu_on_off(
@@ -623,7 +623,7 @@ class TestPublishMonitorMessage(TestProducerBase):
         create_message,
         registered_schema,
         producer,
-        disable_sensu,
+        enable_sensu,
         expected_call_count
     ):
         with mock.patch.object(
@@ -632,7 +632,7 @@ class TestPublishMonitorMessage(TestProducerBase):
             autospec=True,
             return_value=None
         ) as mock_sensu_ttl_process:
-            producer.disable_sensu = disable_sensu
+            producer.enable_sensu = enable_sensu
             m = create_message(registered_schema, timeslot=1.0)
             producer.publish(m)
             assert mock_sensu_ttl_process.call_count == expected_call_count
@@ -651,7 +651,7 @@ class TestPublishMonitorMessage(TestProducerBase):
             autospec=True,
             return_value=None
         ) as mock_sensu_ttl_process:
-            producer.disable_sensu = False
+            producer.enable_sensu = True
             m1 = create_message(registered_schema, timeslot=1.0)
             for i in range(message_count):
                 producer.publish(m1)

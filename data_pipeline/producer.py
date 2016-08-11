@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import copy
 import multiprocessing
 import time
 from collections import defaultdict
@@ -118,8 +119,8 @@ class Producer(Client):
         # Send initial producer registration messages
         self.registrar.register_tracked_schema_ids(schema_id_list)
 
-        self.disable_meteorite = True
-        self.disable_sensu = True
+        self.enable_meteorite = get_config().enable_meteorite
+        self.enable_sensu = get_config().enable_sensu
         self.monitors = {}
         self._next_sensu_update = 0
         self._sensu_window = 0
@@ -186,12 +187,14 @@ class Producer(Client):
         )
 
         underscored_client_name = "_".join(self.client_name.split())
+        # Sensu event dictionary parameters are described here:
+        # http://pysensu-yelp.readthedocs.io/en/latest/index.html?highlight=send_event
         ttl_sensu_dict = {
             'name': "{0}_outage_check".format(underscored_client_name),
             'output': "{0} is back on track".format(self.client_name),
             'runbook': "y/datapipeline",
             'team': self.registrar.team_name,
-            'page': False,
+            'page': get_config().sensu_page_on_critical,
             'status': 0,
             'ttl': "{0}s".format(get_config().sensu_ttl),
             'sensu_host': get_config().sensu_host,
@@ -201,22 +204,24 @@ class Producer(Client):
             ),
             'tip': "either the producer has died or there are no hearbeats upstream"
         }
-        delay_sensu_dict = dict(ttl_sensu_dict)
-        delay_sensu_dict['name'] = "{0}_delay_check".format(underscored_client_name)
-        delay_sensu_dict['alert_after'] = '5m'
-
         self._sensu_window = get_config().sensu_ping_window
         self.monitors["sensu_ttl"] = SensuTTLManager(
             result_dict=ttl_sensu_dict,
-            disable=self.disable_sensu
+            enable=self.enable_sensu
         )
 
+        delay_sensu_dict = copy.deepcopy(ttl_sensu_dict)
+        delay_sensu_dict.update({
+            'name': "{0}_delay_check".format(underscored_client_name),
+            'alert_after': get_config().sensu_alert_after_seconds,
+        })
+        disable_sensu = not self.enable_sensu
         self.monitors["sensu_delay"] = SensuAlertManager(
             SENSU_DELAY_ALERT_INTERVAL_SECONDS,
             self.client_name,
             delay_sensu_dict,
-            get_config().max_producer_delay_minutes,
-            disable=self.disable_sensu
+            get_config().max_producer_delay_seconds,
+            disable=disable_sensu
         )
 
     def publish(self, message, timestamp=None):
@@ -239,10 +244,10 @@ class Producer(Client):
         """
         self._kafka_producer.publish(message)
 
-        if not self.disable_meteorite:
+        if self.enable_meteorite:
             self.monitors['meteorite'].process(message.topic)
 
-        if not self.disable_sensu and time.time() > self._next_sensu_update:
+        if self.enable_sensu and time.time() > self._next_sensu_update:
             self._next_sensu_update = time.time() + self._sensu_window
             self.monitors['sensu_ttl'].process()
             self.monitors['sensu_delay'].process(timestamp)
