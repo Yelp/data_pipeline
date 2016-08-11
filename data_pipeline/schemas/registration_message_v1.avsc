@@ -1,7 +1,7 @@
 {
   "type": "record",
   "namespace": "yelp.data_pipeline",
-  "name": "client_registration_message",
+  "name": "client_registration_message_v1",
   "doc": "Message format for Producer/Consumer registration.",
   "fields": [
     {
