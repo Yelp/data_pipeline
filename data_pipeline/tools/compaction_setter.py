@@ -47,6 +47,11 @@ class CompactionSetter(Batch):
             default='/nail/srv/configs/data_pipeline_tools.yaml',
             help='Config path for CompactionSetter (default: %default)'
         )
+        opt_group.add_option(
+            '--whitelist-topic',
+            type='str',
+            help='A single topic for which log compaction should be turned on'
+        )
         return opt_group
 
     def process_commandline_options(self, args=None):
@@ -54,10 +59,14 @@ class CompactionSetter(Batch):
 
         load_package_config(self.options.config_path)
         self.dry_run = self.options.dry_run
+        self.whitelist_topic = self.options.whitelist_topic
         self.schematizer = get_schematizer()
 
     def _get_all_topics_to_compact(self):
-        topics = self.schematizer.get_topics_by_criteria()
+        if self.whitelist_topic:
+            topics = [self.schematizer.get_topic_by_name(self.whitelist_topic)]
+        else:
+            topics = self.schematizer.get_topics_by_criteria()
         topics = [topic.name for topic in topics]
         return self.schematizer.filter_topics_by_pkeys(topics)
 
