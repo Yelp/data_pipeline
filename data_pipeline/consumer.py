@@ -75,12 +75,12 @@ class Consumer(BaseConsumer):
             This method must be implemented if topic state is to be stored
             in some system other than Kafka, for example when writing data from
             Kafka into a transactional store.
-        pre_topic_refresh_callback: (Optional[Callable[[list[str], list[str]],
+        pre_topic_refresh_callback: (Optional[Callable[[set[str], set[str]],
             Any]]): Optional callback that gets executed right before the
             consumer is about to refresh the topics. The callback function is
-            passed in a list of topic names Consumer is currently consuming
-            from (old topics) and a list of topic names Consumer will be
-            consuming from (old topics and new topics). The return value of the
+            passed in a set of topic names Consumer is currently consuming
+            from (current_topics) and a set of topic names Consumer will be
+            consuming from (refreshed_topics). The return value of the
             function is ignored.
 
     Note:
@@ -217,22 +217,27 @@ class Consumer(BaseConsumer):
         return messages
 
     def _refresh_source_topics_if_necessary(self):
-        # TODO(tajinder|DATAPIPE-1265): Consumer after refreshing topics should
-        # only tail new topics.
         if not self._refresh_timer.should_tick():
             return
 
-        current_topics = self.topic_to_partition_map.keys()
+        current_topics = set(self.topic_to_partition_map.keys())
+        refreshed_topics = set(self.consumer_source.get_topics())
 
-        refreshed_topic_to_state_map = self._get_topic_to_offset_map(
-            self.topic_to_partition_map,
-            self.consumer_source
-        )
-        refreshed_topics = refreshed_topic_to_state_map.keys()
-
-        if set(current_topics) == set(refreshed_topics):
+        if current_topics == refreshed_topics:
             return
+
+        all_topics_to_state_map = self._get_topic_to_offset_map(
+            current_topics.union(refreshed_topics)
+        )
+        refreshed_topics_to_state_map = {
+            topic: all_topics_to_state_map.get(topic)
+            for topic in refreshed_topics
+        }
 
         if self.pre_topic_refresh_callback:
             self.pre_topic_refresh_callback(current_topics, refreshed_topics)
-        self.reset_topics(refreshed_topic_to_state_map)
+
+        self.stop()
+        self._commit_topic_offsets(all_topics_to_state_map)
+        self._set_topic_to_partition_map(refreshed_topics_to_state_map)
+        self._start_consumer()

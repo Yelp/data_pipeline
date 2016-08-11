@@ -9,7 +9,8 @@ from datetime import datetime
 import mock
 import pytest
 import simplejson
-from requests import ConnectionError
+from requests.exceptions import ConnectionError
+from requests.exceptions import ReadTimeout
 from swaggerpy import exception as swaggerpy_exc
 
 from data_pipeline.config import get_config
@@ -22,7 +23,6 @@ from data_pipeline.schematizer_clientlib.models.target_schema_type_enum import \
 from data_pipeline.schematizer_clientlib.schematizer import SchematizerClient
 
 
-@pytest.mark.usefixtures('containers')
 class SchematizerClientTestBase(object):
 
     @pytest.fixture
@@ -150,7 +150,7 @@ class TestAPIClient(SchematizerClientTestBase):
         with mock.patch.object(
             schematizer,
             '_get_api_result',
-            side_effect=[ConnectionError, ConnectionError, None]
+            side_effect=[ConnectionError, ReadTimeout, None]
         ) as api_spy:
             schematizer._call_api(
                 api=schematizer._client.schemas.get_schema_by_id,
@@ -401,36 +401,6 @@ class TestGetSchemaBySchemaJson(SchematizerClientTestBase):
     @pytest.fixture
     def schema_str(self, schema_json):
         return simplejson.dumps(schema_json)
-
-    def test_get_schema_by_schema_json_returns_none_if_not_cached(
-        self,
-        schematizer,
-        schema_json
-    ):
-        assert schematizer.get_schema_by_schema_json(schema_json) is None
-
-    def test_get_schema_by_schema_json_returns_cached_schema(
-        self,
-        schematizer,
-        biz_src_name,
-        schema_json,
-        yelp_namespace
-    ):
-        schema_one = schematizer.register_schema_from_schema_json(
-            namespace=yelp_namespace,
-            source=biz_src_name,
-            schema_json=schema_json,
-            source_owner_email=self.source_owner_email,
-            contains_pii=False
-        )
-
-        with self.attach_spy_on_api(
-            schematizer._client.schemas,
-            'register_schema'
-        ) as register_schema_api_spy:
-            schema_two = schematizer.get_schema_by_schema_json(schema_json)
-            assert register_schema_api_spy.called == 0
-            assert schema_one == schema_two
 
 
 class TestGetTopicByName(SchematizerClientTestBase):

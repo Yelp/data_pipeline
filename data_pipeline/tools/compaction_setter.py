@@ -10,6 +10,7 @@ from yelp_batch.batch import batch_command_line_options
 from yelp_kafka_tool.util.zookeeper import ZK
 from yelp_servlib.config_util import load_package_config
 
+from data_pipeline import __version__
 from data_pipeline.config import get_config
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
@@ -22,6 +23,13 @@ class CompactionSetter(Batch):
     def __init__(self):
         super(CompactionSetter, self).__init__()
         self.notify_emails = ['bam+batch@yelp.com']
+
+    @property
+    def version(self):
+        """Overriding this so we'll get the clientlib version number when
+        the tailer is run with --version.
+        """
+        return "data_pipeline {}".format(__version__)
 
     @batch_command_line_options
     def define_options(self, option_parser):

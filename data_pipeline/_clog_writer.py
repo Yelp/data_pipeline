@@ -17,6 +17,6 @@ class ClogWriter(object):
 
     def publish(self, message):
         try:
-            clog.log_line(message.topic, self.envelope.pack(message))
+            clog.log_line(message.topic, self.envelope.pack(message, ascii_encoded=True))
         except:
             logger.error("Failed to scribe message - {}".format(str(message)))

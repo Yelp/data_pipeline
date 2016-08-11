@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import base64
 import os
 
 import avro.io
@@ -32,6 +33,11 @@ class Envelope(object):
         >>> unpacked['payload']
         'FAKE MESSAGE'
     """
+
+    # Magic byte value of packed message specifying that it is base64 encoded.
+    # This value was chosen because it is valid ASCII
+    ASCII_MAGIC_BYTE = bytes('a')
+
     @cached_property
     def _schema(self):
         # Keeping this as an instance method because of issues with sharing
@@ -50,23 +56,35 @@ class Envelope(object):
     def _avro_string_reader(self):
         return AvroStringReader(self._schema, self._schema)
 
-    def pack(self, message):
+    def pack(self, message, ascii_encoded=False):
         """Packs a message for transport as described in y/cep342.
 
         Use :func:`unpack` to decode the packed message.
 
         Args:
             message (data_pipeline.message.Message): The message to pack
+            ascii_decoded (Optional[bool]): Set to True if message is not valid ASCII
 
         Returns:
             bytes: Avro byte string prepended by magic envelope version byte
+
+        The initial "magic byte" is meant to specify the envelope schema version.
+        See y/cep342 for details.  In other words, the version number of the current
+        schema is the null byte.  In the event we need to add additional envelope
+        versions, we'll use this byte to identify it.
+
+        In addition, the "magic byte" is used as a protocol to encode the serialized
+        message in base64. See DATAPIPE-1350 for more detail. This option has been
+        added because as of now, yelp_clog only supports sending valid ASCII strings.
+        Producer/Consumer registration will make use of this to instead send base64
+        encoded strings.
         """
-        # The initial "magic byte" is currently unused, but is meant to specify
-        # the envelope schema version.  see y/cep342 for details.  In other
-        # words, the version number of the current schema is the null byte.  In
-        # the event we need to add additional envelope versions, we'll use this
-        # byte to identify it.
-        return bytes(0) + self._avro_string_writer.encode(message.avro_repr)
+        msg = bytes(0) + self._avro_string_writer.encode(message.avro_repr)
+
+        if ascii_encoded:
+            return self.ASCII_MAGIC_BYTE + base64.urlsafe_b64encode(msg)
+        else:
+            return msg
 
     def unpack(self, packed_message):
         """Decodes a message packed with :func:`pack`.
@@ -81,5 +99,9 @@ class Envelope(object):
         Returns:
             dict: A dictionary with the decoded Avro representation.
         """
-        # The initial "magic byte" is ignored, see the comment in `pack`.
+
+        # If the magic byte is ASCII_MAGIC_BYTE, decode it from base64 to ASCII
+        if packed_message[0] == self.ASCII_MAGIC_BYTE:
+            packed_message = base64.urlsafe_b64decode(packed_message[1:])
+
         return self._avro_string_reader.decode(packed_message[1:])
