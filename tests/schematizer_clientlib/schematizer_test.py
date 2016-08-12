@@ -350,6 +350,72 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
             self._assert_avro_schemas_equal(actual, schema)
 
 
+class TestGetSchmasByCriteria(SchematizerClientTestBase):
+    @pytest.fixture(autouse=True, scope='class')
+    def sorted_schemas(self, yelp_namespace, biz_src_name):
+        biz_schema = self._register_avro_schema(
+            namespace=yelp_namespace,
+            source=biz_src_name
+        )
+
+        time.sleep(1)
+        schema_json = {
+            'type': 'record',
+            'name': biz_src_name,
+            'namespace': yelp_namespace,
+            'doc': 'test',
+            'fields': [{'type': 'int', 'doc': 'test', 'name': 'simple'}]
+        }
+        simple_schema = self._register_avro_schema(
+            namespace=yelp_namespace,
+            source=biz_src_name,
+            schema_json=schema_json
+        )
+
+        time.sleep(1)
+        schema_json = {
+            'type': 'record',
+            'name': biz_src_name,
+            'namespace': yelp_namespace,
+            'doc': 'test',
+            'fields': [{'type': 'int', 'doc': 'test', 'name': 'baz'}]
+        }
+        baz_schema = self._register_avro_schema(
+            namespace=yelp_namespace,
+            source=biz_src_name,
+            schema_json=schema_json
+        )
+
+        return [biz_schema, simple_schema, baz_schema]
+
+    def test_get_schemas_by_date_and_id(self, sorted_schemas, schematizer):
+        schemas = schematizer.get_schemas_by_criteria(
+            created_after=long(
+                (
+                    sorted_schemas[0].created_at - datetime.utcfromtimestamp(0)
+                ).total_seconds()
+            ) + 1,
+            min_id=sorted_schemas[1].schema_id + 1,
+            page_size=10
+        )
+        assert len(schemas) == 1
+
+    def test_get_schemas_by_size_and_id(self, sorted_schemas, schematizer):
+        schemas = schematizer.get_schemas_by_criteria(
+            created_after=0,
+            min_id=sorted_schemas[0].schema_id + 1,
+            page_size=1
+        )
+        assert len(schemas) == 1
+
+    def test_get_schemas_by_criteria_cached(self, sorted_schemas, schematizer):
+        schemas = schematizer.get_schemas_by_criteria(page_size=2)
+        # Assert each element was cached properly
+        for schema in schemas:
+            actual = schematizer.get_schema_by_id(schema.schema_id)
+            self._assert_avro_schemas_equal(actual, schema)
+
+
 class TestGetSchemasByTopic(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
