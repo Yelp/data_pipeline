@@ -1,3 +1,10 @@
+data-pipeline-tools (0.5.0) lucid; urgency=low
+
+  * Commit: Merge branch 'master' into datapipe-1347-update-schematizer-
+    clientlibs-to-add-list_sources-end-point
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Fri, 12 Aug 2016 14:23:07 -0700
+
 data-pipeline-tools (0.4.11) lucid; urgency=low
 
   * Commit: Merge branch 'master' of
