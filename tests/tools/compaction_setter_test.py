@@ -104,6 +104,9 @@ class TestCompactionSetter(object):
         mock_schematizer.get_sources_by_namespace = mock.Mock(
             return_value=sources
         )
+        mock_schematizer.get_topic_by_name = mock.Mock(
+            return_value=topics[0]
+        )
         mock_schematizer.get_topics_by_criteria = mock.Mock(
             return_value=topics
         )
@@ -178,6 +181,30 @@ class TestCompactionSetter(object):
         mock_log_results
     ):
         self._run_compaction_setter(compaction_setter)
+        mock_log_results.assert_called_once_with(
+            compacted_topics=[topic_name],
+            skipped_topics=[],
+            missed_topics=[]
+        )
+        mock_set_topic_config.assert_called_once_with(
+            topic=topic_name,
+            value=fake_topic_config_with_cleanup_policy
+        )
+
+    def test_compact_whitelisted_topic(
+        self,
+        compaction_setter,
+        topic_name,
+        fake_topic_config_with_cleanup_policy,
+        mock_get_topic_config,
+        mock_get_schematizer,
+        mock_set_topic_config,
+        mock_log_results
+    ):
+        compaction_setter.process_commandline_options(
+            args=['--whitelist-topic={}'.format(topic_name)]
+        )
+        compaction_setter.run()
         mock_log_results.assert_called_once_with(
             compacted_topics=[topic_name],
             skipped_topics=[],
