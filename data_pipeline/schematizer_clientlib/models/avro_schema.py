@@ -2,10 +2,10 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import copy
 from collections import namedtuple
 
 import simplejson
+from frozendict import frozendict
 
 from data_pipeline.schematizer_clientlib.models.model_base import BaseModel
 from data_pipeline.schematizer_clientlib.models.topic import _Topic
@@ -73,7 +73,7 @@ class _AvroSchema(BaseModel):
     def to_cache_value(self):
         return {
             'schema_id': self.schema_id,
-            'schema_json': copy.deepcopy(self.schema_json),
+            'schema_json': frozendict(self.schema_json),
             'topic_name': self.topic.name,
             'base_schema_id': self.base_schema_id,
             'status': self.status,
