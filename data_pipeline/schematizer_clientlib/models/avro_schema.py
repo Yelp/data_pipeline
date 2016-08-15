@@ -96,7 +96,7 @@ class _AvroSchema(BaseModel):
         )
         return cls(
             schema_id=cache_value['schema_id'],
-            schema_json=copy.deepcopy(cache_value['schema_json']),
+            schema_json=cache_value['schema_json'],
             topic=name_only_topic,
             base_schema_id=cache_value['base_schema_id'],
             status=cache_value['status'],
