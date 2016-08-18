@@ -149,14 +149,16 @@ class SchematizerClient(object):
             (List of data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
                 The list of avro schemas created after (inclusive) specified date.
         """
-        return self._get_schemas_created_after_date(created_after, min_id,
-                                                    page_size)
+        return self._get_schemas_created_after_date(
+            created_after, min_id,
+            page_size
+        )
 
     def get_schemas_by_criteria(
             self,
             created_after=0,
             min_id=0,
-            page_size=10
+            count=10
     ):
         """ Get the avro schemas with the specified criteria
         Args:
@@ -164,8 +166,7 @@ class SchematizerClient(object):
                 epoch timestamp.
             min_id (Optional[int]): Limits the result to those schemas with an
                 id greater than or equal to given min_id (default: 0)
-            page_size (Optional[int]): Limits the number of api calls and
-                number of schemas to retrieve per call to avoid timeouts
+            count (Optional[int]): the number of schemas returned in this call
                 (default: 10).
 
         Returns:
@@ -176,7 +177,7 @@ class SchematizerClient(object):
             api=self._client.schemas.get_schemas_created_after,
             params={
                 'created_after': created_after,
-                'count': page_size,
+                'count': count,
                 'min_id': min_id
             }
         )

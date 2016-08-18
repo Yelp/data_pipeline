@@ -396,20 +396,18 @@ class TestGetSchmasByCriteria(SchematizerClientTestBase):
                 ).total_seconds()
             ) + 1,
             min_id=sorted_schemas[1].schema_id + 1,
-            page_size=10
         )
         assert len(schemas) == 1
 
-    def test_get_schemas_by_size_and_id(self, sorted_schemas, schematizer):
+    def test_get_schemas_by_count_and_id(self, sorted_schemas, schematizer):
         schemas = schematizer.get_schemas_by_criteria(
-            created_after=0,
             min_id=sorted_schemas[0].schema_id + 1,
-            page_size=1
+            count=1
         )
         assert len(schemas) == 1
 
     def test_get_schemas_by_criteria_cached(self, sorted_schemas, schematizer):
-        schemas = schematizer.get_schemas_by_criteria(page_size=2)
+        schemas = schematizer.get_schemas_by_criteria(count=2)
         # Assert each element was cached properly
         for schema in schemas:
             actual = schematizer.get_schema_by_id(schema.schema_id)
