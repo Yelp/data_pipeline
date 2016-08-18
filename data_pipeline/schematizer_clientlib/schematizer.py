@@ -150,7 +150,8 @@ class SchematizerClient(object):
                 The list of avro schemas created after (inclusive) specified date.
         """
         return self._get_schemas_created_after_date(
-            created_after, min_id,
+            created_after,
+            min_id,
             page_size
         )
 
