@@ -2,13 +2,13 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import datetime
+from datetime import datetime
 from datetime import timedelta
 
 from dateutil.tz import tzutc
 
 
-class HeartbeatPeriodicProcessor(object):
+class BasePeriodicProcessor(object):
     """ This class provides an interface for handling periodic events that can
     be triggered by a heartbeat event, like sensu alert and data event checkpoint.
     That is, it serves as a base class and must be subclassed.
@@ -37,4 +37,4 @@ class HeartbeatPeriodicProcessor(object):
 
     @property
     def _utc_now(self):
-        return datetime.datetime.now(tzutc())
+        return datetime.now(tzutc())

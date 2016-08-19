@@ -387,10 +387,13 @@ class Config(object):
     @property
     def sensu_ping_window(self):
         """The ping window defines the minimum time (in seconds) the producer will wait
-        prior to sending another OK message to sensu.  For example, if the ping window
-        is 30 seconds all events and an event is published at time=0, then until an event
-        is published after we will not send another OK to sensu.  The purpose of this is
-        to throtte the number events each producer sends to sensu.
+        prior to sending another OK message to sensu.  For example, say the ping window
+        is 30 seconds, and an event is published at time=0.  No events prior to time=30s
+        will cause the producer to publish an OK message to sensu.  Once an event comes
+        in after time=30s the clock will be reset.  That is, if the next event comes in
+        at time=40s the producer will send the OK, and not publish OK's again until
+        after time=70s.  The purpose of this is to throtte the number events each
+        producer sends to sensu.
         """
         return data_pipeline_conf.read_int('sensu_ping_window', default=30)
 

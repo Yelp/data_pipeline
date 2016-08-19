@@ -2,11 +2,11 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from data_pipeline.tools.heartbeat_periodic_processor import HeartbeatPeriodicProcessor
+from data_pipeline.tools.heartbeat_periodic_processor import BasePeriodicProcessor
 from data_pipeline.tools.meteorite_wrappers import StatGauge
 
 
-class MeteoriteGaugeManager(HeartbeatPeriodicProcessor):
+class MeteoriteGaugeManager(BasePeriodicProcessor):
     """
     This class reports how far behind real-time the producer is to meteorite/signalfx
 

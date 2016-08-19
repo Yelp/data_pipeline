@@ -590,7 +590,7 @@ class TestPublishMonitorMessage(TestProducerBase):
             )
 
     @pytest.mark.parametrize(
-        "enable_meteorite,expected_call_count", [
+        "enable_meteorite, expected_call_count", [
             (False, 0), (True, 1)
         ]
     )
@@ -605,8 +605,7 @@ class TestPublishMonitorMessage(TestProducerBase):
         with mock.patch.object(
             data_pipeline.producer.StatsCounter,
             'process',
-            autospec=True,
-            return_value=None
+            autospec=True
         ) as mock_stats_counter:
             producer.enable_meteorite = enable_meteorite
             m = create_message(registered_schema, timeslot=1.0)
@@ -614,7 +613,7 @@ class TestPublishMonitorMessage(TestProducerBase):
             assert mock_stats_counter.call_count == expected_call_count
 
     @pytest.mark.parametrize(
-        "enable_sensu,expected_call_count", [
+        "enable_sensu, expected_call_count", [
             (False, 0), (True, 1)
         ]
     )
@@ -638,7 +637,7 @@ class TestPublishMonitorMessage(TestProducerBase):
             assert mock_sensu_ttl_process.call_count == expected_call_count
 
     @pytest.mark.parametrize("message_count", [1, 2])
-    def test_sensu_outside_inside_window(
+    def test_sensu_process_called_once_inside_window(
         self,
         create_message,
         registered_schema,
