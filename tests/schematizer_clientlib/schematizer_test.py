@@ -111,8 +111,13 @@ class SchematizerClientTestBase(object):
 
     def _assert_schema_values(self, actual, expected_resp):
         attrs = (
-            'schema_id', 'base_schema_id', 'status', 'primary_keys', 'note',
-            'created_at', 'updated_at'
+            'schema_id',
+            'base_schema_id',
+            'status',
+            'primary_keys',
+            'note',
+            'created_at',
+            'updated_at'
         )
         self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
         assert actual.schema_json == simplejson.loads(expected_resp.schema)
@@ -127,8 +132,13 @@ class SchematizerClientTestBase(object):
 
     def _assert_avro_schemas_equal(self, actual, expected_resp):
         attrs = (
-            'schema_id', 'base_schema_id', 'status', 'primary_keys', 'note',
-            'created_at', 'updated_at'
+            'schema_id',
+            'base_schema_id',
+            'status',
+            'primary_keys',
+            'note',
+            'created_at',
+            'updated_at'
         )
         self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
         assert actual.schema_json == expected_resp.schema_json
@@ -136,7 +146,11 @@ class SchematizerClientTestBase(object):
 
     def _assert_topic_values(self, actual, expected_resp):
         attrs = (
-            'topic_id', 'name', 'contains_pii', 'primary_keys', 'created_at',
+            'topic_id',
+            'name',
+            'contains_pii',
+            'primary_keys',
+            'created_at',
             'updated_at'
         )
         self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
