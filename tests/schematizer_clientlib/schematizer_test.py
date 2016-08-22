@@ -79,8 +79,13 @@ class SchematizerClientTestBase(object):
         """
         return get_config().schematizer_client
 
-    def _register_avro_schema(self, namespace, source, schema_json=None,
-                              **overrides):
+    def _register_avro_schema(
+        self,
+        namespace,
+        source,
+        schema_json=None,
+        **overrides
+    ):
         schema_json = schema_json or {
             'type': 'record',
             'name': source,
@@ -107,7 +112,8 @@ class SchematizerClientTestBase(object):
     def _assert_schema_values(self, actual, expected_resp):
         attrs = (
             'schema_id', 'base_schema_id', 'status', 'primary_keys', 'note',
-            'created_at', 'updated_at')
+            'created_at', 'updated_at'
+        )
         self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
         assert actual.schema_json == simplejson.loads(expected_resp.schema)
         self._assert_topic_values(actual.topic, expected_resp.topic)
@@ -122,7 +128,8 @@ class SchematizerClientTestBase(object):
     def _assert_avro_schemas_equal(self, actual, expected_resp):
         attrs = (
             'schema_id', 'base_schema_id', 'status', 'primary_keys', 'note',
-            'created_at', 'updated_at')
+            'created_at', 'updated_at'
+        )
         self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
         assert actual.schema_json == expected_resp.schema_json
         self._assert_topic_values(actual.topic, expected_resp.topic)
@@ -130,7 +137,8 @@ class SchematizerClientTestBase(object):
     def _assert_topic_values(self, actual, expected_resp):
         attrs = (
             'topic_id', 'name', 'contains_pii', 'primary_keys', 'created_at',
-            'updated_at')
+            'updated_at'
+        )
         self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
         self._assert_source_values(actual.source, expected_resp.source)
 
@@ -303,9 +311,9 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
         created_after_str = "2015-01-01T19:10:26"
         created_after = datetime.strptime(created_after_str,
                                           '%Y-%m-%dT%H:%M:%S')
-        creation_timestamp = long((created_after -
-                                   datetime.utcfromtimestamp(
-                                       0)).total_seconds())
+        creation_timestamp = long(
+            (created_after - datetime.utcfromtimestamp(0)).total_seconds()
+        )
         with self.attach_spy_on_api(
                 schematizer._client.schemas,
                 'get_schemas_created_after'
@@ -322,16 +330,16 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
         created_after_str = "2015-01-01T19:10:26"
         created_after = datetime.strptime(created_after_str,
                                           '%Y-%m-%dT%H:%M:%S')
-        creation_timestamp = long((created_after -
-                                   datetime.utcfromtimestamp(
-                                       0)).total_seconds())
+        creation_timestamp = long(
+            (created_after - datetime.utcfromtimestamp(0)).total_seconds()
+        )
 
         created_after_str2 = "2016-06-10T19:10:26"
         created_after2 = datetime.strptime(created_after_str2,
                                            '%Y-%m-%dT%H:%M:%S')
-        creation_timestamp2 = long((created_after2 -
-                                    datetime.utcfromtimestamp(
-                                        0)).total_seconds())
+        creation_timestamp2 = long(
+            (created_after2 - datetime.utcfromtimestamp(0)).total_seconds()
+        )
         schemas = schematizer.get_schemas_created_after_date(
             creation_timestamp
         )
@@ -344,9 +352,9 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
         created_after_str = "2015-01-01T19:10:26"
         created_after = datetime.strptime(created_after_str,
                                           '%Y-%m-%dT%H:%M:%S')
-        creation_timestamp = long((created_after -
-                                   datetime.utcfromtimestamp(
-                                       0)).total_seconds())
+        creation_timestamp = long(
+            (created_after - datetime.utcfromtimestamp(0)).total_seconds()
+        )
         schemas = schematizer.get_schemas_created_after_date(
             creation_timestamp)
         # Assert each element was cached properly
@@ -669,8 +677,12 @@ class TestGetTopicsBySourceId(SchematizerClientTestBase):
             contains_pii=True
         ).topic
 
-    def test_get_topics_of_biz_source(self, schematizer, biz_topic,
-                                      pii_biz_topic):
+    def test_get_topics_of_biz_source(
+            self,
+            schematizer,
+            biz_topic,
+            pii_biz_topic
+    ):
         actual = schematizer.get_topics_by_source_id(
             biz_topic.source.source_id)
 
@@ -689,7 +701,8 @@ class TestGetTopicsBySourceId(SchematizerClientTestBase):
 
     def test_topics_should_be_cached(self, schematizer, biz_topic):
         topics = schematizer.get_topics_by_source_id(
-            biz_topic.source.source_id)
+            biz_topic.source.source_id
+        )
         with self.attach_spy_on_api(
                 schematizer._client.topics,
                 'get_topic_by_topic_name'
@@ -713,7 +726,8 @@ class TestGetLatestTopicBySourceId(SchematizerClientTestBase):
 
     def test_get_latest_topic_of_biz_source(self, schematizer, biz_topic):
         actual = schematizer.get_latest_topic_by_source_id(
-            biz_topic.source.source_id)
+            biz_topic.source.source_id
+        )
         expected = biz_topic
         self._assert_topic_values(actual, expected)
 
@@ -736,7 +750,8 @@ class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
     def biz_schema_two(self, biz_schema):
         new_schema = simplejson.loads(biz_schema.schema)
         new_schema['fields'].append(
-            {'type': 'int', 'doc': 'test', 'name': 'bar', 'default': 0})
+            {'type': 'int', 'doc': 'test', 'name': 'bar', 'default': 0}
+        )
         return self._register_avro_schema(
             namespace=biz_schema.topic.source.namespace.name,
             source=biz_schema.topic.source.name,
@@ -759,7 +774,8 @@ class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
 
     def test_latest_schema_should_be_cached(self, schematizer, biz_topic):
         latest_schema = schematizer.get_latest_schema_by_topic_name(
-            biz_topic.name)
+            biz_topic.name
+        )
         with self.attach_spy_on_api(
                 schematizer._client.schemas,
                 'get_schema_by_id'
@@ -985,8 +1001,12 @@ class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
             ]
         }
 
-    def test_register_for_new_table(self, schematizer, yelp_namespace,
-                                    biz_src_name):
+    def test_register_for_new_table(
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name
+    ):
         actual = schematizer.register_schema_from_mysql_stmts(
             namespace=yelp_namespace,
             source=biz_src_name,
@@ -1170,15 +1190,19 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
             yelp_namespace,
             yelp_topics
     ):
-        sorted_yelp_topics = sorted(yelp_topics,
-                                    key=lambda topic: topic.topic_id)
+        sorted_yelp_topics = sorted(
+            yelp_topics,
+            key=lambda topic: topic.topic_id
+        )
         actual = schematizer.get_topics_by_criteria(
             namespace_name=yelp_namespace,
             min_id=sorted_yelp_topics[0].topic_id + 1
         )
         assert len(actual) == len(sorted_yelp_topics) - 1
-        self._assert_topics_values(actual,
-                                   expected_topics=sorted_yelp_topics[1:])
+        self._assert_topics_values(
+            actual,
+            expected_topics=sorted_yelp_topics[1:]
+        )
 
 
 class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
@@ -1273,8 +1297,7 @@ class TestFilterTopicsByPkeys(SchematizerClientTestBase):
             biz_topic_resp.name,
             pk_topic_resp.name
         ]
-        assert schematizer.filter_topics_by_pkeys(topics) == [
-            pk_topic_resp.name]
+        assert schematizer.filter_topics_by_pkeys(topics) == [pk_topic_resp.name]
 
 
 class RegistrationTestBase(SchematizerClientTestBase):
@@ -1378,8 +1401,11 @@ class TestCreateDataTarget(RegistrationTestBase):
 
 
 class TestGetDataTargetById(RegistrationTestBase):
-    def test_get_non_cached_data_target(self, schematizer,
-                                        dw_data_target_resp):
+    def test_get_non_cached_data_target(
+        self,
+        schematizer,
+        dw_data_target_resp
+    ):
         with self.attach_spy_on_api(
                 schematizer._client.data_targets,
                 'get_data_target_by_id'
@@ -1470,8 +1496,11 @@ class TestCreateConsumerGroup(RegistrationTestBase):
 
 
 class TestGetConsumerGroupById(RegistrationTestBase):
-    def test_get_non_cached_consumer_group(self, schematizer,
-                                           dw_con_group_resp):
+    def test_get_non_cached_consumer_group(
+        self,
+        schematizer,
+        dw_con_group_resp
+    ):
         with self.attach_spy_on_api(
                 schematizer._client.consumer_groups,
                 'get_consumer_group_by_id'

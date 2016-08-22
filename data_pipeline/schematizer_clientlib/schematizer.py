@@ -156,10 +156,10 @@ class SchematizerClient(object):
         )
 
     def get_schemas_by_criteria(
-            self,
-            created_after=0,
-            min_id=0,
-            count=10
+        self,
+        created_after=0,
+        min_id=0,
+        count=10
     ):
         """ Get the avro schemas with the specified criteria: created_after,
         min_id and count
