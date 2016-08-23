@@ -42,6 +42,7 @@ setup(
         'yelp-lib>=10.0.5',
         'yelp-servlib>=4.3.0',
         'cryptography<=1.3.4',
+        'frozendict==0.5'
     ],
     extras_require={
         'tools': [
