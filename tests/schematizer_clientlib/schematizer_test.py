@@ -24,6 +24,7 @@ from data_pipeline.schematizer_clientlib.schematizer import SchematizerClient
 
 
 class SchematizerClientTestBase(object):
+
     @pytest.fixture
     def schematizer(self, containers):
         return SchematizerClient()
@@ -167,15 +168,16 @@ class SchematizerClientTestBase(object):
 
 
 class TestAPIClient(SchematizerClientTestBase):
+
     @pytest.fixture(autouse=True, scope='class')
     def biz_schema(self, yelp_namespace, biz_src_name, containers):
         return self._register_avro_schema(yelp_namespace, biz_src_name)
 
     def test_retry_api_call(self, schematizer, biz_schema):
         with mock.patch.object(
-                schematizer,
-                '_get_api_result',
-                side_effect=[ConnectionError, ReadTimeout, None]
+            schematizer,
+            '_get_api_result',
+            side_effect=[ConnectionError, ReadTimeout, None]
         ) as api_spy:
             schematizer._call_api(
                 api=schematizer._client.schemas.get_schema_by_id,
@@ -185,6 +187,7 @@ class TestAPIClient(SchematizerClientTestBase):
 
 
 class TestGetSchemaById(SchematizerClientTestBase):
+
     @pytest.fixture(autouse=True, scope='class')
     def biz_schema(self, yelp_namespace, biz_src_name):
         return self._register_avro_schema(yelp_namespace, biz_src_name)
@@ -219,6 +222,7 @@ class TestGetSchemaById(SchematizerClientTestBase):
 
 
 class TestGetSchemaElementsBySchemaId(SchematizerClientTestBase):
+
     @pytest.fixture(autouse=True, scope='class')
     def biz_schema(self, yelp_namespace, biz_src_name):
         return self._register_avro_schema(yelp_namespace, biz_src_name)
@@ -237,6 +241,7 @@ class TestGetSchemaElementsBySchemaId(SchematizerClientTestBase):
 
 
 class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
+
     @pytest.fixture(autouse=True, scope='class')
     def sorted_schemas(self, yelp_namespace, biz_src_name):
         biz_schema = self._register_avro_schema(
@@ -275,9 +280,9 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
         return [biz_schema, simple_schema, baz_schema]
 
     def test_get_schemas_created_after_date_filter_by_min_id(
-            self,
-            sorted_schemas,
-            schematizer
+        self,
+        sorted_schemas,
+        schematizer
     ):
         created_at = sorted_schemas[0].created_at
         creation_timestamp = long(
@@ -298,9 +303,9 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
             assert schemas_api_spy.call_count == len(schemas) / 10 + 1
 
     def test_get_schemas_created_after_with_page_size(
-            self,
-            sorted_schemas,
-            schematizer
+        self,
+        sorted_schemas,
+        schematizer
     ):
         created_at = sorted_schemas[0].created_at
         creation_timestamp = long(
@@ -383,6 +388,7 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
 
 
 class TestGetSchmasByCriteria(SchematizerClientTestBase):
+
     @pytest.fixture(autouse=True, scope='class')
     def sorted_schemas(self, yelp_namespace, biz_src_name):
         biz_schema = self._register_avro_schema(
@@ -457,6 +463,7 @@ class TestGetSchmasByCriteria(SchematizerClientTestBase):
 
 
 class TestGetSchemasByTopic(SchematizerClientTestBase):
+
     @pytest.fixture(autouse=True, scope='class')
     def biz_schema(self, yelp_namespace, biz_src_name):
         return self._register_avro_schema(yelp_namespace, biz_src_name)
@@ -481,6 +488,7 @@ class TestGetSchemasByTopic(SchematizerClientTestBase):
 
 
 class TestGetNamespaces(SchematizerClientTestBase):
+
     def test_get_namespaces(self, schematizer, biz_src_resp):
         actual = schematizer.get_namespaces()
         partial = Namespace(
@@ -491,6 +499,7 @@ class TestGetNamespaces(SchematizerClientTestBase):
 
 
 class TestGetSchemaBySchemaJson(SchematizerClientTestBase):
+
     @pytest.fixture
     def schema_json(self, yelp_namespace, biz_src_name):
         return {
@@ -507,6 +516,7 @@ class TestGetSchemaBySchemaJson(SchematizerClientTestBase):
 
 
 class TestGetTopicByName(SchematizerClientTestBase):
+
     @pytest.fixture(autouse=True, scope='class')
     def biz_topic(self, yelp_namespace, biz_src_name):
         return self._register_avro_schema(yelp_namespace, biz_src_name).topic
@@ -537,6 +547,7 @@ class TestGetTopicByName(SchematizerClientTestBase):
 
 
 class GetSourcesTestBase(SchematizerClientTestBase):
+
     @pytest.fixture(scope='class')
     def biz_src(self, yelp_namespace, biz_src_name):
         return self._register_avro_schema(
@@ -560,6 +571,7 @@ class GetSourcesTestBase(SchematizerClientTestBase):
 
 
 class TestGetSources(GetSourcesTestBase):
+
     @pytest.fixture(scope='class')
     def sorted_sources(self, biz_src, usr_src, cta_src):
         return [biz_src, usr_src, cta_src]
@@ -619,6 +631,7 @@ class TestGetSources(GetSourcesTestBase):
 
 
 class TestGetSourceById(SchematizerClientTestBase):
+
     @pytest.fixture(autouse=True, scope='class')
     def biz_src(self, yelp_namespace, biz_src_name):
         return self._register_avro_schema(
@@ -648,6 +661,7 @@ class TestGetSourceById(SchematizerClientTestBase):
 
 
 class TestGetSourcesByNamespace(GetSourcesTestBase):
+
     def test_get_sources_in_yelp_namespace(
             self,
             schematizer,
@@ -679,6 +693,7 @@ class TestGetSourcesByNamespace(GetSourcesTestBase):
 
 
 class TestGetTopicsBySourceId(SchematizerClientTestBase):
+
     @pytest.fixture(autouse=True, scope='class')
     def biz_topic(self, yelp_namespace, biz_src_name):
         return self._register_avro_schema(yelp_namespace, biz_src_name).topic
@@ -698,7 +713,8 @@ class TestGetTopicsBySourceId(SchematizerClientTestBase):
             pii_biz_topic
     ):
         actual = schematizer.get_topics_by_source_id(
-            biz_topic.source.source_id)
+            biz_topic.source.source_id
+        )
 
         sorted_expected = sorted(
             [biz_topic, pii_biz_topic],
@@ -731,6 +747,7 @@ class TestGetTopicsBySourceId(SchematizerClientTestBase):
 
 
 class TestGetLatestTopicBySourceId(SchematizerClientTestBase):
+
     @pytest.fixture(autouse=True, scope='class')
     def biz_topic(self, yelp_namespace, biz_src_name):
         return self._register_avro_schema(
@@ -752,6 +769,7 @@ class TestGetLatestTopicBySourceId(SchematizerClientTestBase):
 
 
 class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
+
     @pytest.fixture(autouse=True, scope='class')
     def biz_schema(self, yelp_namespace, biz_src_name):
         return self._register_avro_schema(yelp_namespace, biz_src_name)
@@ -808,6 +826,7 @@ class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
 
 
 class TestRegisterSchema(SchematizerClientTestBase):
+
     @pytest.fixture
     def schema_json(self, yelp_namespace, biz_src_name):
         return {
@@ -989,6 +1008,7 @@ class TestRegisterSchema(SchematizerClientTestBase):
 
 
 class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
+
     @property
     def old_create_biz_table_stmt(self):
         return 'create table biz(id int(11) not null);'
@@ -1100,6 +1120,7 @@ class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
 
 
 class TestGetTopicsByCriteria(SchematizerClientTestBase):
+
     @pytest.fixture(autouse=True, scope='class')
     def yelp_biz_topic(self, yelp_namespace, biz_src_name):
         return self._register_avro_schema(yelp_namespace, biz_src_name).topic
@@ -1220,6 +1241,7 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
 
 
 class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
+
     @pytest.fixture(scope='class')
     def schema_json(self, yelp_namespace, biz_src_name):
         return {
@@ -1282,6 +1304,7 @@ class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
 
 
 class TestFilterTopicsByPkeys(SchematizerClientTestBase):
+
     @pytest.fixture(autouse=True, scope='class')
     def pk_topic_resp(self, yelp_namespace, usr_src_name):
         pk_schema_json = {
@@ -1315,6 +1338,7 @@ class TestFilterTopicsByPkeys(SchematizerClientTestBase):
 
 
 class RegistrationTestBase(SchematizerClientTestBase):
+
     @pytest.fixture(scope="class")
     def dw_data_target_resp(self):
         return self._create_data_target()
@@ -1374,6 +1398,7 @@ class RegistrationTestBase(SchematizerClientTestBase):
 
 
 class TestCreateDataTarget(RegistrationTestBase):
+
     @property
     def random_target_type(self):
         return 'random_type'
@@ -1415,6 +1440,7 @@ class TestCreateDataTarget(RegistrationTestBase):
 
 
 class TestGetDataTargetById(RegistrationTestBase):
+
     def test_get_non_cached_data_target(
         self,
         schematizer,
@@ -1450,6 +1476,7 @@ class TestGetDataTargetById(RegistrationTestBase):
 
 
 class TestCreateConsumerGroup(RegistrationTestBase):
+
     @pytest.fixture
     def random_group_name(self):
         return 'group_{}'.format(random.random())
@@ -1510,6 +1537,7 @@ class TestCreateConsumerGroup(RegistrationTestBase):
 
 
 class TestGetConsumerGroupById(RegistrationTestBase):
+
     def test_get_non_cached_consumer_group(
         self,
         schematizer,
@@ -1547,6 +1575,7 @@ class TestGetConsumerGroupById(RegistrationTestBase):
 
 
 class TestCreateConsumerGroupDataSource(RegistrationTestBase):
+
     def test_create_consumer_group_data_source(
             self,
             schematizer,
@@ -1582,6 +1611,7 @@ class TestCreateConsumerGroupDataSource(RegistrationTestBase):
 
 
 class TestGetTopicsByDataTargetId(RegistrationTestBase):
+
     def test_data_target_with_topics(
             self,
             schematizer,
@@ -1613,6 +1643,7 @@ class TestGetTopicsByDataTargetId(RegistrationTestBase):
 
 
 class TestGetSchemaMigration(SchematizerClientTestBase):
+
     @pytest.fixture
     def new_schema(self):
         return {
