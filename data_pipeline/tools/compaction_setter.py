@@ -67,7 +67,7 @@ class CompactionSetter(Batch):
             topics = [self.schematizer.get_topic_by_name(self.whitelist_topic)]
         else:
             topics = self.schematizer.get_topics_by_criteria()
-        topics = [topic.name for topic in topics]
+        topics = [str(topic.name) for topic in topics]
         return self.schematizer.filter_topics_by_pkeys(topics)
 
     def apply_log_compaction(self, topics):
@@ -88,7 +88,7 @@ class CompactionSetter(Batch):
                         # manual override we don't want to set again
                         current_config['config']['cleanup.policy'] = 'compact'
                         if not self.dry_run:
-                            zk.set_topic_config(topic=str(topic), value=current_config)
+                            zk.set_topic_config(topic=topic, value=current_config)
                         compacted_topics.append(topic)
                     else:
                         skipped_topics.append(topic)
