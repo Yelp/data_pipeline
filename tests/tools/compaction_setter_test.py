@@ -7,6 +7,7 @@ from collections import namedtuple
 
 import mock
 import pytest
+import simplejson as json
 from kazoo.exceptions import NoNodeError
 
 from data_pipeline.tools.compaction_setter import CompactionSetter
@@ -188,7 +189,7 @@ class TestCompactionSetter(object):
         )
         mock_set_topic_config.assert_called_once_with(
             topic=topic_name,
-            value=fake_topic_config_with_cleanup_policy
+            value=json.dumps(fake_topic_config_with_cleanup_policy)
         )
 
     def test_compact_whitelisted_topic(
@@ -212,7 +213,7 @@ class TestCompactionSetter(object):
         )
         mock_set_topic_config.assert_called_once_with(
             topic=topic_name,
-            value=fake_topic_config_with_cleanup_policy
+            value=json.dumps(fake_topic_config_with_cleanup_policy)
         )
 
     def test_filtered(

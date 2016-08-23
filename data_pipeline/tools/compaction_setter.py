@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 from optparse import OptionGroup
 
+import simplejson as json
 from kazoo.exceptions import NoNodeError
 from yelp_batch import Batch
 from yelp_batch.batch import batch_command_line_options
@@ -88,7 +89,10 @@ class CompactionSetter(Batch):
                         # manual override we don't want to set again
                         current_config['config']['cleanup.policy'] = 'compact'
                         if not self.dry_run:
-                            zk.set_topic_config(topic=topic, value=current_config)
+                            zk.set_topic_config(
+                                topic=topic,
+                                value=json.dumps(current_config)
+                            )
                         compacted_topics.append(topic)
                     else:
                         skipped_topics.append(topic)
