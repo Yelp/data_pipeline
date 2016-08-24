@@ -72,6 +72,9 @@ class SchematizerClientTestBase(object):
     def source_owner_email(self):
         return 'bam+test@yelp.com'
 
+    def get_new_name(self, prefix):
+        return '{}_{}'.format(prefix, random.random())
+
     def _get_client(self):
         """This is a method instead of a property.  Pytest was accessing this
         attribute before setting up fixtures, resulting in this code failing
@@ -1126,48 +1129,44 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
         return self._register_avro_schema(yelp_namespace, biz_src_name).topic
 
     @pytest.fixture(autouse=True, scope='class')
-    def yelp_usr_topic(self, yelp_namespace, usr_src_name):
+    def yelp_usr_topic(self, yelp_namespace, usr_src_name, yelp_biz_topic):
+        time.sleep(1)
         return self._register_avro_schema(yelp_namespace, usr_src_name).topic
 
     @pytest.fixture(autouse=True, scope='class')
-    def aux_biz_topic(self, aux_namespace, biz_src_name):
+    def aux_biz_topic(self, aux_namespace, biz_src_name, yelp_usr_topic):
+        time.sleep(1)
         return self._register_avro_schema(aux_namespace, biz_src_name).topic
 
-    @pytest.fixture
-    def yelp_topics(self, yelp_biz_topic, yelp_usr_topic):
-        return [yelp_biz_topic, yelp_usr_topic]
-
-    @pytest.fixture
-    def biz_src_topics(self, yelp_biz_topic, aux_biz_topic):
-        return [yelp_biz_topic, aux_biz_topic]
-
-    def test_get_topics_of_yelp_namespace(
-            self,
-            schematizer,
-            yelp_namespace,
-            yelp_topics,
+    def test_get_topics_in_one_namespace(
+        self,
+        schematizer,
+        yelp_namespace,
+        yelp_biz_topic,
+        yelp_usr_topic
     ):
         actual = schematizer.get_topics_by_criteria(
             namespace_name=yelp_namespace
         )
-        self._assert_topics_values(actual, expected_topics=yelp_topics)
+        self._assert_topics_values(
+            actual,
+            expected_topics=[yelp_biz_topic, yelp_usr_topic]
+        )
 
-    def test_get_topics_of_biz_source(
-            self,
-            schematizer,
-            biz_src_name,
-            biz_src_topics,
+    def test_get_topics_of_one_source(
+        self,
+        schematizer,
+        biz_src_name,
+        yelp_biz_topic,
+        aux_biz_topic
     ):
         actual = schematizer.get_topics_by_criteria(
             source_name=biz_src_name
         )
-        self._assert_topics_values(actual, expected_topics=biz_src_topics)
-
-    def _assert_topics_values(self, actual, expected_topics):
-        sorted_expected = sorted(expected_topics, key=lambda o: o.topic_id)
-        sorted_actual = sorted(actual, key=lambda o: o.topic_id)
-        for actual_topic, expected_resp in zip(sorted_actual, sorted_expected):
-            self._assert_topic_values(actual_topic, expected_resp)
+        self._assert_topics_values(
+            actual,
+            expected_topics=[yelp_biz_topic, aux_biz_topic]
+        )
 
     def test_get_topics_of_bad_namesapce_name(self, schematizer):
         actual = schematizer.get_topics_by_criteria(namespace_name='foo')
@@ -1199,45 +1198,65 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
             assert topic_api_spy.call_count == 0
             assert source_api_spy.call_count == 0
 
-    def test_topic_page_size(
-            self,
-            schematizer,
-            yelp_namespace,
-            yelp_topics
-    ):
+    def test_get_topics_by_pagination(self, schematizer):
+        # This test is based on current pagination setting that the page size
+        # is 20. This test mostly is the sanity check for the pagination.
+        namespace_name = self.get_new_name('dummy_namespace')
+        source_name = self.get_new_name('dummy_source')
+        expected_topics = []
+        for i in range(21):
+            schema_json = {
+                'type': 'enum',
+                'name': 'dummy_enum_{}'.format(i),
+                'symbols': ['a'],
+                'doc': 'dummy schema'
+            }
+            topic = self._register_avro_schema(
+                namespace=namespace_name,
+                source=source_name,
+                schema_json=schema_json
+            ).topic
+            expected_topics.append(topic)
+
         with self.attach_spy_on_api(
-                schematizer._client.topics,
-                'get_topics_by_criteria'
+            schematizer._client.topics,
+            'get_topics_by_criteria'
         ) as topic_api_spy:
             actual = schematizer.get_topics_by_criteria(
-                namespace_name=yelp_namespace,
-                page_size=1
+                namespace_name=namespace_name,
+                source_name=source_name
             )
-            self._assert_topics_values(actual, expected_topics=yelp_topics)
-            # Since we have a page size of 1, we should need to fetch len(yelp_topics) + 1 pages
-            # before we get a page with #items less than our page_size (0 items)
-            # Thus, we should call the api len(yelp_topic) + 1 times
-            assert topic_api_spy.call_count == len(yelp_topics) + 1
+            self._assert_topics_values(actual, expected_topics=expected_topics)
+            # Since the page size is 20, there should be 2 calls to get 21 topics.
+            assert topic_api_spy.call_count == 2
 
-    def test_topic_min_id(
-            self,
-            schematizer,
-            yelp_namespace,
-            yelp_topics
+    def test_get_topics_with_id_greater_than_min_id(
+        self,
+        schematizer,
+        yelp_namespace,
+        yelp_biz_topic,
+        yelp_usr_topic
     ):
-        sorted_yelp_topics = sorted(
-            yelp_topics,
-            key=lambda topic: topic.topic_id
-        )
         actual = schematizer.get_topics_by_criteria(
             namespace_name=yelp_namespace,
-            min_id=sorted_yelp_topics[0].topic_id + 1
+            min_id=yelp_biz_topic.topic_id + 1
         )
-        assert len(actual) == len(sorted_yelp_topics) - 1
         self._assert_topics_values(
             actual,
-            expected_topics=sorted_yelp_topics[1:]
+            expected_topics=[yelp_usr_topic]
         )
+
+    def test_get_only_one_topic(self, schematizer, yelp_namespace, yelp_biz_topic):
+        actual = schematizer.get_topics_by_criteria(
+            namespace_name=yelp_namespace,
+            max_count=1
+        )
+        self._assert_topics_values(actual, expected_topics=[yelp_biz_topic])
+
+    def _assert_topics_values(self, actual_topics, expected_topics):
+        assert len(actual_topics) == len(expected_topics)
+        for actual_topic, expected_resp in zip(actual_topics, expected_topics):
+            self._assert_topic_values(actual_topic, expected_resp)
 
 
 class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
