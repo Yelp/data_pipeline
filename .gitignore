@@ -82,3 +82,5 @@ logs/*.log
 # OS X
 .DS_Store
 
+#vim tags
+tags
