@@ -10,6 +10,7 @@ from frozendict import frozendict
 class FrozenDictEncoder(json.JSONEncoder):
     """Custom json encoder for encoding frozendict objects
     """
+
     def default(self, obj):
         if isinstance(obj, frozendict):
             return dict(obj)

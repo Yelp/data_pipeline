@@ -2,10 +2,12 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import json
+
 import mock
 import pytest
-import simplejson as json
 
+from data_pipeline.helpers.frozendict_json_encoder import FrozenDictEncoder
 from data_pipeline.tools.bootstrapper import AVSCBootstrapper
 from data_pipeline.tools.bootstrapper import FileBootstrapperBase
 from data_pipeline.tools.bootstrapper import MySQLBootstrapper
@@ -129,7 +131,10 @@ class TestFileBootstrapperBase(object):
                 bootstrapper.api.schemas.register_schema,
                 body={
                     'base_schema_id': mock_schema_result.schema_id,
-                    'schema': json.dumps(expected_schema_obj),
+                    'schema': json.dumps(
+                        expected_schema_obj,
+                        cls=FrozenDictEncoder
+                    ),
                     'namespace': good_source_ref['namespace'],
                     'source': good_source_ref['source'],
                     'source_owner_email': good_source_ref['owner_email'],

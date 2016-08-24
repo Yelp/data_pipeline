@@ -4,17 +4,18 @@ from __future__ import unicode_literals
 
 import glob
 import inspect
+import json
 import optparse
 import sys
 from os import path
 from pprint import pformat
 from socket import gethostname
 
-import simplejson as json
 import yelp_batch
 from yelp_batch.batch import batch_command_line_options
 
 from data_pipeline.config import get_config
+from data_pipeline.helpers.frozendict_json_encoder import FrozenDictEncoder
 from data_pipeline.tools._glob_util import get_file_paths_from_glob_patterns
 from data_pipeline.tools.schema_ref import SchemaRef
 
@@ -153,7 +154,7 @@ class FileBootstrapperBase(object):
             self.api.schemas.register_schema,
             body={
                 'base_schema_id': schema_result.schema_id,
-                'schema': json.dumps(schema_json),
+                'schema': json.dumps(schema_json, cls=FrozenDictEncoder),
                 'namespace': self.schema_ref.get_source_val(
                     source,
                     'namespace'
