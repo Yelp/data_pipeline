@@ -16,7 +16,7 @@ class MeteoriteGaugeManager(BasePeriodicProcessor):
        container_name(str): paasta container name
        container_env(str): paasta cluster name
        disable(bool): whether this gauge is disabled or not
-       kwargs(dict): any additional keyword args
+       kwargs(dict): any additional keyword args for the Meteorite StatsGauge class
     """
 
     def __init__(

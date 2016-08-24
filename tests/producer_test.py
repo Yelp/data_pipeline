@@ -626,7 +626,7 @@ class TestPublishMonitorMessage(TestProducerBase):
         expected_call_count
     ):
         with mock.patch.object(
-            data_pipeline.producer.SensuTTLManager,
+            data_pipeline.producer.SensuTTLAlerter,
             'process',
             autospec=True,
             return_value=None
@@ -645,7 +645,7 @@ class TestPublishMonitorMessage(TestProducerBase):
         message_count
     ):
         with mock.patch.object(
-            data_pipeline.producer.SensuTTLManager,
+            data_pipeline.producer.SensuTTLAlerter,
             'process',
             autospec=True,
             return_value=None

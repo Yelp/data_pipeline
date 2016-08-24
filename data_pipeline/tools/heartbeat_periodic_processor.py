@@ -22,6 +22,12 @@ class BasePeriodicProcessor(object):
         self._next_process_time = self._utc_now
 
     def periodic_process(self, timestamp=None):
+        """ This method remains because it's called by the replication handler;
+        if / when we start calling the process method below directly from the
+        replication handler we can remove it (DATAPIPE-1435)
+        Args:
+            timestamp(datetime.datetime): the datetime of the event with utc
+        """
         if self._should_process():
             self.process(timestamp)
             self._next_process_time = self._compute_next_process_time()

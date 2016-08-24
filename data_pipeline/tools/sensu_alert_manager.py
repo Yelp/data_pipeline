@@ -10,14 +10,16 @@ import pysensu_yelp
 
 from data_pipeline.tools.heartbeat_periodic_processor import BasePeriodicProcessor
 
-SENSU_DELAY_ALERT_INTERVAL_SECONDS = 30
-
 
 class SensuAlertManager(BasePeriodicProcessor):
     """ This class triggers sensu alert if the producer falls behind real time.
-    The check will be triggered every 30 seconds to avoid flapping and overflowing
-    sensu servers. And if we fall behind and then recover, sensu will take care of
-    resolving this alert itself.
+    The check will be triggered every interval_in_seconds seconds to avoid flapping and
+    overflowing sensu servers. If we fall behind and then recover, sensu will take care
+    of resolving this alert itself.  Typically the producer will call process on this
+    in this class for every message produced.
+
+    Note the check_every variable in the sensu alert is defaulted to interval_in_seconds
+    if it's not specified.
 
     Args:
         interval_in_seconds(int): check_every interval for sensu

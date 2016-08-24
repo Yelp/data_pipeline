@@ -385,7 +385,7 @@ class Config(object):
         )
 
     @property
-    def sensu_ping_window(self):
+    def sensu_ping_window_seconds(self):
         """The ping window defines the minimum time (in seconds) the producer will wait
         prior to sending another OK message to sensu.  For example, say the ping window
         is 30 seconds, and an event is published at time=0.  No events prior to time=30s
@@ -395,7 +395,7 @@ class Config(object):
         after time=70s.  The purpose of this is to throtte the number events each
         producer sends to sensu.
         """
-        return data_pipeline_conf.read_int('sensu_ping_window', default=30)
+        return data_pipeline_conf.read_int('sensu_ping_window_seconds', default=30)
 
     @property
     def expected_heartbeat_interval(self):
@@ -416,7 +416,7 @@ class Config(object):
         stops sending heartbeats to the producer the team owning the producer will be alerted
         within one TTL period.
         """
-        return self.expected_heartbeat_interval + self.sensu_ping_window + 1
+        return self.expected_heartbeat_interval + self.sensu_ping_window_seconds + 1
 
     @property
     def sensu_host(self):
@@ -492,7 +492,7 @@ class Config(object):
 
     @property
     def max_producer_delay_seconds(self):
-        """This is the maximum number of minutes allowed between the event times
+        """This is the maximum number of seconds allowed between the event times
         and the time the producer is to publish the message to kafka.  Anything
         greater than this time will produce an alert"""
         return data_pipeline_conf.read_int('sensu_max_delay_seconds', 300)

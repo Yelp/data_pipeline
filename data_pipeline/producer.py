@@ -16,9 +16,8 @@ from data_pipeline._pooled_kafka_producer import PooledKafkaProducer
 from data_pipeline.client import Client
 from data_pipeline.config import get_config
 from data_pipeline.tools.meteorite_wrappers import StatsCounter
-from data_pipeline.tools.sensu_alert_manager import SENSU_DELAY_ALERT_INTERVAL_SECONDS
 from data_pipeline.tools.sensu_alert_manager import SensuAlertManager
-from data_pipeline.tools.sensu_ttl_alerter import SensuTTLManager
+from data_pipeline.tools.sensu_ttl_alerter import SensuTTLAlerter
 
 
 logger = get_config().logger
@@ -204,9 +203,9 @@ class Producer(Client):
             ),
             'tip': "either the producer has died or there are no hearbeats upstream"
         }
-        self._sensu_window = get_config().sensu_ping_window
-        self.monitors["sensu_ttl"] = SensuTTLManager(
-            result_dict=ttl_sensu_dict,
+        self._sensu_window = get_config().sensu_ping_window_seconds
+        self.monitors["sensu_ttl"] = SensuTTLAlerter(
+            sensu_event_info=ttl_sensu_dict,
             enable=self.enable_sensu
         )
 
@@ -216,6 +215,7 @@ class Producer(Client):
             'alert_after': get_config().sensu_alert_after_seconds,
         })
         disable_sensu = not self.enable_sensu
+        SENSU_DELAY_ALERT_INTERVAL_SECONDS = 30
         self.monitors["sensu_delay"] = SensuAlertManager(
             SENSU_DELAY_ALERT_INTERVAL_SECONDS,
             self.client_name,
