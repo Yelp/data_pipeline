@@ -109,3 +109,4 @@ class TestAvroStringStore(object):
         store = _AvroStringStore()
         store.get_reader(schema_id, schema_id, schema_types, schema_types)
         assert (schema_id, schema_id) in store._reader_cache
+
