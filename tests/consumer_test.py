@@ -249,11 +249,11 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
 
     @pytest.fixture
     def registered_auto_refresh_schema(
-            self,
-            schematizer_client,
-            example_schema,
-            refresh_namespace,
-            refresh_source
+        self,
+        schematizer_client,
+        example_schema,
+        refresh_namespace,
+        refresh_source
     ):
         return schematizer_client.register_schema(
             namespace=refresh_namespace,
@@ -264,35 +264,38 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
         )
 
     @pytest.fixture
-    def ensure_topic_exists(self, containers, registered_auto_refresh_schema):
-        topic_name = str(registered_auto_refresh_schema.topic.name)
-        containers.create_kafka_topic(topic_name)
+    def current_auto_topic(self, registered_auto_refresh_schema):
+        return str(registered_auto_refresh_schema.topic.name)
 
     @pytest.fixture
-    def simple_message(self, registered_auto_refresh_schema, payload):
+    def current_message(self, registered_auto_refresh_schema, payload):
         return CreateMessage(
             schema_id=registered_auto_refresh_schema.schema_id,
             payload=payload
         )
 
-    @pytest.fixture
-    def register_non_compatible_schema(
+    def _setup_new_topic_and_publish_message_helper(
         self,
         schematizer_client,
-        refresh_namespace,
-        refresh_source,
-        example_non_compatible_schema,
+        publish_messages,
+        schema,
+        payload_data,
+        namespace,
+        source
     ):
-        def _register_not_compatible_schema():
-            registered_schema = schematizer_client.register_schema(
-                namespace=refresh_namespace,
-                source=refresh_source,
-                schema_str=example_non_compatible_schema,
-                source_owner_email='test@yelp.com',
-                contains_pii=False
-            )
-            return registered_schema
-        return _register_not_compatible_schema
+        registered_non_compatible_schema = schematizer_client.register_schema(
+            namespace=namespace,
+            source=source,
+            schema_str=schema,
+            source_owner_email='test@yelp.com',
+            contains_pii=False
+        )
+        message = CreateMessage(
+            schema_id=registered_non_compatible_schema.schema_id,
+            payload_data=payload_data
+        )
+        publish_messages(message, count=3)
+        return message
 
     @pytest.fixture
     def non_compatible_payload_data(self, example_non_compatible_schema):
@@ -308,13 +311,12 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
         team_name,
         consumer_source,
         pre_rebalance_callback,
-        post_rebalance_callback,
+        post_rebalance_callback
     ):
         return Consumer(
             consumer_name=consumer_group_name,
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
-            topic_to_consumer_topic_state_map=None,
             consumer_source=consumer_source,
             topic_refresh_frequency_seconds=0.5,
             auto_offset_reset='smallest',
@@ -322,15 +324,16 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
             post_rebalance_callback=post_rebalance_callback,
         )
 
-    def test_auto_refresh_topics(
+    def test_consumer_pick_up_new_topics_after_refresh(
         self,
-        ensure_topic_exists,
-        registered_auto_refresh_schema,
+        schematizer_client,
         publish_messages,
         consumer_instance,
-        simple_message,
-        register_non_compatible_schema,
-        non_compatible_payload_data
+        example_non_compatible_schema,
+        non_compatible_payload_data,
+        current_message,
+        refresh_namespace,
+        refresh_source
     ):
         """
         This test publishes 2 messages and starts the consumer. The consumer
@@ -339,28 +342,32 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
         consumer refreshes itself to include the new topic and receives exactly
         those 3 messages.
         """
+        publish_messages(current_message, count=2)
         with consumer_instance as consumer:
-            publish_messages(simple_message, count=2)
-            # consumer should return exactly 2 messages 'message'
+            # consumer should return exactly 2 messages
             actual_messages = consumer.get_messages(
                 count=10, blocking=True, timeout=TIMEOUT
             )
-            self.assert_equal_messages(actual_messages, simple_message, 2)
+            self.assert_equal_messages(actual_messages, current_message, 2)
             assert len(consumer.topic_to_partition_map) == 1
 
             consumer.commit_messages(actual_messages)
-            new_schema = register_non_compatible_schema()
-            new_message = CreateMessage(
-                schema_id=new_schema.schema_id,
-                payload_data=non_compatible_payload_data
+
+            next_auto_message = self._setup_new_topic_and_publish_message_helper(
+                schematizer_client,
+                publish_messages,
+                schema=example_non_compatible_schema,
+                payload_data=non_compatible_payload_data,
+                namespace=refresh_namespace,
+                source=refresh_source
             )
-            publish_messages(new_message, count=3)
+
             # consumer should refresh itself and include the new topic in the
             # topic_to_partition_map
             new_messages = consumer.get_messages(
                 count=10, blocking=True, timeout=TIMEOUT
             )
-            self.assert_equal_messages(new_messages, new_message, 3)
+            self.assert_equal_messages(new_messages, next_auto_message, 3)
             assert len(consumer.topic_to_partition_map) == 2
 
     def assert_equal_messages(
@@ -480,24 +487,23 @@ class TestReaderSchemaMapFixedSchemas(BaseConsumerSourceBaseTest):
 
 class TestConsumerRegistration(TestReaderSchemaMapFixedSchemas):
 
-    def test_consumer_initial_registration_message(self):
+    def test_consumer_initial_registration_message(self, topic):
         """
-        Assert that an initial RegistrationMessage is sent upon initialization
-        of a Consumer with a non-empty topic_to_consumer_topic_state_map.
+        Assert that an initial RegistrationMessage is sent upon starting
+        the Consumer with a non-empty topic_to_consumer_topic_state_map.
         """
         with attach_spy_on_func(
             clog,
             'log_line'
         ) as func_spy:
             fake_topic = ConsumerTopicState({}, 23)
-            Consumer(
+            with Consumer(
                 consumer_name='test_consumer',
                 team_name='bam',
                 expected_frequency_seconds=ExpectedFrequency.constantly,
-                topic_to_consumer_topic_state_map={'topic': fake_topic,
-                                                   'topic2': None}
-            )
-            assert func_spy.call_count == 1
+                topic_to_consumer_topic_state_map={topic: fake_topic}
+            ):
+                assert func_spy.call_count == 1
 
     def test_consumer_periodic_registration_messages(
         self,
@@ -513,6 +519,7 @@ class TestConsumerRegistration(TestReaderSchemaMapFixedSchemas):
         Note: Tests fails when threshold is set significanly below 1 second
         """
         TIMEOUT = 1.8
+        consumer_instance.registrar.threshold = 1
         with consumer_instance as consumer:
             with attach_spy_on_func(
                 consumer.registrar.clog_writer,
@@ -522,7 +529,7 @@ class TestConsumerRegistration(TestReaderSchemaMapFixedSchemas):
                 consumer.get_message(blocking=True, timeout=TIMEOUT)
                 consumer.registrar.threshold = 1
                 consumer.registrar.start()
-                time.sleep(1.5)
+                time.sleep(2.5)
                 assert func_spy.call_count == 2
                 consumer.registrar.stop()
 

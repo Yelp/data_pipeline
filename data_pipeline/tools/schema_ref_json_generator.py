@@ -20,6 +20,8 @@ from __future__ import unicode_literals
 import csv
 import json
 
+from data_pipeline.helpers.frozendict_json_encoder import FrozenDictEncoder
+
 
 def _read_rows_from_file(file_name):
 
@@ -113,5 +115,5 @@ if __name__ == '__main__':
         output['docs'].append(table_output)
 
     with open('schema_ref.json', 'wb') as outfile:
-        outfile.write(json.dumps(output))
+        outfile.write(json.dumps(output, cls=FrozenDictEncoder))
         outfile.close()

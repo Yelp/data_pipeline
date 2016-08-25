@@ -3,7 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import simplejson
-from requests import ConnectionError
+from requests.exceptions import RequestException
 from swaggerpy.exception import HTTPError
 
 from data_pipeline._retry_util import ExpBackoffPolicy
@@ -75,7 +75,6 @@ class SchematizerClient(object):
     def __init__(self):
         self._client = get_config().schematizer_client  # swaggerpy client
         self._cache = _Cache()
-        self._avro_schema_cache = {}
 
     def get_schema_by_id(self, schema_id):
         """Get the avro schema of given schema id.
@@ -150,7 +149,48 @@ class SchematizerClient(object):
             (List of data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
                 The list of avro schemas created after (inclusive) specified date.
         """
-        return self._get_schemas_created_after_date(created_after, min_id, page_size)
+        return self._get_schemas_created_after_date(
+            created_after,
+            min_id,
+            page_size
+        )
+
+    def get_schemas_by_criteria(
+        self,
+        created_after=0,
+        min_id=0,
+        count=10
+    ):
+        """ Get the avro schemas with the specified criteria: created_after,
+        min_id and count.
+
+        Args:
+            created_after (Optional[long]): get schemas created at or after the given
+                epoch timestamp (default 0)
+            min_id (Optional[int]): Limits the result to those schemas with an
+                id greater than or equal to given min_id (default: 0)
+            count (Optional[int]): the maximum number of schemas returned in this call
+                (default: 10).
+
+        Returns:
+            (List of data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
+                list of avro_schemas satifying the criteria specified in parameters
+        """
+        results = []
+        response = self._call_api(
+            api=self._client.schemas.get_schemas_created_after,
+            params={
+                'created_after': created_after,
+                'count': count,
+                'min_id': min_id
+            }
+        )
+
+        for resp_item in response:
+            _schema = _AvroSchema.from_response(resp_item)
+            results.append(_schema.to_result())
+            self._set_cache_by_schema(_schema)
+        return results
 
     def _get_schemas_created_after_date(self, created_after, min_id, page_size):
         last_page_size = page_size
@@ -175,33 +215,6 @@ class SchematizerClient(object):
                 min_id = _schema.schema_id + 1
             last_page_size = len(response)
         return result
-
-    def _make_avro_schema_key(self, schema_json):
-        return simplejson.dumps(schema_json, sort_keys=True)
-
-    def get_schema_by_schema_json(self, schema_json):
-        """ Get schema object if one exists for a given avro schema.
-        If not, return None.
-
-        Args:
-            schema_json (dict or list): Python object representation of the
-                avro schema json.
-
-        Returns:
-            (data_pipeline.schematizer_clientlib.models.avro_schema.AvroSchema):
-                Avro Schema object.
-        """
-        cached_schema = self._avro_schema_cache.get(
-            self._make_avro_schema_key(schema_json)
-        )
-        if cached_schema:
-            _schema = _AvroSchema.from_cache_value(cached_schema)
-            _schema.topic = self._get_topic_by_name(cached_schema['topic_name'])
-            return _schema.to_result()
-        else:
-            # TODO(DATAPIPE-608|askatti): Add schematizer endpoint to return
-            # Schema object given a schema_json
-            return None
 
     def get_schemas_by_topic(self, topic_name):
         """Get the list of schemas in the specified topic.
@@ -310,6 +323,42 @@ class SchematizerClient(object):
             _source = _Source.from_response(resp_item)
             result.append(_source.to_result())
             self._set_cache_by_source(_source)
+        return result
+
+    def get_sources(
+        self,
+        min_id=0,
+        page_size=10
+    ):
+        """Get the sources that match specified criteria (min_id and
+        page_size).  If no criterion is specified, it returns all the sources.
+
+        Args:
+            min_id (Optional[int]): Limits results to those sources with an id
+                greater than or equal to given min_id (default: 0)
+            page_size (Optional[int]): Maximum number of sources to retrieve
+                per page. (default: 10)
+
+        Returns:
+            (List[data_pipeline.schematizer_clientlib.models.Source]):
+                list of topics that match given criteria.
+        """
+        last_page_size = page_size
+        result = []
+        while last_page_size == page_size:
+            response = self._call_api(
+                api=self._client.sources.list_sources,
+                params={
+                    'min_id': min_id,
+                    'count': page_size
+                }
+            )
+            for resp_item in response:
+                _source = _Source.from_response(resp_item)
+                result.append(_source.to_result())
+                self._set_cache_by_source(_source)
+                min_id = _source.source_id + 1
+            last_page_size = len(response)
         return result
 
     def get_topics_by_source_id(self, source_id):
@@ -912,7 +961,7 @@ class SchematizerClient(object):
         )
         response = retry_on_exception(
             retry_policy=retry_policy,
-            retry_exceptions=ConnectionError,
+            retry_exceptions=RequestException,
             func_to_retry=self._get_api_result,
             request=request
         )
@@ -930,10 +979,6 @@ class SchematizerClient(object):
     def _set_cache_by_schema(self, new_schema):
         self._cache.set_value(new_schema.schema_id, new_schema)
         self._set_cache_by_topic(new_schema.topic)
-
-        self._avro_schema_cache[
-            self._make_avro_schema_key(new_schema.schema_json)
-        ] = new_schema.to_cache_value()
 
     def _get_cached_topic(self, topic_name):
         _topic = self._cache.get_value(_Topic, topic_name)

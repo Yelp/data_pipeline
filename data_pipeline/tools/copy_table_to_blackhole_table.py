@@ -21,6 +21,7 @@ from yelp_conn.topology import TopologyFile
 from yelp_lib.classutil import cached_property
 from yelp_servlib.config_util import load_default_config
 
+from data_pipeline import __version__
 from data_pipeline.schematizer_clientlib.models.refresh import RefreshStatus
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
@@ -101,6 +102,13 @@ class FullRefreshRunner(Batch, BatchDBMixin):
     @cached_property
     def schematizer(self):
         return get_schematizer()
+
+    @property
+    def version(self):
+        """Overriding this so we'll get the clientlib version number when
+        the tailer is run with --version.
+        """
+        return "data_pipeline {}".format(__version__)
 
     @batch_command_line_options
     def define_options(self, option_parser):
