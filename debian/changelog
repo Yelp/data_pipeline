@@ -1,3 +1,9 @@
+data-pipeline-tools (0.5.4) lucid; urgency=low
+
+  * Commit: Fixed pep complains about deleting empty line
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Wed, 24 Aug 2016 17:20:38 -0700
+
 data-pipeline-tools (0.5.2) lucid; urgency=low
 
   * Commit: Apply str casting on topic list creation.

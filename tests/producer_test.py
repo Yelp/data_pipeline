@@ -587,6 +587,73 @@ class TestPublishMonitorMessage(TestProducerBase):
                 expected_start_timestamp=producer.monitor.start_time
             )
 
+    @pytest.mark.parametrize(
+        "enable_meteorite, expected_call_count", [
+            (False, 0), (True, 1)
+        ]
+    )
+    def test_meteorite_on_off(
+        self,
+        create_message,
+        registered_schema,
+        producer,
+        enable_meteorite,
+        expected_call_count
+    ):
+        with mock.patch.object(
+            data_pipeline.producer.StatsCounter,
+            'process',
+            autospec=True
+        ) as mock_stats_counter:
+            producer.enable_meteorite = enable_meteorite
+            m = create_message(registered_schema, timeslot=1.0)
+            producer.publish(m)
+            assert mock_stats_counter.call_count == expected_call_count
+
+    @pytest.mark.parametrize(
+        "enable_sensu, expected_call_count", [
+            (False, 0), (True, 1)
+        ]
+    )
+    def test_sensu_on_off(
+        self,
+        create_message,
+        registered_schema,
+        producer,
+        enable_sensu,
+        expected_call_count
+    ):
+        with mock.patch.object(
+            data_pipeline.producer.SensuTTLAlerter,
+            'process',
+            autospec=True,
+            return_value=None
+        ) as mock_sensu_ttl_process:
+            producer.enable_sensu = enable_sensu
+            m = create_message(registered_schema, timeslot=1.0)
+            producer.publish(m)
+            assert mock_sensu_ttl_process.call_count == expected_call_count
+
+    @pytest.mark.parametrize("message_count", [1, 2])
+    def test_sensu_process_called_once_inside_window(
+        self,
+        create_message,
+        registered_schema,
+        producer,
+        message_count
+    ):
+        with mock.patch.object(
+            data_pipeline.producer.SensuTTLAlerter,
+            'process',
+            autospec=True,
+            return_value=None
+        ) as mock_sensu_ttl_process:
+            producer.enable_sensu = True
+            m1 = create_message(registered_schema, timeslot=1.0)
+            for i in range(message_count):
+                producer.publish(m1)
+            assert mock_sensu_ttl_process.call_count == 1
+
     def test_publish_messages_with_diff_timestamps(
         self, producer, create_message, registered_schema
     ):

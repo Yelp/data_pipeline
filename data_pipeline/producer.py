@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import copy
 import multiprocessing
 import time
 from collections import defaultdict
@@ -14,6 +15,9 @@ from data_pipeline._kafka_util import get_actual_published_messages_count
 from data_pipeline._pooled_kafka_producer import PooledKafkaProducer
 from data_pipeline.client import Client
 from data_pipeline.config import get_config
+from data_pipeline.tools.meteorite_wrappers import StatsCounter
+from data_pipeline.tools.sensu_alert_manager import SensuAlertManager
+from data_pipeline.tools.sensu_ttl_alerter import SensuTTLAlerter
 
 
 logger = get_config().logger
@@ -111,9 +115,15 @@ class Producer(Client):
         self.position_data_callback = position_data_callback
         if schema_id_list is None:
             schema_id_list = []
-
         # Send initial producer registration messages
         self.registrar.register_tracked_schema_ids(schema_id_list)
+
+        self.enable_meteorite = get_config().enable_meteorite
+        self.enable_sensu = get_config().enable_sensu
+        self.monitors = {}
+        self._next_sensu_update = 0
+        self._sensu_window = 0
+        self._setup_monitors()
 
     @cached_property
     def _kafka_producer(self):
@@ -163,7 +173,59 @@ class Producer(Client):
         # for more information.
         return False
 
-    def publish(self, message):
+    def _setup_monitors(self):
+        """This method sets up the meteorite monitor as well as the two sensu
+        monitors, first for ttl, and second for delay.  The ttl monitor tracks
+        the health of the producer and upstream heartbeat.  The delay monitor
+        tracks whether the producer has fallen too far behind the upstream
+        data"""
+
+        self.monitors["meteorite"] = StatsCounter(
+            stat_counter_name=self.client_name,
+            container_name=get_config().container_name,
+            container_env=get_config().container_env
+        )
+
+        underscored_client_name = "_".join(self.client_name.split())
+        # Sensu event dictionary parameters are described here:
+        # http://pysensu-yelp.readthedocs.io/en/latest/index.html?highlight=send_event
+        ttl_sensu_dict = {
+            'name': "{0}_outage_check".format(underscored_client_name),
+            'output': "{0} is back on track".format(self.client_name),
+            'runbook': "y/datapipeline",
+            'team': self.registrar.team_name,
+            'page': get_config().sensu_page_on_critical,
+            'status': 0,
+            'ttl': "{0}s".format(get_config().sensu_ttl),
+            'sensu_host': get_config().sensu_host,
+            'source': "{0}_{1}".format(
+                self.client_name,
+                get_config().sensu_source
+            ),
+            'tip': "either the producer has died or there are no hearbeats upstream"
+        }
+        self._sensu_window = get_config().sensu_ping_window_seconds
+        self.monitors["sensu_ttl"] = SensuTTLAlerter(
+            sensu_event_info=ttl_sensu_dict,
+            enable=self.enable_sensu
+        )
+
+        delay_sensu_dict = copy.deepcopy(ttl_sensu_dict)
+        delay_sensu_dict.update({
+            'name': "{0}_delay_check".format(underscored_client_name),
+            'alert_after': get_config().sensu_alert_after_seconds,
+        })
+        disable_sensu = not self.enable_sensu
+        SENSU_DELAY_ALERT_INTERVAL_SECONDS = 30
+        self.monitors["sensu_delay"] = SensuAlertManager(
+            SENSU_DELAY_ALERT_INTERVAL_SECONDS,
+            self.client_name,
+            delay_sensu_dict,
+            get_config().max_producer_delay_seconds,
+            disable=disable_sensu
+        )
+
+    def publish(self, message, timestamp=None):
         """Adds the message to the buffer to be published.  Messages are
         published after a number of messages are accumulated or after a
         slight time delay, whichever passes first.  Passing a message to
@@ -179,8 +241,18 @@ class Producer(Client):
 
         Args:
             message (data_pipeline.message.Message): message to publish
+            timestamp (timezone aware timestamp): utc datetime of event
         """
         self._kafka_producer.publish(message)
+
+        if self.enable_meteorite:
+            self.monitors['meteorite'].process(message.topic)
+
+        if self.enable_sensu and time.time() > self._next_sensu_update:
+            self._next_sensu_update = time.time() + self._sensu_window
+            self.monitors['sensu_ttl'].process()
+            self.monitors['sensu_delay'].process(timestamp)
+
         self.monitor.record_message(message)
         self.registrar.update_schema_last_used_timestamp(
             message.schema_id,

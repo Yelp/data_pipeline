@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import logging
+import os
 
 import staticconf
 from cached_property import cached_property
@@ -382,6 +383,119 @@ class Config(object):
             'force_recovery_from_publication_unensurable_error',
             default=False
         )
+
+    @property
+    def sensu_ping_window_seconds(self):
+        """The ping window defines the minimum time (in seconds) the producer will wait
+        prior to sending another OK message to sensu.  For example, say the ping window
+        is 30 seconds, and an event is published at time=0.  No events prior to time=30s
+        will cause the producer to publish an OK message to sensu.  Once an event comes
+        in after time=30s the clock will be reset.  That is, if the next event comes in
+        at time=40s the producer will send the OK, and not publish OK's again until
+        after time=70s.  The purpose of this is to throtte the number events each
+        producer sends to sensu.
+        """
+        return data_pipeline_conf.read_int('sensu_ping_window_seconds', default=30)
+
+    @property
+    def expected_heartbeat_interval(self):
+        """The producer expects the upstream to send heartbeats at intervels with a maximum
+        of this number of seconds.  For example, if this returns 300 then we expect the
+        upstream to create at least one event every 300 seconds.
+        """
+        return data_pipeline_conf.read_int('expected_heartbeat_interval', default=300)
+
+    @property
+    def sensu_ttl(self):
+        """This is the time to live (TTL) for the producer.  If sensu doesn't get an OK
+        message by the time to live interval sensu will alert.  Note that the TTL is derived
+        from the expected heartbeat and the ping window to prevent false alarms.  For example
+        if the ping window is 30 seconds and the hearbeat interval is 300 seconds the TTL
+        will be 331 seconds, which guarantees if things are working correctly we'll have be
+        sending OK's to sensu on time.  If either the producer goes down or the upstream
+        stops sending heartbeats to the producer the team owning the producer will be alerted
+        within one TTL period.
+        """
+        return self.expected_heartbeat_interval + self.sensu_ping_window_seconds + 1
+
+    @property
+    def sensu_host(self):
+        """If we're running in Paasta, use the paasta cluster from the
+        environment directly as laid out in PAASTA-1579.  This makes it so that
+        local-run and real sensu alerts go to the same cluster, which should
+        prevent false alerts that never resolve when we run locally.
+        """
+        if os.environ.get('PAASTA_CLUSTER'):
+            return "paasta-{cluster}.yelp".format(
+                cluster=os.environ.get('PAASTA_CLUSTER')
+            )
+        else:
+            return data_pipeline_conf.read_string('sensu_host', self.YOCALHOST)
+
+    @property
+    def sensu_page_on_critical(self):
+        """If this is true the client will page on a sensu critical alert"""
+        return data_pipeline_conf.read_bool('sensu_page_on_critical', default=False)
+
+    @property
+    def container_name(self):
+        """This is the name of the paasta instance in which the client is running.
+        For example: canary"""
+        return os.environ.get(
+            'PAASTA_INSTANCE',
+            data_pipeline_conf.read_string('container_name', "no_paasta_container")
+        )
+
+    @property
+    def container_env(self):
+        """This is the name of the paasta cluster in which the client is running.
+        For example: norcal-prod.
+        """
+        return os.environ.get(
+            'PAASTA_CLUSTER',
+            data_pipeline_conf.read_string('container_env', "no_paasta_environment")
+        )
+
+    @property
+    def sensu_source(self):
+        """This ensures that the alert tracks both the paasta environment and
+        the running instance, so we can have separate alerts for the canary
+        and the main instances.
+        """
+        return '{container_env}_{container_name}'.format(
+            container_env=self.container_env,
+            container_name=self.container_name
+        )
+
+    @property
+    def sensu_alert_after_seconds(self):
+        """This ensures that the alert tracks both the paasta environment and
+        the running instance, so we can have separate alerts for the canary
+        and the main instances.
+        """
+        return "{}s".format(
+            data_pipeline_conf.read_int(
+                'sensu_alert_after_seconds',
+                default=300
+            )
+        )
+
+    @property
+    def enable_sensu(self):
+        """enable sensu alerting"""
+        return data_pipeline_conf.read_bool('enable_sensu', False)
+
+    @property
+    def enable_meteorite(self):
+        """enable meteorite monitoring"""
+        return data_pipeline_conf.read_bool('enable_meteorite', False)
+
+    @property
+    def max_producer_delay_seconds(self):
+        """This is the maximum number of seconds allowed between the event times
+        and the time the producer is to publish the message to kafka.  Anything
+        greater than this time will produce an alert"""
+        return data_pipeline_conf.read_int('sensu_max_delay_seconds', 300)
 
 
 def configure_from_dict(config_dict):
