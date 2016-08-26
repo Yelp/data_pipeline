@@ -1739,3 +1739,22 @@ class TestGetDataTargetsBySchemaID(RegistrationTestBase):
         with pytest.raises(swaggerpy_exc.HTTPError) as e:
             schematizer.get_data_targets_by_schema_id(-1)
         assert e.value.response.status_code == 404
+
+    def test_data_targets_should_be_cached(
+            self,
+            schematizer,
+            biz_schema_id,
+            dw_data_target_resp
+    ):
+        data_targets = schematizer.get_data_targets_by_schema_id(
+            biz_schema_id
+        )
+        with self.attach_spy_on_api(
+                schematizer._client.data_targets,
+                'get_data_target_by_id'
+        ) as schema_api_spy:
+            actual = schematizer.get_data_target_by_id(
+                dw_data_target_resp.data_target_id
+            )
+            self._assert_data_target_values(actual, data_targets[0])
+            assert schema_api_spy.call_count == 0

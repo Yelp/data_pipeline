@@ -634,7 +634,12 @@ class SchematizerClient(object):
             api=self._client.schemas.get_data_targets_by_schema_id,
             params={'schema_id': schema_id}
         )
-        return [_DataTarget.from_response(entry) for entry in response]
+        results = []
+        for resp_item in response:
+            _data_target = _DataTarget.from_response(resp_item)
+            results.append(_data_target)
+            self._set_cache_by_data_target(_data_target)
+        return results
 
     def get_data_target_by_id(self, data_target_id):
         """Get the data target of specified id.
