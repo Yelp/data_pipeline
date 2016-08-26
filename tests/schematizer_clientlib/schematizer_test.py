@@ -1703,3 +1703,39 @@ class TestGetSchemaMigration(SchematizerClientTestBase):
                 target_schema_type=TargetSchemaTypeEnum.unsupported
             )
         assert e.value.response.status_code == 501
+
+
+class TestGetDataTargetsBySchemaID(RegistrationTestBase):
+
+    @pytest.fixture
+    def biz_schema_id(self, yelp_namespace, biz_src_name):
+        return self._register_avro_schema(
+            yelp_namespace,
+            biz_src_name
+        ).schema_id
+
+    def test_get_data_targets_with_scheam_id(
+        self,
+        schematizer,
+        dw_con_group_resp,
+        dw_con_group_data_src_resp,
+        dw_data_target_resp,
+        biz_schema_id
+    ):
+        with self.attach_spy_on_api(
+                schematizer._client.schemas,
+                'get_data_targets_by_schema_id'
+        ) as api_spy:
+            actual = schematizer.get_data_targets_by_schema_id(
+                biz_schema_id
+            )
+            self._assert_data_target_values(actual[0], dw_data_target_resp)
+            assert api_spy.call_count == 1
+
+    def test_get_data_targets_with_illegal_scheam_id(
+        self,
+        schematizer,
+    ):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.get_data_targets_by_schema_id(-1)
+        assert e.value.response.status_code == 404
