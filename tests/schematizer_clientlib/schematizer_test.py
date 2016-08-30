@@ -1717,14 +1717,13 @@ class TestGetDataTargetsBySchemaID(RegistrationTestBase):
     def test_get_data_targets_with_scheam_id(
         self,
         schematizer,
-        dw_con_group_resp,
         dw_con_group_data_src_resp,
         dw_data_target_resp,
         biz_schema_id
     ):
         with self.attach_spy_on_api(
-                schematizer._client.schemas,
-                'get_data_targets_by_schema_id'
+            schematizer._client.schemas,
+            'get_data_targets_by_schema_id'
         ) as api_spy:
             actual = schematizer.get_data_targets_by_schema_id(
                 biz_schema_id
@@ -1732,7 +1731,7 @@ class TestGetDataTargetsBySchemaID(RegistrationTestBase):
             self._assert_data_target_values(actual[0], dw_data_target_resp)
             assert api_spy.call_count == 1
 
-    def test_get_data_targets_with_illegal_scheam_id(
+    def test_get_data_targets_with_invalid_schema_id(
         self,
         schematizer,
     ):
@@ -1741,17 +1740,17 @@ class TestGetDataTargetsBySchemaID(RegistrationTestBase):
         assert e.value.response.status_code == 404
 
     def test_data_targets_should_be_cached(
-            self,
-            schematizer,
-            biz_schema_id,
-            dw_data_target_resp
+        self,
+        schematizer,
+        biz_schema_id,
+        dw_data_target_resp
     ):
         data_targets = schematizer.get_data_targets_by_schema_id(
             biz_schema_id
         )
         with self.attach_spy_on_api(
-                schematizer._client.data_targets,
-                'get_data_target_by_id'
+            schematizer._client.data_targets,
+            'get_data_target_by_id'
         ) as schema_api_spy:
             actual = schematizer.get_data_target_by_id(
                 dw_data_target_resp.data_target_id

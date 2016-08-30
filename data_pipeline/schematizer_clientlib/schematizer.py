@@ -618,7 +618,7 @@ class SchematizerClient(object):
         return _data_target.to_result()
 
     def get_data_targets_by_schema_id(self, schema_id):
-        """Get data targets of specified schema_id
+        """Get data targets of specified schema id
 
         Args:
             schema_id (int): the id of a schema
