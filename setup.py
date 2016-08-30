@@ -34,6 +34,7 @@ setup(
         'kafka-python==0.9.5.post5',
         'psutil==4.2.0',
         'pycrypto>=2.6.1',
+        'pysensu-yelp>=0.2.3',
         'PyStaticConfiguration>=0.9.0',
         'simplejson>=2.1.2',
         'swaggerpy>=0.7.6',
