@@ -44,7 +44,8 @@ setup(
         'yelp-servlib>=4.3.0',
         'cryptography<=1.3.4',
         'pyopenssl==16.0.0',
-        'frozendict==0.5'
+        'frozendict==0.5',
+        'swagger_zipkin==0.1.0'
     ],
     extras_require={
         'tools': [
