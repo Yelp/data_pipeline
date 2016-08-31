@@ -634,6 +634,30 @@ class SchematizerClient(object):
         self._set_cache_by_data_target(_data_target)
         return _data_target.to_result()
 
+    def get_data_targets_by_schema_id(self, schema_id):
+        """Get data targets of specified schema id
+
+        Args:
+            schema_id (int): the id of a schema
+
+        Returns:
+            (List[data_pipeline.schematizer_clientlib.models.data_target.DataTarget]):
+                The list of data targets corresponding to the schema_id
+        """
+        return self._get_data_targets_by_schema_id(schema_id)
+
+    def _get_data_targets_by_schema_id(self, schema_id):
+        response = self._call_api(
+            api=self._client.schemas.get_data_targets_by_schema_id,
+            params={'schema_id': schema_id}
+        )
+        results = []
+        for resp_item in response:
+            _data_target = _DataTarget.from_response(resp_item)
+            results.append(_data_target)
+            self._set_cache_by_data_target(_data_target)
+        return results
+
     def get_data_target_by_id(self, data_target_id):
         """Get the data target of specified id.
 
@@ -641,7 +665,7 @@ class SchematizerClient(object):
             data_target_id (int): The id of requested data target.
 
         Returns:
-            (data_pipeline.data_targettizer_clientlib.models.data_target.DataTarget):
+            (data_pipeline.schematizer_clientlib.models.data_target.DataTarget):
                 The requested data target.
         """
         return self._get_data_target_by_id(data_target_id).to_result()
