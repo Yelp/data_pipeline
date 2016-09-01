@@ -45,7 +45,7 @@ clean-vim:
 
 test:
 	# This will timeout after 15 minutes, in case there is a hang on jenkins
-	PULL_CONTAINERS=true FORCE_FRESH_CONTAINERS=true timeout -9 900 tox $(REBUILD_FLAG)
+	PULL_CONTAINERS=true FORCE_FRESH_CONTAINERS=true timeout -9 1500 tox $(REBUILD_FLAG)
 
 docs: clean-docs 
 	tox -e docs $(REBUILD_FLAG)

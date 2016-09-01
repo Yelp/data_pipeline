@@ -345,7 +345,7 @@ class Containers(object):
 
     def _wait_for_services(self, timeout_seconds=60):
         self.use_testing_containers()
-        self._wait_for_schematizer(timeout_seconds)
+        self._wait_for_schematizer(timeout_seconds=60)
         self._wait_for_kafka(timeout_seconds)
 
     def _wait_for_schematizer(self, timeout_seconds):
