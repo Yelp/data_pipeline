@@ -74,7 +74,8 @@ class SchematizerClient(object):
     __metaclass__ = Singleton
 
     def __init__(self):
-        self._client = ZipkinClientDecorator(get_config().schematizer_client)  # swaggerpy client
+        self._raw_client = get_config().schematizer_client
+        self._client = ZipkinClientDecorator(self._raw_client)  # swaggerpy client
         self._cache = _Cache()
 
     def get_schema_by_id(self, schema_id):
