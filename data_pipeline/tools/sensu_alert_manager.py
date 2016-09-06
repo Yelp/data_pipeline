@@ -46,7 +46,6 @@ class SensuAlertManager(BasePeriodicProcessor):
         self._log = logging.getLogger('{}.util.sensu_alert_manager'.format(service_name))
         self._disable = disable
         self._should_send_sensu_disabled_message = False
-        self._max_delay_allowed_in_seconds = max_delay_seconds
         self._max_delay = timedelta(seconds=max_delay_seconds)
 
     def _setup_ok_result_dict(self, result_dict):
