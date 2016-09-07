@@ -162,10 +162,10 @@ class KafkaProducer(object):
         )
 
         # Updating the topic offset map
-        topics_from_responses = []
-        for response in responses:
-            if isinstance(response, ProduceResponse):
-                topics_from_responses.append(response.topic)
+        topics_from_responses = [
+            response.topic for response in responses
+            if isinstance(response, ProduceResponse)
+        ]
 
         topics_watermarks = get_topics_watermarks(
             kafka_client=self.kafka_client,
