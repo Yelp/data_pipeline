@@ -571,7 +571,8 @@ class SchematizerClient(object):
 
         Returns:
             (List[data_pipeline.schematizer_clientlib.models.topic.Topic]):
-                list of topics that match given criteria.
+                list of topics that match given criteria. The returned topics
+                are ordered by their topic id.
 
         Remarks:
             The function internally paginates through the topics if the max_count
