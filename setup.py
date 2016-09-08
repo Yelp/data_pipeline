@@ -39,7 +39,7 @@ setup(
         'simplejson>=2.1.2',
         'swaggerpy>=0.7.6',
         'yelp-avro>=0.1.9',
-        'yelp-kafka>=4.2.0',
+        'yelp-kafka>=4.17.1',
         'yelp-lib>=10.0.5',
         'yelp-servlib>=4.3.0',
         'cryptography<=1.3.4',
