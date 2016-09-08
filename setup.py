@@ -38,14 +38,14 @@ setup(
         'PyStaticConfiguration>=0.9.0',
         'simplejson>=2.1.2',
         'swaggerpy>=0.7.6',
+        'swagger_zipkin>=0.1.0',
         'yelp-avro>=0.1.9',
         'yelp-kafka>=4.2.0',
         'yelp-lib>=10.0.5',
         'yelp-servlib>=4.3.0',
         'cryptography<=1.3.4',
         'pyopenssl==16.0.0',
-        'frozendict==0.5',
-        'swagger_zipkin==0.1.0'
+        'frozendict==0.5'
     ],
     extras_require={
         'tools': [

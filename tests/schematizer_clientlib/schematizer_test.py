@@ -194,8 +194,8 @@ class TestGetSchemaById(SchematizerClientTestBase):
 
     def test_get_non_cached_schema_by_id(self, schematizer, biz_schema):
         with self.attach_spy_on_api(
-                schematizer._client.schemas,
-                'get_schema_by_id'
+            schematizer._swagger_client.schemas,
+            'get_schema_by_id'
         ) as api_spy:
             actual = schematizer.get_schema_by_id(biz_schema.schema_id)
             self._assert_schema_values(actual, biz_schema)
@@ -205,13 +205,13 @@ class TestGetSchemaById(SchematizerClientTestBase):
         schematizer.get_schema_by_id(biz_schema.schema_id)
 
         with self.attach_spy_on_api(
-                schematizer._client.schemas,
-                'get_schema_by_id'
+            schematizer._swagger_client.schemas,
+            'get_schema_by_id'
         ) as schema_api_spy, self.attach_spy_on_api(
-            schematizer._client.topics,
+            schematizer._swagger_client.topics,
             'get_topic_by_topic_name'
         ) as topic_api_spy, self.attach_spy_on_api(
-            schematizer._client.sources,
+            schematizer._swagger_client.sources,
             'get_source_by_id'
         ) as source_api_spy:
             actual = schematizer.get_schema_by_id(biz_schema.schema_id)
@@ -229,8 +229,8 @@ class TestGetSchemaElementsBySchemaId(SchematizerClientTestBase):
 
     def test_get_schema_elements_by_schema_id(self, schematizer, biz_schema):
         with self.attach_spy_on_api(
-                schematizer._client.schemas,
-                'get_schema_elements_by_schema_id'
+            schematizer._swagger_client.schemas,
+            'get_schema_elements_by_schema_id'
         ) as api_spy:
             actual = schematizer.get_schema_elements_by_schema_id(
                 biz_schema.schema_id
@@ -290,8 +290,8 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
         )
         min_id = sorted_schemas[1].schema_id
         with self.attach_spy_on_api(
-                schematizer._client.schemas,
-                'get_schemas_created_after'
+            schematizer._swagger_client.schemas,
+            'get_schemas_created_after'
         ) as schemas_api_spy:
             schemas = schematizer.get_schemas_created_after_date(
                 created_after=creation_timestamp,
@@ -313,8 +313,8 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
         )
 
         with self.attach_spy_on_api(
-                schematizer._client.schemas,
-                'get_schemas_created_after'
+            schematizer._swagger_client.schemas,
+            'get_schemas_created_after'
         ) as schemas_api_spy:
             schemas = schematizer.get_schemas_created_after_date(
                 created_after=creation_timestamp,
@@ -334,8 +334,8 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
             (created_after - datetime.utcfromtimestamp(0)).total_seconds()
         )
         with self.attach_spy_on_api(
-                schematizer._client.schemas,
-                'get_schemas_created_after'
+            schematizer._swagger_client.schemas,
+            'get_schemas_created_after'
         ) as api_spy:
             schemas = schematizer.get_schemas_created_after_date(
                 creation_timestamp
@@ -378,8 +378,8 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
             creation_timestamp)
         # Assert each element was cached properly
         with self.attach_spy_on_api(
-                schematizer._client.schemas,
-                'get_schema_by_id'
+            schematizer._swagger_client.schemas,
+            'get_schema_by_id'
         ) as schema_api_spy:
             for schema in schemas:
                 actual = schematizer.get_schema_by_id(schema.schema_id)
@@ -453,8 +453,8 @@ class TestGetSchmasByCriteria(SchematizerClientTestBase):
         schemas = schematizer.get_schemas_by_criteria(count=2)
         # Assert each element was cached properly
         with self.attach_spy_on_api(
-                schematizer._client.schemas,
-                'get_schema_by_id'
+            schematizer._swagger_client.schemas,
+            'get_schema_by_id'
         ) as schema_api_spy:
             for schema in schemas:
                 actual = schematizer.get_schema_by_id(schema.schema_id)
@@ -470,8 +470,8 @@ class TestGetSchemasByTopic(SchematizerClientTestBase):
 
     def test_get_schemas_by_topic(self, schematizer, biz_schema):
         with self.attach_spy_on_api(
-                schematizer._client.topics,
-                'list_schemas_by_topic_name'
+            schematizer._swagger_client.topics,
+            'list_schemas_by_topic_name'
         ) as api_spy:
             topic_name = biz_schema.topic.name
             actual = schematizer.get_schemas_by_topic(topic_name)
@@ -523,8 +523,8 @@ class TestGetTopicByName(SchematizerClientTestBase):
 
     def test_get_non_cached_topic_by_name(self, schematizer, biz_topic):
         with self.attach_spy_on_api(
-                schematizer._client.topics,
-                'get_topic_by_topic_name'
+            schematizer._swagger_client.topics,
+            'get_topic_by_topic_name'
         ) as api_spy:
             actual = schematizer.get_topic_by_name(biz_topic.name)
             self._assert_topic_values(actual, biz_topic)
@@ -534,10 +534,10 @@ class TestGetTopicByName(SchematizerClientTestBase):
         schematizer.get_topic_by_name(biz_topic.name)
 
         with self.attach_spy_on_api(
-                schematizer._client.topics,
-                'get_topic_by_topic_name'
+            schematizer._swagger_client.topics,
+            'get_topic_by_topic_name'
         ) as topic_api_spy, self.attach_spy_on_api(
-            schematizer._client.sources,
+            schematizer._swagger_client.sources,
             'get_source_by_id'
         ) as source_api_spy:
             actual = schematizer.get_topic_by_name(biz_topic.name)
@@ -577,9 +577,9 @@ class TestGetSources(GetSourcesTestBase):
         return [biz_src, usr_src, cta_src]
 
     def test_get_all_sources(
-            self,
-            schematizer,
-            sorted_sources
+        self,
+        schematizer,
+        sorted_sources
     ):
         actual = set(schematizer.get_sources())
         partial = {
@@ -597,9 +597,9 @@ class TestGetSources(GetSourcesTestBase):
         partial.issubset(actual)
 
     def test_get_sources_filter_by_min_id(
-            self,
-            sorted_sources,
-            schematizer
+        self,
+        sorted_sources,
+        schematizer
     ):
         min_id = sorted_sources[1].source_id
         expected_sources = sorted_sources[1:]
@@ -607,18 +607,18 @@ class TestGetSources(GetSourcesTestBase):
             min_id=min_id
         )
         for actual_source, expected_source in zip(
-                actual_sources,
-                expected_sources
+            actual_sources,
+            expected_sources
         ):
             self._assert_source_values(actual_source, expected_source)
 
     def test_get_sources_with_page_size(
-            self,
-            schematizer
+        self,
+        schematizer
     ):
         with self.attach_spy_on_api(
-                schematizer._client.sources,
-                'list_sources'
+            schematizer._swagger_client.sources,
+            'list_sources'
         ) as sources_api_spy:
             actual_sources = schematizer.get_sources(
                 min_id=1,
@@ -641,8 +641,8 @@ class TestGetSourceById(SchematizerClientTestBase):
 
     def test_get_non_cached_source_by_id(self, schematizer, biz_src):
         with self.attach_spy_on_api(
-                schematizer._client.sources,
-                'get_source_by_id'
+            schematizer._swagger_client.sources,
+            'get_source_by_id'
         ) as api_spy:
             actual = schematizer.get_source_by_id(biz_src.source_id)
             self._assert_source_values(actual, biz_src)
@@ -652,8 +652,8 @@ class TestGetSourceById(SchematizerClientTestBase):
         schematizer.get_source_by_id(biz_src.source_id)
 
         with self.attach_spy_on_api(
-                schematizer._client.sources,
-                'get_source_by_id'
+            schematizer._swagger_client.sources,
+            'get_source_by_id'
         ) as source_api_spy:
             actual = schematizer.get_source_by_id(biz_src.source_id)
             self._assert_source_values(actual, biz_src)
@@ -663,11 +663,11 @@ class TestGetSourceById(SchematizerClientTestBase):
 class TestGetSourcesByNamespace(GetSourcesTestBase):
 
     def test_get_sources_in_yelp_namespace(
-            self,
-            schematizer,
-            yelp_namespace,
-            biz_src,
-            usr_src
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src,
+        usr_src
     ):
         actual = schematizer.get_sources_by_namespace(yelp_namespace)
 
@@ -684,8 +684,8 @@ class TestGetSourcesByNamespace(GetSourcesTestBase):
     def test_sources_should_be_cached(self, schematizer, yelp_namespace):
         sources = schematizer.get_sources_by_namespace(yelp_namespace)
         with self.attach_spy_on_api(
-                schematizer._client.sources,
-                'get_source_by_id'
+            schematizer._swagger_client.sources,
+            'get_source_by_id'
         ) as source_api_spy:
             actual = schematizer.get_source_by_id(sources[0].source_id)
             assert actual == sources[0]
@@ -707,10 +707,10 @@ class TestGetTopicsBySourceId(SchematizerClientTestBase):
         ).topic
 
     def test_get_topics_of_biz_source(
-            self,
-            schematizer,
-            biz_topic,
-            pii_biz_topic
+        self,
+        schematizer,
+        biz_topic,
+        pii_biz_topic
     ):
         actual = schematizer.get_topics_by_source_id(
             biz_topic.source.source_id
@@ -734,10 +734,10 @@ class TestGetTopicsBySourceId(SchematizerClientTestBase):
             biz_topic.source.source_id
         )
         with self.attach_spy_on_api(
-                schematizer._client.topics,
-                'get_topic_by_topic_name'
+            schematizer._swagger_client.topics,
+            'get_topic_by_topic_name'
         ) as topic_api_spy, self.attach_spy_on_api(
-            schematizer._client.sources,
+            schematizer._swagger_client.sources,
             'get_source_by_id'
         ) as source_api_spy:
             actual = schematizer.get_topic_by_name(topics[0].name)
@@ -791,10 +791,10 @@ class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
         )
 
     def test_get_latest_schema_of_biz_topic(
-            self,
-            schematizer,
-            biz_topic,
-            biz_schema_two
+        self,
+        schematizer,
+        biz_topic,
+        biz_schema_two
     ):
         actual = schematizer.get_latest_schema_by_topic_name(biz_topic.name)
         self._assert_schema_values(actual, biz_schema_two)
@@ -809,13 +809,13 @@ class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
             biz_topic.name
         )
         with self.attach_spy_on_api(
-                schematizer._client.schemas,
-                'get_schema_by_id'
+            schematizer._swagger_client.schemas,
+            'get_schema_by_id'
         ) as schema_api_spy, self.attach_spy_on_api(
-            schematizer._client.topics,
+            schematizer._swagger_client.topics,
             'get_topic_by_topic_name'
         ) as topic_api_spy, self.attach_spy_on_api(
-            schematizer._client.sources,
+            schematizer._swagger_client.sources,
             'get_source_by_id'
         ) as source_api_spy:
             actual = schematizer.get_schema_by_id(latest_schema.schema_id)
@@ -842,11 +842,11 @@ class TestRegisterSchema(SchematizerClientTestBase):
         return simplejson.dumps(schema_json)
 
     def test_register_schema(
-            self,
-            schematizer,
-            yelp_namespace,
-            biz_src_name,
-            schema_str
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name,
+        schema_str
     ):
         actual = schematizer.register_schema(
             namespace=yelp_namespace,
@@ -859,11 +859,11 @@ class TestRegisterSchema(SchematizerClientTestBase):
         self._assert_schema_values(actual, expected)
 
     def test_register_schema_with_schema_json(
-            self,
-            schematizer,
-            yelp_namespace,
-            biz_src_name,
-            schema_json
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name,
+        schema_json
     ):
         actual = schematizer.register_schema_from_schema_json(
             namespace=yelp_namespace,
@@ -876,11 +876,11 @@ class TestRegisterSchema(SchematizerClientTestBase):
         self._assert_schema_values(actual, expected)
 
     def test_register_schema_with_base_schema(
-            self,
-            schematizer,
-            yelp_namespace,
-            biz_src_name,
-            schema_str
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name,
+        schema_str
     ):
         actual = schematizer.register_schema(
             namespace=yelp_namespace,
@@ -894,11 +894,11 @@ class TestRegisterSchema(SchematizerClientTestBase):
         self._assert_schema_values(actual, expected)
 
     def test_register_same_schema_twice(
-            self,
-            schematizer,
-            yelp_namespace,
-            biz_src_name,
-            schema_str
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name,
+        schema_str
     ):
         schema_one = schematizer.register_schema(
             namespace=yelp_namespace,
@@ -917,11 +917,11 @@ class TestRegisterSchema(SchematizerClientTestBase):
         assert schema_one == schema_two
 
     def test_register_same_schema_with_diff_base_schema(
-            self,
-            schematizer,
-            yelp_namespace,
-            biz_src_name,
-            schema_str
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name,
+        schema_str
     ):
         schema_one = schematizer.register_schema(
             namespace=yelp_namespace,
@@ -943,11 +943,11 @@ class TestRegisterSchema(SchematizerClientTestBase):
         assert schema_one.topic.source == schema_two.topic.source
 
     def test_register_same_schema_with_diff_pii(
-            self,
-            schematizer,
-            yelp_namespace,
-            biz_src_name,
-            schema_str
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name,
+        schema_str
     ):
         schema_one = schematizer.register_schema(
             namespace=yelp_namespace,
@@ -969,11 +969,11 @@ class TestRegisterSchema(SchematizerClientTestBase):
         assert schema_one.topic.source == schema_two.topic.source
 
     def test_register_same_schema_with_diff_source(
-            self,
-            schematizer,
-            yelp_namespace,
-            biz_src_name,
-            schema_str
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name,
+        schema_str
     ):
         another_src = 'biz_user'
         schema_one = schematizer.register_schema(
@@ -1052,10 +1052,10 @@ class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
         self._assert_schema_values(actual, expected)
 
     def test_register_for_updated_existing_table(
-            self,
-            schematizer,
-            yelp_namespace,
-            biz_src_name
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name
     ):
         actual = schematizer.register_schema_from_mysql_stmts(
             namespace=yelp_namespace,
@@ -1070,10 +1070,10 @@ class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
         self._assert_schema_values(actual, expected)
 
     def test_register_same_schema_with_diff_pii(
-            self,
-            schematizer,
-            yelp_namespace,
-            biz_src_name
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name
     ):
         non_pii_schema = schematizer.register_schema_from_mysql_stmts(
             namespace=yelp_namespace,
@@ -1101,10 +1101,10 @@ class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
         assert non_pii_schema.topic.source == non_pii_schema.topic.source
 
     def test_register_schema_with_primary_keys(
-            self,
-            schematizer,
-            yelp_namespace,
-            biz_src_name
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name
     ):
         schema_sql = ('create table biz(id int(11) not null, name varchar(8), '
                       'primary key (id));')
@@ -1142,10 +1142,10 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
         return [yelp_biz_topic, aux_biz_topic]
 
     def test_get_topics_of_yelp_namespace(
-            self,
-            schematizer,
-            yelp_namespace,
-            yelp_topics,
+        self,
+        schematizer,
+        yelp_namespace,
+        yelp_topics,
     ):
         actual = schematizer.get_topics_by_criteria(
             namespace_name=yelp_namespace
@@ -1153,10 +1153,10 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
         self._assert_topics_values(actual, expected_topics=yelp_topics)
 
     def test_get_topics_of_biz_source(
-            self,
-            schematizer,
-            biz_src_name,
-            biz_src_topics,
+        self,
+        schematizer,
+        biz_src_name,
+        biz_src_topics,
     ):
         actual = schematizer.get_topics_by_criteria(
             source_name=biz_src_name
@@ -1188,10 +1188,10 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
             namespace_name=yelp_namespace
         )
         with self.attach_spy_on_api(
-                schematizer._client.topics,
-                'get_topic_by_topic_name'
+            schematizer._swagger_client.topics,
+            'get_topic_by_topic_name'
         ) as topic_api_spy, self.attach_spy_on_api(
-            schematizer._client.sources,
+            schematizer._swagger_client.sources,
             'get_source_by_id'
         ) as source_api_spy:
             actual = schematizer.get_topic_by_name(topics[0].name)
@@ -1200,14 +1200,14 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
             assert source_api_spy.call_count == 0
 
     def test_topic_page_size(
-            self,
-            schematizer,
-            yelp_namespace,
-            yelp_topics
+        self,
+        schematizer,
+        yelp_namespace,
+        yelp_topics
     ):
         with self.attach_spy_on_api(
-                schematizer._client.topics,
-                'get_topics_by_criteria'
+            schematizer._swagger_client.topics,
+            'get_topics_by_criteria'
         ) as topic_api_spy:
             actual = schematizer.get_topics_by_criteria(
                 namespace_name=yelp_namespace,
@@ -1220,10 +1220,10 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
             assert topic_api_spy.call_count == len(yelp_topics) + 1
 
     def test_topic_min_id(
-            self,
-            schematizer,
-            yelp_namespace,
-            yelp_topics
+        self,
+        schematizer,
+        yelp_namespace,
+        yelp_topics
     ):
         sorted_yelp_topics = sorted(
             yelp_topics,
@@ -1284,12 +1284,12 @@ class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
         )
 
     def test_is_avro_schema_compatible(
-            self,
-            schematizer,
-            yelp_namespace,
-            biz_src_name,
-            schema_str,
-            schema_str_incompatible
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src_name,
+        schema_str,
+        schema_str_incompatible
     ):
         assert schematizer.is_avro_schema_compatible(
             avro_schema_str=schema_str,
@@ -1447,8 +1447,8 @@ class TestGetDataTargetById(RegistrationTestBase):
         dw_data_target_resp
     ):
         with self.attach_spy_on_api(
-                schematizer._client.data_targets,
-                'get_data_target_by_id'
+            schematizer._swagger_client.data_targets,
+            'get_data_target_by_id'
         ) as api_spy:
             actual = schematizer.get_data_target_by_id(
                 dw_data_target_resp.data_target_id
@@ -1460,8 +1460,8 @@ class TestGetDataTargetById(RegistrationTestBase):
         schematizer.get_data_target_by_id(dw_data_target_resp.data_target_id)
 
         with self.attach_spy_on_api(
-                schematizer._client.data_targets,
-                'get_data_target_by_id'
+            schematizer._swagger_client.data_targets,
+            'get_data_target_by_id'
         ) as data_target_api_spy:
             actual = schematizer.get_data_target_by_id(
                 dw_data_target_resp.data_target_id
@@ -1482,10 +1482,10 @@ class TestCreateConsumerGroup(RegistrationTestBase):
         return 'group_{}'.format(random.random())
 
     def test_create_consumer_group(
-            self,
-            schematizer,
-            dw_data_target_resp,
-            random_group_name
+        self,
+        schematizer,
+        dw_data_target_resp,
+        random_group_name
     ):
         actual = schematizer.create_consumer_group(
             group_name=random_group_name,
@@ -1506,10 +1506,10 @@ class TestCreateConsumerGroup(RegistrationTestBase):
         assert e.value.response.status_code == 400
 
     def test_duplicate_group_name(
-            self,
-            schematizer,
-            dw_data_target_resp,
-            random_group_name
+        self,
+        schematizer,
+        dw_data_target_resp,
+        random_group_name
     ):
         schematizer.create_consumer_group(
             group_name=random_group_name,
@@ -1544,8 +1544,8 @@ class TestGetConsumerGroupById(RegistrationTestBase):
         dw_con_group_resp
     ):
         with self.attach_spy_on_api(
-                schematizer._client.consumer_groups,
-                'get_consumer_group_by_id'
+            schematizer._swagger_client.consumer_groups,
+            'get_consumer_group_by_id'
         ) as api_spy:
             actual = schematizer.get_consumer_group_by_id(
                 dw_con_group_resp.consumer_group_id
@@ -1559,8 +1559,8 @@ class TestGetConsumerGroupById(RegistrationTestBase):
         )
 
         with self.attach_spy_on_api(
-                schematizer._client.consumer_groups,
-                'get_consumer_group_by_id'
+            schematizer._swagger_client.consumer_groups,
+            'get_consumer_group_by_id'
         ) as consumer_group_api_spy:
             actual = schematizer.get_consumer_group_by_id(
                 dw_con_group_resp.consumer_group_id
@@ -1577,10 +1577,10 @@ class TestGetConsumerGroupById(RegistrationTestBase):
 class TestCreateConsumerGroupDataSource(RegistrationTestBase):
 
     def test_create_consumer_group_data_source(
-            self,
-            schematizer,
-            dw_con_group_resp,
-            biz_src_resp
+        self,
+        schematizer,
+        dw_con_group_resp,
+        biz_src_resp
     ):
         actual = schematizer.create_consumer_group_data_source(
             consumer_group_id=dw_con_group_resp.consumer_group_id,
@@ -1613,12 +1613,12 @@ class TestCreateConsumerGroupDataSource(RegistrationTestBase):
 class TestGetTopicsByDataTargetId(RegistrationTestBase):
 
     def test_data_target_with_topics(
-            self,
-            schematizer,
-            dw_data_target_resp,
-            dw_con_group_data_src_resp,
-            biz_src_resp,
-            biz_topic_resp
+        self,
+        schematizer,
+        dw_data_target_resp,
+        dw_con_group_data_src_resp,
+        biz_src_resp,
+        biz_topic_resp
     ):
         actual = schematizer.get_topics_by_data_target_id(
             dw_data_target_resp.data_target_id
@@ -1659,14 +1659,14 @@ class TestGetSchemaMigration(SchematizerClientTestBase):
         return new_schema if request.param else None
 
     def test_normal_schema_migration(
-            self,
-            schematizer,
-            new_schema,
-            old_schema
+        self,
+        schematizer,
+        new_schema,
+        old_schema
     ):
         with self.attach_spy_on_api(
-                schematizer._client.schema_migrations,
-                'get_schema_migration'
+            schematizer._swagger_client.schema_migrations,
+            'get_schema_migration'
         ) as api_spy:
             actual = schematizer.get_schema_migration(
                 new_schema=new_schema,
@@ -1678,9 +1678,9 @@ class TestGetSchemaMigration(SchematizerClientTestBase):
             assert api_spy.call_count == 1
 
     def test_invalid_schema(
-            self,
-            schematizer,
-            new_schema
+        self,
+        schematizer,
+        new_schema
     ):
         with pytest.raises(swaggerpy_exc.HTTPError) as e:
             schematizer._call_api(
@@ -1693,9 +1693,9 @@ class TestGetSchemaMigration(SchematizerClientTestBase):
         assert e.value.response.status_code == 422
 
     def test_unsupported_schema_migration(
-            self,
-            schematizer,
-            new_schema
+        self,
+        schematizer,
+        new_schema
     ):
         with pytest.raises(swaggerpy_exc.HTTPError) as e:
             schematizer.get_schema_migration(
@@ -1722,7 +1722,7 @@ class TestGetDataTargetsBySchemaID(RegistrationTestBase):
         biz_schema_id
     ):
         with self.attach_spy_on_api(
-            schematizer._client.schemas,
+            schematizer._swagger_client.schemas,
             'get_data_targets_by_schema_id'
         ) as api_spy:
             actual = schematizer.get_data_targets_by_schema_id(
@@ -1749,7 +1749,7 @@ class TestGetDataTargetsBySchemaID(RegistrationTestBase):
             biz_schema_id
         )
         with self.attach_spy_on_api(
-            schematizer._client.data_targets,
+            schematizer._swagger_client.data_targets,
             'get_data_target_by_id'
         ) as schema_api_spy:
             actual = schematizer.get_data_target_by_id(
