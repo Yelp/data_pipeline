@@ -7,6 +7,7 @@ from collections import namedtuple
 
 import simplejson
 from Crypto.Cipher import AES
+from yelp_lib.decorators import memoized
 
 from data_pipeline.config import get_config
 from data_pipeline.helpers.singleton import Singleton
@@ -125,8 +126,7 @@ class EncryptionHelper(object):
         # Get the key number to use, allowing for key rotation.
         _, key_id = self._get_algorithm_and_key_id(encryption_type)
 
-        with open(key_location.format(key_id), 'r') as f:
-            return f.read(AES.block_size)
+        return fetch_encyption_key(key_location.format(key_id))
 
     @classmethod
     def _get_algorithm_and_key_id(cls, encryption_type):
@@ -182,3 +182,9 @@ class EncryptionHelper(object):
 
     def _unpad(self, payload):
         return payload[:-ord(payload[len(payload) - 1:])]
+
+
+@memoized
+def fetch_encyption_key(file_name):
+    with open(file_name, 'r') as f:
+        return f.read(AES.block_size)

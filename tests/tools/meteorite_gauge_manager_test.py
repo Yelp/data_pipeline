@@ -38,3 +38,14 @@ class TestMeteoriteGaugeManager(object):
             ts = fake_time - timedelta(seconds=60)
             gauge.process(ts)
             assert mock_set.call_args[0][1] == 60.0
+
+    @mock.patch('yelp_meteorite.metrics.Gauge.set', autospec=True)
+    def test_gauge_manager_disabled(self, mock_set):
+        gauge = MeteoriteGaugeManager(
+            interval_in_seconds=10,
+            stats_gauge_name='test_gauge',
+            disable=True
+        )
+        ts = datetime.now(tzutc())
+        gauge.process(ts)
+        assert mock_set.call_count == 0

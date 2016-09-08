@@ -281,7 +281,8 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
         schema,
         payload_data,
         namespace,
-        source
+        source,
+        message_count
     ):
         registered_non_compatible_schema = schematizer_client.register_schema(
             namespace=namespace,
@@ -294,7 +295,7 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
             schema_id=registered_non_compatible_schema.schema_id,
             payload_data=payload_data
         )
-        publish_messages(message, count=3)
+        publish_messages(message, count=message_count)
         return message
 
     @pytest.fixture
@@ -359,7 +360,8 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
                 schema=example_non_compatible_schema,
                 payload_data=non_compatible_payload_data,
                 namespace=refresh_namespace,
-                source=refresh_source
+                source=refresh_source,
+                message_count=1
             )
 
             # consumer should refresh itself and include the new topic in the
@@ -367,7 +369,7 @@ class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
             new_messages = consumer.get_messages(
                 count=10, blocking=True, timeout=TIMEOUT
             )
-            self.assert_equal_messages(new_messages, next_auto_message, 3)
+            self.assert_equal_messages(new_messages, next_auto_message, 1)
             assert len(consumer.topic_to_partition_map) == 2
 
     def assert_equal_messages(

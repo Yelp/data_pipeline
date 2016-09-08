@@ -1,3 +1,16 @@
+data-pipeline-tools (0.6.4) lucid; urgency=low
+
+  * Commit: Merge branch 'DATAPIPE-1484'
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Thu, 08 Sep 2016 13:40:07 -0700
+
+data-pipeline-tools (0.6.2) lucid; urgency=low
+
+  * Commit: Merge branch 'extend-time-out-to-wait-for-container-be-
+    ready'
+
+ -- Chia-Chi Lin <clin@yelp.com>  Tue, 06 Sep 2016 14:39:15 -0700
+
 data-pipeline-tools (0.6.1) lucid; urgency=low
 
   * Commit: added missing pysensu import to setup.py

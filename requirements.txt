@@ -38,7 +38,7 @@ geogrid==1.0.9
 ipaddress==1.0.14
 iso8601==0.1.10
 jsonschema==2.5.1
-kafka-python==0.9.5.post5
+kafka-python==0.9.5.post6
 kazoo==2.2
 mysqlclient==1.3.6
 ply==3.4
@@ -73,7 +73,7 @@ yelp-cgeom==1.3.1
 yelp-clog==2.5.2
 yelp-conn==7.1.3
 yelp-encodings==0.1.3
-yelp-kafka==4.7.0
+yelp-kafka==4.17.1
 yelp-kafka-tool==0.8.2
 yelp-lib==11.0.2
 yelp-logging==1.4.1
