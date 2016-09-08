@@ -1139,6 +1139,16 @@ class TestPublishMessagesWithRetry(TestProducerBase):
                 expected_published_msgs_count=1
             )
 
+    def test_populate_topic_to_offset_map(self, producer, topic):
+        response_one = ProduceResponse(topic, partition=0, error=0, offset=1)
+        response_two = FailedPayloadsError(payload=mock.Mock())
+        responses = [response_one, response_two]
+        topics_map = producer._kafka_producer._populate_topics_to_offset_map(
+            responses
+        )
+        assert len(topics_map) == 1
+        assert topic in topics_map
+
     def test_retry_false_failed_publish(self, message, producer):
         # TODO(DATAPIPE-606|clin) investigate better way than mocking response
         orig_func = producer._kafka_producer.kafka_client.send_produce_request

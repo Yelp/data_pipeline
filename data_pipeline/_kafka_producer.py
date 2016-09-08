@@ -161,7 +161,19 @@ class KafkaProducer(object):
             retry_handler.requests_to_be_sent
         )
 
-        # Updating the topic offset map
+        topics_watermarks = self._populate_topics_to_offset_map(responses)
+        self.position_data_tracker.topic_to_kafka_offset_map.update(
+            topics_watermarks
+        )
+
+        retry_handler.update_requests_to_be_sent(
+            responses,
+            self.position_data_tracker.topic_to_kafka_offset_map
+        )
+        self._record_success_requests(retry_handler.success_topic_stats_map)
+        return retry_handler
+
+    def _populate_topics_to_offset_map(self, responses):
         topics_from_responses = [
             response.topic for response in responses
             if isinstance(response, ProduceResponse)
@@ -176,16 +188,7 @@ class KafkaProducer(object):
             topic: partition_offsets[0].highmark
             for topic, partition_offsets in topics_watermarks.iteritems()
         }
-        self.position_data_tracker.topic_to_kafka_offset_map.update(
-            topics_watermarks
-        )
-
-        retry_handler.update_requests_to_be_sent(
-            responses,
-            self.position_data_tracker.topic_to_kafka_offset_map
-        )
-        self._record_success_requests(retry_handler.success_topic_stats_map)
-        return retry_handler
+        return topics_watermarks
 
     def _try_send_produce_requests(self, requests):
         # Either it throws exceptions and none of them succeeds, or it returns
