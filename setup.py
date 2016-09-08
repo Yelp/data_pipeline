@@ -31,7 +31,7 @@ setup(
         'cached-property>=0.1.5',
         'cffi>=1.1.2',
         'enum34>=1.0.4',
-        'kafka-python==0.9.5.post5',
+        'kafka-python==0.9.5.post6',
         'psutil==4.2.0',
         'pycrypto>=2.6.1',
         'pysensu-yelp>=0.2.3',
