@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 import simplejson
 from requests.exceptions import RequestException
+from swagger_zipkin.zipkin_decorator import ZipkinClientDecorator
 from swaggerpy.exception import HTTPError
 
 from data_pipeline._retry_util import ExpBackoffPolicy
@@ -73,7 +74,8 @@ class SchematizerClient(object):
     __metaclass__ = Singleton
 
     def __init__(self):
-        self._client = get_config().schematizer_client  # swaggerpy client
+        self._swagger_client = get_config().schematizer_client  # swaggerpy client
+        self._client = ZipkinClientDecorator(self._swagger_client)
         self._cache = _Cache()
 
     def get_schema_by_id(self, schema_id):
