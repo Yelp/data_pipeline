@@ -578,8 +578,8 @@ class SchematizerClient(object):
 
         Remarks:
             The function internally paginates through the topics if the max_count
-            is too large to avoid timeout from the service.  The default page size
-            is currently set to 20.
+            is too large to avoid timeout from the service.  The page size is set
+            to 20 right now.
         """
         # The reason to set fixed page size internally is to make the pagination
         # transparent to the users. We can set a reasonable page size that makes

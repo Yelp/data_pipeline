@@ -1219,7 +1219,7 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
             expected_topics.append(topic)
 
         with self.attach_spy_on_api(
-            schematizer._client.topics,
+            schematizer._swagger_client.topics,
             'get_topics_by_criteria'
         ) as topic_api_spy:
             actual = schematizer.get_topics_by_criteria(
