@@ -89,6 +89,10 @@ class BaseConsumer(Client):
         partitioner_cooldown (float): Waiting time (in seconds) for the
             consumer to acquire the partitions. See
             yelp_kafka/yelp_kafka/partitioner.py for more details
+        use_group_sha (Optional[boolean]): Used by partitioner to establish
+            group membership. If false, consumer group with same name will
+            be treated as the same group; otherwise, they will be different
+            since group sha is different. Default is true.
         pre_rebalance_callback (Optional[Callable[{str:list[int]}, None]]):
             Optional callback which is passed a dict of topic as key and list
             of partitions as value. It's important to note this may be called
@@ -132,6 +136,7 @@ class BaseConsumer(Client):
         force_payload_decode=True,
         auto_offset_reset='smallest',
         partitioner_cooldown=get_config().consumer_partitioner_cooldown_default,
+        use_group_sha=get_config().consumer_use_group_sha_default,
         topic_refresh_frequency_seconds=get_config().topic_refresh_frequency_seconds,
         pre_rebalance_callback=None,
         post_rebalance_callback=None,
@@ -155,6 +160,7 @@ class BaseConsumer(Client):
         self.force_payload_decode = force_payload_decode
         self.auto_offset_reset = auto_offset_reset
         self.partitioner_cooldown = partitioner_cooldown
+        self.use_group_sha = use_group_sha
         self.running = False
         self.consumer_group = None
         self.pre_rebalance_callback = pre_rebalance_callback
@@ -632,6 +638,7 @@ class BaseConsumer(Client):
             auto_offset_reset=self.auto_offset_reset,
             auto_commit=False,
             partitioner_cooldown=self.partitioner_cooldown,
+            use_group_sha=self.use_group_sha,
             pre_rebalance_callback=self.pre_rebalance_callback,
             post_rebalance_callback=self._apply_post_rebalance_callback_to_partition
         )
