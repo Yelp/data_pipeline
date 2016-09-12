@@ -40,7 +40,7 @@ setup(
         'swaggerpy>=0.7.6',
         'swagger_zipkin>=0.1.0',
         'yelp-avro>=0.1.9',
-        'yelp-kafka>=4.17.1',
+        'yelp-kafka>=4.17.1,<5.0.0',
         'yelp-lib>=10.0.5',
         'yelp-servlib>=4.3.0',
         'cryptography<=1.3.4',
