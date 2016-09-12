@@ -1130,6 +1130,9 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
     def yelp_usr_topic(self, yelp_namespace, usr_src_name, yelp_biz_topic):
+        # Because the minimum unit for created_at and updated_at timestamps
+        # stored in the db table is 1 second, here it explicitly waits for 1
+        # second to ensure these topics don't have the same created_at value.
         time.sleep(1)
         return self._register_avro_schema(yelp_namespace, usr_src_name).topic
 
