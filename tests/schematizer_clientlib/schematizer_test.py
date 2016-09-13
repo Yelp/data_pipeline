@@ -1230,7 +1230,8 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
                 source_name=source_name
             )
             self._assert_topics_values(actual, expected_topics=expected_topics)
-            # Since the page size is 20, there should be 2 calls to get 21 topics.
+            # There are one more topic than the page size, therefore it'll need
+            # 2 api calls to the service.
             assert topic_api_spy.call_count == 2
 
     def test_get_topics_with_id_greater_than_min_id(

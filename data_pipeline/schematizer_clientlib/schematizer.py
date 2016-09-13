@@ -579,7 +579,7 @@ class SchematizerClient(object):
             min_id (Optional[int]): Limits results to those topics with an id
                 greater than or equal to given min_id (default: 0)
             max_count (Optional[int]): Maximum number of topics to retrieve. It
-                must be a postivie integer. If not specified, it returns all the
+                must be a positive integer. If not specified, it returns all the
                 topics.
 
         Returns:
