@@ -1207,7 +1207,7 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
         namespace_name = self.get_new_name('dummy_namespace')
         source_name = self.get_new_name('dummy_source')
         expected_topics = []
-        for i in range(21):
+        for i in range(schematizer.DEFAULT_PAGE_SIZE + 1):
             schema_json = {
                 'type': 'enum',
                 'name': 'dummy_enum_{}'.format(i),
