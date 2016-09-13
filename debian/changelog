@@ -1,3 +1,11 @@
+data-pipeline-tools (0.6.5) lucid; urgency=low
+
+  * Commit: Merge branch 'keegan_setup_requirements_yelp_kafka_fix'
+    (keep version of yelp-kafka < 5 until yelp-kafka-tools is updated
+    DATAPIPE-1505)
+
+ -- Amit Katti <askatti@yelp.com>  Mon, 12 Sep 2016 14:52:23 -0700
+
 data-pipeline-tools (0.6.4) lucid; urgency=low
 
   * Commit: Merge branch 'DATAPIPE-1484'
