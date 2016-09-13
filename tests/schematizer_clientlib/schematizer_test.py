@@ -37,6 +37,29 @@ class SchematizerClientTestBase(object):
 
         return mock.patch.object(resource, api_name, side_effect=attach_spy)
 
+    def _get_creation_timestamp(self, created_at):
+        # Must create these vars with tzinfo/no tzinfo in mind while
+        # schematizer transitions to including this info
+        if created_at.tzinfo:
+            return long(
+                (created_at - datetime.fromtimestamp(0, created_at.tzinfo))
+                .total_seconds()
+            )
+        return long(
+            (created_at - datetime.utcfromtimestamp(0)).total_seconds()
+        )
+
+    def _get_created_after(self, created_at=None):
+        # Must create these vars with tzinfo/no tzinfo in mind while
+        # schematizer transitions to including this info
+        if created_at and created_at.tzinfo:
+            return datetime(
+                2015, 1, 1, 19, 10, 26, 0, created_at.tzinfo
+            )
+        return datetime(
+            2015, 1, 1, 19, 10, 26, 0
+        )
+
     @pytest.fixture(scope='class')
     def yelp_namespace(self):
         return 'yelp_{0}'.format(random.random())
@@ -285,9 +308,7 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
         schematizer
     ):
         created_at = sorted_schemas[0].created_at
-        creation_timestamp = long(
-            (created_at - datetime.utcfromtimestamp(0)).total_seconds()
-        )
+        creation_timestamp = self._get_creation_timestamp(created_at)
         min_id = sorted_schemas[1].schema_id
         with self.attach_spy_on_api(
             schematizer._swagger_client.schemas,
@@ -297,10 +318,10 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
                 created_after=creation_timestamp,
                 min_id=min_id
             )
-            for schema in schemas:
-                assert schema.schema_id >= min_id
             # By default, Schematizer will fetch only 10 schemas at a time.
             assert schemas_api_spy.call_count == len(schemas) / 10 + 1
+            for schema in schemas:
+                assert schema.schema_id >= min_id
 
     def test_get_schemas_created_after_with_page_size(
         self,
@@ -308,9 +329,7 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
         schematizer
     ):
         created_at = sorted_schemas[0].created_at
-        creation_timestamp = long(
-            (created_at - datetime.utcfromtimestamp(0)).total_seconds()
-        )
+        creation_timestamp = self._get_creation_timestamp(created_at)
 
         with self.attach_spy_on_api(
             schematizer._swagger_client.schemas,
@@ -327,12 +346,8 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
             assert schemas_api_spy.call_count == len(schemas) + 1
 
     def test_get_schemas_created_after_date(self, schematizer):
-        created_after_str = "2015-01-01T19:10:26"
-        created_after = datetime.strptime(created_after_str,
-                                          '%Y-%m-%dT%H:%M:%S')
-        creation_timestamp = long(
-            (created_after - datetime.utcfromtimestamp(0)).total_seconds()
-        )
+        created_after = self._get_created_after()
+        creation_timestamp = self._get_creation_timestamp(created_after)
         with self.attach_spy_on_api(
             schematizer._swagger_client.schemas,
             'get_schemas_created_after'
@@ -340,15 +355,15 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
             schemas = schematizer.get_schemas_created_after_date(
                 creation_timestamp
             )
-            for schema in schemas:
-                assert schema.created_at >= created_after
             # By default, Schematizer will fetch only 10 schemas at a time
             assert api_spy.call_count == len(schemas) / 10 + 1
+            # Need to recreate created_after now that we may have tzinfo
+            created_after = self._get_created_after(schemas[0].created_at)
+            for schema in schemas:
+                assert schema.created_at >= created_after
 
     def test_get_schemas_created_after_date_filter(self, schematizer):
-        created_after_str = "2015-01-01T19:10:26"
-        created_after = datetime.strptime(created_after_str,
-                                          '%Y-%m-%dT%H:%M:%S')
+        created_after = self._get_created_after()
         creation_timestamp = long(
             (created_after - datetime.utcfromtimestamp(0)).total_seconds()
         )
@@ -368,12 +383,8 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
         assert len(schemas) >= len(schemas_later)
 
     def test_get_schemas_created_after_date_cached(self, schematizer):
-        created_after_str = "2015-01-01T19:10:26"
-        created_after = datetime.strptime(created_after_str,
-                                          '%Y-%m-%dT%H:%M:%S')
-        creation_timestamp = long(
-            (created_after - datetime.utcfromtimestamp(0)).total_seconds()
-        )
+        created_after = self._get_created_after()
+        creation_timestamp = self._get_creation_timestamp(created_after)
         schemas = schematizer.get_schemas_created_after_date(
             creation_timestamp)
         # Assert each element was cached properly
@@ -431,10 +442,8 @@ class TestGetSchmasByCriteria(SchematizerClientTestBase):
         sorted_schemas,
         schematizer
     ):
-        created_after_date = long(
-            (
-                sorted_schemas[0].created_at - datetime.utcfromtimestamp(0)
-            ).total_seconds()
+        created_after_date = self._get_creation_timestamp(
+            sorted_schemas[0].created_at
         ) + 1
         schemas = schematizer.get_schemas_by_criteria(
             created_after=created_after_date,
