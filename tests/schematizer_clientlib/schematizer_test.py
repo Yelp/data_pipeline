@@ -40,25 +40,18 @@ class SchematizerClientTestBase(object):
     def _get_creation_timestamp(self, created_at):
         # Must create these vars with tzinfo/no tzinfo in mind while
         # schematizer transitions to including this info
+        zero_date = datetime.utcfromtimestamp(0)
         if created_at.tzinfo:
-            return long(
-                (created_at - datetime.fromtimestamp(0, created_at.tzinfo))
-                .total_seconds()
-            )
-        return long(
-            (created_at - datetime.utcfromtimestamp(0)).total_seconds()
-        )
+            zero_date = datetime.fromtimestamp(0, created_at.tzinfo)
+        return long((created_at - zero_date).total_seconds())
 
     def _get_created_after(self, created_at=None):
         # Must create these vars with tzinfo/no tzinfo in mind while
         # schematizer transitions to including this info
+        day_one = (2015, 1, 1, 19, 10, 26, 0)
         if created_at and created_at.tzinfo:
-            return datetime(
-                2015, 1, 1, 19, 10, 26, 0, created_at.tzinfo
-            )
-        return datetime(
-            2015, 1, 1, 19, 10, 26, 0
-        )
+            return datetime(*day_one, tzinfo=created_at.tzinfo)
+        return datetime(*day_one)
 
     @pytest.fixture(scope='class')
     def yelp_namespace(self):
