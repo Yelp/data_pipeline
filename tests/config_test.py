@@ -57,6 +57,9 @@ class TestConfigDefaults(TestConfigBase):
     def test_consumer_partitioner_cooldown_default(self, config):
         assert config.consumer_partitioner_cooldown_default == 0.5
 
+    def test_use_group_sha_default(self, config):
+        assert config.consumer_use_group_sha_default is True
+
     def test_monitoring_window_in_sec(self, config):
         assert config.monitoring_window_in_sec == 600
 
@@ -163,6 +166,10 @@ class TestConfigurationOverrides(TestConfigBase):
     def test_consumer_partitioner_cooldown_default(self, config):
         with reconfigure(consumer_partitioner_cooldown_default=10.0):
             assert config.consumer_partitioner_cooldown_default == 10.0
+
+    def test_consumer_use_group_sha_default(self, config):
+        with reconfigure(consumer_use_group_sha_default=False):
+            assert config.consumer_use_group_sha_default is False
 
     def test_monitoring_window_in_sec(self, config):
         with reconfigure(monitoring_window_in_sec=10):

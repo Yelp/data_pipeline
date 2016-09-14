@@ -51,6 +51,10 @@ class Consumer(BaseConsumer):
         partitioner_cooldown (float): Waiting time (in seconds) for the
             consumer to acquire the partitions. See
             yelp_kafka/yelp_kafka/partitioner.py for more details
+        use_group_sha (Optional[boolean]): Used by partitioner to establish
+            group membership. If false, consumer group with same name will
+            be treated as the same group; otherwise, they will be different
+            since group sha is different. Default is true.
         pre_rebalance_callback (Optional[Callable[{str:list[int]}, None]]):
             Optional callback which is passed a dict of topic as key and list
             of partitions as value. It's important to note this may be called

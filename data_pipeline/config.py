@@ -234,6 +234,15 @@ class Config(object):
         )
 
     @property
+    def consumer_use_group_sha_default(self):
+        """Default use group sha option. See yelp_kafka.config for more details
+        """
+        return data_pipeline_conf.read_bool(
+            'consumer_use_group_sha_default',
+            default=True
+        )
+
+    @property
     def monitoring_window_in_sec(self):
         """Returns the duration(in sec) for which the monitoring system will count
         the number of messages processed by the client
