@@ -1202,8 +1202,9 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
             assert source_api_spy.call_count == 0
 
     def test_get_topics_by_pagination(self, schematizer):
-        # This test is based on current pagination setting that the page size
-        # is 20. This test mostly is the sanity check for the pagination.
+        # This test is based on current pagination setting in SchematizerClient,
+        # which is set to default page size. This test mostly is the sanity
+        # check for the pagination.
         namespace_name = self.get_new_name('dummy_namespace')
         source_name = self.get_new_name('dummy_source')
         expected_topics = []
