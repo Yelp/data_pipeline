@@ -1,3 +1,10 @@
+data-pipeline-tools (0.6.7) lucid; urgency=low
+
+  * Commit: Merge branch 'DATAPIPE-939-increase-get_topics_by_criteria-
+    count-size'
+
+ -- Chia-Chi Lin <clin@yelp.com>  Tue, 13 Sep 2016 18:58:18 -0700
+
 data-pipeline-tools (0.6.5) lucid; urgency=low
 
   * Commit: Merge branch 'keegan_setup_requirements_yelp_kafka_fix'
