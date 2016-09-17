@@ -7,13 +7,12 @@ import warnings
 from collections import namedtuple
 from uuid import UUID
 
-from yelp_lib.containers.lists import unlist
-
 from data_pipeline._avro_payload import _AvroPayload
 from data_pipeline._encryption_helper import EncryptionHelper
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
+from data_pipeline.helpers.lists import unlist
 from data_pipeline.helpers.yelp_avro_store import _AvroStringStore
 from data_pipeline.message_type import _ProtectedMessageType
 from data_pipeline.message_type import MessageType

@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 from optparse import OptionGroup
 
+from cached_property import cached_property
 from yelp_batch import Batch
 from yelp_batch import batch_command_line_options
 from yelp_batch import batch_configure
@@ -18,7 +19,6 @@ from yelp_conn.connection_set import ConnectionSet
 from yelp_conn.sqlatxn import TransactionManager
 from yelp_conn.topology import ConnectionSetConfig
 from yelp_conn.topology import TopologyFile
-from yelp_lib.classutil import cached_property
 from yelp_servlib.config_util import load_default_config
 
 from data_pipeline import __version__

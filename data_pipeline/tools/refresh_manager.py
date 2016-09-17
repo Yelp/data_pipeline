@@ -10,10 +10,10 @@ from multiprocessing import Process
 from optparse import OptionGroup
 
 import psutil
+from cached_property import cached_property
 from yelp_batch import BatchDaemon
 from yelp_batch.batch import batch_command_line_options
 from yelp_batch.batch import batch_configure
-from yelp_lib.classutil import cached_property
 from yelp_servlib.config_util import load_package_config
 
 from data_pipeline import __version__
