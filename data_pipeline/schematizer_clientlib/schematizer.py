@@ -428,6 +428,7 @@ class SchematizerClient(object):
         schema_str,
         source_owner_email,
         contains_pii,
+        is_log=False,
         base_schema_id=None
     ):
         """ Register a new schema and return newly created schema object.
@@ -440,6 +441,8 @@ class SchematizerClient(object):
             contains_pii (bool): Indicates if the schema being registered has
                 at least one field that can potentially contain PII.
                 See http://y/pii for help identifying what is or is not PII.
+            is_log (bool): Indicates whether this is a log source or not.
+                Defaults to False
             base_schema_id (Optional[int]): The id of the original schema which
                 the new schema was changed based on
 
@@ -453,6 +456,7 @@ class SchematizerClient(object):
             'source': source,
             'source_owner_email': source_owner_email,
             'contains_pii': contains_pii,
+            'is_log': is_log
         }
         if base_schema_id:
             request_body['base_schema_id'] = base_schema_id
@@ -472,6 +476,7 @@ class SchematizerClient(object):
         schema_json,
         source_owner_email,
         contains_pii,
+        is_log=False,
         base_schema_id=None
     ):
         """ Register a new schema and return newly created schema object.
@@ -485,6 +490,8 @@ class SchematizerClient(object):
             contains_pii (bool): Indicates if the schema being registered has
                 at least one field that can potentially contain PII.
                 See http://y/pii for help identifying what is or is not PII.
+            is_log (bool): Indicates whether this is a log source or not.
+                Defaults to False
             base_schema_id (Optional[int]): The id of the original schema which
                 the new schema was changed based on
 
@@ -498,6 +505,7 @@ class SchematizerClient(object):
             schema_str=simplejson.dumps(schema_json),
             source_owner_email=source_owner_email,
             contains_pii=contains_pii,
+            is_log=is_log,
             base_schema_id=base_schema_id
         )
 

@@ -9,6 +9,7 @@ from cached_property import cached_property
 from kafka import KafkaClient
 from kafka.common import OffsetCommitRequest
 from kafka.util import kafka_bytestring
+from yelp_kafka import discovery
 from yelp_kafka.config import KafkaConsumerConfig
 
 from data_pipeline._consumer_tick import _ConsumerTick
@@ -19,6 +20,13 @@ from data_pipeline.message import Message
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
 logger = get_config().logger
+
+
+SCRIBE_CLUSTER_NAME = 'scribe'
+
+
+class MultipleTopicTypeError(Exception):
+    pass
 
 
 class ConsumerTopicState(object):
@@ -124,6 +132,11 @@ class BaseConsumer(Client):
             from (current_topics) and a set of topic names Consumer will be
             consuming from (refreshed_topics). The return value of the
             function is ignored.
+        is_log: (Optional[boolean]): Flag which indicates whether the topics
+            are log sources or not. If they are log sources, Consumer will
+            connect to Scribe Kafka cluster. If not, it will connect to
+            DataPipeline kafka cluster. By default, this is set to False. All
+            topics should either be log sources or not.
     """
 
     def __init__(
@@ -141,7 +154,8 @@ class BaseConsumer(Client):
         pre_rebalance_callback=None,
         post_rebalance_callback=None,
         fetch_offsets_for_topics=None,
-        pre_topic_refresh_callback=None
+        pre_topic_refresh_callback=None,
+        is_log=False
     ):
         super(BaseConsumer, self).__init__(
             consumer_name,
@@ -167,12 +181,23 @@ class BaseConsumer(Client):
         self.post_rebalance_callback = post_rebalance_callback
         self.fetch_offsets_for_topics = fetch_offsets_for_topics
         self.pre_topic_refresh_callback = pre_topic_refresh_callback
+        self.is_log = is_log
         self._refresh_timer = _ConsumerTick(
             refresh_time_seconds=topic_refresh_frequency_seconds
         )
         self._topic_to_reader_schema_map = self._get_topic_to_reader_schema_map(
             consumer_source
         )
+        self._check_all_topics_have_same_is_log()
+
+    def _check_all_topics_have_same_is_log(self):
+        for topic_name in self.topic_to_consumer_topic_state_map:
+            topic = get_schematizer().get_topics_by_name(topic_name)
+            if self.is_log != topic.is_log:
+                raise MultipleTopicTypeError(
+                    "A single consumer can not process both log and standard "
+                    "topics."
+                )
 
     def _get_refreshed_topic_to_consumer_topic_state_map(
         self,
@@ -237,12 +262,26 @@ class BaseConsumer(Client):
         and corresponding partition lists as values.
         """
         self.topic_to_partition_map = {}
-        for topic, consumer_topic_state in topic_to_consumer_topic_state_map.iteritems():
+        for topic_name, consumer_topic_state in topic_to_consumer_topic_state_map.iteritems():
+            topic = self._get_topic_from_topic_name(topic_name)
             self.topic_to_partition_map[topic] = (
                 consumer_topic_state.partition_offset_map.keys()
                 if consumer_topic_state else None
             )
         self._set_registrar_tracked_schema_ids(topic_to_consumer_topic_state_map)
+
+    def _get_topic_from_topic_name(self, topic_name):
+        if self.is_log:
+            [(topic_list, _)] = discovery.get_region_logs_stream(
+                client_id=self.client_name,
+                stream=topic_name,
+                # Not sure whether to let this search in local region or
+                # specify regions in config.
+                region='uswest1-devc'
+            )
+            return topic_list[0]
+        else:
+            return topic_name
 
     def _set_registrar_tracked_schema_ids(self, topic_to_consumer_topic_state_map):
         """
@@ -259,7 +298,10 @@ class BaseConsumer(Client):
     @cached_property
     def kafka_client(self):
         """ Returns the `KafkaClient` object."""
-        return KafkaClient(get_config().cluster_config.broker_list)
+        if self.is_log:
+            return discovery.get_kafka_connection(SCRIBE_CLUSTER_NAME)
+        else:
+            return KafkaClient(get_config().cluster_config.broker_list)
 
     @property
     def client_type(self):
@@ -632,16 +674,26 @@ class BaseConsumer(Client):
             `auto_commit` is set to False to ensure clients can determine when
             they want their topic offsets committed via commit_messages(..)
         """
-        return KafkaConsumerConfig(
-            group_id=self.client_name,
-            cluster=get_config().cluster_config,
-            auto_offset_reset=self.auto_offset_reset,
-            auto_commit=False,
-            partitioner_cooldown=self.partitioner_cooldown,
-            use_group_sha=self.use_group_sha,
-            pre_rebalance_callback=self.pre_rebalance_callback,
-            post_rebalance_callback=self._apply_post_rebalance_callback_to_partition
-        )
+        consumer_config_kwargs = {
+            'auto_offset_reset': self.auto_offset_reset,
+            'auto_commit': False,
+            'partitioner_cooldown': self.partitioner_cooldown,
+            'use_group_sha': self.use_group_sha,
+            'pre_rebalance_callback': self.pre_rebalance_callback,
+            'post_rebalance_callback': self._apply_post_rebalance_callback_to_partition
+        }
+        if self.is_log:
+            return discovery.get_consumer_config(
+                cluster_type=SCRIBE_CLUSTER_NAME,
+                group_id=self.client_name,
+                **consumer_config_kwargs
+            )
+        else:
+            return KafkaConsumerConfig(
+                group_id=self.client_name,
+                cluster=get_config().cluster_config,
+                **consumer_config_kwargs
+            )
 
     def _apply_post_rebalance_callback_to_partition(self, partitions):
         """

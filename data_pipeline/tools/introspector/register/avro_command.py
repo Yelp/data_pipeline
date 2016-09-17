@@ -49,6 +49,7 @@ class RegisterAvroCommand(_BaseRegisterCommand):
             schema_str=self.avro_schema,
             source_owner_email=self.source_owner_email,
             contains_pii=self.pii,
+            is_log=self.is_log,
             base_schema_id=self.base_schema_id
         )
         self.print_schema(schema)
