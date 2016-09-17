@@ -68,6 +68,28 @@ def registered_schema(schematizer_client, example_schema, namespace, source):
     )
 
 
+@pytest.fixture(scope="module")
+def log_source():
+    return 'good_log_source_{}'.format(uuid4())
+
+
+@pytest.fixture(scope="module")
+def registered_log_schema(
+    schematizer_client,
+    example_schema,
+    namespace,
+    log_source
+):
+    return schematizer_client.register_schema(
+        namespace=namespace,
+        source=log_source,
+        schema_str=example_schema,
+        source_owner_email='test@yelp.com',
+        contains_pii=False,
+        is_log=True
+    )
+
+
 @pytest.fixture(scope='module')
 def registered_compatible_schema(
     schematizer_client,
@@ -250,6 +272,14 @@ def team_name():
 def message(registered_schema, payload):
     return CreateMessage(
         schema_id=registered_schema.schema_id,
+        payload=payload
+    )
+
+
+@pytest.fixture
+def log_message(registered_log_schema, payload):
+    return CreateMessage(
+        schema_id=registered_log_schema.schema_id,
         payload=payload
     )
 

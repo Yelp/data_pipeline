@@ -73,46 +73,60 @@ class TestConsumer(BaseConsumerTest):
         return 'test_consumer_{}'.format(random.random())
 
     @pytest.fixture
-    def consumer_instance(
+    def consumer_init_kwargs(
         self,
         consumer_group_name,
         force_payload_decode,
-        topic,
-        pii_topic,
         team_name,
         pre_rebalance_callback,
         post_rebalance_callback
     ):
+        return {
+            'consumer_name': consumer_group_name,
+            'team_name': team_name,
+            'expected_frequency_seconds': ExpectedFrequency.constantly,
+            'force_payload_decode': force_payload_decode,
+            'pre_rebalance_callback': pre_rebalance_callback,
+            'post_rebalance_callback': post_rebalance_callback,
+        }
+
+    @pytest.fixture
+    def consumer_instance(
+        self,
+        topic,
+        pii_topic,
+        consumer_init_kwargs,
+    ):
         return Consumer(
-            consumer_name=consumer_group_name,
-            team_name=team_name,
-            expected_frequency_seconds=ExpectedFrequency.constantly,
             topic_to_consumer_topic_state_map={topic: None, pii_topic: None},
-            force_payload_decode=force_payload_decode,
-            auto_offset_reset='largest',  # start from the tail of the topic
-            pre_rebalance_callback=pre_rebalance_callback,
-            post_rebalance_callback=post_rebalance_callback
+            auto_offset_reset='largest',  # start from the tail of the topic,
+            **consumer_init_kwargs
         )
 
     @pytest.fixture
     def consumer_two_instance(
         self,
-        consumer_group_name,
-        force_payload_decode,
         topic,
         pii_topic,
-        team_name,
-        pre_rebalance_callback,
-        post_rebalance_callback
+        consumer_init_kwargs
     ):
         return Consumer(
-            consumer_name=consumer_group_name,
-            team_name=team_name,
-            expected_frequency_seconds=ExpectedFrequency.constantly,
             topic_to_consumer_topic_state_map={topic: None, pii_topic: None},
-            force_payload_decode=force_payload_decode,
-            pre_rebalance_callback=pre_rebalance_callback,
-            post_rebalance_callback=post_rebalance_callback
+            **consumer_init_kwargs
+        )
+
+    @pytest.fixture
+    def log_consumer_instance(
+        self,
+        topic,
+        pii_topic,
+        consumer_init_kwargs,
+    ):
+        return Consumer(
+            topic_to_consumer_topic_state_map={topic: None, pii_topic: None},
+            auto_offset_reset='largest',  # start from the tail of the topic,
+            is_log=True,
+            **consumer_init_kwargs
         )
 
     # TODO This is a flakey test that needs to be fixed

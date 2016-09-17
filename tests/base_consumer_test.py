@@ -11,7 +11,9 @@ from uuid import uuid4
 import mock
 import pytest
 
+from data_pipeline.base_consumer import BaseConsumer
 from data_pipeline.base_consumer import ConsumerTopicState
+from data_pipeline.base_consumer import MultipleTopicTypeError
 from data_pipeline.base_consumer import TopicFilter
 from data_pipeline.consumer_source import FixedSchemas
 from data_pipeline.consumer_source import FixedTopics
@@ -73,6 +75,10 @@ class BaseConsumerTest(object):
     @pytest.fixture(scope="module")
     def topic(self, registered_schema):
         return str(registered_schema.topic.name)
+
+    @pytest.fixture(scope="module")
+    def log_topic(self, registered_log_schema):
+        return str(registered_log_schema.topic.name)
 
     @pytest.fixture(scope="module")
     def partitions(self):
@@ -323,6 +329,36 @@ class BaseConsumerTest(object):
                 timeout=TIMEOUT
             )
             asserter.assert_messages(messages, expected_count=2)
+
+    def test_get_log_message(
+        self,
+        log_consumer_instance,
+        publish_log_messages,
+        log_message
+    ):
+        with log_consumer_instance as consumer:
+            # publish_log_messages has not been implemented yet! Need help
+            publish_log_messages(log_message, count=1)
+            asserter = ConsumerAsserter(
+                consumer=consumer,
+                expected_message=log_message
+            )
+            _message = consumer.get_message(blocking=True, timeout=TIMEOUT)
+            asserter.assert_messages([_message], expected_count=1)
+
+    def test_handle_log_and_non_log_topics_fails(
+        self,
+        topic,
+        log_topic,
+        consumer_init_kwargs
+    ):
+        with pytest.raises(MultipleTopicTypeError):
+            BaseConsumer(
+                topic_to_consumer_topic_state_map={topic: None, log_topic: None},
+                auto_offset_reset='largest',  # start from the tail of the topic,
+                is_log=True,
+                **consumer_init_kwargs
+            )
 
 
 class BaseConsumerSourceBaseTest(object):

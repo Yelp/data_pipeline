@@ -21,6 +21,7 @@ AvroArgs = namedtuple(
         "namespace",
         "source_owner_email",
         "pii",
+        "is_log",
         "avro_schema",
         "base_schema_id",
         "verbosity"
@@ -51,6 +52,7 @@ class BaseTestRegister(TestIntrospectorBase):
         namespace_name,
         source_name,
         contains_pii=False,
+        is_log=False,
         base_schema_id=None
     ):
         assert schema.primary_keys == primary_keys
@@ -59,6 +61,7 @@ class BaseTestRegister(TestIntrospectorBase):
         assert schema.topic.source.name == source_name
         assert schema.topic.source.namespace.name == namespace_name
         assert schema.topic.contains_pii == contains_pii
+        assert schema.topic.is_log == is_log
 
     @pytest.fixture
     def namespace_name(self):
@@ -102,7 +105,8 @@ class TestRegisterAvroCommand(BaseTestRegister):
         namespace=None,
         avro_schema=None,
         base_schema_id=None,
-        pii=False
+        pii=False,
+        is_log=False
     ):
         return AvroArgs(
             source_id=source_id,
@@ -112,9 +116,16 @@ class TestRegisterAvroCommand(BaseTestRegister):
             avro_schema=avro_schema,
             base_schema_id=base_schema_id,
             pii=pii,
+            is_log=is_log,
             verbosity=0
         )
 
+    @pytest.mark.parametrize("overrides", [
+        {},
+        {'base_schema_id': 1},
+        {'pii': True},
+        {'is_log': True}
+    ])
     def test_avro_schema(
         self,
         register_command,
@@ -122,40 +133,14 @@ class TestRegisterAvroCommand(BaseTestRegister):
         source_name,
         namespace_name,
         schema_str,
-        schema_json
-    ):
-        args = self._create_fake_args(
-            source_name=source_name,
-            namespace=namespace_name,
-            avro_schema=schema_str
-        )
-        register_command.run(args, parser)
-        assert register_command.print_schema.call_count == 1
-        call_args, _ = register_command.print_schema.call_args
-        schema = call_args[0]
-        self._assert_correct_schema(
-            schema=schema,
-            primary_keys=[],
-            schema_json=schema_json,
-            namespace_name=namespace_name,
-            source_name=source_name
-        )
-
-    def test_avro_schema_base_id_and_pii(
-        self,
-        register_command,
-        parser,
-        source_name,
-        namespace_name,
-        schema_str,
-        schema_json
+        schema_json,
+        overrides
     ):
         args = self._create_fake_args(
             source_name=source_name,
             namespace=namespace_name,
             avro_schema=schema_str,
-            base_schema_id=1,
-            pii=True
+            **overrides
         )
         register_command.run(args, parser)
         assert register_command.print_schema.call_count == 1
@@ -167,8 +152,7 @@ class TestRegisterAvroCommand(BaseTestRegister):
             schema_json=schema_json,
             namespace_name=namespace_name,
             source_name=source_name,
-            base_schema_id=1,
-            contains_pii=True
+            **overrides
         )
 
     def test_avro_schema_with_no_namespace(
