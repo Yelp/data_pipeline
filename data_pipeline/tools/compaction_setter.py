@@ -4,10 +4,10 @@ from __future__ import unicode_literals
 
 from optparse import OptionGroup
 
+from kafka_utils.util.zookeeper import ZK
 from kazoo.exceptions import NoNodeError
 from yelp_batch import Batch
 from yelp_batch.batch import batch_command_line_options
-from yelp_kafka_tool.util.zookeeper import ZK
 from yelp_servlib.config_util import load_package_config
 
 from data_pipeline import __version__
