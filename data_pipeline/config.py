@@ -150,7 +150,8 @@ class Config(object):
             not self.should_use_testing_containers
         ):
             return get_kafka_cluster(self.kafka_cluster_type,
-                                     'datapipe-client', self.kafka_cluster_name)
+                                     'data_pipeline-client',
+                                     self.kafka_cluster_name)
         else:
             return ClusterConfig(
                 type='standard',
