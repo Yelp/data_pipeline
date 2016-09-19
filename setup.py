@@ -27,7 +27,7 @@ setup(
     packages=find_packages(exclude=['tests*', 'benchmarks*']),
     include_package_data=True,
     install_requires=[
-        'avro==1.9.0-yelp3',
+        'avro==1.9.0-yelp4',
         'cached-property>=0.1.5',
         'cffi>=1.1.2',
         'enum34>=1.0.4',
