@@ -7,5 +7,5 @@ Standards-Version: 3.8.3
 
 Package: data-pipeline-tools
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libffi-dev, uuid-dev, libssl0.9.8
+Depends: ${shlibs:Depends}, ${misc:Depends}, libssl0.9.8
 Description: Data pipeline clientlib tools
