@@ -151,7 +151,8 @@ class Config(object):
         ):
             return get_kafka_cluster(self.kafka_cluster_type,
                                      'data_pipeline-client',
-                                     self.kafka_cluster_name)
+                                     self.kafka_cluster_name
+                                    )
         else:
             return ClusterConfig(
                 type='standard',
