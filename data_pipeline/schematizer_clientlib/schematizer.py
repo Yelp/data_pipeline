@@ -71,7 +71,17 @@ class SchematizerClient(object):
     # The down side is it becomes harder to know if a function has been defined
     # since they're now in multiple classes/files.
 
+    # TODO[clin|DATAPIPE-1518] change the rest of the hidden variables to normal
+    # variables.
+
     __metaclass__ = Singleton
+
+    # Default page size used for the pagination when calling bulk apis such as
+    # `get_topics_by_criteria`. If a bulk api needs pagination, this should be
+    # the page size by default. If the api needs custom page size, we should
+    # consider a good way to implement it because I'd like to avoid adding a
+    # bunch of such constants which clutter the code.
+    DEFAULT_PAGE_SIZE = 20
 
     def __init__(self):
         self._swagger_client = get_config().schematizer_client  # swaggerpy client
@@ -555,7 +565,7 @@ class SchematizerClient(object):
         source_name=None,
         created_after=None,
         min_id=0,
-        page_size=1
+        max_count=None
     ):
         """Get all the topics that match specified criteria.  If no criterion
         is specified, it returns all the topics.
@@ -568,16 +578,30 @@ class SchematizerClient(object):
                 also included.
             min_id (Optional[int]): Limits results to those topics with an id
                 greater than or equal to given min_id (default: 0)
-            page_size (Optional[int]): Maximum number of topics to retrieve per page.
-                (default: 1 - see DATAPIPE-935 for reason why)
+            max_count (Optional[int]): Maximum number of topics to retrieve. It
+                must be a positive integer. If not specified, it returns all the
+                topics.
 
         Returns:
-            (List[data_pipeline.schematizer_clientlib.models.topic.Topic]):
-                list of topics that match given criteria.
+            List[data_pipeline.schematizer_clientlib.models.topic.Topic]:
+                list of topics that match given criteria. The returned topics
+                are ordered by their topic id.
+
+        Remarks:
+            The function internally paginates through the topics if the max_count
+            is too large to avoid timeout from the service.  The page size is set
+            to 20 right now.
         """
-        last_page_size = page_size
+        # The reason to set fixed page size internally is to make the pagination
+        # transparent to the users. We can set a reasonable page size that makes
+        # reasonable number of calls without causing timeout. This interface
+        # should be sufficient for most of our use cases, so we probably don't
+        # need to provide the interface for users to set the page size right now.
+        max_count_specified = max_count is not None and max_count > 0
+        page_size = self.DEFAULT_PAGE_SIZE
+        should_get_more_topics = True
         result = []
-        while last_page_size == page_size:
+        while should_get_more_topics:
             response = self._call_api(
                 api=self._client.topics.get_topics_by_criteria,
                 params={
@@ -588,12 +612,19 @@ class SchematizerClient(object):
                     'count': page_size
                 }
             )
+            topic = None
             for resp_item in response:
-                _topic = _Topic.from_response(resp_item)
-                result.append(_topic.to_result())
-                self._set_cache_by_topic(_topic)
-                min_id = _topic.topic_id + 1
-            last_page_size = len(response)
+                topic = _Topic.from_response(resp_item)
+                result.append(topic.to_result())
+                self._set_cache_by_topic(topic)
+                if max_count_specified and len(result) == max_count:
+                    should_get_more_topics = False
+                    break
+            if topic:
+                min_id = topic.topic_id + 1
+            should_get_more_topics = (
+                should_get_more_topics and len(response) >= page_size
+            )
         return result
 
     def create_data_target(self, target_type, destination):
