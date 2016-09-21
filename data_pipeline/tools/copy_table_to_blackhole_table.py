@@ -141,7 +141,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         opt_group.add_option(
             '--primary',
             dest='primary',
-            help='Required: Comma separated string of primary key column names'
+            help='Required: A single primary key column name (if composite use one).'
         )
         opt_group.add_option(
             '--dry-run',

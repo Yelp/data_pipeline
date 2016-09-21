@@ -27,12 +27,56 @@ SCHEMATIZER_POLL_FREQUENCY_SECONDS = 5
 COMPLETE_STATUSES = {RefreshStatus.SUCCESS, RefreshStatus.FAILED}
 
 
+class PriorityRefreshQueue:
+
+    def __init__(self):
+        self.queue = []
+        self.ref = {}
+
+    def update_jobs(self, jobs):
+        for job in jobs:
+            if not job.id in self.ref:
+                self.queue.append(job.id)
+            self.ref[job.id] = job
+
+        # ternary sort in descending order, so that oldest updated jobs come first
+        self.queue.sort(
+            key=lambda id: self.ref[id].updated_at,
+            reverse=True
+        )
+        # secondary sort in ascending order, so that paused jobs come first
+        self.queue.sort(
+            key=lambda id:
+                (0 if self.ref[id].status == RefreshStatus.PAUSED else 1)
+        )
+        # primary sort in descending order, so that ones with the higest priority come first
+        self.queue.sort(
+            key=lambda id: self.ref[id].priority,
+            reverse=True
+        )
+
+    def peek(self):
+        if not self.queue:
+            return None
+        return self.ref[self.queue[0]]
+
+    def pop(self):
+        if not self.queue:
+            return None
+        item_id = self.queue.pop(0)
+        item = self.ref[item_id]
+        del self.ref[item_id]
+        return item
+
+
 class FullRefreshManager(BatchDaemon):
 
     def __init__(self):
         super(FullRefreshManager, self).__init__()
         self.notify_emails = ['bam+batch@yelp.com']
         self.active_refresh = {'id': None, 'pid': None}
+        self._refresh_queue = PriorityRefreshQueue()
+        self.last_updated_timestamp = None
 
     @cached_property
     def schematizer(self):
@@ -93,29 +137,35 @@ class FullRefreshManager(BatchDaemon):
     def _begin_refresh_job(self, refresh):
         # We need to make 2 schematizer requests to get the primary_keys, but this happens infrequently enough
         # where it's not paricularly vital to make a new end point for it
-        topic = self.schematizer.get_latest_topic_by_source_id(refresh.source.source_id)
+        topics = self.schematizer.get_topics_by_criteria(
+            source_name=refresh.source_name,
+            namespace_name=refresh.namespace_name
+        )
+        topics.sort(key=lambda topic: topic.created_after)
+        topic = topics[-1]
         primary_keys = self.schematizer.get_latest_schema_by_topic_name(topic.name).primary_keys
         if len(primary_keys):
-            primary_keys = ','.join(primary_keys)
+            # The refresh runner doesn't like composite keys, and gets by just fine using only one of them
+            primary = primary_keys[0]
         else:
             # Fallback in case we get bad data from the schematizer (command line default is 'id')
-            primary_keys = 'id'
+            primary = 'id'
         refresh_batch = FullRefreshRunner(
             refresh_id=self.active_refresh['id'],
             cluster=self.cluster,
             database=self.database,
             config_path=self.config_path,
-            table_name=refresh.source.name,
+            table_name=refresh.source_name,
             offset=refresh.offset,
             batch_size=refresh.batch_size,
-            primary=primary_keys,
+            primary=primary,
             where_clause=refresh.filter_condition,
             dry_run=self.dry_run,
             avg_rows_per_second_cap=getattr(refresh, 'avg_rows_per_second_cap', None)
         )
         self.log.info(
             "Starting a batch table_name: {}, refresh_id: {}, worker_id: {}".format(
-                refresh.source.name,
+                refresh.source_name,
                 self.active_refresh['id'],
                 self.active_refresh['pid']
             )
@@ -125,8 +175,8 @@ class FullRefreshManager(BatchDaemon):
     def setup_new_refresh(self, refresh):
         active_pid = self.active_refresh['pid']
         if active_pid is not None:
-            # If we somehow have an active worker but not an active refresh (refresh died somehow),
-            # then we want to kill that worker.
+            # If we somehow have an active worker (replacing a lower priority refresh),
+            # then we want to kill that worker, which will pause it.
             os.kill(active_pid, signal.SIGTERM)
         new_worker = Process(
             target=self._begin_refresh_job,
@@ -142,27 +192,10 @@ class FullRefreshManager(BatchDaemon):
         current_refresh = self.schematizer.get_refresh_by_id(
             self.active_refresh['id']
         )
-        next_priority = next_refresh.priority.value
-        current_priority = current_refresh.priority.value
+        next_priority = next_refresh.priority
+        current_priority = current_refresh.priority
         return (next_priority > current_priority or
                 current_refresh.status in COMPLETE_STATUSES)
-
-    def determine_best_refresh(self, not_started_jobs, paused_jobs):
-        if not_started_jobs and paused_jobs:
-            not_started_job = not_started_jobs[0]
-            paused_job = paused_jobs[0]
-            if not_started_job.priority.value > paused_job.priority.value:
-                return not_started_job
-            else:
-                return paused_job
-
-        if not_started_jobs:
-            return not_started_jobs[0]
-
-        if paused_jobs:
-            return paused_jobs[0]
-
-        return None
 
     def set_zombie_refresh_to_fail(self):
         """The manager sometimes gets in to situations where
@@ -180,7 +213,7 @@ class FullRefreshManager(BatchDaemon):
         refresh = self.schematizer.get_refresh_by_id(
             self.active_refresh['id']
         )
-        if refresh.status.value == RefreshStatus.IN_PROGRESS.value:
+        if refresh.status == RefreshStatus.IN_PROGRESS:
             self.schematizer.update_refresh(
                 self.active_refresh['id'],
                 RefreshStatus.FAILED,
@@ -192,13 +225,22 @@ class FullRefreshManager(BatchDaemon):
     def get_next_refresh(self):
         not_started_jobs = self.schematizer.get_refreshes_by_criteria(
             self.namespace,
-            RefreshStatus.NOT_STARTED
+            RefreshStatus.NOT_STARTED,
+            updated_after=self.last_updated_timestamp
         )
         paused_jobs = self.schematizer.get_refreshes_by_criteria(
             self.namespace,
-            RefreshStatus.PAUSED
+            RefreshStatus.PAUSED,
+            updated_after=self.last_updated_timestamp
         )
-        return self.determine_best_refresh(not_started_jobs, paused_jobs)
+        jobs = not_started_jobs + paused_jobs
+
+        self._refresh_queue.update(jobs)
+        self.last_updated_timestamp = max(
+            [job.updated_at for job in jobs]
+        ) + 1 if jobs else self.last_updated_timestamp
+
+        return self._refresh_queue.peek()
 
     def run(self):
         with ZKLock(name="refresh_manager", namespace=self.namespace):
@@ -207,6 +249,8 @@ class FullRefreshManager(BatchDaemon):
                     self.set_zombie_refresh_to_fail()
                     next_refresh = self.get_next_refresh()
                     if next_refresh and self._should_run_next_refresh(next_refresh):
+                        # Pop now that we know we're using it
+                        next_refresh = self._refresh_queue.pop()
                         self.setup_new_refresh(next_refresh)
                     if self._stopping:
                         break

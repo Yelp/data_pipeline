@@ -50,12 +50,14 @@ class TestFullRefreshManager(object):
     @pytest.fixture
     def refresh_params(
         self,
-        source_response,
+        fake_source,
+        fake_namespace,
         fake_created_at,
         fake_updated_at
     ):
         return {
-            'source': source_response,
+            'source_name': fake_source,
+            'namespace_name': fake_namespace,
             'offset': 0,
             'batch_size': 200,
             'filter_condition': None,
@@ -84,21 +86,21 @@ class TestFullRefreshManager(object):
     def refresh_result(self, refresh_params):
         refresh_params['refresh_id'] = 1
         refresh_params['status'] = 'NOT_STARTED'
-        refresh_params['priority'] = 'MEDIUM'
+        refresh_params['priority'] = refresh.Priority.MEDIUM.value
         return refresh._Refresh(**refresh_params).to_result()
 
     @pytest.fixture
     def high_refresh_result(self, refresh_params):
         refresh_params['refresh_id'] = 2
         refresh_params['status'] = 'NOT_STARTED'
-        refresh_params['priority'] = 'HIGH'
+        refresh_params['priority'] = refresh.Priority.HIGH.value
         return refresh._Refresh(**refresh_params).to_result()
 
     @pytest.fixture
     def complete_refresh_result(self, refresh_params):
         refresh_params['refresh_id'] = 3
         refresh_params['status'] = 'SUCCESS'
-        refresh_params['priority'] = 'MEDIUM'
+        refresh_params['priority'] = refresh.Priority.MEDIUM.value
         return refresh._Refresh(**refresh_params).to_result()
 
     @pytest.yield_fixture

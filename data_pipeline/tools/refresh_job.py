@@ -148,15 +148,16 @@ class FullRefreshJob(Batch):
             source_id=self.source_id,
             offset=self.options.offset,
             batch_size=self.options.batch_size,
-            priority=Priority[self.options.priority],
+            priority=Priority[self.options.priority].value,
             filter_condition=self.options.filter_condition,
             avg_rows_per_second_cap=self.options.avg_rows_per_second_cap
         )
         self.log.info(
             "Refresh registered with refresh id: {rid} "
-            "on source id: {sid}".format(
+            "on source: {source_name}, namespace: {namespace_name}".format(
                 rid=self.job.refresh_id,
-                sid=self.job.source.source_id
+                source_name=self.job.source_name,
+                namespace_name=self.job.namespace_name
             )
         )
 

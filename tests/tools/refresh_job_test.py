@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 import pytest
 
+from data_pipeline.schematizer_clientlib.models.refresh import Priority
 from data_pipeline.tools.refresh_job import FullRefreshJob
 
 
@@ -76,7 +77,7 @@ class TestFullRefreshJob(object):
         )
         refresh_job.run()
         actual_refresh = refresh_job.schematizer.get_refresh_by_id(refresh_job.job.refresh_id)
-        self._check_refresh(actual_refresh, source.source_id, None)
+        self._check_refresh(actual_refresh, source.name, None)
 
     def test_valid_run_namespace_source_name(self, refresh_job, source):
         refresh_job.process_commandline_options(
@@ -90,7 +91,7 @@ class TestFullRefreshJob(object):
         )
         refresh_job.run()
         actual_refresh = refresh_job.schematizer.get_refresh_by_id(refresh_job.job.refresh_id)
-        self._check_refresh(actual_refresh, source.source_id, None)
+        self._check_refresh(actual_refresh, source.name, None)
 
     def test_invalid_run_namespace_source_name_not_found(self, refresh_job, source):
         with pytest.raises(ValueError) as e:
@@ -118,12 +119,12 @@ class TestFullRefreshJob(object):
         )
         refresh_job.run()
         actual_refresh = refresh_job.schematizer.get_refresh_by_id(refresh_job.job.refresh_id)
-        self._check_refresh(actual_refresh, source.source_id, 100)
+        self._check_refresh(actual_refresh, source.name, 100)
 
-    def _check_refresh(self, refresh, source_id, avg_rows_per_second_cap):
-        assert refresh.source.source_id == source_id
+    def _check_refresh(self, refresh, source_name, avg_rows_per_second_cap):
+        assert refresh.source_name == source_name
         assert refresh.avg_rows_per_second_cap == avg_rows_per_second_cap
-        assert refresh.priority.name == "MAX"
-        assert refresh.status.name == "NOT_STARTED"
+        assert refresh.priority == Priority.MAX.value
+        assert refresh.status.value == "NOT_STARTED"
         assert refresh.offset == 0
         assert refresh.batch_size == 250
