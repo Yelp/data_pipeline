@@ -1,3 +1,10 @@
+data-pipeline-tools (0.6.9) lucid; urgency=low
+
+  * Commit: Merge branch 'keegan_DATAPIPE-1778-
+    pyramid_zipkin_version_pinning'
+
+ -- Shahid Chohan <chohan@yelp.com>  Wed, 21 Sep 2016 15:48:31 -0700
+
 data-pipeline-tools (0.6.8) lucid; urgency=low
 
   * Commit: removed libffi-dev, uuid-dev from the package control file
