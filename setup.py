@@ -32,6 +32,7 @@ setup(
         'cffi>=1.1.2',
         'enum34>=1.0.4',
         'kafka-python==0.9.5.post6',
+        'kafka-utils>0.3.3',
         'psutil==4.2.0',
         'pycrypto>=2.6.1',
         'pyramid_zipkin>=0.12.0,<0.13.0',
@@ -41,7 +42,8 @@ setup(
         'swaggerpy>=0.7.6',
         'swagger_zipkin>=0.1.0',
         'yelp-avro>=0.1.9',
-        'yelp-kafka>=4.17.1,<5.0.0',
+        'yelp-kafka>=5.0.0',
+        'yelp-lib>=10.0.5',
         'yelp-servlib>=4.3.0',
         'cryptography<=1.3.4',
         'pyopenssl==16.0.0',
@@ -54,7 +56,6 @@ setup(
             'thriftpy<0.2.0',
             'yelp_batch>=0.19.4',
             'yelp_conn>=7.0.0',
-            'yelp-kafka-tool>=0.8.2'
         ],
         'testing_helpers': [
             'docker-compose==1.5.2',
