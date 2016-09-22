@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import datetime
 import os
 import signal
 import sys
@@ -33,11 +34,11 @@ class PriorityRefreshQueue:
         self.queue = []
         self.ref = {}
 
-    def update_jobs(self, jobs):
+    def update(self, jobs):
         for job in jobs:
-            if not job.id in self.ref:
-                self.queue.append(job.id)
-            self.ref[job.id] = job
+            if job.refresh_id not in self.ref:
+                self.queue.append(job.refresh_id)
+            self.ref[job.refresh_id] = job
 
         # ternary sort in descending order, so that oldest updated jobs come first
         self.queue.sort(
@@ -222,6 +223,20 @@ class FullRefreshManager(BatchDaemon):
             self.active_refresh['id'] = None
             self.active_refresh['pid'] = None
 
+    def determine_best_refresh(self, not_started_jobs, paused_jobs):
+        jobs = not_started_jobs + paused_jobs
+
+        self._refresh_queue.update(jobs)
+        self.last_updated_timestamp = self.get_last_updated_timestamp(jobs)
+
+        return self._refresh_queue.peek()
+
+    def get_last_updated_timestamp(self, jobs):
+        if not jobs:
+            return self.last_updated_timestamp
+        max_time = max([job.updated_at for job in jobs])
+        return int((max_time - datetime.datetime(1970, 1, 1)).total_seconds())
+
     def get_next_refresh(self):
         not_started_jobs = self.schematizer.get_refreshes_by_criteria(
             self.namespace,
@@ -233,14 +248,7 @@ class FullRefreshManager(BatchDaemon):
             RefreshStatus.PAUSED,
             updated_after=self.last_updated_timestamp
         )
-        jobs = not_started_jobs + paused_jobs
-
-        self._refresh_queue.update(jobs)
-        self.last_updated_timestamp = max(
-            [job.updated_at for job in jobs]
-        ) + 1 if jobs else self.last_updated_timestamp
-
-        return self._refresh_queue.peek()
+        return self.determine_best_refresh(not_started_jobs, paused_jobs)
 
     def run(self):
         with ZKLock(name="refresh_manager", namespace=self.namespace):
