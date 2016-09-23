@@ -42,8 +42,6 @@ setup(
         'swaggerpy>=0.7.6',
         'swagger_zipkin>=0.1.0',
         'yelp-avro>=0.1.9',
-        'yelp-kafka>=5.0.0',
-        'yelp-lib>=10.0.5',
         'yelp-servlib>=4.3.0',
         'cryptography<=1.3.4',
         'pyopenssl==16.0.0',
@@ -62,6 +60,9 @@ setup(
             'docker-py==1.6.0',
             # requests is locked at <2.7 to satisfy a docker-compose requirement
             'requests<2.7'
+        ],
+        'internal': [
+            'yelp-kafka>=5.0.0'
         ]
     },
     zip_safe=False,

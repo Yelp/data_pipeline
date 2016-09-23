@@ -4,7 +4,7 @@ from __future__ import unicode_literals
 
 from uuid import UUID
 
-from yelp_kafka import offsets
+from kafka_utils.util import offsets
 
 from data_pipeline._fast_uuid import FastUUID
 from data_pipeline.base_consumer import ConsumerTopicState
