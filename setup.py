@@ -61,6 +61,8 @@ setup(
             # requests is locked at <2.7 to satisfy a docker-compose requirement
             'requests<2.7'
         ],
+        # inform downstream projects that use data_pipeline consumer to
+        # include data_pipeline[internal] to their dependency.
         'internal': [
             'yelp-kafka>=5.0.0'
         ]
