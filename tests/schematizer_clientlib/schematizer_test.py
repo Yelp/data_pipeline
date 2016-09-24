@@ -37,6 +37,22 @@ class SchematizerClientTestBase(object):
 
         return mock.patch.object(resource, api_name, side_effect=attach_spy)
 
+    def _get_creation_timestamp(self, created_at):
+        # Must create these vars with tzinfo/no tzinfo in mind while
+        # schematizer transitions to including this info
+        zero_date = datetime.utcfromtimestamp(0)
+        if created_at.tzinfo:
+            zero_date = datetime.fromtimestamp(0, created_at.tzinfo)
+        return long((created_at - zero_date).total_seconds())
+
+    def _get_created_after(self, created_at=None):
+        # Must create these vars with tzinfo/no tzinfo in mind while
+        # schematizer transitions to including this info
+        day_one = (2015, 1, 1, 19, 10, 26, 0)
+        if created_at and created_at.tzinfo:
+            return datetime(*day_one, tzinfo=created_at.tzinfo)
+        return datetime(*day_one)
+
     @pytest.fixture(scope='class')
     def yelp_namespace(self):
         return 'yelp_{0}'.format(random.random())
@@ -71,6 +87,9 @@ class SchematizerClientTestBase(object):
     @property
     def source_owner_email(self):
         return 'bam+test@yelp.com'
+
+    def get_new_name(self, prefix):
+        return '{}_{}'.format(prefix, random.random())
 
     def _get_client(self):
         """This is a method instead of a property.  Pytest was accessing this
@@ -285,9 +304,7 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
         schematizer
     ):
         created_at = sorted_schemas[0].created_at
-        creation_timestamp = long(
-            (created_at - datetime.utcfromtimestamp(0)).total_seconds()
-        )
+        creation_timestamp = self._get_creation_timestamp(created_at)
         min_id = sorted_schemas[1].schema_id
         with self.attach_spy_on_api(
             schematizer._swagger_client.schemas,
@@ -297,10 +314,10 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
                 created_after=creation_timestamp,
                 min_id=min_id
             )
-            for schema in schemas:
-                assert schema.schema_id >= min_id
             # By default, Schematizer will fetch only 10 schemas at a time.
             assert schemas_api_spy.call_count == len(schemas) / 10 + 1
+            for schema in schemas:
+                assert schema.schema_id >= min_id
 
     def test_get_schemas_created_after_with_page_size(
         self,
@@ -308,9 +325,7 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
         schematizer
     ):
         created_at = sorted_schemas[0].created_at
-        creation_timestamp = long(
-            (created_at - datetime.utcfromtimestamp(0)).total_seconds()
-        )
+        creation_timestamp = self._get_creation_timestamp(created_at)
 
         with self.attach_spy_on_api(
             schematizer._swagger_client.schemas,
@@ -327,12 +342,8 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
             assert schemas_api_spy.call_count == len(schemas) + 1
 
     def test_get_schemas_created_after_date(self, schematizer):
-        created_after_str = "2015-01-01T19:10:26"
-        created_after = datetime.strptime(created_after_str,
-                                          '%Y-%m-%dT%H:%M:%S')
-        creation_timestamp = long(
-            (created_after - datetime.utcfromtimestamp(0)).total_seconds()
-        )
+        created_after = self._get_created_after()
+        creation_timestamp = self._get_creation_timestamp(created_after)
         with self.attach_spy_on_api(
             schematizer._swagger_client.schemas,
             'get_schemas_created_after'
@@ -340,15 +351,15 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
             schemas = schematizer.get_schemas_created_after_date(
                 creation_timestamp
             )
-            for schema in schemas:
-                assert schema.created_at >= created_after
             # By default, Schematizer will fetch only 10 schemas at a time
             assert api_spy.call_count == len(schemas) / 10 + 1
+            # Need to recreate created_after now that we may have tzinfo
+            created_after = self._get_created_after(schemas[0].created_at)
+            for schema in schemas:
+                assert schema.created_at >= created_after
 
     def test_get_schemas_created_after_date_filter(self, schematizer):
-        created_after_str = "2015-01-01T19:10:26"
-        created_after = datetime.strptime(created_after_str,
-                                          '%Y-%m-%dT%H:%M:%S')
+        created_after = self._get_created_after()
         creation_timestamp = long(
             (created_after - datetime.utcfromtimestamp(0)).total_seconds()
         )
@@ -368,12 +379,8 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
         assert len(schemas) >= len(schemas_later)
 
     def test_get_schemas_created_after_date_cached(self, schematizer):
-        created_after_str = "2015-01-01T19:10:26"
-        created_after = datetime.strptime(created_after_str,
-                                          '%Y-%m-%dT%H:%M:%S')
-        creation_timestamp = long(
-            (created_after - datetime.utcfromtimestamp(0)).total_seconds()
-        )
+        created_after = self._get_created_after()
+        creation_timestamp = self._get_creation_timestamp(created_after)
         schemas = schematizer.get_schemas_created_after_date(
             creation_timestamp)
         # Assert each element was cached properly
@@ -431,10 +438,8 @@ class TestGetSchmasByCriteria(SchematizerClientTestBase):
         sorted_schemas,
         schematizer
     ):
-        created_after_date = long(
-            (
-                sorted_schemas[0].created_at - datetime.utcfromtimestamp(0)
-            ).total_seconds()
+        created_after_date = self._get_creation_timestamp(
+            sorted_schemas[0].created_at
         ) + 1
         schemas = schematizer.get_schemas_by_criteria(
             created_after=created_after_date,
@@ -1126,48 +1131,47 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
         return self._register_avro_schema(yelp_namespace, biz_src_name).topic
 
     @pytest.fixture(autouse=True, scope='class')
-    def yelp_usr_topic(self, yelp_namespace, usr_src_name):
+    def yelp_usr_topic(self, yelp_namespace, usr_src_name, yelp_biz_topic):
+        # Because the minimum unit for created_at and updated_at timestamps
+        # stored in the db table is 1 second, here it explicitly waits for 1
+        # second to ensure these topics don't have the same created_at value.
+        time.sleep(1)
         return self._register_avro_schema(yelp_namespace, usr_src_name).topic
 
     @pytest.fixture(autouse=True, scope='class')
-    def aux_biz_topic(self, aux_namespace, biz_src_name):
+    def aux_biz_topic(self, aux_namespace, biz_src_name, yelp_usr_topic):
+        time.sleep(1)
         return self._register_avro_schema(aux_namespace, biz_src_name).topic
 
-    @pytest.fixture
-    def yelp_topics(self, yelp_biz_topic, yelp_usr_topic):
-        return [yelp_biz_topic, yelp_usr_topic]
-
-    @pytest.fixture
-    def biz_src_topics(self, yelp_biz_topic, aux_biz_topic):
-        return [yelp_biz_topic, aux_biz_topic]
-
-    def test_get_topics_of_yelp_namespace(
+    def test_get_topics_in_one_namespace(
         self,
         schematizer,
         yelp_namespace,
-        yelp_topics,
+        yelp_biz_topic,
+        yelp_usr_topic
     ):
         actual = schematizer.get_topics_by_criteria(
             namespace_name=yelp_namespace
         )
-        self._assert_topics_values(actual, expected_topics=yelp_topics)
+        self._assert_topics_values(
+            actual,
+            expected_topics=[yelp_biz_topic, yelp_usr_topic]
+        )
 
-    def test_get_topics_of_biz_source(
+    def test_get_topics_of_one_source(
         self,
         schematizer,
         biz_src_name,
-        biz_src_topics,
+        yelp_biz_topic,
+        aux_biz_topic
     ):
         actual = schematizer.get_topics_by_criteria(
             source_name=biz_src_name
         )
-        self._assert_topics_values(actual, expected_topics=biz_src_topics)
-
-    def _assert_topics_values(self, actual, expected_topics):
-        sorted_expected = sorted(expected_topics, key=lambda o: o.topic_id)
-        sorted_actual = sorted(actual, key=lambda o: o.topic_id)
-        for actual_topic, expected_resp in zip(sorted_actual, sorted_expected):
-            self._assert_topic_values(actual_topic, expected_resp)
+        self._assert_topics_values(
+            actual,
+            expected_topics=[yelp_biz_topic, aux_biz_topic]
+        )
 
     def test_get_topics_of_bad_namesapce_name(self, schematizer):
         actual = schematizer.get_topics_by_criteria(namespace_name='foo')
@@ -1199,45 +1203,67 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
             assert topic_api_spy.call_count == 0
             assert source_api_spy.call_count == 0
 
-    def test_topic_page_size(
-        self,
-        schematizer,
-        yelp_namespace,
-        yelp_topics
-    ):
+    def test_get_topics_by_pagination(self, schematizer):
+        # This test is based on current pagination setting in SchematizerClient,
+        # which is set to default page size. This test mostly is the sanity
+        # check for the pagination.
+        namespace_name = self.get_new_name('dummy_namespace')
+        source_name = self.get_new_name('dummy_source')
+        expected_topics = []
+        for i in range(schematizer.DEFAULT_PAGE_SIZE + 1):
+            schema_json = {
+                'type': 'enum',
+                'name': 'dummy_enum_{}'.format(i),
+                'symbols': ['a'],
+                'doc': 'dummy schema'
+            }
+            topic = self._register_avro_schema(
+                namespace=namespace_name,
+                source=source_name,
+                schema_json=schema_json
+            ).topic
+            expected_topics.append(topic)
+
         with self.attach_spy_on_api(
             schematizer._swagger_client.topics,
             'get_topics_by_criteria'
         ) as topic_api_spy:
             actual = schematizer.get_topics_by_criteria(
-                namespace_name=yelp_namespace,
-                page_size=1
+                namespace_name=namespace_name,
+                source_name=source_name
             )
-            self._assert_topics_values(actual, expected_topics=yelp_topics)
-            # Since we have a page size of 1, we should need to fetch len(yelp_topics) + 1 pages
-            # before we get a page with #items less than our page_size (0 items)
-            # Thus, we should call the api len(yelp_topic) + 1 times
-            assert topic_api_spy.call_count == len(yelp_topics) + 1
+            self._assert_topics_values(actual, expected_topics=expected_topics)
+            # There are one more topic than the page size, therefore it'll need
+            # 2 api calls to the service.
+            assert topic_api_spy.call_count == 2
 
-    def test_topic_min_id(
+    def test_get_topics_with_id_greater_than_min_id(
         self,
         schematizer,
         yelp_namespace,
-        yelp_topics
+        yelp_biz_topic,
+        yelp_usr_topic
     ):
-        sorted_yelp_topics = sorted(
-            yelp_topics,
-            key=lambda topic: topic.topic_id
-        )
         actual = schematizer.get_topics_by_criteria(
             namespace_name=yelp_namespace,
-            min_id=sorted_yelp_topics[0].topic_id + 1
+            min_id=yelp_biz_topic.topic_id + 1
         )
-        assert len(actual) == len(sorted_yelp_topics) - 1
         self._assert_topics_values(
             actual,
-            expected_topics=sorted_yelp_topics[1:]
+            expected_topics=[yelp_usr_topic]
         )
+
+    def test_get_only_one_topic(self, schematizer, yelp_namespace, yelp_biz_topic):
+        actual = schematizer.get_topics_by_criteria(
+            namespace_name=yelp_namespace,
+            max_count=1
+        )
+        self._assert_topics_values(actual, expected_topics=[yelp_biz_topic])
+
+    def _assert_topics_values(self, actual_topics, expected_topics):
+        assert len(actual_topics) == len(expected_topics)
+        for actual_topic, expected_resp in zip(actual_topics, expected_topics):
+            self._assert_topic_values(actual_topic, expected_resp)
 
 
 class TestIsAvroSchemaCompatible(SchematizerClientTestBase):

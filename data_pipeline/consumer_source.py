@@ -229,16 +229,29 @@ class NewTopicOnlyInDataTarget(TopicInDataTarget):
         super(NewTopicOnlyInDataTarget, self).__init__(data_target_id)
         self.last_query_timestamp = None
 
+    def _is_topic_created_after_last_query(self, topic):
+        return (
+            topic.created_at.tzinfo and
+            topic.created_at >= datetime.fromtimestamp(
+                self.last_query_timestamp,
+                topic.created_at.tzinfo
+            )
+        ) or (
+            not topic.created_at.tzinfo and
+            topic.created_at >= datetime.utcfromtimestamp(
+                self.last_query_timestamp
+            )
+        )
+
     def get_topics(self):
         topics = self.schematizer.get_topics_by_data_target_id(
             self.data_target_id
         )
         topic_names = [
             topic.name for topic in topics
-            if not self.last_query_timestamp or
-            topic.created_at >= datetime.utcfromtimestamp(
-                self.last_query_timestamp
-            )
+            if (not self.last_query_timestamp or
+                self._is_topic_created_after_last_query(topic)
+                )
         ]
         self.last_query_timestamp = long(time.time())
         return topic_names

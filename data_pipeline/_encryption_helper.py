@@ -7,9 +7,9 @@ from collections import namedtuple
 
 import simplejson
 from Crypto.Cipher import AES
-from yelp_lib.decorators import memoized
 
 from data_pipeline.config import get_config
+from data_pipeline.helpers.decorators import memoized
 from data_pipeline.helpers.singleton import Singleton
 from data_pipeline.initialization_vector import get_initialization_vector
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer

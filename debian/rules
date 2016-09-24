@@ -23,4 +23,4 @@ override_dh_auto_test:
 	true
 
 override_dh_virtualenv:
-	dh_virtualenv -v --pypi-url='https://pypi.yelpcorp.com/simple' --extra-index-url='https://pypi.python.org/simple/' --python=/usr/bin/python2.7
+	dh_virtualenv -v --pypi-url='https://pypi.yelpcorp.com/simple' --extra-index-url='https://pypi.python.org/simple/' --python=/usr/bin/python2.7 --extra-pip-arg '--no-use-wheel'

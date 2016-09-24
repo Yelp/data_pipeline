@@ -1,3 +1,32 @@
+data-pipeline-tools (0.7.0) lucid; urgency=low
+
+  * Commit: Merge branch 'u/vipul/KAFKA-
+    2470_upgrade_data_pipeline_to_use_yelp_kafka_5.1.1'
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Thu, 22 Sep 2016 15:47:15 -0700
+
+data-pipeline-tools (0.6.9) lucid; urgency=low
+
+  * Commit: Merge branch 'keegan_DATAPIPE-1778-
+    pyramid_zipkin_version_pinning'
+
+ -- Shahid Chohan <chohan@yelp.com>  Wed, 21 Sep 2016 15:48:31 -0700
+
+data-pipeline-tools (0.6.8) lucid; urgency=low
+
+  * Commit: removed libffi-dev, uuid-dev from the package control file
+    (Depends field); disable using wheel for trusty; added dependent
+    packages libmysqlclient-dev libssl-dev
+
+ -- Chia-Chi Lin <clin@yelp.com>  Sun, 18 Sep 2016 17:55:32 -0700
+
+data-pipeline-tools (0.6.7) lucid; urgency=low
+
+  * Commit: Merge branch 'DATAPIPE-939-increase-get_topics_by_criteria-
+    count-size'
+
+ -- Chia-Chi Lin <clin@yelp.com>  Tue, 13 Sep 2016 18:58:18 -0700
+
 data-pipeline-tools (0.6.5) lucid; urgency=low
 
   * Commit: Merge branch 'keegan_setup_requirements_yelp_kafka_fix'

@@ -6,10 +6,11 @@ import signal
 import sys
 
 import kazoo.client
-import yelp_lib.config_loader
+import yaml
+from cached_property import cached_property
+from cached_property import cached_property_with_ttl
 from kazoo.exceptions import LockTimeout
 from kazoo.retry import KazooRetry
-from yelp_lib.classutil import cached_property
 
 from data_pipeline.config import get_config
 
@@ -37,10 +38,12 @@ class ZK(object):
         self.zk_client.start()
         self.register_signal_handlers()
 
-    def _get_local_zk(self):
-        path = get_config().zookeeper_discovery_path.format(ecosystem=self.ecosystem)
+    @cached_property_with_ttl(ttl=2)
+    def _local_zk(self):
         """Get (with caching) the local zookeeper cluster definition."""
-        return yelp_lib.config_loader.load(path, '/')
+        path = get_config().zookeeper_discovery_path.format(ecosystem=self.ecosystem)
+        with open(path, 'r') as f:
+            return yaml.safe_load(f)
 
     def _get_kazoo_client_for_cluster_def(self, cluster_def, **kwargs):
         """Get a KazooClient for a list of host-port pairs `cluster_def`."""
@@ -54,7 +57,7 @@ class ZK(object):
 
     def get_kazoo_client(self, **kwargs):
         """Get a KazooClient for a local zookeeper cluster."""
-        return self._get_kazoo_client_for_cluster_def(self._get_local_zk(), **kwargs)
+        return self._get_kazoo_client_for_cluster_def(self._local_zk, **kwargs)
 
     def close(self):
         """Clean up the zookeeper client."""

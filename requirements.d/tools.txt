@@ -3,4 +3,3 @@ sqlparse
 yelp_batch
 yelp_clog==2.5.2
 yelp_conn
-yelp_kafka_tool==0.8.2

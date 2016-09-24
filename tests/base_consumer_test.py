@@ -673,7 +673,8 @@ class RefreshNewTopicsTest(object):
         )
 
     def _get_utc_timestamp(self, dt):
-        return int((dt - datetime.datetime(1970, 1, 1)).total_seconds())
+        utc_zero = datetime.datetime(1970, 1, 1, tzinfo=dt.tzinfo)
+        return int((dt - utc_zero).total_seconds())
 
     def _increment_seconds(self, dt, seconds):
         return self._get_utc_timestamp(dt + datetime.timedelta(seconds=seconds))

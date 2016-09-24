@@ -7,11 +7,11 @@ import logging
 from collections import OrderedDict
 from contextlib import contextmanager
 
+from cached_property import cached_property
 from kafka import KafkaClient
+from kafka_utils.util.zookeeper import ZK
 from swaggerpy.exception import HTTPError
 from yelp_kafka import offsets
-from yelp_kafka_tool.util.zookeeper import ZK
-from yelp_lib.classutil import cached_property
 from yelp_servlib.config_util import load_package_config
 
 from data_pipeline.config import get_config
