@@ -18,7 +18,7 @@ Args:
     source (data_pipeline.schematizer_clientlib.models.source.Source):
         The source of the topic.
     contains_pii (bool): Whether the messages in this topic contain PII data.
-    is_log (bool): Indicates whether this is a log source or not.
+    cluster_type (str): Kafka cluster type to connect. Ex datapipe, scribe, etc.
     primary_keys ([str]): List of keys that are the primary keys of the topics schemas
     created_at (str): The timestamp when the topic is created in ISO-8601
         format.
@@ -27,7 +27,7 @@ Args:
 """
 Topic = namedtuple(
     'Topic',
-    ['topic_id', 'name', 'source', 'contains_pii', 'is_log', 'primary_keys',
+    ['topic_id', 'name', 'source', 'contains_pii', 'cluster_type', 'primary_keys',
      'created_at', 'updated_at']
 )
 
@@ -40,7 +40,7 @@ class _Topic(BaseModel):
         name,
         source,
         contains_pii,
-        is_log,
+        cluster_type,
         primary_keys,
         created_at,
         updated_at
@@ -49,7 +49,7 @@ class _Topic(BaseModel):
         self.name = name
         self.source = source
         self.contains_pii = contains_pii
-        self.is_log = is_log
+        self.cluster_type = cluster_type
         self.primary_keys = primary_keys
         self.created_at = created_at
         self.updated_at = updated_at
@@ -61,7 +61,7 @@ class _Topic(BaseModel):
             name=response.name,
             source=_Source.from_response(response.source),
             contains_pii=response.contains_pii,
-            is_log=response.is_log,
+            cluster_type=response.cluster_type,
             primary_keys=response.primary_keys,
             created_at=response.created_at,
             updated_at=response.updated_at
@@ -73,7 +73,7 @@ class _Topic(BaseModel):
             'name': self.name,
             'source_id': self.source.source_id,
             'contains_pii': self.contains_pii,
-            'is_log': self.is_log,
+            'cluster_type': self.cluster_type,
             'primary_keys': self.primary_keys,
             'created_at': self.created_at,
             'updated_at': self.updated_at
@@ -93,7 +93,7 @@ class _Topic(BaseModel):
             name=cache_value['name'],
             source=id_only_source,
             contains_pii=cache_value['contains_pii'],
-            is_log=cache_value['is_log'],
+            cluster_type=cache_value['cluster_type'],
             primary_keys=cache_value['primary_keys'],
             created_at=cache_value['created_at'],
             updated_at=cache_value['updated_at']
@@ -105,7 +105,7 @@ class _Topic(BaseModel):
             name=self.name,
             source=self.source.to_result(),
             contains_pii=self.contains_pii,
-            is_log=self.is_log,
+            cluster_type=self.cluster_type,
             primary_keys=self.primary_keys,
             created_at=self.created_at,
             updated_at=self.updated_at

@@ -356,7 +356,6 @@ class BaseConsumerTest(object):
             BaseConsumer(
                 topic_to_consumer_topic_state_map={topic: None, log_topic: None},
                 auto_offset_reset='largest',  # start from the tail of the topic,
-                is_log=True,
                 **consumer_init_kwargs
             )
 

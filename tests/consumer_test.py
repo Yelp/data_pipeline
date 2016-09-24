@@ -125,7 +125,7 @@ class TestConsumer(BaseConsumerTest):
         return Consumer(
             topic_to_consumer_topic_state_map={topic: None, pii_topic: None},
             auto_offset_reset='largest',  # start from the tail of the topic,
-            is_log=True,
+            cluster_type='scribe',
             **consumer_init_kwargs
         )
 

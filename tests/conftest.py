@@ -86,7 +86,7 @@ def registered_log_schema(
         schema_str=example_schema,
         source_owner_email='test@yelp.com',
         contains_pii=False,
-        is_log=True
+        cluster_type='scribe'
     )
 
 

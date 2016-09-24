@@ -31,11 +31,10 @@ class _BaseRegisterCommand(IntrospectorCommand):
         )
 
         parser.add_argument(
-            "--is-log",
-            dest="is_log",
-            default=False,
-            action="store_true",
-            help="Flag indicating if schema is a log source or not"
+            "--cluster-type",
+            dest="cluster_type",
+            default=None,
+            help="Kafka cluster type to connect. Ex: datapipe, scribe, etc."
         )
 
     def process_args(self, args, parser):
@@ -43,7 +42,7 @@ class _BaseRegisterCommand(IntrospectorCommand):
         self.process_source_and_namespace_args(args, parser)
         self.source_owner_email = args.source_owner_email
         self.pii = args.pii
-        self.is_log = args.is_log
+        self.cluster_type = args.cluster_type
 
     def print_schema(self, schema):
         schema_dict = IntrospectorSchema(
