@@ -11,10 +11,10 @@ from uuid import UUID
 
 import simplejson
 from kafka import KafkaClient
+from kafka_utils.util import offsets
 from yelp_batch.batch import Batch
 from yelp_batch.batch import batch_command_line_options
 from yelp_batch.batch import batch_configure
-from yelp_kafka import offsets
 from yelp_servlib.config_util import load_default_config
 
 from data_pipeline import __version__

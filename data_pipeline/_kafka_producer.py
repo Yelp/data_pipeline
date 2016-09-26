@@ -12,7 +12,7 @@ from kafka import create_message
 from kafka import KafkaClient
 from kafka.common import ProduceRequest
 from kafka.common import ProduceResponse
-from yelp_kafka.offsets import get_topics_watermarks
+from kafka_utils.util.offsets import get_topics_watermarks
 
 from data_pipeline._position_data_tracker import PositionDataTracker
 from data_pipeline._producer_retry import RetryHandler

@@ -7,8 +7,8 @@ import os
 
 import staticconf
 from cached_property import cached_property
+from kafka_utils.util.config import ClusterConfig
 from swaggerpy import client
-from yelp_kafka.config import ClusterConfig
 from yelp_kafka.discovery import get_kafka_cluster
 from yelp_servlib.config_util import get_service_host_and_port
 
