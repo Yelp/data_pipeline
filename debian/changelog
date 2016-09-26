@@ -1,3 +1,10 @@
+data-pipeline-tools (0.7.0) lucid; urgency=low
+
+  * Commit: Merge branch 'u/vipul/KAFKA-
+    2470_upgrade_data_pipeline_to_use_yelp_kafka_5.1.1'
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Thu, 22 Sep 2016 15:47:15 -0700
+
 data-pipeline-tools (0.6.9) lucid; urgency=low
 
   * Commit: Merge branch 'keegan_DATAPIPE-1778-
