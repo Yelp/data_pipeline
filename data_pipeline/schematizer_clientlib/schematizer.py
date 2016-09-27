@@ -452,7 +452,8 @@ class SchematizerClient(object):
                 at least one field that can potentially contain PII.
                 See http://y/pii for help identifying what is or is not PII.
             cluster_type (str): Kafka cluster type to connect like datapipe,
-                scribe, etc. Defaults to datapipe.
+                scribe, etc. See http://y/datapipe_cluster_types for more info
+                on cluster_types. Defaults to datapipe.
             base_schema_id (Optional[int]): The id of the original schema which
                 the new schema was changed based on
 
@@ -501,7 +502,8 @@ class SchematizerClient(object):
                 at least one field that can potentially contain PII.
                 See http://y/pii for help identifying what is or is not PII.
             cluster_type (str): Kafka cluster type to connect like datapipe,
-                scribe, etc. Defaults to datapipe.
+                scribe, etc. See http://y/datapipe_cluster_types for more info
+                on cluster_types. Defaults to datapipe.
             base_schema_id (Optional[int]): The id of the original schema which
                 the new schema was changed based on
 

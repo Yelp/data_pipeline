@@ -130,7 +130,8 @@ class BaseConsumer(Client):
         cluster_type: (Optional[string]): Indicates which kafka cluster type
             the topics belong to. Accordingly the Consumer will connect to
             corresponding Kafka cluster. All topics should belong to the same
-            kafka cluster type. Defaults to datapipe.
+            kafka cluster type. See http://y/datapipe_cluster_types for more
+            info on cluster_types. Defaults to datapipe.
     """
 
     def __init__(
