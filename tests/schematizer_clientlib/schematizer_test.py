@@ -124,6 +124,15 @@ class SchematizerClientTestBase(object):
             params.update(**overrides)
         return self._get_client().schemas.register_schema(body=params).result()
 
+    def _create_note(self, schema_id):
+        note = {
+            'reference_type': 'schema',
+            'reference_id': schema_id,
+            'note': 'note',
+            'last_updated_by': 'bam'
+        }
+        return self._get_client().notes.create_note(body=note).result()
+
     def _get_schema_by_id(self, schema_id):
         return self._get_client().schemas.get_schema_by_id(
             schema_id=schema_id
@@ -209,7 +218,9 @@ class TestGetSchemaById(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
     def biz_schema(self, yelp_namespace, biz_src_name):
-        return self._register_avro_schema(yelp_namespace, biz_src_name)
+        schema = self._register_avro_schema(yelp_namespace, biz_src_name)
+        # self._create_note(schema.schema_id)
+        return schema
 
     def test_get_non_cached_schema_by_id(self, schematizer, biz_schema):
         with self.attach_spy_on_api(

@@ -8,8 +8,8 @@ import simplejson
 from frozendict import frozendict
 
 from data_pipeline.schematizer_clientlib.models.model_base import BaseModel
+from data_pipeline.schematizer_clientlib.models.note import _Note
 from data_pipeline.schematizer_clientlib.models.topic import _Topic
-
 
 """
 Represent the data of an Avro schema.
@@ -26,7 +26,7 @@ Args:
         used to deserialize messages, and Write status means the schema can be
         used to serialize messages.
     primary_keys (list): List of primary key names.
-    note (Optional[str]): Information specified by users about the schema.
+    note (Optional[data_pipeline.schematizer_clientlib.models.note.Note]): Information specified by users about the schema.
     created_at (str): The timestamp when the schema is created in ISO-8601
         format.
     updated_at (str): The timestamp when the schema is last updated in ISO-8601
@@ -65,7 +65,7 @@ class _AvroSchema(BaseModel):
             base_schema_id=response.base_schema_id,
             status=response.status,
             primary_keys=response.primary_keys,
-            note=response.note,
+            note=_Note.from_response(response.note),
             created_at=response.created_at,
             updated_at=response.updated_at
         )
@@ -78,7 +78,7 @@ class _AvroSchema(BaseModel):
             'base_schema_id': self.base_schema_id,
             'status': self.status,
             'primary_keys': self.primary_keys,
-            'note': self.note,
+            'note': frozendict(self.note.to_cache_value()) if self.note is not None else None,
             'created_at': self.created_at,
             'updated_at': self.updated_at
         }
@@ -101,7 +101,7 @@ class _AvroSchema(BaseModel):
             base_schema_id=cache_value['base_schema_id'],
             status=cache_value['status'],
             primary_keys=cache_value['primary_keys'],
-            note=cache_value['note'],
+            note=_Note.from_cache_value(cache_value['note']),
             created_at=cache_value['created_at'],
             updated_at=cache_value['updated_at']
         )
@@ -114,7 +114,7 @@ class _AvroSchema(BaseModel):
             base_schema_id=self.base_schema_id,
             status=self.status,
             primary_keys=self.primary_keys,
-            note=self.note,
+            note=self.note.to_result() if self.note is not None else None,
             created_at=self.created_at,
             updated_at=self.updated_at
         )

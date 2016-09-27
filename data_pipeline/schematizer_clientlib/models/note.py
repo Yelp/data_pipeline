@@ -21,7 +21,7 @@ Args:
 """
 
 Note = namedtuple(
-    'Note'
+    'Note',
     [
         'created_at',
         'reference_type',
@@ -56,6 +56,8 @@ class _Note(BaseModel):
 
     @classmethod
     def from_response(cls, response):
+        if response is None:
+            return None
         return cls(
             id=response.id,
             reference_id=response.reference_id,
@@ -79,6 +81,8 @@ class _Note(BaseModel):
 
     @classmethod
     def from_cache_value(cls, cache_value):
+        if cache_value is None:
+            return None
         return cls(
             id=cache_value['id'],
             reference_id=cache_value['reference_id'],
