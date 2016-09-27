@@ -35,6 +35,9 @@ Note = namedtuple(
 
 
 class _Note(BaseModel):
+    """Internal class used to convert from/to various data structures and
+    facilitate constructing the return value of schematizer functions.
+    """
 
     def __init__(
         self,

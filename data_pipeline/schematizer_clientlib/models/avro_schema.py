@@ -11,6 +11,7 @@ from data_pipeline.schematizer_clientlib.models.model_base import BaseModel
 from data_pipeline.schematizer_clientlib.models.note import _Note
 from data_pipeline.schematizer_clientlib.models.topic import _Topic
 
+
 """
 Represent the data of an Avro schema.
 
