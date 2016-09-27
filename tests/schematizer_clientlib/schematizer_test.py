@@ -88,6 +88,10 @@ class SchematizerClientTestBase(object):
     def source_owner_email(self):
         return 'bam+test@yelp.com'
 
+    @property
+    def note(self):
+        return 'note'
+
     def get_new_name(self, prefix):
         return '{}_{}'.format(prefix, random.random())
 
@@ -124,12 +128,12 @@ class SchematizerClientTestBase(object):
             params.update(**overrides)
         return self._get_client().schemas.register_schema(body=params).result()
 
-    def _create_note(self, schema_id):
+    def _create_note(self, reference_id, type):
         note = {
-            'reference_type': 'schema',
-            'reference_id': schema_id,
-            'note': 'note',
-            'last_updated_by': 'bam'
+            'reference_type': type,
+            'reference_id': reference_id,
+            'note': self.note,
+            'last_updated_by': self.source_owner_email
         }
         return self._get_client().notes.create_note(body=note).result()
 
@@ -219,7 +223,8 @@ class TestGetSchemaById(SchematizerClientTestBase):
     @pytest.fixture(autouse=True, scope='class')
     def biz_schema(self, yelp_namespace, biz_src_name):
         schema = self._register_avro_schema(yelp_namespace, biz_src_name)
-        # self._create_note(schema.schema_id)
+        note = self._create_note(schema.schema_id, 'schema')
+        schema.note = note
         return schema
 
     def test_get_non_cached_schema_by_id(self, schematizer, biz_schema):
@@ -266,8 +271,14 @@ class TestGetSchemaElementsBySchemaId(SchematizerClientTestBase):
                 biz_schema.schema_id
             )
             for element in actual:
+                self._create_note(element.id, 'schema_element')
+            actual = schematizer.get_schema_elements_by_schema_id(
+                biz_schema.schema_id
+            )
+            for element in actual:
+                assert element.note.note == self.note
                 assert element.schema_id == biz_schema.schema_id
-            assert api_spy.call_count == 1
+            assert api_spy.call_count == 2
 
 
 class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
