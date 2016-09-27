@@ -20,7 +20,7 @@ from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 logger = get_config().logger
 
 
-class MultipleTopicTypeError(Exception):
+class MultipleClusterTypeTypeError(Exception):
     pass
 
 
@@ -188,7 +188,7 @@ class BaseConsumer(Client):
         for topic_name in self.topic_to_consumer_topic_state_map:
             topic = get_schematizer().get_topics_by_name(topic_name)
             if self.cluster_type != topic.cluster_type:
-                raise MultipleTopicTypeError(
+                raise MultipleClusterTypeTypeError(
                     "Consumer can not process topics from different kafka "
                     "cluster types, i.e. ({}, {}).".format(
                         self.cluster_type, topic.cluster_type
@@ -669,6 +669,7 @@ class BaseConsumer(Client):
         return discovery.get_consumer_config(
             cluster_type=self.cluster_type,
             group_id=self.client_name,
+            auto_offset_reset=self.auto_offset_reset,
             auto_commit=False,
             partitioner_cooldown=self.partitioner_cooldown,
             use_group_sha=self.use_group_sha,

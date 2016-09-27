@@ -33,8 +33,9 @@ class _BaseRegisterCommand(IntrospectorCommand):
         parser.add_argument(
             "--cluster-type",
             dest="cluster_type",
-            default=None,
-            help="Kafka cluster type to connect. Ex: datapipe, scribe, etc."
+            default='datapipe',
+            help="Kafka cluster type to connect. Ex: datapipe, scribe, etc. "
+                 "Defaults to datapipe"
         )
 
     def process_args(self, args, parser):

@@ -13,7 +13,7 @@ import pytest
 
 from data_pipeline.base_consumer import BaseConsumer
 from data_pipeline.base_consumer import ConsumerTopicState
-from data_pipeline.base_consumer import MultipleTopicTypeError
+from data_pipeline.base_consumer import MultipleClusterTypeTypeError
 from data_pipeline.base_consumer import TopicFilter
 from data_pipeline.consumer_source import FixedSchemas
 from data_pipeline.consumer_source import FixedTopics
@@ -352,7 +352,7 @@ class BaseConsumerTest(object):
         log_topic,
         consumer_init_kwargs
     ):
-        with pytest.raises(MultipleTopicTypeError):
+        with pytest.raises(MultipleClusterTypeTypeError):
             BaseConsumer(
                 topic_to_consumer_topic_state_map={topic: None, log_topic: None},
                 auto_offset_reset='largest',  # start from the tail of the topic,
