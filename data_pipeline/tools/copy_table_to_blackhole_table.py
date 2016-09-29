@@ -33,73 +33,18 @@ from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 class FullRefreshRunner(Batch, BatchDBMixin):
     """The FullRefreshManager spawns off a child process which executes this
     batch to copy rows from the source table into a black hole table.
-
-    Args:
-        refresh_id (int): Identifies the refresh to be executed.
-        cluster (str): The cluster name of the table to be refreshed.
-        database (str): The database name that the table belongs to.
-        ro_replica (str): The ro replica connection name for this cluster.
-        rw_replica (str): The rw replica connection name for this cluster.
-        config_path (str): Path to the config file containing information
-            to initialize yelp_conn.
-        table_name (str): Name of the table to be refreshed.
-        offset (int): The row number to start the refresh from.
-        batch_size (int): The number of rows to refresh per batch.
-        primary (str): The column name for the primary column of the table.
-        where_clause (str): The where clause that must be satisfied by the
-            rows being refreshed.
-        dry_run (bool): Set to True to execute a dry refresh run.
-        avg_rows_per_second_cap (int): Number of rows we want to complete per second (sleeps in between batches to enforce)
     """
     notify_emails = ['bam+batch@yelp.com']
     is_readonly_batch = False
     DEFAULT_TOPOLOGY_PATH = "/nail/srv/configs/topology.yaml"
     DEFAULT_AVG_ROWS_PER_SECOND_CAP = 50
 
-    def __init__(
-        self,
-        refresh_id=None,
-        cluster=None,
-        database=None,
-        config_path=None,
-        table_name=None,
-        offset=None,
-        batch_size=None,
-        primary=None,
-        where_clause=None,
-        dry_run=False,
-        avg_rows_per_second_cap=None
-    ):
+    def __init__(self):
         super(FullRefreshRunner, self).__init__()
-        self.config_path = config_path
         self._connection_set = None
-        self.refresh_id = refresh_id
-        # Case where the RefreshManager is running the refresh.
-        if self.refresh_id is not None:
-            self.topology_path = self.DEFAULT_TOPOLOGY_PATH
-            signal.signal(signal.SIGTERM, self.handle_terminate)
-            signal.signal(signal.SIGINT, self.handle_interupt)
-            self.db_name = cluster
-            self.database = database
-            if not self.database:
-                raise ValueError("--database must be specified")
-            self.table_name = table_name
-            self.temp_table = '{table}_data_pipeline_refresh'.format(
-                table=self.table_name
-            )
-            self.processed_row_count = offset
-            self.batch_size = batch_size
-            if self.batch_size <= 0:
-                raise ValueError("Batch size should be greater than 0")
-            self.primary_key = primary
-            self.where_clause = where_clause
-            self.dry_run = dry_run
-            self.avg_rows_per_second_cap = avg_rows_per_second_cap
-            if self.avg_rows_per_second_cap is None:
-                self.avg_rows_per_second_cap = self.DEFAULT_AVG_ROWS_PER_SECOND_CAP
-            self.config_path = config_path
+        self.topology_path = self.DEFAULT_TOPOLOGY_PATH
 
-    @cached_property
+    @property
     def schematizer(self):
         return get_schematizer()
 
@@ -188,38 +133,54 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             type='int',
             default=self.DEFAULT_AVG_ROWS_PER_SECOND_CAP
         )
+        opt_group.add_option(
+            '--offset',
+            type='int',
+            default=0,
+            help='The row number to start the refresh from (useful for when restarting '
+                 'a paused refresh). (default: %default).'
+        )
+        opt_group.add_option(
+            '--refresh-id',
+            dest="refresh_id",
+            type='int',
+            default=None,
+            help='To be used only when running the runner through the manager, do not use'
+                 ' for manual refreshes'
+        )
         return opt_group
 
     @batch_configure
     def _init_global_state(self):
-        if not self.config_path:
-            self.config_path = self.options.config_path
+        self.config_path = self.options.config_path
         load_default_config(self.config_path)
         self._connection_set = None
-        # Case where refresh batch is run independently.
-        if self.refresh_id is None:
-            if self.options.batch_size <= 0:
-                raise ValueError("Batch size should be greater than 0")
-            self.db_name = self.options.cluster
-            self.database = self.options.database
-            if not self.database:
-                raise ValueError("--database must be specified")
-            self.avg_rows_per_second_cap = self.options.avg_rows_per_second_cap
-            if self.avg_rows_per_second_cap is not None and self.avg_rows_per_second_cap <= 0:
-                raise ValueError("--avg-rows-per-second-cap should be greater than 0")
-            self.table_name = self.options.table_name
-            self.temp_table = '{table}_data_pipeline_refresh'.format(
-                table=self.table_name
-            )
-            self.process_row_start_time = time.time()
-            self.processed_row_count = 0
-            self.batch_size = self.options.batch_size
-            if self.batch_size <= 0:
-                raise ValueError("Batch size should be greater than 0")
-            self.primary_key = self.options.primary
-            self.where_clause = self.options.where_clause
-            self.dry_run = self.options.dry_run
-            self.topology_path = self.options.topology_path
+        if self.options.batch_size <= 0:
+            raise ValueError("Batch size should be greater than 0")
+        self.db_name = self.options.cluster
+        self.database = self.options.database
+        if not self.database:
+            raise ValueError("--database must be specified")
+        self.avg_rows_per_second_cap = self.options.avg_rows_per_second_cap
+        if self.avg_rows_per_second_cap is not None and self.avg_rows_per_second_cap <= 0:
+            raise ValueError("--avg-rows-per-second-cap should be greater than 0")
+        self.table_name = self.options.table_name
+        self.temp_table = '{table}_data_pipeline_refresh'.format(
+            table=self.table_name
+        )
+        self.process_row_start_time = time.time()
+        self.processed_row_count = self.options.offset
+        self.batch_size = self.options.batch_size
+        if self.batch_size <= 0:
+            raise ValueError("Batch size should be greater than 0")
+        self.primary_key = self.options.primary
+        self.where_clause = self.options.where_clause
+        self.dry_run = self.options.dry_run
+        self.topology_path = self.options.topology_path
+        self.refresh_id = self.options.refresh_id
+        if self.refresh_id:
+            signal.signal(signal.SIGTERM, self.handle_terminate)
+            signal.signal(signal.SIGINT, self.handle_interupt)
 
     def setup_connections(self):
         """Creates connections to the mySQL database.
