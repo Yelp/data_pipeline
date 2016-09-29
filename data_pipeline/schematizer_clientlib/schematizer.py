@@ -627,10 +627,11 @@ class SchematizerClient(object):
             )
         return result
 
-    def create_data_target(self, target_type, destination):
+    def create_data_target(self, name, target_type, destination):
         """ Create and return newly created data target.
 
         Args:
+            name (str): Name to uniquely identify the data target.
             target_type (str): The type of the data target, such as Redshift.
             destination (str): The actual location of the data target, such as
                 Url of the Redshift cluster.
@@ -642,6 +643,7 @@ class SchematizerClient(object):
         response = self._call_api(
             api=self._client.data_targets.create_data_target,
             request_body={
+                'name': name,
                 'target_type': target_type,
                 'destination': destination
             }

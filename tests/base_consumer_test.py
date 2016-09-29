@@ -708,6 +708,10 @@ class RefreshTopicsTestBase(object):
         return foo_schema.topic.name
 
     @property
+    def data_target_name(self):
+        return 'simple_data_target'
+
+    @property
     def target_type(self):
         return 'redshift'
 
@@ -718,6 +722,7 @@ class RefreshTopicsTestBase(object):
     @pytest.fixture
     def data_target(self, schematizer_client):
         return schematizer_client.create_data_target(
+            name=self.data_target_name,
             target_type=self.target_type,
             destination=self.destination
         )
@@ -1144,6 +1149,7 @@ class TopicInDataTargetSetupMixin(RefreshDynamicTopicTests):
     @pytest.fixture
     def bad_consumer_source(self, consumer_source_cls, schematizer_client):
         data_target = schematizer_client.create_data_target(
+            name='bad data target name',
             target_type='bad target type',
             destination='bad destination'
         )
@@ -1158,6 +1164,7 @@ class TopicInDataTargetSetupMixin(RefreshDynamicTopicTests):
         schematizer_client
     ):
         data_target = schematizer_client.create_data_target(
+            name='some data target name',
             target_type='some target type',
             destination='some destination'
         )
