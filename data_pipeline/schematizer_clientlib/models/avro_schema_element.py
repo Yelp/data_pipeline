@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 from collections import namedtuple
 
 from data_pipeline.schematizer_clientlib.models.model_base import BaseModel
+from data_pipeline.schematizer_clientlib.models.note import _Note
 
 
 """
@@ -16,7 +17,7 @@ Args:
     element_type (): The data type of the element
     element_name (str): The column corresponding to the key of the AvroSchemaElement
     doc ():
-    note (Optional[str]): Information specified by users about the schema.
+    note (Optional[data_pipeline.schematizer_clientlib.models.note.Note]): Information specified by users about the schema.
     created_at (str): The timestamp when the schema is created in ISO-8601
         format.
     updated_at (str): The timestamp when the schema is last updated in ISO-8601
@@ -62,7 +63,7 @@ class _AvroSchemaElement(BaseModel):
                     element_type=response.element_type,
                     key=response.key,
                     doc=response.doc,
-                    note=response.note,
+                    note=_Note.from_response(response.note),
                     created_at=response.created_at,
                     updated_at=response.updated_at
                 )
@@ -76,7 +77,7 @@ class _AvroSchemaElement(BaseModel):
             element_type=self.element_type,
             element_name=self.element_name,
             doc=self.doc,
-            note=self.note,
+            note=self.note.to_result() if self.note is not None else None,
             created_at=self.created_at,
             updated_at=self.updated_at
         )

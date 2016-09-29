@@ -17,4 +17,4 @@ schematizer:
     - schematizerdatabase
   volumes_from:
     - schematizerconfigs
-  command: "/code/virtualenv_run/bin/python /code/serviceinit.d/schematizer start-dev"
+  command: "/code/virtualenv_run/bin/python /code/serviceinitd/internal_schematizer start-dev"
