@@ -1,3 +1,10 @@
+data-pipeline-tools (0.8.0) lucid; urgency=low
+
+  * Commit: updated consumer_test.py to include 'name' attribute in the
+    data_targets test cases.
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Thu, 29 Sep 2016 14:44:58 -0700
+
 data-pipeline-tools (0.7.0) lucid; urgency=low
 
   * Commit: Merge branch 'u/vipul/KAFKA-
