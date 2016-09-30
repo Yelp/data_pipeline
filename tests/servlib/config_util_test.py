@@ -54,18 +54,18 @@ class TestConfigUtil(object):
 
 class TestLoadPackageConfig(object):
 
-    @pytest.fixture
+    @pytest.yield_fixture
     def mock_staticconf(self):
         with mock.patch(
-            'schematizer.helpers.config_util.staticconf',
+            'data_pipeline.servlib.config_util.staticconf',
             autospec=True
         ) as mock_staticconf:
             yield mock_staticconf
 
-    @pytest.fixture
+    @pytest.yield_fixture
     def mock_config_packages(self):
         with mock.patch(
-            'schematizer.helpers.config_util.configure_packages',
+            'data_pipeline.servlib.config_util.configure_packages',
             autospec=True
         ) as mock_config_packages:
             yield mock_config_packages
@@ -98,14 +98,14 @@ class TestConfigurePackages(object):
 
 @pytest.yield_fixture
 def mock_load_package_config():
-    with mock.patch('schematizer.helpers.config_util.load_package_config',
+    with mock.patch('data_pipeline.servlib.config_util.load_package_config',
                     autospec=True) as mock_load:
         yield mock_load
 
 
 @pytest.yield_fixture
 def mock_path_exists():
-    with mock.patch('schematizer.helpers.config_util.os.path.exists',
+    with mock.patch('data_pipeline.servlib.config_util.os.path.exists',
                     autospec=True) as mock_path:
         yield mock_path
 
