@@ -72,9 +72,9 @@ class PriorityRefreshQueue:
                 (0 if self.refresh_ref[id].status == RefreshStatus.PAUSED else 1)
         )
         # primary sort in descending order, so that ones with the higest priority come first
+        # we multiply by -1 instead of using reverse to keep order of previous sorts
         queue.sort(
-            key=lambda id: self.refresh_ref[id].priority,
-            reverse=True
+            key=lambda id: (-1 * self.refresh_ref[id].priority)
         )
 
     def update(self, jobs):

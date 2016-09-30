@@ -136,27 +136,24 @@ class TestFullRefreshRunner(object):
     @pytest.yield_fixture
     def managed_refresh_batch(
         self,
-        mock_get_schematizer,
+        table_name,
+        cluster,
         mock_load_config,
-        refresh_params
+        database_name,
+        mock_get_schematizer
     ):
-        # Initialize the batch the same way the refresh manager would.
-        batch = FullRefreshRunner(**refresh_params)
-        with mock.patch.object(
-            batch,
-            'get_connection_set_from_cluster'
-        ):
-            batch.setup_connections()
-            yield batch
-
-    @pytest.yield_fixture
-    def managed_refresh_batch_custom_where(
-        self,
-        mock_load_config,
-        refresh_params
-    ):
-        refresh_params['where_clause'] = "country='CA'"
-        batch = FullRefreshRunner(**refresh_params)
+        batch = FullRefreshRunner()
+        batch.process_commandline_options([
+            '--dry-run',
+            '--table-name={}'.format(table_name),
+            '--database={}'.format(database_name),
+            '--cluster={}'.format(cluster),
+            '--offset=0',
+            '--batch-size=200',
+            '--primary=id',
+            '--refresh-id=1'
+        ])
+        batch._init_global_state()
         yield batch
 
     @pytest.yield_fixture
