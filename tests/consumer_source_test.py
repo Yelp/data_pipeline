@@ -222,6 +222,7 @@ class DataTargetSetupMixin(ConsumerSourceTestBase):
     @pytest.fixture
     def data_target(self, schematizer_client):
         return schematizer_client.create_data_target(
+            name='name_{}'.format(random.random()),
             target_type='some target type',
             destination='some destination'
         )
@@ -252,6 +253,7 @@ class DataTargetSetupMixin(ConsumerSourceTestBase):
     @pytest.fixture
     def bad_consumer_source(self, schematizer_client, consumer_source_cls):
         bad_data_target = schematizer_client.create_data_target(
+            name='random_bad_name_{}'.format(random.random()),
             target_type='bad target type',
             destination='bad destination'
         )

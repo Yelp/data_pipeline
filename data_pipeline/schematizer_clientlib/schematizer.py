@@ -627,10 +627,11 @@ class SchematizerClient(object):
             )
         return result
 
-    def create_data_target(self, target_type, destination):
+    def create_data_target(self, name, target_type, destination):
         """ Create and return newly created data target.
 
         Args:
+            name (str): Name to uniquely identify the data target.
             target_type (str): The type of the data target, such as Redshift.
             destination (str): The actual location of the data target, such as
                 Url of the Redshift cluster.
@@ -642,6 +643,7 @@ class SchematizerClient(object):
         response = self._call_api(
             api=self._client.data_targets.create_data_target,
             request_body={
+                'name': name,
                 'target_type': target_type,
                 'destination': destination
             }
@@ -697,6 +699,31 @@ class SchematizerClient(object):
         )
         _data_target = _DataTarget.from_response(response)
         self._set_cache_by_data_target(_data_target)
+        return _data_target
+
+    def get_data_target_by_name(self, data_target_name):
+        """Get the data target of specified name.
+
+        Args:
+            data_target_name (str): The name of requested data target.
+
+        Returns:
+            (data_pipeline.schematizer_clientlib.models.data_target.DataTarget):
+                The requested data target.
+        """
+        return self._get_data_target_by_name(data_target_name).to_result()
+
+    def _get_data_target_by_name(self, data_target_name):
+        _data_target = self._cache.get_value(_DataTarget, data_target_name)
+        if _data_target:
+            return _data_target
+
+        response = self._call_api(
+            api=self._client.data_targets.get_data_target_by_name,
+            params={'data_target_name': data_target_name}
+        )
+        _data_target = _DataTarget.from_response(response)
+        self._set_cache_by_data_target_name(_data_target)
         return _data_target
 
     def get_topics_by_data_target_id(self, data_target_id):
@@ -1057,6 +1084,9 @@ class SchematizerClient(object):
 
     def _set_cache_by_data_target(self, new_data_target):
         self._cache.set_value(new_data_target.data_target_id, new_data_target)
+
+    def _set_cache_by_data_target_name(self, new_data_target):
+        self._cache.set_value(new_data_target.name, new_data_target)
 
     def _get_cached_consumer_group(self, consumer_group_id):
         _consumer_group = self._cache.get_value(_ConsumerGroup, consumer_group_id)

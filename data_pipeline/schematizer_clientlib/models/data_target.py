@@ -19,7 +19,7 @@ Args:
 """
 DataTarget = namedtuple(
     'DataTarget',
-    ['data_target_id', 'target_type', 'destination']
+    ['data_target_id', 'name', 'target_type', 'destination']
 )
 
 
@@ -28,8 +28,9 @@ class _DataTarget(BaseModel):
     facilitate constructing the return value of schematizer functions.
     """
 
-    def __init__(self, data_target_id, target_type, destination):
+    def __init__(self, data_target_id, name, target_type, destination):
         self.data_target_id = data_target_id
+        self.name = name
         self.target_type = target_type
         self.destination = destination
 
@@ -37,6 +38,7 @@ class _DataTarget(BaseModel):
     def from_response(cls, response):
         return cls(
             data_target_id=response.data_target_id,
+            name=response.name,
             target_type=response.target_type,
             destination=response.destination
         )
@@ -44,6 +46,7 @@ class _DataTarget(BaseModel):
     def to_cache_value(self):
         return {
             'data_target_id': self.data_target_id,
+            'name': self.name,
             'target_type': self.target_type,
             'destination': self.destination
         }
@@ -52,6 +55,7 @@ class _DataTarget(BaseModel):
     def from_cache_value(cls, cache_value):
         return cls(
             data_target_id=cache_value['data_target_id'],
+            name=cache_value['name'],
             target_type=cache_value['target_type'],
             destination=cache_value['destination']
         )
@@ -59,6 +63,7 @@ class _DataTarget(BaseModel):
     def to_result(self):
         return DataTarget(
             data_target_id=self.data_target_id,
+            name=self.name,
             target_type=self.target_type,
             destination=self.destination
         )
