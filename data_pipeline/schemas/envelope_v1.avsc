@@ -20,6 +20,7 @@
         "type": "enum",
         "doc": "Enumeration for possible types of message, these are used as values for data_pipeline.message_type.MessageType.",
         "symbols": [
+          "log",
           "create",
           "update",
           "delete",
