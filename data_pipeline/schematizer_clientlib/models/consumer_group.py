@@ -54,6 +54,7 @@ class _ConsumerGroup(BaseModel):
     def from_cache_value(cls, cache_value):
         id_only_data_target = _DataTarget(
             data_target_id=cache_value['data_target_id'],
+            name=None,
             target_type=None,
             destination=None
         )
