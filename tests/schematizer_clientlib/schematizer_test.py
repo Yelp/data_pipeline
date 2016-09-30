@@ -1540,6 +1540,44 @@ class TestGetDataTargetById(RegistrationTestBase):
         assert e.value.response.status_code == 404
 
 
+class TestGetDataTargetByName(RegistrationTestBase):
+
+    def test_get_non_cached_data_target(
+        self,
+        schematizer,
+        dw_data_target_resp
+    ):
+        with self.attach_spy_on_api(
+            schematizer._swagger_client.data_targets,
+            'get_data_target_by_name'
+        ) as api_spy:
+            actual = schematizer.get_data_target_by_name(
+                dw_data_target_resp.name
+            )
+            self._assert_data_target_values(actual, dw_data_target_resp)
+            assert api_spy.call_count == 1
+
+    def test_get_cached_data_target(self, schematizer, dw_data_target_resp):
+        schematizer.get_data_target_by_name(dw_data_target_resp.name)
+
+        with self.attach_spy_on_api(
+            schematizer._swagger_client.data_targets,
+            'get_data_target_by_name'
+        ) as data_target_api_spy:
+            actual = schematizer.get_data_target_by_name(
+                dw_data_target_resp.name
+            )
+            self._assert_data_target_values(actual, dw_data_target_resp)
+            assert data_target_api_spy.call_count == 0
+
+    def test_non_existing_data_target_name(self, schematizer):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.get_data_target_by_name(
+                data_target_name='bad test name'
+            )
+        assert e.value.response.status_code == 404
+
+
 class TestCreateConsumerGroup(RegistrationTestBase):
 
     @pytest.fixture
