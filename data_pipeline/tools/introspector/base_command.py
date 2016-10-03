@@ -12,7 +12,6 @@ from cached_property import cached_property
 from kafka import KafkaClient
 from kafka_utils.util import offsets
 from kafka_utils.util.zookeeper import ZK
-from swaggerpy.exception import HTTPError
 
 from data_pipeline.config import get_config
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
