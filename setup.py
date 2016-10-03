@@ -28,6 +28,7 @@ setup(
     include_package_data=True,
     install_requires=[
         'avro==1.9.0-yelp4',
+        'bravado>=8.4.0',
         'cached-property>=0.1.5',
         'cffi>=1.1.2',
         'enum34>=1.0.4',
@@ -39,7 +40,6 @@ setup(
         'pysensu-yelp>=0.2.3',
         'PyStaticConfiguration>=0.9.0',
         'simplejson>=2.1.2',
-        'swaggerpy>=0.7.6',
         'swagger_zipkin>=0.1.0',
         'yelp-avro>=0.1.9',
         'yelp-kafka>=5.0.0',

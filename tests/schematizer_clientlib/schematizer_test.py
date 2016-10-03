@@ -9,9 +9,9 @@ from datetime import datetime
 import mock
 import pytest
 import simplejson
+from bravado import exception as http_exc
 from requests.exceptions import ConnectionError
 from requests.exceptions import ReadTimeout
-from swaggerpy import exception as swaggerpy_exc
 
 from data_pipeline.config import get_config
 from data_pipeline.schematizer_clientlib.models.data_source_type_enum import \
@@ -704,9 +704,8 @@ class TestGetSourcesByNamespace(GetSourcesTestBase):
             self._assert_source_values(actual_src, expected_resp)
 
     def test_get_sources_of_bad_namespace(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_sources_by_namespace('bad_namespace')
-        assert e.value.response.status_code == 404
 
     def test_sources_should_be_cached(self, schematizer, yelp_namespace):
         sources = schematizer.get_sources_by_namespace(yelp_namespace)
@@ -752,9 +751,8 @@ class TestGetTopicsBySourceId(SchematizerClientTestBase):
             self._assert_topic_values(actual_topic, expected_resp)
 
     def test_get_topics_of_bad_source_id(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_topics_by_source_id(0)
-        assert e.value.response.status_code == 404
 
     def test_topics_should_be_cached(self, schematizer, biz_topic):
         topics = schematizer.get_topics_by_source_id(
@@ -790,9 +788,8 @@ class TestGetLatestTopicBySourceId(SchematizerClientTestBase):
         self._assert_topic_values(actual, expected)
 
     def test_get_latest_topic_of_bad_source(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_latest_topic_by_source_id(0)
-        assert e.value.response.status_code == 404
 
 
 class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
@@ -827,9 +824,8 @@ class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
         self._assert_schema_values(actual, biz_schema_two)
 
     def test_latest_schema_of_bad_topic(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_latest_schema_by_topic_name('bad_topic')
-        assert e.value.response.status_code == 404
 
     def test_latest_schema_should_be_cached(self, schematizer, biz_topic):
         latest_schema = schematizer.get_latest_schema_by_topic_name(
@@ -1472,31 +1468,28 @@ class TestCreateDataTarget(RegistrationTestBase):
         assert actual.destination == self.random_destination
 
     def test_invalid_empty_name(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPBadRequest):
             schematizer.create_data_target(
                 name='',
                 target_type=self.random_target_type,
                 destination=self.random_destination
             )
-        assert e.value.response.status_code == 400
 
     def test_invalid_empty_target_type(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPBadRequest):
             schematizer.create_data_target(
                 name=self.random_name,
                 target_type='',
                 destination=self.random_destination
             )
-        assert e.value.response.status_code == 400
 
     def test_invalid_empty_destination(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPBadRequest):
             schematizer.create_data_target(
                 name=self.random_name,
                 target_type=self.random_target_type,
                 destination=''
             )
-        assert e.value.response.status_code == 400
 
     def _get_data_target_resp(self, data_target_id):
         return self._get_client().data_targets.get_data_target_by_id(
@@ -1535,9 +1528,8 @@ class TestGetDataTargetById(RegistrationTestBase):
             assert data_target_api_spy.call_count == 0
 
     def test_non_existing_data_target_id(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_data_target_by_id(data_target_id=0)
-        assert e.value.response.status_code == 404
 
 
 class TestGetDataTargetByName(RegistrationTestBase):
@@ -1571,11 +1563,10 @@ class TestGetDataTargetByName(RegistrationTestBase):
             assert data_target_api_spy.call_count == 0
 
     def test_non_existing_data_target_name(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_data_target_by_name(
                 data_target_name='bad test name'
             )
-        assert e.value.response.status_code == 404
 
 
 class TestCreateConsumerGroup(RegistrationTestBase):
@@ -1601,12 +1592,11 @@ class TestCreateConsumerGroup(RegistrationTestBase):
         assert actual.group_name == random_group_name
 
     def test_invalid_empty_group_name(self, schematizer, dw_data_target_resp):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPBadRequest):
             schematizer.create_consumer_group(
                 group_name='',
                 data_target_id=dw_data_target_resp.data_target_id
             )
-        assert e.value.response.status_code == 400
 
     def test_duplicate_group_name(
         self,
@@ -1618,20 +1608,18 @@ class TestCreateConsumerGroup(RegistrationTestBase):
             group_name=random_group_name,
             data_target_id=dw_data_target_resp.data_target_id
         )
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPBadRequest):
             schematizer.create_consumer_group(
                 group_name=random_group_name,
                 data_target_id=dw_data_target_resp.data_target_id
             )
-        assert e.value.response.status_code == 400
 
     def test_non_existing_data_target(self, schematizer, random_group_name):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.create_consumer_group(
                 group_name=random_group_name,
                 data_target_id=0
             )
-        assert e.value.response.status_code == 404
 
     def _get_consumer_group_resp(self, consumer_group_id):
         return self._get_client().consumer_groups.get_consumer_group_by_id(
@@ -1672,9 +1660,8 @@ class TestGetConsumerGroupById(RegistrationTestBase):
             assert consumer_group_api_spy.call_count == 0
 
     def test_non_existing_consumer_group_id(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_consumer_group_by_id(consumer_group_id=0)
-        assert e.value.response.status_code == 404
 
 
 class TestCreateConsumerGroupDataSource(RegistrationTestBase):
@@ -1695,22 +1682,20 @@ class TestCreateConsumerGroupDataSource(RegistrationTestBase):
         assert actual.data_source_id == biz_src_resp.source_id
 
     def test_non_existing_consumer_group(self, schematizer, biz_src_resp):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.create_consumer_group_data_source(
                 consumer_group_id=0,
                 data_source_type=DataSourceTypeEnum.Source,
                 data_source_id=biz_src_resp.source_id
             )
-        assert e.value.response.status_code == 404
 
     def test_non_existing_data_source(self, schematizer, dw_con_group_resp):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.create_consumer_group_data_source(
                 consumer_group_id=dw_con_group_resp.consumer_group_id,
                 data_source_type=DataSourceTypeEnum.Source,
                 data_source_id=0
             )
-        assert e.value.response.status_code == 404
 
 
 class TestGetTopicsByDataTargetId(RegistrationTestBase):
@@ -1740,9 +1725,8 @@ class TestGetTopicsByDataTargetId(RegistrationTestBase):
         assert actual == []
 
     def test_non_existing_data_target(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_topics_by_data_target_id(data_target_id=0)
-        assert e.value.response.status_code == 404
 
 
 class TestGetSchemaMigration(SchematizerClientTestBase):
@@ -1785,7 +1769,7 @@ class TestGetSchemaMigration(SchematizerClientTestBase):
         schematizer,
         new_schema
     ):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPUnprocessableEntity):
             schematizer._call_api(
                 api=schematizer._client.schema_migrations.get_schema_migration,
                 request_body={
@@ -1793,19 +1777,17 @@ class TestGetSchemaMigration(SchematizerClientTestBase):
                     'target_schema_type': TargetSchemaTypeEnum.redshift.name,
                 }
             )
-        assert e.value.response.status_code == 422
 
     def test_unsupported_schema_migration(
         self,
         schematizer,
         new_schema
     ):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotImplemented):
             schematizer.get_schema_migration(
                 new_schema=new_schema,
                 target_schema_type=TargetSchemaTypeEnum.unsupported
             )
-        assert e.value.response.status_code == 501
 
 
 class TestGetDataTargetsBySchemaID(RegistrationTestBase):
@@ -1838,9 +1820,8 @@ class TestGetDataTargetsBySchemaID(RegistrationTestBase):
         self,
         schematizer,
     ):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_data_targets_by_schema_id(-1)
-        assert e.value.response.status_code == 404
 
     def test_data_targets_should_be_cached(
         self,
