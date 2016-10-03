@@ -19,11 +19,11 @@ from yelp_conn.connection_set import ConnectionSet
 from yelp_conn.sqlatxn import TransactionManager
 from yelp_conn.topology import ConnectionSetConfig
 from yelp_conn.topology import TopologyFile
-from yelp_servlib.config_util import load_default_config
 
 from data_pipeline import __version__
 from data_pipeline.schematizer_clientlib.models.refresh import RefreshStatus
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+from data_pipeline.servlib.config_util import load_default_config
 
 
 # WARNING: This batch will not work for non-numeric or compound primary

@@ -65,7 +65,8 @@ setup(
         # inform downstream projects that use data_pipeline consumer to
         # include data_pipeline[internal] to their dependency.
         'internal': [
-            'yelp-kafka>=5.0.0'
+            'yelp-kafka>=5.0.0',
+            'yelp-servlib>=4.3.0'
         ]
     },
     zip_safe=False,
