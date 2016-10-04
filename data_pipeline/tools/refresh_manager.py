@@ -27,8 +27,8 @@ from data_pipeline.zookeeper import ZKLock
 
 SCHEMATIZER_POLL_FREQUENCY_SECONDS = 5
 COMPLETE_STATUSES = {RefreshStatus.SUCCESS, RefreshStatus.FAILED}
-PER_SOURCE_THROUGHPUT_CAP = 50
-TOTAL_THROUGHPUT_CAP = 1000
+DEFAULT_PER_SOURCE_THROUGHPUT_CAP = 50
+DEFAULT_TOTAL_THROUGHPUT_CAP = 1000
 
 
 class PriorityRefreshQueue:
@@ -146,6 +146,20 @@ class FullRefreshManager(BatchDaemon):
             help="Will execute all refreshes as dry runs, will still affect "
             "the schematizer's records. (default: %default)"
         )
+        opt_group.add_option(
+            '--per-source-throughput-cap',
+            default=DEFAULT_PER_SOURCE_THROUGHPUT_CAP,
+            dest="per_source_throughput_cap",
+            help="The cap that each source within the namespace is given. Any source in this "
+                 "namespace cannot have a throughput higher than this cap. (default: %default)"
+        )
+        opt_group.add_option(
+            '--total-throughput-cap',
+            default=DEFAULT_TOTAL_THROUGHPUT_CAP,
+            dest="total_throughput_cap",
+            help="The cap that the namespace gives in general. The cumulative running refreshes "
+                 "cannot have a throughput higher than this number. (default: %default)"
+        )
         return opt_group
 
     @batch_configure
@@ -156,6 +170,8 @@ class FullRefreshManager(BatchDaemon):
         self._set_cluster_and_database()
         self.config_path = self.options.config_path
         self.dry_run = self.options.dry_run
+        self.per_source_throughput_cap = self.options.per_source_throughput_cap
+        self.total_throughput_cap = self.options.total_throughput_cap
         load_package_config(self.config_path)
         # Removing the cmd line arguments to prevent child process error.
         sys.argv = sys.argv[:1]
@@ -245,7 +261,8 @@ class FullRefreshManager(BatchDaemon):
         job['pid'] = new_worker.pid
 
     def pause_job(self, job):
-        os.kill(job['pid'], signal.SIGTERM)
+        if job['status'] not in COMPLETE_STATUSES:
+            os.kill(job['pid'], signal.SIGTERM)
         job['pid'] = None
 
     def modify_job(self, job):
@@ -271,6 +288,7 @@ class FullRefreshManager(BatchDaemon):
                 0
             )
             self.remove_from_active_refreshes(source, active_refresh)
+        os.kill(current_pid, signal.SIGINT)
 
     def remove_from_active_refreshes(self, source, active_refresh):
         self.total_throughput_being_used -= active_refresh['throughput']
@@ -324,8 +342,8 @@ class FullRefreshManager(BatchDaemon):
         return self.determine_best_refresh(not_started_jobs, paused_jobs)
 
     def get_cap(self):
-        cap_left = TOTAL_THROUGHPUT_CAP - self.total_throughput_being_used
-        return min(cap_left, PER_SOURCE_THROUGHPUT_CAP)
+        cap_left = self.total_throughput_cap - self.total_throughput_being_used
+        return min(cap_left, self.per_source_throughput_cap)
 
     def top_refresh(self, source_name):
         return self.active_refreshes[source_name][0]
@@ -432,10 +450,10 @@ class FullRefreshManager(BatchDaemon):
         for job in self.to_run_jobs:
             self.run_job(job)
 
-    def delete_inactive_and_failed_jobs(self):
+    def delete_inactive_and_completed_jobs(self):
         for source, active_refreshes in self.active_refreshes.items():
             for job in active_refreshes:
-                if job['pid'] is None or job['status'] == RefreshStatus.FAILED:
+                if job['pid'] is None or job['status'] in COMPLETE_STATUSES:
                     active_refreshes.remove(job)
             if not self.active_refreshes[source]:
                 del self.active_refreshes[source]
@@ -495,14 +513,17 @@ class FullRefreshManager(BatchDaemon):
                 if job['pid'] is not None:
                     self.pause_job(job)
 
+    def step(self):
+        self.set_zombie_refreshes_to_fail()
+        next_refresh_set = self.get_next_refresh()
+        self.reallocate_throughput(next_refresh_set)
+        self.delete_inactive_and_completed_jobs()
+
     def run(self):
         with ZKLock(name="refresh_manager", namespace=self.namespace):
             try:
                 while True:
-                    self.set_zombie_refreshes_to_fail()
-                    next_refresh_set = self.get_next_refresh()
-                    self.reallocate_throughput(next_refresh_set)
-                    self.delete_inactive_and_failed_jobs()
+                    self.step()
                     if self._stopping:
                         break
                     self.log.debug(
