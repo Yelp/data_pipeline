@@ -2,39 +2,40 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import os
+import signal
 from collections import namedtuple
 from datetime import datetime
+from datetime import timedelta
 from uuid import uuid4
 
 import mock
-import simplejson
-import psutil
 import pytest
+import simplejson
 
-import data_pipeline.tools.refresh_manager
-from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
-from data_pipeline.schematizer_clientlib.models.refresh import Priority
 from data_pipeline.schematizer_clientlib.models.refresh import _Refresh
+from data_pipeline.schematizer_clientlib.models.refresh import Priority
 from data_pipeline.schematizer_clientlib.models.refresh import RefreshStatus
+from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.tools.refresh_manager import FullRefreshManager
 from data_pipeline.tools.refresh_manager import PriorityRefreshQueue
 
 DEFAULT_CAP = 50
+
+
 @pytest.mark.usefixures('containers')
 class TestFullRefreshManager(object):
 
     def _create_schema(self, namespace, source):
         return simplejson.dumps(
-        {
-            "type": "record",
-            "namespace": namespace,
-            "name": source,
-            "doc": "test",
-            "fields":[
-                {"type": "int", "name": "field", "doc": "test_field", "default": 1}
-            ]
-        })
+            {
+                "type": "record",
+                "namespace": namespace,
+                "name": source,
+                "doc": "test",
+                "fields": [
+                    {"type": "int", "name": "field", "doc": "test_field", "default": 1}
+                ]
+            })
 
     def _create_job_from_refresh(
         self,
@@ -51,8 +52,7 @@ class TestFullRefreshManager(object):
             'cap': refresh.avg_rows_per_second_cap or DEFAULT_CAP,
             'source': refresh.source_name,
             'priority': refresh.priority,
-            'status': status or refresh.status,
-            'object': refresh
+            'status': status or refresh.status
         }
         if last_throughput is not None:
             job['last_throughput'] = last_throughput
@@ -127,16 +127,16 @@ class TestFullRefreshManager(object):
         return schema.topic
 
     @pytest.fixture(autouse=True)
-    def fake_source(self, fake_topic_two):
+    def fake_source_two(self, fake_topic_two):
         return fake_topic_two.source
 
     @pytest.fixture
     def fake_created_at(self):
-         return datetime(2015, 1, 1, 17, 0, 0)
+        return datetime(2015, 1, 1, 17, 0, 0)
 
     @pytest.fixture
     def fake_updated_at(self):
-         return datetime(2015, 1, 1, 17, 0, 1)
+        return datetime(2015, 1, 1, 17, 0, 1)
 
     @pytest.fixture
     def refresh_params(
@@ -193,24 +193,44 @@ class TestFullRefreshManager(object):
         return _Refresh(**refresh_params).to_result()
 
     @pytest.fixture
+    def later_created_refresh_result(self, refresh_params, fake_created_at):
+        refresh_params['refresh_id'] = 6
+        refresh_params['status'] = 'NOT_STARTED'
+        refresh_params['priority'] = Priority.MEDIUM.value
+        refresh_params['created_at'] = fake_created_at + timedelta(days=1)
+        return _Refresh(**refresh_params).to_result()
+
+    @pytest.fixture
     def real_refresh(self, schematizer, fake_source):
-         return schematizer.create_refresh(
+        return schematizer.create_refresh(
             source_id=fake_source.source_id,
             offset=0,
             batch_size=500,
             priority=Priority.MEDIUM.value,
             filter_condition=None,
-            avg_rows_per_second_cap=None
+            avg_rows_per_second_cap=(DEFAULT_CAP * 2)
+            # if cap is too high we should still only use 50
         )
 
     @pytest.fixture
     def high_priority_real_refresh(self, schematizer, fake_source):
-         return schematizer.create_refresh(
+        return schematizer.create_refresh(
             source_id=fake_source.source_id,
             offset=0,
             batch_size=500,
             priority=Priority.HIGH.value,
             filter_condition=None,
+            avg_rows_per_second_cap=None
+        )
+
+    @pytest.fixture
+    def real_refresh_source_two(self, schematizer, fake_source_two):
+        return schematizer.create_refresh(
+            source_id=fake_source_two.source_id,
+            offset=0,
+            batch_size=500,
+            priority=Priority.MEDIUM.value,
+            filter_condition="country='CA' AND city='Waterloo'",
             avg_rows_per_second_cap=None
         )
 
@@ -257,11 +277,11 @@ class TestFullRefreshManager(object):
         fake_source_name,
         refresh_result
     ):
-        assert priority_refresh_queue.peek() == []
+        assert priority_refresh_queue.peek() == {}
         priority_refresh_queue.update([refresh_result])
-        assert priority_refresh_queue.peek() == [(fake_source_name, refresh_result)]
+        assert priority_refresh_queue.peek() == {fake_source_name: refresh_result}
         assert priority_refresh_queue.pop(fake_source_name) == refresh_result
-        assert priority_refresh_queue.peek() == []
+        assert priority_refresh_queue.peek() == {}
         assert priority_refresh_queue.refresh_ref == {}
         assert priority_refresh_queue.source_to_refresh_queue == {}
 
@@ -271,16 +291,20 @@ class TestFullRefreshManager(object):
         fake_source_name,
         refresh_result,
         paused_refresh_result,
-        high_refresh_result
+        high_refresh_result,
+        later_created_refresh_result
     ):
         priority_refresh_queue.update(
-            [paused_refresh_result, refresh_result, high_refresh_result]
+            [paused_refresh_result, refresh_result,
+             later_created_refresh_result, high_refresh_result]
         )
-        assert priority_refresh_queue.peek() == [(fake_source_name, high_refresh_result)]
+        assert priority_refresh_queue.peek() == {fake_source_name: high_refresh_result}
         assert priority_refresh_queue.pop(fake_source_name) == high_refresh_result
-        assert priority_refresh_queue.peek() == [(fake_source_name, paused_refresh_result)]
+        assert priority_refresh_queue.peek() == {fake_source_name: paused_refresh_result}
         assert priority_refresh_queue.pop(fake_source_name) == paused_refresh_result
-        assert priority_refresh_queue.peek() == [(fake_source_name, refresh_result)]
+        assert priority_refresh_queue.peek() == {fake_source_name: refresh_result}
+        assert priority_refresh_queue.pop(fake_source_name) == refresh_result
+        assert priority_refresh_queue.peek() == {fake_source_name: later_created_refresh_result}
 
     def test_refresh_queue_multiple_sources(
         self,
@@ -292,11 +316,10 @@ class TestFullRefreshManager(object):
     ):
         priority_refresh_queue.update([refresh_result, refresh_result_two])
         refresh_set = priority_refresh_queue.peek()
-        assert (fake_source_name, refresh_result) in refresh_set
-        assert (fake_source_two_name, refresh_result_two) in refresh_set
-        assert len(refresh_set) == 2
+        assert refresh_set[fake_source_name] == refresh_result
+        assert refresh_set[fake_source_two_name] == refresh_result_two
         assert priority_refresh_queue.pop(fake_source_name) == refresh_result
-        assert priority_refresh_queue.peek() == [(fake_source_two_name, refresh_result_two)]
+        assert priority_refresh_queue.peek() == {fake_source_two_name: refresh_result_two}
 
     def test_refresh_runner_path(
         self,
@@ -312,8 +335,9 @@ class TestFullRefreshManager(object):
         fake_source_name,
         fake_namespace
     ):
-        assert fake_topic.name == \
-            refresh_manager.get_most_recent_topic_name(fake_source_name, fake_namespace)
+        assert fake_topic.name == refresh_manager.get_most_recent_topic_name(
+            fake_source_name, fake_namespace
+        )
 
     def test_job_construction(
         self,
@@ -370,7 +394,7 @@ class TestFullRefreshManager(object):
         )
         refresh_manager.step()
         mock_popen.assert_called_once_with(
-        # testing refresh_runner_path is a seperate test
+            # testing refresh_runner_path is a seperate test
             ['python', refresh_manager.refresh_runner_path,
              '--cluster={}'.format(fake_cluster),
              '--database={}'.format(fake_database),
@@ -380,15 +404,15 @@ class TestFullRefreshManager(object):
              '--batch-size={}'.format(high_priority_real_refresh.batch_size),
              '--refresh-id={}'.format(high_priority_real_refresh.refresh_id),
              '--dry-run', '--primary=id'
-            ]
+             ]
         )
         assert mock_kill.call_count == 0
         assert refresh_manager.active_refreshes == {
             fake_source.name: [expected_high_priority_job]
         }
-        assert refresh_manager.refresh_queue.peek() == [
-            (fake_source.name, real_refresh)
-        ]
+        assert refresh_manager.refresh_queue.peek() == {
+            fake_source.name: real_refresh
+        }
         high_priority_real_refresh = schematizer.update_refresh(
             high_priority_real_refresh.refresh_id,
             RefreshStatus.IN_PROGRESS,
@@ -402,9 +426,9 @@ class TestFullRefreshManager(object):
         assert refresh_manager.active_refreshes == {
             fake_source.name: [expected_high_priority_job]
         }
-        assert refresh_manager.refresh_queue.peek() == [
-            (fake_source.name, real_refresh)
-        ]
+        assert refresh_manager.refresh_queue.peek() == {
+            fake_source.name: real_refresh
+        }
         high_priority_real_refresh = schematizer.update_refresh(
             high_priority_real_refresh.refresh_id,
             RefreshStatus.SUCCESS,
@@ -412,7 +436,7 @@ class TestFullRefreshManager(object):
         )
         refresh_manager.step()
         mock_popen.assert_called_with(
-        # testing refresh_runner_path is a seperate test
+            # testing refresh_runner_path is a seperate test
             ['python', refresh_manager.refresh_runner_path,
              '--cluster={}'.format(fake_cluster),
              '--database={}'.format(fake_database),
@@ -422,13 +446,13 @@ class TestFullRefreshManager(object):
              '--batch-size={}'.format(real_refresh.batch_size),
              '--refresh-id={}'.format(real_refresh.refresh_id),
              '--dry-run', '--primary=id'
-            ]
+             ]
         )
         assert mock_kill.call_count == 0
         assert refresh_manager.active_refreshes == {
             fake_source.name: [expected_job]
         }
-        assert refresh_manager.refresh_queue.peek() == []
+        assert refresh_manager.refresh_queue.peek() == {}
         schematizer.update_refresh(
             real_refresh.refresh_id,
             RefreshStatus.SUCCESS,
@@ -437,5 +461,166 @@ class TestFullRefreshManager(object):
         refresh_manager.step()
         assert mock_popen.call_count == 2
         assert refresh_manager.active_refreshes == {}
-        assert refresh_manager.refresh_queue.peek() == []
+        assert refresh_manager.refresh_queue.peek() == {}
 
+    def test_multisource_step_low_cap(
+        self,
+        refresh_manager,
+        schematizer,
+        high_priority_real_refresh,
+        real_refresh_source_two,
+        fake_source,
+        fake_source_two,
+        fake_cluster,
+        fake_database,
+        mock_popen
+    ):
+        refresh_manager.total_throughput_cap = (DEFAULT_CAP * 2) - 30
+        expected_job = self._create_job_from_refresh(
+            real_refresh_source_two,
+            throughput=DEFAULT_CAP - 30,
+            last_throughput=0,
+            pid=self.pid
+        )
+        expected_high_priority_job = self._create_job_from_refresh(
+            high_priority_real_refresh,
+            throughput=DEFAULT_CAP,
+            last_throughput=0,
+            pid=self.pid
+        )
+        refresh_manager.step()
+        assert refresh_manager.active_refreshes == {
+            fake_source.name: [expected_high_priority_job],
+            fake_source_two.name: [expected_job]
+        }
+        assert refresh_manager.sort_sources_by_top_refresh() == [
+            fake_source.name, fake_source_two.name
+        ]
+        assert refresh_manager.refresh_queue.peek() == {}
+        assert mock_popen.call_count == 2
+        mock_popen.assert_any_call(
+            ['python', refresh_manager.refresh_runner_path,
+             '--cluster={}'.format(fake_cluster),
+             '--database={}'.format(fake_database),
+             '--table-name={}'.format(fake_source.name), '--offset=0',
+             '--config-path={}'.format(refresh_manager.config_path),
+             '--avg-rows-per-second-cap={}'.format(DEFAULT_CAP),
+             '--batch-size={}'.format(high_priority_real_refresh.batch_size),
+             '--refresh-id={}'.format(high_priority_real_refresh.refresh_id),
+             '--dry-run', '--primary=id'
+             ]
+        )
+        mock_popen.assert_any_call(
+            ['python', refresh_manager.refresh_runner_path,
+             '--cluster={}'.format(fake_cluster),
+             '--database={}'.format(fake_database),
+             '--table-name={}'.format(fake_source_two.name), '--offset=0',
+             '--config-path={}'.format(refresh_manager.config_path),
+             '--avg-rows-per-second-cap={}'.format(DEFAULT_CAP - 30),
+             '--batch-size={}'.format(real_refresh_source_two.batch_size),
+             '--refresh-id={}'.format(real_refresh_source_two.refresh_id),
+             '--dry-run',
+             '--where="country=\'CA\' AND city=\'Waterloo\'"',
+             '--primary=id'
+             ]
+        )
+
+    def test_two_job_in_source(
+        self,
+        refresh_manager,
+        schematizer,
+        real_refresh,
+        fake_source,
+        fake_cluster,
+        fake_database,
+        mock_popen,
+        mock_kill
+    ):
+        refresh_manager.per_source_throughput_cap = 60
+        expected_job = self._create_job_from_refresh(
+            real_refresh,
+            throughput=DEFAULT_CAP,
+            last_throughput=0,
+            pid=self.pid
+        )
+        refresh_manager.step()
+        mock_popen.assert_called_once_with(
+            ['python', refresh_manager.refresh_runner_path,
+             '--cluster={}'.format(fake_cluster),
+             '--database={}'.format(fake_database),
+             '--table-name={}'.format(fake_source.name), '--offset=0',
+             '--config-path={}'.format(refresh_manager.config_path),
+             '--avg-rows-per-second-cap={}'.format(60),
+             '--batch-size={}'.format(real_refresh.batch_size),
+             '--refresh-id={}'.format(real_refresh.refresh_id),
+             '--dry-run', '--primary=id'
+             ]
+        )
+        assert mock_kill.call_count == 0
+        schematizer.update_refresh(
+            real_refresh.refresh_id,
+            status=RefreshStatus.IN_PROGRESS,
+            offset=0
+        )
+        new_refresh = schematizer.create_refresh(
+            source_id=fake_source.source_id,
+            offset=0,
+            batch_size=500,
+            priority=Priority.HIGH.value,
+            filter_condition=None,
+            avg_rows_per_second_cap=None
+        )
+
+        mock_kill.side_effect = lambda pid, signal: schematizer.update_refresh(
+            real_refresh.refresh_id,
+            status=RefreshStatus.PAUSED,
+            offset=500
+        )
+
+        refresh_manager.step()
+
+        expected_job = self._create_job_from_refresh(
+            real_refresh,
+            throughput=60 - DEFAULT_CAP,
+            last_throughput=60,
+            pid=self.pid,
+            status=RefreshStatus.IN_PROGRESS
+        )
+        expected_new_job = self._create_job_from_refresh(
+            new_refresh,
+            throughput=DEFAULT_CAP,
+            last_throughput=0,
+            pid=self.pid
+        )
+
+        mock_kill.assert_called_once_with(
+            self.pid, signal.SIGTERM
+        )
+        mock_popen.assert_any_call(
+            ['python', refresh_manager.refresh_runner_path,
+             '--cluster={}'.format(fake_cluster),
+             '--database={}'.format(fake_database),
+             '--table-name={}'.format(fake_source.name), '--offset=500',
+             '--config-path={}'.format(refresh_manager.config_path),
+             '--avg-rows-per-second-cap={}'.format(60 - DEFAULT_CAP),
+             '--batch-size={}'.format(real_refresh.batch_size),
+             '--refresh-id={}'.format(real_refresh.refresh_id),
+             '--dry-run', '--primary=id'
+             ]
+        )
+        mock_popen.assert_any_call(
+            ['python', refresh_manager.refresh_runner_path,
+             '--cluster={}'.format(fake_cluster),
+             '--database={}'.format(fake_database),
+             '--table-name={}'.format(fake_source.name), '--offset=0',
+             '--config-path={}'.format(refresh_manager.config_path),
+             '--avg-rows-per-second-cap={}'.format(DEFAULT_CAP),
+             '--batch-size={}'.format(new_refresh.batch_size),
+             '--refresh-id={}'.format(new_refresh.refresh_id),
+             '--dry-run', '--primary=id'
+             ]
+        )
+        assert mock_popen.call_count == 3
+        assert refresh_manager.active_refreshes == {
+            fake_source.name: [expected_new_job, expected_job]
+        }
