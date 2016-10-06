@@ -20,13 +20,17 @@ def test_container():
 
 
 def test_compose_prefix(test_container):
+    file_name = "docker-compose-opensource.yml" \
+        if test_container._is_envvar_set('OPEN_SOURCE_MODE') \
+        else "docker-compose.yml"
     project_name = test_container.project
     file_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     expected_result = ("docker-compose "
                        "--file={file_path}"
-                       "/data_pipeline/testing_helpers/docker-compose.yml "
+                       "/data_pipeline/testing_helpers/{file_name} "
                        "--project-name={project_name}").format(
         file_path=file_path,
+        file_name=file_name,
         project_name=project_name)
     actual_result = Containers.compose_prefix()
     assert expected_result == actual_result
