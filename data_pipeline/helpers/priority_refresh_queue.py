@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 from data_pipeline.schematizer_clientlib.models.refresh import RefreshStatus
 
+
 class PriorityRefreshQueue(object):
     """
     PriorityQueue that sorts each source's queue by age, status and priority in that order,

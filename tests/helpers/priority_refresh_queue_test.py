@@ -10,7 +10,6 @@ import pytest
 
 from data_pipeline.schematizer_clientlib.models.refresh import _Refresh
 from data_pipeline.schematizer_clientlib.models.refresh import Priority
-from data_pipeline.schematizer_clientlib.models.refresh import RefreshStatus
 from data_pipeline.tools.refresh_manager import PriorityRefreshQueue
 
 
