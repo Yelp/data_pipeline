@@ -112,7 +112,7 @@ class TestFullRefreshRunner(object):
         batch.process_commandline_options([
             '--dry-run',
             '--table-name={0}'.format(table_name),
-            '--primary=id',
+            '--primary-key=id',
             '--cluster={0}'.format(cluster),
             '--topology-path={0}'.format(topology_path),
             '--database={0}'.format(database_name)
@@ -126,7 +126,7 @@ class TestFullRefreshRunner(object):
         batch.process_commandline_options([
             '--dry-run',
             '--table-name={0}'.format(table_name),
-            '--primary=id',
+            '--primary-key=id',
             '--where={0}'.format("country='CA'"),
             '--database={0}'.format(database_name)
         ])
@@ -150,7 +150,7 @@ class TestFullRefreshRunner(object):
             '--cluster={}'.format(cluster),
             '--offset=0',
             '--batch-size=200',
-            '--primary=id',
+            '--primary-key=id',
             '--refresh-id=1'
         ])
         batch._init_global_state()

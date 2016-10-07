@@ -1,0 +1,83 @@
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import
+from __future__ import unicode_literals
+
+from data_pipeline.schematizer_clientlib.models.refresh import RefreshStatus
+
+class PriorityRefreshQueue(object):
+    """
+    PriorityQueue that sorts each source's queue by age, status and priority in that order,
+    and then sorts sources by the top refresh in their queue with the same scheme.
+
+    The only public ways to add/remove jobs from this queue are update and pop.
+
+    We could implement this faster, but this is unnecessary as we have ample time between
+    schematizer polls.
+    """
+
+    def __init__(self):
+        self.source_to_refresh_queue = {}
+        self.refresh_ref = {}
+
+    def _add_job_to_queue(self, job):
+        if job.refresh_id not in self.refresh_ref:
+            if job.source_name not in self.source_to_refresh_queue:
+                self.source_to_refresh_queue[job.source_name] = []
+            self.source_to_refresh_queue[job.source_name].append(
+                job.refresh_id
+            )
+        self.refresh_ref[job.refresh_id] = job
+
+    def _top_refresh(self, source_name):
+        return self.refresh_ref[
+            self.source_to_refresh_queue[source_name][0]
+        ]
+
+    def _sort_by_ascending_age(self, queue):
+        return sorted(
+            queue,
+            key=lambda refresh_id: self.refresh_ref[refresh_id].created_at
+        )
+
+    def _sort_by_paused_first(self, queue):
+        return sorted(
+            queue,
+            key=lambda refresh_id:
+                (0 if self.refresh_ref[refresh_id].status == RefreshStatus.PAUSED else 1)
+        )
+
+    def _sort_by_descending_priority(self, queue):
+        return sorted(
+            queue,
+            key=lambda refresh_id: self.refresh_ref[refresh_id].priority,
+            reverse=True
+        )
+
+    def _sort_refresh_queue(self, queue):
+        queue = self._sort_by_ascending_age(queue)
+        queue = self._sort_by_paused_first(queue)
+        return self._sort_by_descending_priority(queue)
+
+    def update(self, jobs):
+        """Adds jobs to the queue"""
+        for job in jobs:
+            self._add_job_to_queue(job)
+
+        for source, queue in self.source_to_refresh_queue.iteritems():
+            self.source_to_refresh_queue[source] = self._sort_refresh_queue(queue)
+
+    def peek(self):
+        """Returns a dict of the top refresh for each source in the queue"""
+        return {
+            source_name: self._top_refresh(source_name)
+            for source_name in self.source_to_refresh_queue.keys()
+        }
+
+    def pop(self, source_name):
+        """Removes and returns the top refresh for the given source using its name
+        (Note: source_name does not include its namespace)"""
+        refresh_id = self.source_to_refresh_queue[source_name].pop(0)
+        item = self.refresh_ref.pop(refresh_id)
+        if not self.source_to_refresh_queue[source_name]:
+            del self.source_to_refresh_queue[source_name]
+        return item

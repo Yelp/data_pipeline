@@ -1,3 +1,4 @@
+attr
 psutil==4.2.0
 sqlparse
 yelp_batch

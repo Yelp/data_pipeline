@@ -84,8 +84,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
                  '(default: %default).'
         )
         opt_group.add_option(
-            '--primary',
-            dest='primary',
+            '--primary-key',
+            dest='primary_key',
             help='Required: A single primary key column name (if composite use one).'
         )
         opt_group.add_option(
@@ -146,7 +146,9 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             type='int',
             default=None,
             help='To be used only when running the runner through the manager, do not use'
-                 ' for manual refreshes'
+                 ' for manual refreshes. This stores the id of a refresh request retrieved'
+                 ' from the schematizer, and is used for updating refresh status as the'
+                 ' refresh runs'
         )
         return opt_group
 
@@ -173,7 +175,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self.batch_size = self.options.batch_size
         if self.batch_size <= 0:
             raise ValueError("Batch size should be greater than 0")
-        self.primary_key = self.options.primary
+        self.primary_key = self.options.primary_key
         self.where_clause = self.options.where_clause
         self.dry_run = self.options.dry_run
         self.topology_path = self.options.topology_path
