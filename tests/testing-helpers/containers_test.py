@@ -20,9 +20,9 @@ def test_container():
 
 
 def test_compose_prefix(test_container):
-    file_name = "docker-compose-opensource.yml" \
-        if test_container._is_envvar_set('OPEN_SOURCE_MODE') \
-        else "docker-compose.yml"
+    file_name = ("docker-compose-opensource.yml"
+                 if test_container._is_envvar_set('OPEN_SOURCE_MODE')
+                 else "docker-compose.yml")
     project_name = test_container.project
     file_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     expected_result = ("docker-compose "

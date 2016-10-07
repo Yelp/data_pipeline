@@ -12,7 +12,7 @@ help:
 	@echo "clean-vim - remove vim swap file artifacts"
 	@echo "test - run tests quickly with the default Python"
 	@echo "coverage - check code coverage"
-	@echo "docs - generate Sphinx HTML documentation, including API docs"
+	@echo "docs - generate(s) Sphinx HTML documentation, including API docs"
 	@echo "compose-prefix - generates a preconfigured docker-compose command"
 	@echo "get-venv-update - fetched the latest version of venv-update"
 
