@@ -11,11 +11,10 @@ from uuid import UUID
 
 import simplejson
 from kafka import KafkaClient
+from kafka_utils.util import offsets
 from yelp_batch.batch import Batch
 from yelp_batch.batch import batch_command_line_options
 from yelp_batch.batch import batch_configure
-from yelp_kafka import offsets
-from yelp_servlib.config_util import load_default_config
 
 from data_pipeline import __version__
 from data_pipeline._fast_uuid import FastUUID
@@ -25,6 +24,7 @@ from data_pipeline.consumer import Consumer
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import Message
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+from data_pipeline.servlib.config_util import load_default_config
 from data_pipeline.tools.timestamp_to_offset_mapper import get_first_offset_at_or_after_start_timestamp
 
 logger = get_config().logger

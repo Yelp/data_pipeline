@@ -5,9 +5,9 @@ from __future__ import unicode_literals
 import time
 from collections import namedtuple
 
+import kafka_utils
 import mock
 import pytest
-import yelp_kafka
 from yelp_batch.batch import BatchOptionParser
 
 import data_pipeline
@@ -287,7 +287,7 @@ class TestTailer(object):
             ['topic', 'partition', 'highmark', 'lowmark']
         )
         with mock.patch.object(
-            yelp_kafka.offsets,
+            kafka_utils.util.offsets,
             'get_topics_watermarks',
             return_value={
                 topic_name: {0: PartitionOffsets(topic_name, 0, 13, 12)}

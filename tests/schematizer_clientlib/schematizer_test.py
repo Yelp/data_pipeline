@@ -88,6 +88,10 @@ class SchematizerClientTestBase(object):
     def source_owner_email(self):
         return 'bam+test@yelp.com'
 
+    @property
+    def note(self):
+        return 'note'
+
     def get_new_name(self, prefix):
         return '{}_{}'.format(prefix, random.random())
 
@@ -123,6 +127,15 @@ class SchematizerClientTestBase(object):
         if overrides:
             params.update(**overrides)
         return self._get_client().schemas.register_schema(body=params).result()
+
+    def _create_note(self, reference_id, type):
+        note = {
+            'reference_type': type,
+            'reference_id': reference_id,
+            'note': self.note,
+            'last_updated_by': self.source_owner_email
+        }
+        return self._get_client().notes.create_note(body=note).result()
 
     def _get_schema_by_id(self, schema_id):
         return self._get_client().schemas.get_schema_by_id(
@@ -209,7 +222,10 @@ class TestGetSchemaById(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
     def biz_schema(self, yelp_namespace, biz_src_name):
-        return self._register_avro_schema(yelp_namespace, biz_src_name)
+        schema = self._register_avro_schema(yelp_namespace, biz_src_name)
+        note = self._create_note(schema.schema_id, 'schema')
+        schema.note = note
+        return schema
 
     def test_get_non_cached_schema_by_id(self, schematizer, biz_schema):
         with self.attach_spy_on_api(
@@ -255,8 +271,14 @@ class TestGetSchemaElementsBySchemaId(SchematizerClientTestBase):
                 biz_schema.schema_id
             )
             for element in actual:
+                self._create_note(element.id, 'schema_element')
+            actual = schematizer.get_schema_elements_by_schema_id(
+                biz_schema.schema_id
+            )
+            for element in actual:
+                assert element.note.note == self.note
                 assert element.schema_id == biz_schema.schema_id
-            assert api_spy.call_count == 1
+            assert api_spy.call_count == 2
 
 
 class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
@@ -1371,6 +1393,7 @@ class RegistrationTestBase(SchematizerClientTestBase):
 
     def _create_data_target(self):
         post_body = {
+            'name': 'simple_name_{}'.format(random.random()),
             'target_type': 'redshift_{}'.format(random.random()),
             'destination': 'dwv1.yelpcorp.com.{}'.format(random.random())
         }
@@ -1426,6 +1449,10 @@ class RegistrationTestBase(SchematizerClientTestBase):
 class TestCreateDataTarget(RegistrationTestBase):
 
     @property
+    def random_name(self):
+        return 'random_name'
+
+    @property
     def random_target_type(self):
         return 'random_type'
 
@@ -1435,6 +1462,7 @@ class TestCreateDataTarget(RegistrationTestBase):
 
     def test_create_data_target(self, schematizer):
         actual = schematizer.create_data_target(
+            name=self.random_name,
             target_type=self.random_target_type,
             destination=self.random_destination
         )
@@ -1443,9 +1471,19 @@ class TestCreateDataTarget(RegistrationTestBase):
         assert actual.target_type == self.random_target_type
         assert actual.destination == self.random_destination
 
+    def test_invalid_empty_name(self, schematizer):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.create_data_target(
+                name='',
+                target_type=self.random_target_type,
+                destination=self.random_destination
+            )
+        assert e.value.response.status_code == 400
+
     def test_invalid_empty_target_type(self, schematizer):
         with pytest.raises(swaggerpy_exc.HTTPError) as e:
             schematizer.create_data_target(
+                name=self.random_name,
                 target_type='',
                 destination=self.random_destination
             )
@@ -1454,6 +1492,7 @@ class TestCreateDataTarget(RegistrationTestBase):
     def test_invalid_empty_destination(self, schematizer):
         with pytest.raises(swaggerpy_exc.HTTPError) as e:
             schematizer.create_data_target(
+                name=self.random_name,
                 target_type=self.random_target_type,
                 destination=''
             )
@@ -1498,6 +1537,44 @@ class TestGetDataTargetById(RegistrationTestBase):
     def test_non_existing_data_target_id(self, schematizer):
         with pytest.raises(swaggerpy_exc.HTTPError) as e:
             schematizer.get_data_target_by_id(data_target_id=0)
+        assert e.value.response.status_code == 404
+
+
+class TestGetDataTargetByName(RegistrationTestBase):
+
+    def test_get_non_cached_data_target(
+        self,
+        schematizer,
+        dw_data_target_resp
+    ):
+        with self.attach_spy_on_api(
+            schematizer._swagger_client.data_targets,
+            'get_data_target_by_name'
+        ) as api_spy:
+            actual = schematizer.get_data_target_by_name(
+                dw_data_target_resp.name
+            )
+            self._assert_data_target_values(actual, dw_data_target_resp)
+            assert api_spy.call_count == 1
+
+    def test_get_cached_data_target(self, schematizer, dw_data_target_resp):
+        schematizer.get_data_target_by_name(dw_data_target_resp.name)
+
+        with self.attach_spy_on_api(
+            schematizer._swagger_client.data_targets,
+            'get_data_target_by_name'
+        ) as data_target_api_spy:
+            actual = schematizer.get_data_target_by_name(
+                dw_data_target_resp.name
+            )
+            self._assert_data_target_values(actual, dw_data_target_resp)
+            assert data_target_api_spy.call_count == 0
+
+    def test_non_existing_data_target_name(self, schematizer):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.get_data_target_by_name(
+                data_target_name='bad test name'
+            )
         assert e.value.response.status_code == 404
 
 

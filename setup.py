@@ -43,7 +43,6 @@ setup(
         'swagger_zipkin>=0.1.0',
         'yelp-avro>=0.1.9',
         'yelp-kafka>=5.0.0',
-        'yelp-lib>=10.0.5',
         'yelp-servlib>=4.3.0',
         'cryptography<=1.3.4',
         'pyopenssl==16.0.0',
@@ -62,6 +61,12 @@ setup(
             'docker-py==1.6.0',
             # requests is locked at <2.7 to satisfy a docker-compose requirement
             'requests<2.7'
+        ],
+        # inform downstream projects that use data_pipeline consumer to
+        # include data_pipeline[internal] to their dependency.
+        'internal': [
+            'yelp-kafka>=5.0.0',
+            'yelp-servlib>=4.3.0'
         ]
     },
     zip_safe=False,

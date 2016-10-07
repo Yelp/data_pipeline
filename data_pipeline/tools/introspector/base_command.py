@@ -9,13 +9,13 @@ from contextlib import contextmanager
 
 from cached_property import cached_property
 from kafka import KafkaClient
+from kafka_utils.util import offsets
 from kafka_utils.util.zookeeper import ZK
 from swaggerpy.exception import HTTPError
-from yelp_kafka import offsets
-from yelp_servlib.config_util import load_package_config
 
 from data_pipeline.config import get_config
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+from data_pipeline.servlib.config_util import load_package_config
 from data_pipeline.tools.introspector.models import IntrospectorNamespace
 from data_pipeline.tools.introspector.models import IntrospectorSource
 from data_pipeline.tools.introspector.models import IntrospectorTopic
