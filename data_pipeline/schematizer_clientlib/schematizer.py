@@ -84,8 +84,8 @@ class SchematizerClient(object):
     DEFAULT_PAGE_SIZE = 20
 
     def __init__(self):
-        self._swagger_client = get_config().schematizer_client  # swaggerpy client
-        self._client = ZipkinClientDecorator(self._swagger_client)
+        self._bravado_client = get_config().schematizer_client
+        self._client = ZipkinClientDecorator(self._bravado_client)
         self._cache = _Cache()
 
     def get_schema_by_id(self, schema_id):

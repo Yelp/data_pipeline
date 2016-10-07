@@ -112,7 +112,7 @@ class Config(object):
             default=False
         )
 
-    @cached_property
+    @property
     def schematizer_client(self):
         """Returns a bravado client for the schematizer api.
 

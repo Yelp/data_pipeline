@@ -40,6 +40,14 @@ class TestFileBootstrapperBase(object):
         bootstrapper.logged_api_call = mock.Mock()
         return bootstrapper
 
+    def _assert_logged_api_call(self, logged_api_call, api, **kwargs):
+        assert logged_api_call.call_count == 1
+        call_args = logged_api_call.mock_calls[0]
+        name, args, call_kwargs = call_args
+        assert kwargs == call_kwargs
+        assert api.operation == args[0].operation
+        assert len(args) == 1
+
     def test_bootstrap_files_calls_register_file_for_each_file(
             self,
             containers
@@ -126,22 +134,21 @@ class TestFileBootstrapperBase(object):
         expected_schema_obj = json.loads(mock_schema_result.schema)
         expected_schema_obj['doc'] = good_source_ref['doc']
         expected_schema_obj['fields'][0]['doc'] = good_field_ref['doc']
-        assert bootstrapper.logged_api_call.mock_calls == [
-            mock.call(
-                bootstrapper.api.schemas.register_schema,
-                body={
-                    'base_schema_id': mock_schema_result.schema_id,
-                    'schema': json.dumps(
-                        expected_schema_obj,
-                        cls=FrozenDictEncoder
-                    ),
-                    'namespace': good_source_ref['namespace'],
-                    'source': good_source_ref['source'],
-                    'source_owner_email': good_source_ref['owner_email'],
-                    'contains_pii': good_source_ref['contains_pii']
-                }
-            )
-        ]
+        self._assert_logged_api_call(
+            bootstrapper.logged_api_call,
+            bootstrapper.api.schemas.register_schema,
+            body={
+                'base_schema_id': mock_schema_result.schema_id,
+                'schema': json.dumps(
+                    expected_schema_obj,
+                    cls=FrozenDictEncoder
+                ),
+                'namespace': good_source_ref['namespace'],
+                'source': good_source_ref['source'],
+                'source_owner_email': good_source_ref['owner_email'],
+                'contains_pii': good_source_ref['contains_pii']
+            }
+        )
 
     def test_register_schema_note_updates_note_if_exists(
             self,
@@ -153,16 +160,15 @@ class TestFileBootstrapperBase(object):
             schema_result=mock_schema_result,
             note='test_note'
         )
-        assert bootstrapper.logged_api_call.mock_calls == [
-            mock.call(
-                bootstrapper.api.notes.update_note,
-                note_id=mock_schema_result.note.id,
-                body={
-                    'note': 'test_note',
-                    'last_updated_by': schema_ref.doc_owner
-                }
-            )
-        ]
+        self._assert_logged_api_call(
+            bootstrapper.logged_api_call,
+            bootstrapper.api.notes.update_note,
+            note_id=mock_schema_result.note.id,
+            body={
+                'note': 'test_note',
+                'last_updated_by': schema_ref.doc_owner
+            }
+        )
 
     def test_register_schema_note_does_nothing_note_if_exists_and_no_override(
             self,
@@ -187,17 +193,16 @@ class TestFileBootstrapperBase(object):
             schema_result=mock_schema_result,
             note='test_note'
         )
-        assert bootstrapper.logged_api_call.mock_calls == [
-            mock.call(
-                bootstrapper.api.notes.create_note,
-                body={
-                    'reference_id': mock_schema_result.schema_id,
-                    'reference_type': 'schema',
-                    'note': 'test_note',
-                    'last_updated_by': schema_ref.doc_owner
-                }
-            )
-        ]
+        self._assert_logged_api_call(
+            bootstrapper.logged_api_call,
+            bootstrapper.api.notes.create_note,
+            body={
+                'reference_id': mock_schema_result.schema_id,
+                'reference_type': 'schema',
+                'note': 'test_note',
+                'last_updated_by': schema_ref.doc_owner
+            }
+        )
 
     def test_register_category_updates_category_if_has_note_and_override(
             self,
@@ -208,13 +213,12 @@ class TestFileBootstrapperBase(object):
             schema_result=mock_schema_result,
             category='test_category'
         )
-        assert bootstrapper.logged_api_call.mock_calls == [
-            mock.call(
-                bootstrapper.api.sources.update_category,
-                source_id=mock_schema_result.topic.source.source_id,
-                body={'category': 'test_category'}
-            )
-        ]
+        self._assert_logged_api_call(
+            bootstrapper.logged_api_call,
+            bootstrapper.api.sources.update_category,
+            source_id=mock_schema_result.topic.source.source_id,
+            body={'category': 'test_category'}
+        )
 
     def test_register_category_updates_category_if_no_category_exists(
             self,
@@ -226,13 +230,12 @@ class TestFileBootstrapperBase(object):
             schema_result=mock_schema_result,
             category='test_category'
         )
-        assert bootstrapper.logged_api_call.mock_calls == [
-            mock.call(
-                bootstrapper.api.sources.update_category,
-                source_id=mock_schema_result.topic.source.source_id,
-                body={'category': 'test_category'}
-            )
-        ]
+        self._assert_logged_api_call(
+            bootstrapper.logged_api_call,
+            bootstrapper.api.sources.update_category,
+            source_id=mock_schema_result.topic.source.source_id,
+            body={'category': 'test_category'}
+        )
 
     def test_register_category_does_nothing_if_not_override_and_category_exists(
             self,
@@ -265,12 +268,11 @@ class TestFileBootstrapperBase(object):
             schema_json=mock_schema_json,
             fields_ref=good_source_ref['fields']
         )
-        assert bootstrapper.logged_api_call.mock_calls == [
-            mock.call(
-                bootstrapper.api.schemas.get_schema_elements_by_schema_id,
-                schema_id=mock_schema_result.schema_id
-            )
-        ]
+        self._assert_logged_api_call(
+            bootstrapper.logged_api_call,
+            bootstrapper.api.schemas.get_schema_elements_by_schema_id,
+            schema_id=mock_schema_result.schema_id
+        )
         assert bootstrapper.register_schema_element_note.mock_calls == [
             mock.call(
                 note=good_source_ref['fields'][0]['note'],
@@ -288,16 +290,15 @@ class TestFileBootstrapperBase(object):
             schema_element=mock_schema_element_result,
             note='test_note'
         )
-        assert bootstrapper.logged_api_call.mock_calls == [
-            mock.call(
-                bootstrapper.api.notes.update_note,
-                note_id=mock_schema_element_result.note.id,
-                body={
-                    'note': 'test_note',
-                    'last_updated_by': schema_ref.doc_owner
-                }
-            )
-        ]
+        self._assert_logged_api_call(
+            bootstrapper.logged_api_call,
+            bootstrapper.api.notes.update_note,
+            note_id=mock_schema_element_result.note.id,
+            body={
+                'note': 'test_note',
+                'last_updated_by': schema_ref.doc_owner
+            }
+        )
 
     def test_register_schema_element_note_does_nothing_if_note_without_override(
             self,
@@ -322,17 +323,16 @@ class TestFileBootstrapperBase(object):
             schema_element=mock_schema_element_result,
             note='test_note'
         )
-        assert bootstrapper.logged_api_call.mock_calls == [
-            mock.call(
-                bootstrapper.api.notes.create_note,
-                body={
-                    'reference_id': mock_schema_element_result.id,
-                    'reference_type': 'schema_element',
-                    'note': 'test_note',
-                    'last_updated_by': schema_ref.doc_owner
-                }
-            )
-        ]
+        self._assert_logged_api_call(
+            bootstrapper.logged_api_call,
+            bootstrapper.api.notes.create_note,
+            body={
+                'reference_id': mock_schema_element_result.id,
+                'reference_type': 'schema_element',
+                'note': 'test_note',
+                'last_updated_by': schema_ref.doc_owner
+            }
+        )
 
 
 class TestAVSCBootstrapper(object):
@@ -347,23 +347,30 @@ class TestAVSCBootstrapper(object):
         bootstrapper.logged_api_call = mock.Mock()
         return bootstrapper
 
+    def _assert_logged_api_call(self, logged_api_call, api, **kwargs):
+        assert logged_api_call.call_count == 1
+        call_args = logged_api_call.mock_calls[0]
+        name, args, call_kwargs = call_args
+        assert kwargs == call_kwargs
+        assert api.operation == args[0].operation
+        assert len(args) == 1
+
     def test_only_avsc_remain_in_file_paths(self, bootstrapper):
         assert bootstrapper.file_paths == {'test.avsc'}
 
     def test_register_avsc(self, bootstrapper, example_schema, good_source_ref):
         bootstrapper.register_avsc(avsc_content=example_schema)
-        assert bootstrapper.logged_api_call.mock_calls == [
-            mock.call(
-                bootstrapper.api.schemas.register_schema,
-                body={
-                    'schema': example_schema,
-                    'namespace': good_source_ref['namespace'],
-                    'source': good_source_ref['source'],
-                    'source_owner_email': good_source_ref['owner_email'],
-                    'contains_pii': good_source_ref['contains_pii']
-                }
-            )
-        ]
+        self._assert_logged_api_call(
+            bootstrapper.logged_api_call,
+            bootstrapper.api.schemas.register_schema,
+            body={
+                'schema': example_schema,
+                'namespace': good_source_ref['namespace'],
+                'source': good_source_ref['source'],
+                'source_owner_email': good_source_ref['owner_email'],
+                'contains_pii': good_source_ref['contains_pii']
+            }
+        )
 
 
 class TestMySQLBootstrapper(object):
@@ -377,6 +384,14 @@ class TestMySQLBootstrapper(object):
         )
         bootstrapper.logged_api_call = mock.Mock()
         return bootstrapper
+
+    def _assert_logged_api_call(self, logged_api_call, api, **kwargs):
+        assert logged_api_call.call_count == 1
+        call_args = logged_api_call.mock_calls[0]
+        name, args, call_kwargs = call_args
+        assert kwargs == call_kwargs
+        assert api.operation == args[0].operation
+        assert len(args) == 1
 
     def test_only_sql_remain_in_file_paths(self, bootstrapper):
         assert bootstrapper.file_paths == {'test.sql'}
@@ -395,15 +410,14 @@ class TestMySQLBootstrapper(object):
             sql_content=mock_sql_content,
             source=good_source_ref['source']
         )
-        assert bootstrapper.logged_api_call.mock_calls == [
-            mock.call(
-                bootstrapper.api.schemas.register_schema_from_mysql_stmts,
-                body={
-                    'new_create_table_stmt': mock_sql_content,
-                    'namespace': good_source_ref['namespace'],
-                    'source': good_source_ref['source'],
-                    'source_owner_email': good_source_ref['owner_email'],
-                    'contains_pii': good_source_ref['contains_pii']
-                }
-            )
-        ]
+        self._assert_logged_api_call(
+            bootstrapper.logged_api_call,
+            bootstrapper.api.schemas.register_schema_from_mysql_stmts,
+            body={
+                'new_create_table_stmt': mock_sql_content,
+                'namespace': good_source_ref['namespace'],
+                'source': good_source_ref['source'],
+                'source_owner_email': good_source_ref['owner_email'],
+                'contains_pii': good_source_ref['contains_pii']
+            }
+        )
