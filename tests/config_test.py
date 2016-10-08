@@ -11,10 +11,6 @@ from data_pipeline.config import get_config
 from tests.helpers.config import reconfigure
 
 
-def _is_envvar_set(envvar):
-    return os.getenv(envvar, 'false').lower() in ['t', 'true', 'y', 'yes']
-
-
 class TestConfigBase(object):
     @pytest.fixture
     def config(self):

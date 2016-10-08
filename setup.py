@@ -41,8 +41,7 @@ setup(
         'swaggerpy>=0.7.6',
         'swagger_zipkin>=0.1.0',
         'yelp-avro>=0.1.9',
-        # TODO (DATAPIPE-1879|abrar): move following 3 packages
-        # into extras_require[internal]
+        # TODO (DATAPIPE-1879|abrar): remove following 3 packages
         'pysensu-yelp>=0.2.3',
         'yelp-kafka>=5.0.0',
         'yelp-servlib>=4.3.0',
