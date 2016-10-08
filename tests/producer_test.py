@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import multiprocessing
+import os
 import random
 import time
 
@@ -592,6 +593,10 @@ class TestPublishMonitorMessage(TestProducerBase):
             (False, 0), (True, 1)
         ]
     )
+    @pytest.mark.skipif(
+        os.getenv('OPEN_SOURCE_MODE', 'false').lower() in ['t', 'true', 'y', 'yes'],
+        reason="skip this in open source mode."
+    )
     def test_meteorite_on_off(
         self,
         create_message,
@@ -601,7 +606,7 @@ class TestPublishMonitorMessage(TestProducerBase):
         expected_call_count
     ):
         with mock.patch.object(
-            data_pipeline.producer.StatsCounter,
+            data_pipeline.tools.meteorite_wrappers.StatsCounter,
             'process',
             autospec=True
         ) as mock_stats_counter:
@@ -615,6 +620,10 @@ class TestPublishMonitorMessage(TestProducerBase):
             (False, 0), (True, 1)
         ]
     )
+    @pytest.mark.skipif(
+        os.getenv('OPEN_SOURCE_MODE', 'false').lower() in ['t', 'true', 'y', 'yes'],
+        reason="skip this in open source mode."
+    )
     def test_sensu_on_off(
         self,
         create_message,
@@ -624,7 +633,7 @@ class TestPublishMonitorMessage(TestProducerBase):
         expected_call_count
     ):
         with mock.patch.object(
-            data_pipeline.producer.SensuTTLAlerter,
+            data_pipeline.tools.sensu_ttl_alerter.SensuTTLAlerter,
             'process',
             autospec=True,
             return_value=None
@@ -635,6 +644,10 @@ class TestPublishMonitorMessage(TestProducerBase):
             assert mock_sensu_ttl_process.call_count == expected_call_count
 
     @pytest.mark.parametrize("message_count", [1, 2])
+    @pytest.mark.skipif(
+        os.getenv('OPEN_SOURCE_MODE', 'false').lower() in ['t', 'true', 'y', 'yes'],
+        reason="skip this in open source mode."
+    )
     def test_sensu_process_called_once_inside_window(
         self,
         create_message,
@@ -643,7 +656,7 @@ class TestPublishMonitorMessage(TestProducerBase):
         message_count
     ):
         with mock.patch.object(
-            data_pipeline.producer.SensuTTLAlerter,
+            data_pipeline.tools.sensu_ttl_alerter.SensuTTLAlerter,
             'process',
             autospec=True,
             return_value=None
