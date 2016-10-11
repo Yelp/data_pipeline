@@ -495,7 +495,7 @@ class BaseConsumer(Client):
             topic_to_partition_offset_map
         )
         return self._send_offset_commit_requests(
-            offset_commit_request_list = [
+            offset_commit_request_list=[
                 OffsetCommitRequest(
                     topic=kafka_bytestring(topic),
                     partition=partition,
