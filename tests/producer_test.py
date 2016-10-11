@@ -3,7 +3,6 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import multiprocessing
-import os
 import random
 import time
 
@@ -28,6 +27,7 @@ from data_pipeline._retry_util import MaxRetryError
 from data_pipeline._retry_util import RetryPolicy
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
+from data_pipeline.environment_configs import IS_OPEN_SOURCE_MODE
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import create_from_offset_and_message
 from data_pipeline.message import CreateMessage
@@ -594,7 +594,7 @@ class TestPublishMonitorMessage(TestProducerBase):
         ]
     )
     @pytest.mark.skipif(
-        os.getenv('OPEN_SOURCE_MODE', 'false').lower() in ['t', 'true', 'y', 'yes'],
+        IS_OPEN_SOURCE_MODE,
         reason="skip this in open source mode."
     )
     def test_meteorite_on_off(
@@ -621,7 +621,7 @@ class TestPublishMonitorMessage(TestProducerBase):
         ]
     )
     @pytest.mark.skipif(
-        os.getenv('OPEN_SOURCE_MODE', 'false').lower() in ['t', 'true', 'y', 'yes'],
+        IS_OPEN_SOURCE_MODE,
         reason="skip this in open source mode."
     )
     def test_sensu_on_off(
@@ -645,7 +645,7 @@ class TestPublishMonitorMessage(TestProducerBase):
 
     @pytest.mark.parametrize("message_count", [1, 2])
     @pytest.mark.skipif(
-        os.getenv('OPEN_SOURCE_MODE', 'false').lower() in ['t', 'true', 'y', 'yes'],
+        IS_OPEN_SOURCE_MODE,
         reason="skip this in open source mode."
     )
     def test_sensu_process_called_once_inside_window(

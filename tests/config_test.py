@@ -2,12 +2,11 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import os
-
 import pytest
 import staticconf
 
 from data_pipeline.config import get_config
+from data_pipeline.environment_configs import IS_OPEN_SOURCE_MODE
 from tests.helpers.config import reconfigure
 
 
@@ -126,7 +125,7 @@ class TestConfigurationOverrides(TestConfigBase):
         return 'datapipe'
 
     @pytest.mark.skipif(
-        os.getenv('OPEN_SOURCE_MODE', 'false').lower() in ['t', 'true', 'y', 'yes'],
+        IS_OPEN_SOURCE_MODE,
         reason="skip this in open source mode."
     )
     def test_schematizer_host_and_port(self, config, addr):
@@ -134,7 +133,7 @@ class TestConfigurationOverrides(TestConfigBase):
             assert config.schematizer_host_and_port == addr
 
     @pytest.mark.skipif(
-        os.getenv('OPEN_SOURCE_MODE', 'false').lower() in ['t', 'true', 'y', 'yes'],
+        IS_OPEN_SOURCE_MODE,
         reason="skip this in open source mode."
     )
     def test_load_schematizer_host_and_port_from_smartstack(self, config, yocalhost):
@@ -142,7 +141,7 @@ class TestConfigurationOverrides(TestConfigBase):
             assert config.schematizer_host_and_port == '{0}:20912'.format(yocalhost)
 
     @pytest.mark.skipif(
-        os.getenv('OPEN_SOURCE_MODE', 'false').lower() in ['t', 'true', 'y', 'yes'],
+        IS_OPEN_SOURCE_MODE,
         reason="skip this in open source mode."
     )
     def test_kafka_discovery(self, config, cluster_name, cluster_type):
@@ -154,7 +153,7 @@ class TestConfigurationOverrides(TestConfigBase):
             assert cluster_config.name == cluster_name
 
     @pytest.mark.skipif(
-        os.getenv('OPEN_SOURCE_MODE', 'false').lower() in ['t', 'true', 'y', 'yes'],
+        IS_OPEN_SOURCE_MODE,
         reason="skip this in open source mode."
     )
     def test_kafka_discovery_precedence(self, config, addr, cluster_name, cluster_type):
