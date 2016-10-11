@@ -323,6 +323,15 @@ class Config(object):
         )
 
     @property
+    def consumer_max_offset_retry_count(self):
+        """Number of times the consumer will retry to set its offsets.
+        """
+        return data_pipeline_conf.read_int(
+            'consumer_max_offset_retry_count',
+            default=5
+        )
+
+    @property
     def kafka_producer_buffer_size(self):
         """The maximum number of messages that the clientlib will buffer
         before sending them out to kafka.
