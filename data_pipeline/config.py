@@ -9,7 +9,6 @@ import staticconf
 from cached_property import cached_property
 from kafka_utils.util.config import ClusterConfig
 from swaggerpy import client
-from yelp_kafka.discovery import get_kafka_cluster
 
 
 namespace = 'data_pipeline'
@@ -149,6 +148,7 @@ class Config(object):
             self.kafka_cluster_name is not None and
             not self.should_use_testing_containers
         ):
+            from yelp_kafka.discovery import get_kafka_cluster  # NOQA
             return get_kafka_cluster(self.kafka_cluster_type,
                                      'data_pipeline-client',
                                      self.kafka_cluster_name

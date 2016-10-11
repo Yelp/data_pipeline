@@ -6,6 +6,7 @@ import pytest
 import staticconf
 
 from data_pipeline.config import get_config
+from data_pipeline.environment_configs import IS_OPEN_SOURCE_MODE
 from tests.helpers.config import reconfigure
 
 
@@ -123,14 +124,26 @@ class TestConfigurationOverrides(TestConfigBase):
     def cluster_type(self):
         return 'datapipe'
 
+    @pytest.mark.skipif(
+        IS_OPEN_SOURCE_MODE,
+        reason="skip this in open source mode."
+    )
     def test_schematizer_host_and_port(self, config, addr):
         with reconfigure(schematizer_host_and_port=addr):
             assert config.schematizer_host_and_port == addr
 
+    @pytest.mark.skipif(
+        IS_OPEN_SOURCE_MODE,
+        reason="skip this in open source mode."
+    )
     def test_load_schematizer_host_and_port_from_smartstack(self, config, yocalhost):
         with reconfigure(load_schematizer_host_and_port_from_smartstack=True):
             assert config.schematizer_host_and_port == '{0}:20912'.format(yocalhost)
 
+    @pytest.mark.skipif(
+        IS_OPEN_SOURCE_MODE,
+        reason="skip this in open source mode."
+    )
     def test_kafka_discovery(self, config, cluster_name, cluster_type):
         with reconfigure(
             kafka_cluster_type=cluster_type,
@@ -139,6 +152,10 @@ class TestConfigurationOverrides(TestConfigBase):
             cluster_config = config.cluster_config
             assert cluster_config.name == cluster_name
 
+    @pytest.mark.skipif(
+        IS_OPEN_SOURCE_MODE,
+        reason="skip this in open source mode."
+    )
     def test_kafka_discovery_precedence(self, config, addr, cluster_name, cluster_type):
         with reconfigure(
             kafka_cluster_type=cluster_type,

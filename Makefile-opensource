@@ -14,7 +14,6 @@ help:
 	@echo "coverage - check code coverage"
 	@echo "docs - generates Sphinx HTML documentation, including API docs"
 	@echo "compose-prefix - generates a preconfigured docker-compose command"
-	@echo "get-venv-update - fetched the latest version of venv-update"
 
 all: production install-hooks
 
@@ -43,15 +42,15 @@ clean-vim:
 
 test:
 	# This will timeout after 15 minutes, in case there is a hang on jenkins
-	OPEN_SOURCE_MODE=true PULL_CONTAINERS=true FORCE_FRESH_CONTAINERS=true timeout -9 1800 tox $(REBUILD_FLAG)
+	OPEN_SOURCE_MODE=true PULL_CONTAINERS=true FORCE_FRESH_CONTAINERS=true timeout -9 1800 tox -c tox-opensource.ini $(REBUILD_FLAG)
 
 docs: clean-docs 
-	tox -e docs $(REBUILD_FLAG)
+	tox -c tox-opensource.ini -e docs $(REBUILD_FLAG)
 
 coverage: test
 
 install-hooks:
-	tox -e pre-commit -- install -f --install-hooks
+	tox -c tox-opensource.ini -e pre-commit -- install -f --install-hooks
 
 compose-prefix:
 	@OPEN_SOURCE_MODE=true python -c "from data_pipeline.testing_helpers.containers import Containers; print Containers.compose_prefix()"

@@ -36,14 +36,16 @@ setup(
         'psutil==4.2.0',
         'pycrypto>=2.6.1',
         'pyramid_zipkin>=0.12.0,<0.13.0',
-        'pysensu-yelp>=0.2.3',
         'PyStaticConfiguration>=0.9.0',
         'simplejson>=2.1.2',
         'swaggerpy>=0.7.6',
         'swagger_zipkin>=0.1.0',
         'yelp-avro>=0.1.9',
+        # TODO (DATAPIPE-1879|abrar): remove following 3 packages
+        'pysensu-yelp>=0.2.3',
         'yelp-kafka>=5.0.0',
         'yelp-servlib>=4.3.0',
+
         'cryptography<=1.3.4',
         'pyopenssl==16.0.0',
         'frozendict==0.5'
@@ -65,6 +67,7 @@ setup(
         # inform downstream projects that use data_pipeline consumer to
         # include data_pipeline[internal] to their dependency.
         'internal': [
+            'pysensu-yelp>=0.2.3',
             'yelp-kafka>=5.0.0',
             'yelp-servlib>=4.3.0'
         ]
