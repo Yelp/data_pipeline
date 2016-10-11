@@ -11,6 +11,7 @@ from uuid import uuid4
 import clog
 import mock
 import pytest
+from kafka.common import FailedPayloadsError
 
 from data_pipeline.base_consumer import ConsumerTopicState
 from data_pipeline.consumer import Consumer
@@ -114,6 +115,31 @@ class TestConsumer(BaseConsumerTest):
             pre_rebalance_callback=pre_rebalance_callback,
             post_rebalance_callback=post_rebalance_callback
         )
+
+    def test_offset_retry_on_network_flake(
+        self,
+        consumer_instance
+    ):
+        mock_offsets = {
+            'test-topic': {0: 10}
+        }
+        exception = FailedPayloadsError("Network flake!")
+        with mock.patch.object(
+            consumer_instance.kafka_client,
+            'send_offset_commit_request',
+            side_effect=[
+                exception,
+                exception,
+                exception,
+                None
+            ]
+        ) as mock_send_offsets, mock.patch.object(
+            consumer_instance,
+            '_get_offsets_map_to_be_committed',
+            return_value=mock_offsets
+        ):
+            consumer_instance.commit_offsets(mock_offsets)
+            assert mock_send_offsets.call_count == 4
 
     # TODO This is a flakey test that needs to be fixed
     # DATAPIPE-1307
