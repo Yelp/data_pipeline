@@ -2,7 +2,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from yelp_kafka.offsets import get_topics_watermarks
+from kafka_utils.util.offsets import get_topics_watermarks
 
 
 def get_actual_published_messages_count(

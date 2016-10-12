@@ -15,9 +15,6 @@ from data_pipeline._kafka_util import get_actual_published_messages_count
 from data_pipeline._pooled_kafka_producer import PooledKafkaProducer
 from data_pipeline.client import Client
 from data_pipeline.config import get_config
-from data_pipeline.tools.meteorite_wrappers import StatsCounter
-from data_pipeline.tools.sensu_alert_manager import SensuAlertManager
-from data_pipeline.tools.sensu_ttl_alerter import SensuTTLAlerter
 
 
 logger = get_config().logger
@@ -179,6 +176,15 @@ class Producer(Client):
         the health of the producer and upstream heartbeat.  The delay monitor
         tracks whether the producer has fallen too far behind the upstream
         data"""
+
+        try:
+            from data_pipeline.tools.meteorite_wrappers import StatsCounter
+            from data_pipeline.tools.sensu_alert_manager import SensuAlertManager
+            from data_pipeline.tools.sensu_ttl_alerter import SensuTTLAlerter
+        except ImportError:
+            self.enable_meteorite = False
+            self.enable_sensu = False
+            return
 
         self.monitors["meteorite"] = StatsCounter(
             stat_counter_name=self.client_name,

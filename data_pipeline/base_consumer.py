@@ -7,11 +7,15 @@ from contextlib import contextmanager
 
 from cached_property import cached_property
 from kafka import KafkaClient
+from kafka.common import FailedPayloadsError
 from kafka.common import OffsetCommitRequest
 from kafka.util import kafka_bytestring
 from yelp_kafka.config import KafkaConsumerConfig
 
 from data_pipeline._consumer_tick import _ConsumerTick
+from data_pipeline._retry_util import ExpBackoffPolicy
+from data_pipeline._retry_util import retry_on_exception
+from data_pipeline._retry_util import RetryPolicy
 from data_pipeline.client import Client
 from data_pipeline.config import get_config
 from data_pipeline.consumer_source import FixedSchemas
@@ -172,6 +176,10 @@ class BaseConsumer(Client):
         )
         self._topic_to_reader_schema_map = self._get_topic_to_reader_schema_map(
             consumer_source
+        )
+        self._consumer_retry_policy = RetryPolicy(
+            ExpBackoffPolicy(with_jitter=True),
+            max_retry_count=get_config().consumer_max_offset_retry_count
         )
 
     def _get_refreshed_topic_to_consumer_topic_state_map(
@@ -615,7 +623,10 @@ class BaseConsumer(Client):
 
     def _send_offset_commit_requests(self, offset_commit_request_list):
         if len(offset_commit_request_list) > 0:
-            self.kafka_client.send_offset_commit_request(
+            retry_on_exception(
+                self._consumer_retry_policy,
+                (FailedPayloadsError),
+                self.kafka_client.send_offset_commit_request,
                 group=kafka_bytestring(self.client_name),
                 payloads=offset_commit_request_list
             )

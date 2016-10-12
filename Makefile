@@ -16,7 +16,6 @@ help:
 	@echo "compose-prefix - generates a preconfigured docker-compose command"
 	@echo "prepare-release - Bump the version number and add a changelog entry (pushmasters only)"
 	@echo "release - Commit the latest version, tag the commit, and push it (pushmasters only)"
-	@echo "get-venv-update - fetched the latest version of venv-update"
 
 all: production install-hooks
 
@@ -45,15 +44,15 @@ clean-vim:
 
 test:
 	# This will timeout after 15 minutes, in case there is a hang on jenkins
-	PULL_CONTAINERS=true FORCE_FRESH_CONTAINERS=true timeout -9 1800 tox $(REBUILD_FLAG)
+	PULL_CONTAINERS=true FORCE_FRESH_CONTAINERS=true timeout -9 1800 tox -c tox.ini $(REBUILD_FLAG)
 
 docs: clean-docs 
-	tox -e docs $(REBUILD_FLAG)
+	tox -c tox.ini -e docs $(REBUILD_FLAG)
 
 coverage: test
 
 install-hooks:
-	tox -e pre-commit -- install -f --install-hooks
+	tox -c tox.ini -e pre-commit -- install -f --install-hooks
 
 # See the makefile in yelp_package/Makefile for packaging stuff
 itest_%:

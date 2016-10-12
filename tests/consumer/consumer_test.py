@@ -11,26 +11,27 @@ from uuid import uuid4
 import clog
 import mock
 import pytest
+from kafka.common import FailedPayloadsError
 
 from data_pipeline.base_consumer import ConsumerTopicState
 from data_pipeline.consumer import Consumer
 from data_pipeline.consumer_source import FixedSchemas
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import CreateMessage
-from tests.base_consumer_test import BaseConsumerSourceBaseTest
-from tests.base_consumer_test import BaseConsumerTest
-from tests.base_consumer_test import FixedSchemasSetupMixin
-from tests.base_consumer_test import MultiTopicsSetupMixin
-from tests.base_consumer_test import RefreshDynamicTopicTests
-from tests.base_consumer_test import RefreshFixedTopicTests
-from tests.base_consumer_test import RefreshNewTopicsTest
-from tests.base_consumer_test import SingleTopicSetupMixin
-from tests.base_consumer_test import TIMEOUT
-from tests.base_consumer_test import TopicInDataTargetSetupMixin
-from tests.base_consumer_test import TopicInSourceAutoRefreshSetupMixin
-from tests.base_consumer_test import TopicInSourceSetupMixin
-from tests.base_consumer_test import TopicsInFixedNamespacesAutoRefreshSetupMixin
-from tests.base_consumer_test import TopicsInFixedNamespacesSetupMixin
+from tests.consumer.base_consumer_test import BaseConsumerSourceBaseTest
+from tests.consumer.base_consumer_test import BaseConsumerTest
+from tests.consumer.base_consumer_test import FixedSchemasSetupMixin
+from tests.consumer.base_consumer_test import MultiTopicsSetupMixin
+from tests.consumer.base_consumer_test import RefreshDynamicTopicTests
+from tests.consumer.base_consumer_test import RefreshFixedTopicTests
+from tests.consumer.base_consumer_test import RefreshNewTopicsTest
+from tests.consumer.base_consumer_test import SingleTopicSetupMixin
+from tests.consumer.base_consumer_test import TIMEOUT
+from tests.consumer.base_consumer_test import TopicInDataTargetSetupMixin
+from tests.consumer.base_consumer_test import TopicInSourceAutoRefreshSetupMixin
+from tests.consumer.base_consumer_test import TopicInSourceSetupMixin
+from tests.consumer.base_consumer_test import TopicsInFixedNamespacesAutoRefreshSetupMixin
+from tests.consumer.base_consumer_test import TopicsInFixedNamespacesSetupMixin
 from tests.helpers.config import reconfigure
 from tests.helpers.mock_utils import attach_spy_on_func
 
@@ -114,6 +115,31 @@ class TestConsumer(BaseConsumerTest):
             pre_rebalance_callback=pre_rebalance_callback,
             post_rebalance_callback=post_rebalance_callback
         )
+
+    def test_offset_retry_on_network_flake(
+        self,
+        consumer_instance
+    ):
+        mock_offsets = {
+            'test-topic': {0: 10}
+        }
+        exception = FailedPayloadsError("Network flake!")
+        with mock.patch.object(
+            consumer_instance.kafka_client,
+            'send_offset_commit_request',
+            side_effect=[
+                exception,
+                exception,
+                exception,
+                None
+            ]
+        ) as mock_send_offsets, mock.patch.object(
+            consumer_instance,
+            '_get_offsets_map_to_be_committed',
+            return_value=mock_offsets
+        ):
+            consumer_instance.commit_offsets(mock_offsets)
+            assert mock_send_offsets.call_count == 4
 
     # TODO This is a flakey test that needs to be fixed
     # DATAPIPE-1307
