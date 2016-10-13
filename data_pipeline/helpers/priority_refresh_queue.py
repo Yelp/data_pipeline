@@ -10,24 +10,27 @@ class PriorityRefreshQueue(object):
     PriorityQueue that sorts each source's queue by age, status and priority in that order,
     and then sorts sources by the top refresh in their queue with the same scheme.
 
-    The only public ways to add/remove jobs from this queue are update and pop.
+    The only public ways to add/remove jobs from this queue are add_refreshes_to_queue and pop.
 
     We could implement this faster, but this is unnecessary as we have ample time between
     schematizer polls.
+
+    Works for multiple sources within a single namespace but not across namespaces (since source_names
+    are only unique within a namespace).
     """
 
     def __init__(self):
         self.source_to_refresh_queue = {}
         self.refresh_ref = {}
 
-    def _add_job_to_queue(self, job):
-        if job.refresh_id not in self.refresh_ref:
-            if job.source_name not in self.source_to_refresh_queue:
-                self.source_to_refresh_queue[job.source_name] = []
-            self.source_to_refresh_queue[job.source_name].append(
-                job.refresh_id
+    def _add_refresh_to_queue(self, refresh):
+        if refresh.refresh_id not in self.refresh_ref:
+            if refresh.source_name not in self.source_to_refresh_queue:
+                self.source_to_refresh_queue[refresh.source_name] = []
+            self.source_to_refresh_queue[refresh.source_name].append(
+                refresh.refresh_id
             )
-        self.refresh_ref[job.refresh_id] = job
+        self.refresh_ref[refresh.refresh_id] = refresh
 
     def _top_refresh(self, source_name):
         return self.refresh_ref[
@@ -59,10 +62,9 @@ class PriorityRefreshQueue(object):
         queue = self._sort_by_paused_first(queue)
         return self._sort_by_descending_priority(queue)
 
-    def update(self, jobs):
-        """Adds jobs to the queue"""
-        for job in jobs:
-            self._add_job_to_queue(job)
+    def add_refreshes_to_queue(self, refreshes):
+        for refresh in refreshes:
+            self._add_refresh_to_queue(refresh)
 
         for source, queue in self.source_to_refresh_queue.iteritems():
             self.source_to_refresh_queue[source] = self._sort_refresh_queue(queue)
@@ -71,7 +73,7 @@ class PriorityRefreshQueue(object):
         """Returns a dict of the top refresh for each source in the queue"""
         return {
             source_name: self._top_refresh(source_name)
-            for source_name in self.source_to_refresh_queue.keys()
+            for source_name in self.source_to_refresh_queue
         }
 
     def pop(self, source_name):

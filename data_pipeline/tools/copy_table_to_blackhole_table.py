@@ -157,6 +157,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self.config_path = self.options.config_path
         load_default_config(self.config_path)
         self._connection_set = None
+        self.processed_row_count = 0
         if self.options.batch_size <= 0:
             raise ValueError("Batch size should be greater than 0")
         self.db_name = self.options.cluster
@@ -171,7 +172,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             table=self.table_name
         )
         self.process_row_start_time = time.time()
-        self.processed_row_count = self.options.offset
+        self.offset = self.options.offset
         self.batch_size = self.options.batch_size
         if self.batch_size <= 0:
             raise ValueError("Batch size should be greater than 0")
@@ -388,6 +389,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         return select_query
 
     def _get_min_primary_key(self):
+        if self.offset:
+            return self.offset
         select_query = """
         SELECT MIN({pk}) FROM {table}
         """.format(
@@ -428,6 +431,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
                 inserted = self.count_inserted(session, min_pk, min_batch)
                 self.insert_batch(session, min_pk, min_batch)
                 self._after_processing_rows(session, inserted)
+            self.offset = min_pk
             min_pk = min_batch
             self.processed_row_count += inserted
 
@@ -446,17 +450,17 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
     def handle_interupt(self, signal, frame):
         self.schematizer.update_refresh(
-            self.refresh_id,
-            RefreshStatus.FAILED,
-            self.processed_row_count
+            refresh_id=self.refresh_id,
+            status=RefreshStatus.FAILED,
+            offset=self.offset
         )
         os._exit(1)
 
     def handle_terminate(self, signal, frame):
         self.schematizer.update_refresh(
-            self.refresh_id,
-            RefreshStatus.PAUSED,
-            self.processed_row_count
+            refresh_id=self.refresh_id,
+            status=RefreshStatus.PAUSED,
+            offset=self.min_pk
         )
         os._exit(1)
 

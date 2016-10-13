@@ -85,7 +85,7 @@ setup(
         'bin/data_pipeline_tailer',
         'bin/data_pipeline_refresh_runner',
         'bin/data_pipeline_refresh_manager',
-        'bin/data_pipeline_refresh_job',
+        'bin/data_pipeline_refresh_requester',
         'bin/data_pipeline_compaction_setter',
         'bin/data_pipeline_introspector'
     ],

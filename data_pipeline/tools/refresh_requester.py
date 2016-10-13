@@ -13,14 +13,14 @@ from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.servlib.config_util import load_package_config
 
 
-class FullRefreshJob(Batch):
+class FullRefreshRequester(Batch):
     """
-    FullRefreshJob parses command line arguments specifying full refresh jobs
+    FullRefreshRequester parses command line arguments specifying full refresh jobs
     and registers the refresh jobs with the Schematizer.
     """
 
     def __init__(self):
-        super(FullRefreshJob, self).__init__()
+        super(FullRefreshRequester, self).__init__()
         self.notify_emails = ['bam+batch@yelp.com']
 
     @property
@@ -100,7 +100,7 @@ class FullRefreshJob(Batch):
         return opt_group
 
     def process_commandline_options(self, args=None):
-        super(FullRefreshJob, self).process_commandline_options(args=args)
+        super(FullRefreshRequester, self).process_commandline_options(args=args)
         if (self.options.avg_rows_per_second_cap is not None and
                 self.options.avg_rows_per_second_cap <= 0):
             raise ValueError("--avg-rows-per-second-cap must be greater than 0")
@@ -144,7 +144,7 @@ class FullRefreshJob(Batch):
         )
 
     def run(self):
-        self.job = self.schematizer.create_refresh(
+        self.request = self.schematizer.create_refresh(
             source_id=self.source_id,
             offset=self.options.offset,
             batch_size=self.options.batch_size,
@@ -155,12 +155,12 @@ class FullRefreshJob(Batch):
         self.log.info(
             "Refresh registered with refresh id: {rid} "
             "on source: {source_name}, namespace: {namespace_name}".format(
-                rid=self.job.refresh_id,
-                source_name=self.job.source_name,
-                namespace_name=self.job.namespace_name
+                rid=self.request.refresh_id,
+                source_name=self.request.source_name,
+                namespace_name=self.request.namespace_name
             )
         )
 
 
 if __name__ == '__main__':
-    FullRefreshJob().start()
+    FullRefreshRequester().start()

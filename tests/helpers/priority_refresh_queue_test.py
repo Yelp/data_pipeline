@@ -109,7 +109,7 @@ class TestPriorityRefreshQueue(object):
         refresh_result
     ):
         assert priority_refresh_queue.peek() == {}
-        priority_refresh_queue.update([refresh_result])
+        priority_refresh_queue.add_refreshes_to_queue([refresh_result])
         assert priority_refresh_queue.peek() == {fake_source_name: refresh_result}
         assert priority_refresh_queue.pop(fake_source_name) == refresh_result
         assert priority_refresh_queue.peek() == {}
@@ -125,7 +125,7 @@ class TestPriorityRefreshQueue(object):
         high_refresh_result,
         later_created_refresh_result
     ):
-        priority_refresh_queue.update(
+        priority_refresh_queue.add_refreshes_to_queue(
             [paused_refresh_result, refresh_result,
              later_created_refresh_result, high_refresh_result]
         )
@@ -145,7 +145,7 @@ class TestPriorityRefreshQueue(object):
         refresh_result,
         refresh_result_two
     ):
-        priority_refresh_queue.update([refresh_result, refresh_result_two])
+        priority_refresh_queue.add_refreshes_to_queue([refresh_result, refresh_result_two])
         refresh_set = priority_refresh_queue.peek()
         assert refresh_set[fake_source_name] == refresh_result
         assert refresh_set[fake_source_two_name] == refresh_result_two

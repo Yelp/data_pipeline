@@ -1,6 +1,6 @@
 usr/share/python/data-pipeline-tools/bin/data_pipeline_tailer usr/bin/data_pipeline_tailer
 usr/share/python/data-pipeline-tools/bin/data_pipeline_refresh_runner usr/bin/data_pipeline_refresh_runner
 usr/share/python/data-pipeline-tools/bin/data_pipeline_refresh_manager usr/bin/data_pipeline_refresh_manager
-usr/share/python/data-pipeline-tools/bin/data_pipeline_refresh_job usr/bin/data_pipeline_refresh_job
+usr/share/python/data-pipeline-tools/bin/data_pipeline_refresh_requester usr/bin/data_pipeline_refresh_requester
 usr/share/python/data-pipeline-tools/bin/data_pipeline_compaction_setter usr/bin/data_pipeline_compaction_setter
 usr/share/python/data-pipeline-tools/bin/data_pipeline_introspector usr/bin/data_pipeline_introspector
