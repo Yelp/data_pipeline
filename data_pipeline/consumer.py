@@ -206,6 +206,7 @@ class Consumer(BaseConsumer):
                 self.consumer_group.iter_timeout = default_iter_timeout
             message = create_from_kafka_message(
                 message,
+                self._envelope,
                 self.force_payload_decode,
                 reader_schema_id=self._topic_to_reader_schema_map.get(message.topic)
             )
