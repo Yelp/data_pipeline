@@ -19,6 +19,7 @@ from data_pipeline._retry_util import RetryPolicy
 from data_pipeline.client import Client
 from data_pipeline.config import get_config
 from data_pipeline.consumer_source import FixedSchemas
+from data_pipeline.envelope import Envelope
 from data_pipeline.message import Message
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
@@ -181,6 +182,7 @@ class BaseConsumer(Client):
             ExpBackoffPolicy(with_jitter=True),
             max_retry_count=get_config().consumer_max_offset_retry_count
         )
+        self._envelope = Envelope()
 
     def _get_refreshed_topic_to_consumer_topic_state_map(
         self,
