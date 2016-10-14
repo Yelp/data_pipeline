@@ -173,6 +173,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         )
         self.process_row_start_time = time.time()
         self.offset = self.options.offset
+        if self.offset < 0:
+            raise ValueError("--offset should be a non-negative number")
         self.batch_size = self.options.batch_size
         if self.batch_size <= 0:
             raise ValueError("Batch size should be greater than 0")
