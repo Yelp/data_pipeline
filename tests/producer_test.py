@@ -10,11 +10,11 @@ import clog
 import mock
 import pytest
 import simplejson as json
+from data_pipeline_avro_util.avro_string_reader import AvroStringReader
+from data_pipeline_avro_util.avro_string_writer import AvroStringWriter
 from kafka.common import FailedPayloadsError
 from kafka.common import ProduceRequest
 from kafka.common import ProduceResponse
-from yelp_avro.avro_string_reader import AvroStringReader
-from yelp_avro.avro_string_writer import AvroStringWriter
 
 import data_pipeline._clog_writer
 import data_pipeline.producer
