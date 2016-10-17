@@ -7,10 +7,10 @@ from uuid import uuid4
 import mock
 import pytest
 import simplejson
-from yelp_avro.avro_string_writer import AvroStringWriter
-from yelp_avro.testing_helpers.generate_payload_data import \
+from data_pipeline_avro_util.avro_string_writer import AvroStringWriter
+from data_pipeline_avro_util.testing_helpers.generate_payload_data import \
     generate_payload_data
-from yelp_avro.util import get_avro_schema_object
+from data_pipeline_avro_util.util import get_avro_schema_object
 
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import CreateMessage
