@@ -9,6 +9,7 @@ from cached_property import cached_property
 from kafka.common import OffsetCommitRequest
 from kafka.util import kafka_bytestring
 from yelp_kafka import discovery
+from yelp_kafka.config import KafkaConsumerConfig
 
 from data_pipeline._consumer_tick import _ConsumerTick
 from data_pipeline.client import Client
@@ -21,6 +22,14 @@ logger = get_config().logger
 
 
 class MultipleClusterTypeTypeError(Exception):
+    pass
+
+
+class TopicFoundInMultipleRegionsError(Exception):
+    pass
+
+
+class TopicNotFoundInRegionError(Exception):
     pass
 
 
@@ -132,6 +141,11 @@ class BaseConsumer(Client):
             corresponding Kafka cluster. All topics should belong to the same
             kafka cluster type. See http://y/datapipe_cluster_types for more
             info on cluster_types. Defaults to datapipe.
+        cluster_name: (Optional[string]): Indicates the name (region) of kafka
+            cluster the topics belong to. Ex: uswest2-prod. Accordingly the
+            Consumer will connect to Kafka cluster in the corresponding region.
+            All topics should belong to the same kafka cluster name.
+            Defaults to None.
     """
 
     def __init__(
@@ -150,7 +164,8 @@ class BaseConsumer(Client):
         post_rebalance_callback=None,
         fetch_offsets_for_topics=None,
         pre_topic_refresh_callback=None,
-        cluster_type='datapipe'
+        cluster_type='datapipe',
+        cluster_name=None
     ):
         super(BaseConsumer, self).__init__(
             consumer_name,
@@ -177,6 +192,7 @@ class BaseConsumer(Client):
         self.fetch_offsets_for_topics = fetch_offsets_for_topics
         self.pre_topic_refresh_callback = pre_topic_refresh_callback
         self.cluster_type = cluster_type
+        self.cluster_name = cluster_name
         self._refresh_timer = _ConsumerTick(
             refresh_time_seconds=topic_refresh_frequency_seconds
         )
@@ -268,12 +284,39 @@ class BaseConsumer(Client):
 
     def _get_topic_from_topic_name(self, topic_name):
         if self.cluster_type is 'scribe':
-            [(topic_list, _)] = discovery.get_region_logs_stream(
+            topics_in_region = discovery.get_region_logs_stream(
                 client_id=self.client_name,
-                stream=topic_name
+                stream=topic_name,
+                region=self.cluster_name
             )
+            if len(topics_in_region) > 1:
+                clusters = [cluster_config.name
+                            for _, cluster_config in topics_in_region]
+                raise TopicFoundInMultipleRegionsError(
+                    "Topic `{}` found in multiple `{}` kafka type clusters in "
+                    "regions: {}".format(
+                        topic_name,
+                        self.cluster_type,
+                        clusters
+                    )
+                )
+            topic_list, _ = topics_in_region[0]
             return topic_list[0]
         else:
+            topics_in_region = discovery.search_topic(
+                topic=topic_name,
+                clusters=[self._region_cluster_config]
+            )
+            if not topics_in_region:
+                raise TopicNotFoundInRegionError(
+                    "Topic `{}` not found in `{}` kafka type cluster in `{}` "
+                    "region".format(
+                        topic_name,
+                        self.cluster_type,
+                        self._region_cluster_config.name
+                    )
+                )
+            topic_list, _ = topics_in_region[0]
             return topic_name
 
     def _set_registrar_tracked_schema_ids(self, topic_to_consumer_topic_state_map):
@@ -656,6 +699,19 @@ class BaseConsumer(Client):
             )
 
     @property
+    def _region_cluster_config(self):
+        """ The ClusterConfig for Kafka cluster to connect to. If cluster_name
+        is not specified, it will default to the value set in Config"""
+        if self.cluster_name:
+            return discovery.get_region_cluster(
+                cluster_type=self.cluster_type,
+                client_id=self.client_name,
+                region=self.cluster_name
+            )
+        else:
+            return get_config().cluster_config
+
+    @property
     def _kafka_consumer_config(self):
         """ The `KafkaConsumerConfig` for the Consumer.
 
@@ -667,9 +723,9 @@ class BaseConsumer(Client):
             `auto_commit` is set to False to ensure clients can determine when
             they want their topic offsets committed via commit_messages(..)
         """
-        return discovery.get_consumer_config(
-            cluster_type=self.cluster_type,
+        return KafkaConsumerConfig(
             group_id=self.client_name,
+            cluster=self._region_cluster_config,
             auto_offset_reset=self.auto_offset_reset,
             auto_commit=False,
             partitioner_cooldown=self.partitioner_cooldown,

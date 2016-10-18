@@ -359,6 +359,16 @@ class BaseConsumerTest(object):
                 **consumer_init_kwargs
             )
 
+    def test_multiple_topics_in_clucter_name(self):
+        pass
+
+    def test_no_topics_in_cluster_name(self):
+        pass
+
+    @pytest.mark.parametrize("cluster_name", [None, 'uswest2-devc'])
+    def test_cluster_name(self, cluster_name):
+        pass
+
 
 class BaseConsumerSourceBaseTest(object):
 
