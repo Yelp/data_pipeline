@@ -10,11 +10,11 @@ import clog
 import mock
 import pytest
 import simplejson as json
+from data_pipeline_avro_util.avro_string_reader import AvroStringReader
+from data_pipeline_avro_util.avro_string_writer import AvroStringWriter
 from kafka.common import FailedPayloadsError
 from kafka.common import ProduceRequest
 from kafka.common import ProduceResponse
-from yelp_avro.avro_string_reader import AvroStringReader
-from yelp_avro.avro_string_writer import AvroStringWriter
 
 import data_pipeline._clog_writer
 import data_pipeline.producer
@@ -27,6 +27,7 @@ from data_pipeline._retry_util import MaxRetryError
 from data_pipeline._retry_util import RetryPolicy
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
+from data_pipeline.environment_configs import IS_OPEN_SOURCE_MODE
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import create_from_offset_and_message
 from data_pipeline.message import CreateMessage
@@ -592,6 +593,10 @@ class TestPublishMonitorMessage(TestProducerBase):
             (False, 0), (True, 1)
         ]
     )
+    @pytest.mark.skipif(
+        IS_OPEN_SOURCE_MODE,
+        reason="skip this in open source mode."
+    )
     def test_meteorite_on_off(
         self,
         create_message,
@@ -601,7 +606,7 @@ class TestPublishMonitorMessage(TestProducerBase):
         expected_call_count
     ):
         with mock.patch.object(
-            data_pipeline.producer.StatsCounter,
+            data_pipeline.tools.meteorite_wrappers.StatsCounter,
             'process',
             autospec=True
         ) as mock_stats_counter:
@@ -615,6 +620,10 @@ class TestPublishMonitorMessage(TestProducerBase):
             (False, 0), (True, 1)
         ]
     )
+    @pytest.mark.skipif(
+        IS_OPEN_SOURCE_MODE,
+        reason="skip this in open source mode."
+    )
     def test_sensu_on_off(
         self,
         create_message,
@@ -624,7 +633,7 @@ class TestPublishMonitorMessage(TestProducerBase):
         expected_call_count
     ):
         with mock.patch.object(
-            data_pipeline.producer.SensuTTLAlerter,
+            data_pipeline.tools.sensu_ttl_alerter.SensuTTLAlerter,
             'process',
             autospec=True,
             return_value=None
@@ -635,6 +644,10 @@ class TestPublishMonitorMessage(TestProducerBase):
             assert mock_sensu_ttl_process.call_count == expected_call_count
 
     @pytest.mark.parametrize("message_count", [1, 2])
+    @pytest.mark.skipif(
+        IS_OPEN_SOURCE_MODE,
+        reason="skip this in open source mode."
+    )
     def test_sensu_process_called_once_inside_window(
         self,
         create_message,
@@ -643,7 +656,7 @@ class TestPublishMonitorMessage(TestProducerBase):
         message_count
     ):
         with mock.patch.object(
-            data_pipeline.producer.SensuTTLAlerter,
+            data_pipeline.tools.sensu_ttl_alerter.SensuTTLAlerter,
             'process',
             autospec=True,
             return_value=None

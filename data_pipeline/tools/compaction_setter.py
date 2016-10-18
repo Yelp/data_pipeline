@@ -8,11 +8,11 @@ from kafka_utils.util.zookeeper import ZK
 from kazoo.exceptions import NoNodeError
 from yelp_batch import Batch
 from yelp_batch.batch import batch_command_line_options
-from yelp_servlib.config_util import load_package_config
 
 from data_pipeline import __version__
 from data_pipeline.config import get_config
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+from data_pipeline.servlib.config_util import load_package_config
 
 
 class CompactionSetter(Batch):

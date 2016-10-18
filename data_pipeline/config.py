@@ -9,8 +9,6 @@ import staticconf
 from cached_property import cached_property
 from kafka_utils.util.config import ClusterConfig
 from swaggerpy import client
-from yelp_kafka.discovery import get_kafka_cluster
-from yelp_servlib.config_util import get_service_host_and_port
 
 
 namespace = 'data_pipeline'
@@ -81,6 +79,7 @@ class Config(object):
         """
         if (self.load_schematizer_host_and_port_from_smartstack and
                 not self.should_use_testing_containers):
+            from yelp_servlib.config_util import get_service_host_and_port  # NOQA
             host, port = get_service_host_and_port('schematizer.main')
             return "{0}:{1}".format(host, port)
         else:
@@ -149,6 +148,7 @@ class Config(object):
             self.kafka_cluster_name is not None and
             not self.should_use_testing_containers
         ):
+            from yelp_kafka.discovery import get_kafka_cluster  # NOQA
             return get_kafka_cluster(self.kafka_cluster_type,
                                      'data_pipeline-client',
                                      self.kafka_cluster_name
@@ -319,6 +319,15 @@ class Config(object):
         """
         return data_pipeline_conf.read_int(
             'producer_max_publish_retry_count',
+            default=5
+        )
+
+    @property
+    def consumer_max_offset_retry_count(self):
+        """Number of times the consumer will retry to set its offsets.
+        """
+        return data_pipeline_conf.read_int(
+            'consumer_max_offset_retry_count',
             default=5
         )
 
