@@ -10,11 +10,13 @@ from uuid import uuid4
 
 import mock
 import pytest
+from yelp_kafka import discovery
 
 from data_pipeline.base_consumer import BaseConsumer
 from data_pipeline.base_consumer import ConsumerTopicState
 from data_pipeline.base_consumer import MultipleClusterTypeTypeError
 from data_pipeline.base_consumer import TopicFilter
+from data_pipeline.base_consumer import TopicNotFoundInRegionError
 from data_pipeline.consumer_source import FixedSchemas
 from data_pipeline.consumer_source import FixedTopics
 from data_pipeline.consumer_source import NewTopicOnlyInDataTarget
@@ -359,11 +361,24 @@ class BaseConsumerTest(object):
                 **consumer_init_kwargs
             )
 
-    def test_multiple_topics_in_clucter_name(self):
-        pass
-
-    def test_no_topics_in_cluster_name(self):
-        pass
+    @pytest.mark.parametrize("cluster_type, discovery_method", [
+        ('scribe', discovery.get_region_logs_stream),
+        ('datapipe', discovery.search_topic)
+    ])
+    def test_no_topics_in_cluster_name(
+        self,
+        consumer_instance,
+        cluster_type,
+        discovery_method
+    ):
+        with mock.patch(discovery_method) as mock_discovery_method:
+            mock_discovery_method.return_value = []
+            with consumer_instance as consumer:
+                consumer.cluster_type = cluster_type
+                with pytest.raises(TopicNotFoundInRegionError):
+                    consumer._get_valid_topics_in_region_from_topic_name(
+                        'dummy'
+                    )
 
     @pytest.mark.parametrize("cluster_name", [None, 'uswest2-devc'])
     def test_cluster_name(self, cluster_name):

@@ -6,6 +6,7 @@ from collections import defaultdict
 from contextlib import contextmanager
 
 from cached_property import cached_property
+from kafka import KafkaClient
 from kafka.common import OffsetCommitRequest
 from kafka.util import kafka_bytestring
 from yelp_kafka import discovery
@@ -25,12 +26,13 @@ class MultipleClusterTypeTypeError(Exception):
     pass
 
 
-class TopicFoundInMultipleRegionsError(Exception):
-    pass
-
-
 class TopicNotFoundInRegionError(Exception):
-    pass
+    def __init__(self, topic_name, cluster_type, cluster_name):
+        err_message = (
+            "Topic `{}` not found in `{}` kafka type cluster in `{}` "
+            "region".format(topic_name, cluster_type, cluster_name)
+        )
+        Exception.__init__(self, err_message)
 
 
 class ConsumerTopicState(object):
@@ -136,11 +138,6 @@ class BaseConsumer(Client):
             from (current_topics) and a set of topic names Consumer will be
             consuming from (refreshed_topics). The return value of the
             function is ignored.
-        cluster_type: (Optional[string]): Indicates which kafka cluster type
-            the topics belong to. Accordingly the Consumer will connect to
-            corresponding Kafka cluster. All topics should belong to the same
-            kafka cluster type. See http://y/datapipe_cluster_types for more
-            info on cluster_types. Defaults to datapipe.
         cluster_name: (Optional[string]): Indicates the name (region) of kafka
             cluster the topics belong to. Ex: uswest2-prod. Accordingly the
             Consumer will connect to Kafka cluster in the corresponding region.
@@ -164,7 +161,6 @@ class BaseConsumer(Client):
         post_rebalance_callback=None,
         fetch_offsets_for_topics=None,
         pre_topic_refresh_callback=None,
-        cluster_type='datapipe',
         cluster_name=None
     ):
         super(BaseConsumer, self).__init__(
@@ -191,7 +187,6 @@ class BaseConsumer(Client):
         self.post_rebalance_callback = post_rebalance_callback
         self.fetch_offsets_for_topics = fetch_offsets_for_topics
         self.pre_topic_refresh_callback = pre_topic_refresh_callback
-        self.cluster_type = cluster_type
         self.cluster_name = cluster_name
         self._refresh_timer = _ConsumerTick(
             refresh_time_seconds=topic_refresh_frequency_seconds
@@ -199,16 +194,25 @@ class BaseConsumer(Client):
         self._topic_to_reader_schema_map = self._get_topic_to_reader_schema_map(
             consumer_source
         )
-        self._check_all_topics_have_same_cluster_type()
+        self._check_all_topics_have_same_cluster_type(
+            self.topic_to_consumer_topic_state_map
+        )
 
-    def _check_all_topics_have_same_cluster_type(self):
-        for topic_name in self.topic_to_consumer_topic_state_map:
+    def _check_all_topics_have_same_cluster_type(
+        self,
+        topic_to_consumer_topic_state_map
+    ):
+        self.cluster_type = None
+        for topic_name in topic_to_consumer_topic_state_map:
             topic = get_schematizer().get_topics_by_name(topic_name)
-            if self.cluster_type != topic.cluster_type:
+            if self.cluster_type is None:
+                self.cluster_type = topic.cluster_type
+            elif self.cluster_type != topic.cluster_type:
                 raise MultipleClusterTypeTypeError(
                     "Consumer can not process topics from different kafka "
                     "cluster types, i.e. ({}, {}).".format(
-                        self.cluster_type, topic.cluster_type
+                        self.cluster_type,
+                        topic.cluster_type
                     ))
 
     def _get_refreshed_topic_to_consumer_topic_state_map(
@@ -273,35 +277,36 @@ class BaseConsumer(Client):
         the topic_to_partition_map instance variable with topic names as keys
         and corresponding partition lists as values.
         """
+        self._check_all_topics_have_same_cluster_type(
+            topic_to_consumer_topic_state_map
+        )
         self.topic_to_partition_map = {}
-        for topic_name, consumer_topic_state in topic_to_consumer_topic_state_map.iteritems():
-            topic = self._get_topic_from_topic_name(topic_name)
-            self.topic_to_partition_map[topic] = (
-                consumer_topic_state.partition_offset_map.keys()
-                if consumer_topic_state else None
-            )
+        for (
+            topic_name, consumer_topic_state
+        ) in topic_to_consumer_topic_state_map.iteritems():
+            topics = self._get_valid_topics_in_region_from_topic_name(topic_name)
+            for topic in topics:
+                self.topic_to_partition_map[topic] = (
+                    consumer_topic_state.partition_offset_map.keys()
+                    if consumer_topic_state else None
+                )
         self._set_registrar_tracked_schema_ids(topic_to_consumer_topic_state_map)
 
-    def _get_topic_from_topic_name(self, topic_name):
+    def _get_valid_topics_in_region_from_topic_name(self, topic_name):
         if self.cluster_type is 'scribe':
             topics_in_region = discovery.get_region_logs_stream(
                 client_id=self.client_name,
                 stream=topic_name,
                 region=self.cluster_name
             )
-            if len(topics_in_region) > 1:
-                clusters = [cluster_config.name
-                            for _, cluster_config in topics_in_region]
-                raise TopicFoundInMultipleRegionsError(
-                    "Topic `{}` found in multiple `{}` kafka type clusters in "
-                    "regions: {}".format(
-                        topic_name,
-                        self.cluster_type,
-                        clusters
-                    )
+            if not topics_in_region:
+                raise TopicNotFoundInRegionError(
+                    topic_name,
+                    self.cluster_type,
+                    self.cluster_name
                 )
-            topic_list, _ = topics_in_region[0]
-            return topic_list[0]
+            topics, _ = topics_in_region[0]
+            return topics
         else:
             topics_in_region = discovery.search_topic(
                 topic=topic_name,
@@ -309,15 +314,11 @@ class BaseConsumer(Client):
             )
             if not topics_in_region:
                 raise TopicNotFoundInRegionError(
-                    "Topic `{}` not found in `{}` kafka type cluster in `{}` "
-                    "region".format(
-                        topic_name,
-                        self.cluster_type,
-                        self._region_cluster_config.name
-                    )
+                    topic_name,
+                    self.cluster_type,
+                    self._region_cluster_config.name
                 )
-            topic_list, _ = topics_in_region[0]
-            return topic_name
+            return [topic for topic, _ in topics_in_region]
 
     def _set_registrar_tracked_schema_ids(self, topic_to_consumer_topic_state_map):
         """
@@ -334,10 +335,7 @@ class BaseConsumer(Client):
     @cached_property
     def kafka_client(self):
         """ Returns the `KafkaClient` object."""
-        return discovery.get_kafka_connection(
-            cluster_type=self.cluster_type,
-            client_id=self.client_name
-        )
+        return KafkaClient(self._region_cluster_config.broker_list)
 
     @property
     def client_type(self):
@@ -703,7 +701,7 @@ class BaseConsumer(Client):
         """ The ClusterConfig for Kafka cluster to connect to. If cluster_name
         is not specified, it will default to the value set in Config"""
         if self.cluster_name:
-            return discovery.get_region_cluster(
+            return discovery.get_kafka_cluster(
                 cluster_type=self.cluster_type,
                 client_id=self.client_name,
                 region=self.cluster_name
