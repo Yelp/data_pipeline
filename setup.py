@@ -34,7 +34,7 @@ setup(
         'data-pipeline-avro-util>=0.2.1',
         'enum34>=1.0.4',
         'frozendict==0.5',
-        'kafka-python==0.9.5.post6',
+        'kafka-python<1.0.0',
         'kafka-utils>0.3.3',
         'psutil==4.2.0',
         'pycrypto>=2.6.1',
