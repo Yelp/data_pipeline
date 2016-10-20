@@ -10,7 +10,6 @@ import sys
 import time
 from optparse import OptionGroup
 
-import attr
 import psutil
 from cached_property import cached_property
 from yelp_batch import BatchDaemon
@@ -28,34 +27,52 @@ from data_pipeline.zookeeper import ZKLock
 
 SCHEMATIZER_POLL_FREQUENCY_SECONDS = 5
 COMPLETE_STATUSES = {RefreshStatus.SUCCESS, RefreshStatus.FAILED}
+INACTIVE_STATUSES = {RefreshStatus.NOT_STARTED, RefreshStatus.PAUSED}
 DEFAULT_PER_SOURCE_THROUGHPUT_CAP = 50
 DEFAULT_TOTAL_THROUGHPUT_CAP = 1000
 
 
-@attr.s
 class RefreshJob(object):
-    refresh_id = attr.ib()
-    cap = attr.ib()
-    priority = attr.ib()
-    status = attr.ib()
-    source = attr.ib()
-    throughput = attr.ib(default=0)
-    last_throughput = attr.ib(default=0)
-    pid = attr.ib(default=None)
+    def __init__(
+        self,
+        refresh_id,
+        cap,
+        priority,
+        status,
+        source,
+        throughput=0,
+        last_throughput=0,
+        pid=None
+    ):
+        self.refresh_id = refresh_id
+        self.cap = cap
+        self.priority = priority
+        self.status = status
+        self.source = source
+        self.throughput = throughput
+        self.last_throughput = last_throughput
+        self.pid = pid
 
     def should_modify(self):
+        """A job should be modified rather than ran or paused if
+        for some reason, a _running_ job's throughput has changed.
+        If this happens for some reason, the job needs to be paused
+        and restarted to get the proper throughput."""
         return (self.status == RefreshStatus.IN_PROGRESS and
                 self.last_throughput and
                 self.last_throughput != self.throughput)
 
     def should_run(self):
-        return (self.status != RefreshStatus.IN_PROGRESS and
+        return (self.status in INACTIVE_STATUSES and
                 self.throughput and
                 not self.last_throughput)
 
     def should_pause(self):
-        return (self.status != RefreshStatus.IN_PROGRESS and
+        return (self.status == RefreshStatus.IN_PROGRESS and
                 not self.throughput)
+
+    def is_active(self):
+        return self.pid is not None and self.status not in COMPLETE_STATUSES
 
 
 class FullRefreshManager(BatchDaemon):
@@ -88,13 +105,17 @@ class FullRefreshManager(BatchDaemon):
     @batch_command_line_options
     def define_options(self, option_parser):
         opt_group = OptionGroup(option_parser, 'Full Refresh Manager Options')
-
         opt_group.add_option(
-            '--namespace',
-            type=str,
-            default=None,
-            help='Name of the namespace this refresh manager will handle. Expected format: '
-            '"cluster.database"'
+            '--cluster',
+            dest='cluster',
+            default='refresh_primary',
+            help='Required: Specifies table cluster (default: %default).'
+        )
+        opt_group.add_option(
+            '--database',
+            dest='database',
+            help='Specify the database to switch to after connecting to the '
+                 'cluster.'
         )
         opt_group.add_option(
             '--config-path',
@@ -129,10 +150,14 @@ class FullRefreshManager(BatchDaemon):
 
     @batch_configure
     def _init_global_state(self):
-        if self.options.namespace is None:
-            raise ValueError("--namespace is required to be defined")
-        self.namespace = self.options.namespace
-        self._set_cluster_and_database()
+        if self.options.database is None:
+            raise ValueError("--database is required to be defined")
+        self.cluster = self.options.cluster
+        self.database = self.options.database
+        self.namespace = DBSourcedNamespace(
+            cluster=self.cluster,
+            database=self.database
+        ).get_name()
         self.config_path = self.options.config_path
         self.dry_run = self.options.dry_run
         self.per_source_throughput_cap = self.options.per_source_throughput_cap
@@ -141,11 +166,6 @@ class FullRefreshManager(BatchDaemon):
         self.refresh_runner_path = self.get_refresh_runner_path()
         # Removing the cmd line arguments to prevent child process error.
         sys.argv = sys.argv[:1]
-
-    def _set_cluster_and_database(self):
-        namespace_info = DBSourcedNamespace.create_from_namespace_name(self.namespace)
-        self.cluster = namespace_info.cluster
-        self.database = namespace_info.database
 
     def get_refresh_runner_path(self):
         return os.path.join(
@@ -169,7 +189,7 @@ class FullRefreshManager(BatchDaemon):
 
     def get_primary_key_from_topic(self, topic):
         primary_keys = topic.primary_keys
-        if len(primary_keys):
+        if primary_keys:
             # The refresh runner doesn't like composite keys, and gets by just fine using only one of them
             primary_key = primary_keys[0]
         else:
@@ -285,17 +305,10 @@ class FullRefreshManager(BatchDaemon):
         )
 
     def get_next_refresh(self):
-        not_started_requests = self.schematizer.get_refreshes_by_criteria(
-            self.namespace,
-            RefreshStatus.NOT_STARTED,
-            updated_after=self.last_updated_timestamp
-        )
-        paused_requests = self.schematizer.get_refreshes_by_criteria(
-            self.namespace,
-            RefreshStatus.PAUSED,
-            updated_after=self.last_updated_timestamp
-        )
-        requests = not_started_requests + paused_requests
+        requests = self.get_refreshes_of_statuses([
+            RefreshStatus.FAILED,
+            RefreshStatus.NOT_STARTED
+        ])
         self.log.debug("Sending {} refresh requests to refresh_queue".format(
             len(requests)
         ))
@@ -369,17 +382,17 @@ class FullRefreshManager(BatchDaemon):
             self.run_job(job)
 
     def delete_inactive_jobs(self):
-        sources_to_remove = []
-        for source, refresh_job in self.active_refresh_jobs.iteritems():
-            if refresh_job.pid is None or refresh_job.status in COMPLETE_STATUSES:
-                sources_to_remove.append(source)
-        for source in sources_to_remove:
-            del self.active_refresh_jobs[source]
+        self.active_refresh_jobs = {
+            source: refresh_job for source, refresh_job
+            in self.active_refresh_jobs.items()
+            if refresh_job.is_active()
+        }
 
-    def _should_replace_running_job(self, candidate_job):
+    def _should_run_new_job(self, candidate_job):
         source = candidate_job.source
-        running_job = self.active_refresh_jobs[source]
-        return (running_job.status in COMPLETE_STATUSES or
+        running_job = self.active_refresh_jobs.get(source, None)
+        return (not running_job or
+                running_job.status in COMPLETE_STATUSES or
                 running_job.priority < candidate_job.priority)
 
     def _remove_running_job(self, source):
@@ -398,10 +411,9 @@ class FullRefreshManager(BatchDaemon):
             status=refresh_to_add.status,
             source=source
         )
-        if source not in self.active_refresh_jobs:
-            self.active_refresh_jobs[source] = new_refresh_job
-        elif self._should_replace_running_job(new_refresh_job):
-            self._remove_running_job(source)
+        if self._should_run_new_job(new_refresh_job):
+            if source in self.active_refresh_jobs:
+                self._remove_running_job(source)
             self.active_refresh_jobs[source] = new_refresh_job
 
     def update_running_jobs_with_refresh_set(self, refresh_set):
@@ -426,16 +438,33 @@ class FullRefreshManager(BatchDaemon):
             if job.pid is not None:
                 self.pause_job(job)
 
+    def get_refreshes_of_statuses(self, statuses):
+        refreshes = []
+        for status in statuses:
+            refreshes += self.schematizer.get_refreshes_by_criteria(
+                self.namespace,
+                status,
+                updated_after=self.last_updated_timestamp
+            )
+        return refreshes
+
     def reset_running_refresh_statuses(self):
-        for source, running_job in self.active_refresh_jobs.iteritems():
-            running_job.status = self.schematizer.get_refresh_by_id(
-                running_job.refresh_id
-            ).status
+        started_refreshes = self.get_refreshes_of_statuses([
+            RefreshStatus.IN_PROGRESS,
+            RefreshStatus.SUCCESS,
+            RefreshStatus.FAILED
+        ])
+        for refresh in started_refreshes:
+            source = refresh.source_name
+            refresh_job = self.active_refresh_jobs.get(source, None)
+            if refresh_job:
+                refresh_job.status = refresh.status
 
     def step(self):
         self.set_zombie_refreshes_to_fail()
+        if self.active_refresh_jobs:
+            self.reset_running_refresh_statuses()
         next_refresh_set = self.get_next_refresh()
-        self.reset_running_refresh_statuses()
         self.update_running_jobs_with_refresh_set(next_refresh_set)
         self.reallocate_throughput()
         to_run_jobs, to_modify_jobs, to_pause_jobs = self.update_job_actions()

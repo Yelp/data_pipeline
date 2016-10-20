@@ -79,6 +79,8 @@ class PriorityRefreshQueue(object):
     def pop(self, source_name):
         """Removes and returns the top refresh for the given source using its name
         (Note: source_name does not include its namespace)"""
+        assert source_name in self.source_to_refresh_queue, \
+            "Trying to pop from empty queue ({})".format(source_name)
         refresh_id = self.source_to_refresh_queue[source_name].pop(0)
         item = self.refresh_ref.pop(refresh_id)
         if not self.source_to_refresh_queue[source_name]:

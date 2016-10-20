@@ -47,7 +47,6 @@ setup(
     ],
     extras_require={
         'tools': [
-            'attr>=0.1.0',
             # yelp_clog isn't compatible with triftpy 0.2.0, which is an
             # implicit dependency of yelp_batch
             'thriftpy<0.2.0',

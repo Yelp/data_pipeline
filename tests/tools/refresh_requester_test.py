@@ -75,8 +75,7 @@ class TestFullRefreshRequester(object):
                 '--offset=0'
             ]
         )
-        refresh_requester.run()
-        actual_refresh = refresh_requester.schematizer.get_refresh_by_id(refresh_requester.request.refresh_id)
+        actual_refresh = refresh_requester.create_request()
         self._check_refresh(actual_refresh, source.name, None)
 
     def test_valid_run_namespace_source_name(self, refresh_requester, source):
@@ -89,8 +88,7 @@ class TestFullRefreshRequester(object):
                 '--offset=0'
             ]
         )
-        refresh_requester.run()
-        actual_refresh = refresh_requester.schematizer.get_refresh_by_id(refresh_requester.request.refresh_id)
+        actual_refresh = refresh_requester.create_request()
         self._check_refresh(actual_refresh, source.name, None)
 
     def test_invalid_run_namespace_source_name_not_found(self, refresh_requester, source):
@@ -117,8 +115,7 @@ class TestFullRefreshRequester(object):
                 '--avg-rows-per-second-cap=100'
             ]
         )
-        refresh_requester.run()
-        actual_refresh = refresh_requester.schematizer.get_refresh_by_id(refresh_requester.request.refresh_id)
+        actual_refresh = refresh_requester.create_request()
         self._check_refresh(actual_refresh, source.name, 100)
 
     def _check_refresh(self, refresh, source_name, avg_rows_per_second_cap):

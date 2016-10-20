@@ -38,6 +38,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
     is_readonly_batch = False
     DEFAULT_TOPOLOGY_PATH = "/nail/srv/configs/topology.yaml"
     DEFAULT_AVG_ROWS_PER_SECOND_CAP = 50
+    REFRESH_UPDATE_INTERVAL = 25
 
     def __init__(self):
         super(FullRefreshRunner, self).__init__()
@@ -137,7 +138,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             '--offset',
             type='int',
             default=0,
-            help='The row number to start the refresh from (useful for when restarting '
+            help='The first primary key to start the refresh from (useful for when restarting '
                  'a paused refresh). (default: %default).'
         )
         opt_group.add_option(
@@ -348,8 +349,9 @@ class FullRefreshRunner(Batch, BatchDBMixin):
                 temp_table=self.temp_table
             )
             self._execute_query(session, query)
-            self.log.info("Dropped table: {table}".format(table=self.temp_table))
+            self.log.info("Dropping table: {table}".format(table=self.temp_table))
             self._commit(session)
+            self.log.info("Dropped table: {table}".format(table=self.temp_table))
 
     def setup_transaction(self, session):
         self._use_db(session)
@@ -429,12 +431,12 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.process_row_start_time = time.time()
             with self.write_session() as session:
                 self.setup_transaction(session)
-                min_batch = min_pk + self.batch_size
-                inserted = self.count_inserted(session, min_pk, min_batch)
-                self.insert_batch(session, min_pk, min_batch)
+                batch_max_pk = min_pk + self.batch_size
+                inserted = self.count_inserted(session, min_pk, batch_max_pk)
+                self.insert_batch(session, min_pk, batch_max_pk)
                 self._after_processing_rows(session, inserted)
-            self.offset = min_pk
-            min_pk = min_batch
+            self.offset = batch_max_pk
+            min_pk = batch_max_pk
             self.processed_row_count += inserted
 
         if self.refresh_id:
@@ -462,7 +464,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self.schematizer.update_refresh(
             refresh_id=self.refresh_id,
             status=RefreshStatus.PAUSED,
-            offset=self.min_pk
+            offset=self.offset
         )
         os._exit(1)
 

@@ -57,7 +57,7 @@ class FullRefreshRequester(Batch):
             dest='offset',
             type='int',
             default=0,
-            help='Row offset to start refreshing from. '
+            help='Primary key id to start refreshing from. '
                  '(default: %default)'
         )
         opt_group.add_option(
@@ -116,35 +116,34 @@ class FullRefreshRequester(Batch):
             self.options.namespace
         ):
             raise ValueError("Cannot use both --source-id and either of --namespace and --source-name")
-
         load_package_config(self.options.config_path)
         self.schematizer = get_schematizer()
+        source_ids = self.get_source_ids()
+        if len(source_ids) == 0:
+            raise ValueError("Found no sources with namespace_name {} and source_name {}".format(
+                self.options.namespace, self.options.source_name
+            ))
+        elif len(source_ids) > 1:
+            raise ValueError(
+                "Pair of namespace_name {} and source_name {} somehow received more than one source. "
+                "Investigation as to how is recommended.".format(
+                    self.options.namespace, self.options.source_name
+                )
+            )
+        self.source_id = source_ids[0]
 
-    @property
-    def source_id(self):
+    def get_source_ids(self):
         if self.options.source_id:
-            return self.options.source_id
-        source_ids = [
+            return [self.options.source_id]
+        return [
             source.source_id
             for source in self.schematizer.get_sources_by_namespace(
                 self.options.namespace
             ) if source.name == self.options.source_name
         ]
-        if len(source_ids) == 1:
-            return source_ids[0]
-        elif len(source_ids) == 0:
-            raise ValueError("Found no sources with namespace_name {} and source_name {}".format(
-                self.options.namespace, self.options.source_name
-            ))
-        raise ValueError(
-            "Pair of namespace_name {} and source_name {} somehow received more than one source. "
-            "Investigation as to how is recommended.".format(
-                self.options.namespace, self.options.source_name
-            )
-        )
 
-    def run(self):
-        self.request = self.schematizer.create_refresh(
+    def create_request(self):
+        return self.schematizer.create_refresh(
             source_id=self.source_id,
             offset=self.options.offset,
             batch_size=self.options.batch_size,
@@ -152,12 +151,15 @@ class FullRefreshRequester(Batch):
             filter_condition=self.options.filter_condition,
             avg_rows_per_second_cap=self.options.avg_rows_per_second_cap
         )
+
+    def run(self):
+        request = self.create_request()
         self.log.info(
             "Refresh registered with refresh id: {rid} "
             "on source: {source_name}, namespace: {namespace_name}".format(
-                rid=self.request.refresh_id,
-                source_name=self.request.source_name,
-                namespace_name=self.request.namespace_name
+                rid=request.refresh_id,
+                source_name=request.source_name,
+                namespace_name=request.namespace_name
             )
         )
 

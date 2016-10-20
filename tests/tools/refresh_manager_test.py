@@ -14,7 +14,6 @@ from data_pipeline.schematizer_clientlib.models.refresh import Priority
 from data_pipeline.schematizer_clientlib.models.refresh import RefreshStatus
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.tools.refresh_manager import FullRefreshManager
-from data_pipeline.tools.refresh_manager import RefreshJob
 
 DEFAULT_CAP = 50
 
@@ -34,32 +33,13 @@ class TestFullRefreshManager(object):
                 ]
             })
 
-    def _create_job_from_refresh(
-        self,
-        refresh,
-        throughput=0,
-        last_throughput=0,
-        status=None,
-        pid=None
-    ):
-        return RefreshJob(
-            refresh_id=refresh.refresh_id,
-            pid=pid,
-            throughput=throughput,
-            last_throughput=last_throughput,
-            cap=refresh.avg_rows_per_second_cap or DEFAULT_CAP,
-            source=refresh.source_name,
-            priority=refresh.priority,
-            status=status or refresh.status
-        )
-
     @property
     def config_path(self):
         return '/nail/srv/configs/data_pipeline_tools.yaml'
 
     @property
     def source_owner_email(self):
-        return "bam+test+introspection@yelp.com"
+        return "bam+test+refresh+manager@yelp.com"
 
     @property
     def pid(self):
@@ -160,14 +140,15 @@ class TestFullRefreshManager(object):
         )
 
     @pytest.fixture
-    def refresh_manager(self, fake_namespace):
+    def refresh_manager(self, fake_cluster, fake_database):
         refresh_manager = FullRefreshManager()
         refresh_manager.options = namedtuple(
             'Options',
-            ['namespace', 'config_path', 'dry_run', 'verbose',
+            ['cluster', 'database', 'config_path', 'dry_run', 'verbose',
              'per_source_throughput_cap', 'total_throughput_cap']
         )(
-            fake_namespace,
+            fake_cluster,
+            fake_database,
             self.config_path,
             True,
             0,
@@ -192,13 +173,6 @@ class TestFullRefreshManager(object):
         ) as mock_kill:
             yield mock_kill
 
-    def test_refresh_runner_path(
-        self,
-        refresh_manager
-    ):
-        assert 'data_pipeline/tools/copy_table_to_blackhole_table.py' in \
-            refresh_manager.refresh_runner_path
-
     def test_get_most_recent_topic_name(
         self,
         refresh_manager,
@@ -209,35 +183,6 @@ class TestFullRefreshManager(object):
         assert fake_topic == refresh_manager.get_most_recent_topic(
             fake_source_name, fake_namespace
         )
-
-    def test_job_construction(
-        self,
-        refresh_manager,
-        real_refresh,
-        high_priority_real_refresh,
-        fake_source,
-        mock_kill
-    ):
-
-        expected_job = self._create_job_from_refresh(
-            real_refresh
-        )
-        expected_high_priority_job = self._create_job_from_refresh(
-            high_priority_real_refresh
-        )
-        refresh_manager.update_running_jobs_with_refresh_set(
-            {fake_source.name: real_refresh}
-        )
-        assert refresh_manager.active_refresh_jobs == {
-            fake_source.name: expected_job
-        }
-        refresh_manager.update_running_jobs_with_refresh_set(
-            {fake_source.name: high_priority_real_refresh}
-        )
-        assert mock_kill.call_count == 1
-        assert refresh_manager.active_refresh_jobs == {
-            fake_source.name: expected_high_priority_job
-        }
 
     def test_step(
         self,
@@ -251,18 +196,6 @@ class TestFullRefreshManager(object):
         mock_popen,
         mock_kill
     ):
-        expected_job = self._create_job_from_refresh(
-            real_refresh,
-            throughput=DEFAULT_CAP,
-            last_throughput=0,
-            pid=self.pid
-        )
-        expected_high_priority_job = self._create_job_from_refresh(
-            high_priority_real_refresh,
-            throughput=DEFAULT_CAP,
-            last_throughput=0,
-            pid=self.pid
-        )
         refresh_manager.step()
         mock_popen.assert_called_once_with(
             # testing refresh_runner_path is a seperate test
@@ -278,28 +211,14 @@ class TestFullRefreshManager(object):
              ]
         )
         assert mock_kill.call_count == 0
-        assert refresh_manager.active_refresh_jobs == {
-            fake_source.name: expected_high_priority_job
-        }
-        assert refresh_manager.refresh_queue.peek() == {
-            fake_source.name: real_refresh
-        }
         high_priority_real_refresh = schematizer.update_refresh(
             high_priority_real_refresh.refresh_id,
             RefreshStatus.IN_PROGRESS,
             0
         )
-        expected_high_priority_job.last_throughput = DEFAULT_CAP
-        expected_high_priority_job.status = RefreshStatus.IN_PROGRESS
         refresh_manager.step()
         assert mock_kill.call_count == 0
         assert mock_popen.call_count == 1
-        assert refresh_manager.active_refresh_jobs == {
-            fake_source.name: expected_high_priority_job
-        }
-        assert refresh_manager.refresh_queue.peek() == {
-            fake_source.name: real_refresh
-        }
         high_priority_real_refresh = schematizer.update_refresh(
             high_priority_real_refresh.refresh_id,
             RefreshStatus.SUCCESS,
@@ -320,19 +239,14 @@ class TestFullRefreshManager(object):
              ]
         )
         assert mock_kill.call_count == 0
-        assert refresh_manager.active_refresh_jobs == {
-            fake_source.name: expected_job
-        }
-        assert refresh_manager.refresh_queue.peek() == {}
         schematizer.update_refresh(
             real_refresh.refresh_id,
             RefreshStatus.SUCCESS,
             0
         )
         refresh_manager.step()
+        assert mock_kill.call_count == 0
         assert mock_popen.call_count == 2
-        assert refresh_manager.active_refresh_jobs == {}
-        assert refresh_manager.refresh_queue.peek() == {}
 
     def test_multisource_step_low_cap(
         self,
@@ -347,27 +261,7 @@ class TestFullRefreshManager(object):
         mock_popen
     ):
         refresh_manager.total_throughput_cap = (DEFAULT_CAP * 2) - 30
-        expected_job = self._create_job_from_refresh(
-            real_refresh_source_two,
-            throughput=DEFAULT_CAP - 30,
-            last_throughput=0,
-            pid=self.pid
-        )
-        expected_high_priority_job = self._create_job_from_refresh(
-            high_priority_real_refresh,
-            throughput=DEFAULT_CAP,
-            last_throughput=0,
-            pid=self.pid
-        )
         refresh_manager.step()
-        assert refresh_manager.active_refresh_jobs == {
-            fake_source.name: expected_high_priority_job,
-            fake_source_two.name: expected_job
-        }
-        assert refresh_manager.sort_sources() == [
-            fake_source.name, fake_source_two.name
-        ]
-        assert refresh_manager.refresh_queue.peek() == {}
         assert mock_popen.call_count == 2
         mock_popen.assert_any_call(
             ['python', refresh_manager.refresh_runner_path,
@@ -408,12 +302,6 @@ class TestFullRefreshManager(object):
         mock_kill
     ):
         refresh_manager.per_source_throughput_cap = 60
-        expected_job = self._create_job_from_refresh(
-            real_refresh,
-            throughput=60,
-            last_throughput=0,
-            pid=self.pid
-        )
         refresh_manager.step()
         mock_popen.assert_called_once_with(
             ['python', refresh_manager.refresh_runner_path,
@@ -427,9 +315,6 @@ class TestFullRefreshManager(object):
              '--dry-run', '--primary-key=id'
              ]
         )
-        assert refresh_manager.active_refresh_jobs == {
-            fake_source.name: expected_job
-        }
         assert mock_kill.call_count == 0
         schematizer.update_refresh(
             real_refresh.refresh_id,
@@ -444,22 +329,12 @@ class TestFullRefreshManager(object):
             filter_condition=None,
             avg_rows_per_second_cap=None
         )
-
         mock_kill.side_effect = lambda pid, signal: schematizer.update_refresh(
             real_refresh.refresh_id,
             status=RefreshStatus.PAUSED,
             offset=500
         )
-
         refresh_manager.step()
-
-        expected_new_job = self._create_job_from_refresh(
-            new_refresh,
-            throughput=DEFAULT_CAP,
-            last_throughput=0,
-            pid=self.pid
-        )
-
         mock_kill.assert_called_once_with(
             self.pid, signal.SIGTERM
         )
@@ -476,6 +351,3 @@ class TestFullRefreshManager(object):
              ]
         )
         assert mock_popen.call_count == 2
-        assert refresh_manager.active_refresh_jobs == {
-            fake_source.name: expected_new_job
-        }

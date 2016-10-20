@@ -8,8 +8,8 @@ from uuid import uuid4
 
 import pytest
 
-from data_pipeline.schematizer_clientlib.models.refresh import _Refresh
 from data_pipeline.schematizer_clientlib.models.refresh import Priority
+from data_pipeline.schematizer_clientlib.models.refresh import Refresh
 from data_pipeline.tools.refresh_manager import PriorityRefreshQueue
 
 
@@ -51,7 +51,8 @@ class TestPriorityRefreshQueue(object):
             'batch_size': 200,
             'filter_condition': None,
             'created_at': fake_created_at,
-            'updated_at': fake_updated_at
+            'updated_at': fake_updated_at,
+            'avg_rows_per_second_cap': None
         }
 
     @pytest.fixture
@@ -59,28 +60,28 @@ class TestPriorityRefreshQueue(object):
         refresh_params['refresh_id'] = 1
         refresh_params['status'] = 'NOT_STARTED'
         refresh_params['priority'] = Priority.MEDIUM.value
-        return _Refresh(**refresh_params).to_result()
+        return Refresh(**refresh_params)
 
     @pytest.fixture
     def paused_refresh_result(self, refresh_params):
         refresh_params['refresh_id'] = 2
         refresh_params['status'] = 'PAUSED'
         refresh_params['priority'] = Priority.MEDIUM.value
-        return _Refresh(**refresh_params).to_result()
+        return Refresh(**refresh_params)
 
     @pytest.fixture
     def high_refresh_result(self, refresh_params):
         refresh_params['refresh_id'] = 3
         refresh_params['status'] = 'NOT_STARTED'
         refresh_params['priority'] = Priority.HIGH.value
-        return _Refresh(**refresh_params).to_result()
+        return Refresh(**refresh_params)
 
     @pytest.fixture
     def complete_refresh_result(self, refresh_params):
         refresh_params['refresh_id'] = 4
         refresh_params['status'] = 'SUCCESS'
         refresh_params['priority'] = Priority.MEDIUM.value
-        return _Refresh(**refresh_params).to_result()
+        return Refresh(**refresh_params)
 
     @pytest.fixture
     def refresh_result_two(self, refresh_params, fake_source_two_name):
@@ -88,7 +89,7 @@ class TestPriorityRefreshQueue(object):
         refresh_params['refresh_id'] = 5
         refresh_params['status'] = 'NOT_STARTED'
         refresh_params['priority'] = Priority.MEDIUM.value
-        return _Refresh(**refresh_params).to_result()
+        return Refresh(**refresh_params)
 
     @pytest.fixture
     def later_created_refresh_result(self, refresh_params, fake_created_at):
@@ -96,11 +97,38 @@ class TestPriorityRefreshQueue(object):
         refresh_params['status'] = 'NOT_STARTED'
         refresh_params['priority'] = Priority.MEDIUM.value
         refresh_params['created_at'] = fake_created_at + timedelta(days=1)
-        return _Refresh(**refresh_params).to_result()
+        return Refresh(**refresh_params)
+
+    @pytest.fixture
+    def later_created_high_refresh_result(self, refresh_params, fake_created_at):
+        refresh_params['refresh_id'] = 7
+        refresh_params['status'] = 'NOT_STARTED'
+        refresh_params['priority'] = Priority.HIGH.value
+        refresh_params['created_at'] = fake_created_at + timedelta(days=2)
+        return Refresh(**refresh_params)
 
     @pytest.fixture
     def priority_refresh_queue(self):
         return PriorityRefreshQueue()
+
+    def test_refresh_queue_no_job(
+        self,
+        priority_refresh_queue,
+        fake_source_name,
+        refresh_result
+    ):
+        assert priority_refresh_queue.peek() == {}
+        with pytest.raises(AssertionError) as e:
+            priority_refresh_queue.pop(fake_source_name)
+            pass
+        assert 'empty queue' in e.value.message
+
+        priority_refresh_queue.add_refreshes_to_queue([refresh_result])
+        assert priority_refresh_queue.pop(fake_source_name) == refresh_result
+        with pytest.raises(AssertionError) as e:
+            priority_refresh_queue.pop(fake_source_name)
+            pass
+        assert 'empty queue' in e.value.message
 
     def test_refresh_queue_single_job(
         self,
@@ -133,6 +161,24 @@ class TestPriorityRefreshQueue(object):
         assert priority_refresh_queue.pop(fake_source_name) == high_refresh_result
         assert priority_refresh_queue.peek() == {fake_source_name: paused_refresh_result}
         assert priority_refresh_queue.pop(fake_source_name) == paused_refresh_result
+        assert priority_refresh_queue.peek() == {fake_source_name: refresh_result}
+        assert priority_refresh_queue.pop(fake_source_name) == refresh_result
+        assert priority_refresh_queue.peek() == {fake_source_name: later_created_refresh_result}
+
+    def test_refresh_queue_time_priority_sort(
+        self,
+        priority_refresh_queue,
+        fake_source_name,
+        refresh_result,
+        later_created_refresh_result,
+        later_created_high_refresh_result
+    ):
+        priority_refresh_queue.add_refreshes_to_queue(
+            [refresh_result, later_created_refresh_result,
+             later_created_high_refresh_result]
+        )
+        assert priority_refresh_queue.peek() == {fake_source_name: later_created_high_refresh_result}
+        assert priority_refresh_queue.pop(fake_source_name) == later_created_high_refresh_result
         assert priority_refresh_queue.peek() == {fake_source_name: refresh_result}
         assert priority_refresh_queue.pop(fake_source_name) == refresh_result
         assert priority_refresh_queue.peek() == {fake_source_name: later_created_refresh_result}
