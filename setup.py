@@ -39,7 +39,7 @@ setup(
         'psutil==4.2.0',
         'pycrypto>=2.6.1',
         'pyopenssl==16.0.0',
-        'pyramid_zipkin>=0.12.0,<0.13.0',
+        'pyramid_zipkin>=0.16.0',
         'PyStaticConfiguration>=0.9.0',
         'simplejson>=2.1.2',
         'swaggerpy>=0.7.6',
