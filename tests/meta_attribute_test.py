@@ -3,7 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import pytest
-from yelp_avro.avro_string_writer import AvroStringWriter
+from data_pipeline_avro_util.avro_string_writer import AvroStringWriter
 
 from data_pipeline.meta_attribute import MetaAttribute
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer

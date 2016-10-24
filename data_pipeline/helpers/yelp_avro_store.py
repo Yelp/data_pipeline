@@ -2,8 +2,8 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from yelp_avro.avro_string_reader import AvroStringReader
-from yelp_avro.avro_string_writer import AvroStringWriter
+from data_pipeline_avro_util.avro_string_reader import AvroStringReader
+from data_pipeline_avro_util.avro_string_writer import AvroStringWriter
 
 from data_pipeline.helpers.singleton import Singleton
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer

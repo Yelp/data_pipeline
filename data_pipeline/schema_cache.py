@@ -6,7 +6,7 @@ import warnings
 from collections import namedtuple
 
 import simplejson
-from yelp_avro.util import get_avro_schema_object
+from data_pipeline_avro_util.util import get_avro_schema_object
 
 from data_pipeline.config import get_config
 
