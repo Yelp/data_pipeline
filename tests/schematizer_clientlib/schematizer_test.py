@@ -4,7 +4,6 @@ from __future__ import unicode_literals
 
 import random
 import time
-from contextlib import contextmanager
 from datetime import datetime
 
 import mock
@@ -30,22 +29,19 @@ class SchematizerClientTestBase(object):
     def schematizer(self, containers):
         return SchematizerClient()
 
-    @contextmanager
     def attach_spy_on_api(self, client, resource_name, api_name):
         # We replace what the client is actually returning instead of just patching
         # since the client creates a new ResourceDecorator on every call of __getattr__
-        client.old_getattr = client.__getattr__
         spied_resource = getattr(client, resource_name)
         callable_operation = getattr(spied_resource, api_name)
 
         def attach_spy(*args, **kwargs):
             return callable_operation(*args, **kwargs)
 
-        with mock.patch.object(
+        setattr(client, resource_name, spied_resource)
+        return mock.patch.object(
             spied_resource, api_name, side_effect=attach_spy
-        ) as spy:
-            setattr(client, resource_name, spied_resource)
-            yield spy
+        )
 
     def _get_creation_timestamp(self, created_at):
         # Must create these vars with tzinfo/no tzinfo in mind while

@@ -13,6 +13,15 @@ from data_pipeline.tools.bootstrapper import FileBootstrapperBase
 from data_pipeline.tools.bootstrapper import MySQLBootstrapper
 
 
+def _assert_logged_api_call(logged_api_call, expected_api, **expected_call_kwargs):
+    assert logged_api_call.call_count == 1
+    call_args = logged_api_call.mock_calls[0]
+    _, args, call_kwargs = call_args
+    assert expected_call_kwargs == call_kwargs
+    assert expected_api.operation == args[0].operation
+    assert len(args) == 1
+
+
 class TestFileBootstrapperBase(object):
 
     @pytest.fixture()
@@ -39,14 +48,6 @@ class TestFileBootstrapperBase(object):
         )
         bootstrapper.logged_api_call = mock.Mock()
         return bootstrapper
-
-    def _assert_logged_api_call(self, logged_api_call, api, **kwargs):
-        assert logged_api_call.call_count == 1
-        call_args = logged_api_call.mock_calls[0]
-        name, args, call_kwargs = call_args
-        assert kwargs == call_kwargs
-        assert api.operation == args[0].operation
-        assert len(args) == 1
 
     def test_bootstrap_files_calls_register_file_for_each_file(
             self,
@@ -134,7 +135,7 @@ class TestFileBootstrapperBase(object):
         expected_schema_obj = json.loads(mock_schema_result.schema)
         expected_schema_obj['doc'] = good_source_ref['doc']
         expected_schema_obj['fields'][0]['doc'] = good_field_ref['doc']
-        self._assert_logged_api_call(
+        _assert_logged_api_call(
             bootstrapper.logged_api_call,
             bootstrapper.api.schemas.register_schema,
             body={
@@ -160,7 +161,7 @@ class TestFileBootstrapperBase(object):
             schema_result=mock_schema_result,
             note='test_note'
         )
-        self._assert_logged_api_call(
+        _assert_logged_api_call(
             bootstrapper.logged_api_call,
             bootstrapper.api.notes.update_note,
             note_id=mock_schema_result.note.id,
@@ -193,7 +194,7 @@ class TestFileBootstrapperBase(object):
             schema_result=mock_schema_result,
             note='test_note'
         )
-        self._assert_logged_api_call(
+        _assert_logged_api_call(
             bootstrapper.logged_api_call,
             bootstrapper.api.notes.create_note,
             body={
@@ -213,7 +214,7 @@ class TestFileBootstrapperBase(object):
             schema_result=mock_schema_result,
             category='test_category'
         )
-        self._assert_logged_api_call(
+        _assert_logged_api_call(
             bootstrapper.logged_api_call,
             bootstrapper.api.sources.update_category,
             source_id=mock_schema_result.topic.source.source_id,
@@ -230,7 +231,7 @@ class TestFileBootstrapperBase(object):
             schema_result=mock_schema_result,
             category='test_category'
         )
-        self._assert_logged_api_call(
+        _assert_logged_api_call(
             bootstrapper.logged_api_call,
             bootstrapper.api.sources.update_category,
             source_id=mock_schema_result.topic.source.source_id,
@@ -268,7 +269,7 @@ class TestFileBootstrapperBase(object):
             schema_json=mock_schema_json,
             fields_ref=good_source_ref['fields']
         )
-        self._assert_logged_api_call(
+        _assert_logged_api_call(
             bootstrapper.logged_api_call,
             bootstrapper.api.schemas.get_schema_elements_by_schema_id,
             schema_id=mock_schema_result.schema_id
@@ -290,7 +291,7 @@ class TestFileBootstrapperBase(object):
             schema_element=mock_schema_element_result,
             note='test_note'
         )
-        self._assert_logged_api_call(
+        _assert_logged_api_call(
             bootstrapper.logged_api_call,
             bootstrapper.api.notes.update_note,
             note_id=mock_schema_element_result.note.id,
@@ -323,7 +324,7 @@ class TestFileBootstrapperBase(object):
             schema_element=mock_schema_element_result,
             note='test_note'
         )
-        self._assert_logged_api_call(
+        _assert_logged_api_call(
             bootstrapper.logged_api_call,
             bootstrapper.api.notes.create_note,
             body={
@@ -347,20 +348,12 @@ class TestAVSCBootstrapper(object):
         bootstrapper.logged_api_call = mock.Mock()
         return bootstrapper
 
-    def _assert_logged_api_call(self, logged_api_call, api, **kwargs):
-        assert logged_api_call.call_count == 1
-        call_args = logged_api_call.mock_calls[0]
-        name, args, call_kwargs = call_args
-        assert kwargs == call_kwargs
-        assert api.operation == args[0].operation
-        assert len(args) == 1
-
     def test_only_avsc_remain_in_file_paths(self, bootstrapper):
         assert bootstrapper.file_paths == {'test.avsc'}
 
     def test_register_avsc(self, bootstrapper, example_schema, good_source_ref):
         bootstrapper.register_avsc(avsc_content=example_schema)
-        self._assert_logged_api_call(
+        _assert_logged_api_call(
             bootstrapper.logged_api_call,
             bootstrapper.api.schemas.register_schema,
             body={
@@ -385,14 +378,6 @@ class TestMySQLBootstrapper(object):
         bootstrapper.logged_api_call = mock.Mock()
         return bootstrapper
 
-    def _assert_logged_api_call(self, logged_api_call, api, **kwargs):
-        assert logged_api_call.call_count == 1
-        call_args = logged_api_call.mock_calls[0]
-        name, args, call_kwargs = call_args
-        assert kwargs == call_kwargs
-        assert api.operation == args[0].operation
-        assert len(args) == 1
-
     def test_only_sql_remain_in_file_paths(self, bootstrapper):
         assert bootstrapper.file_paths == {'test.sql'}
 
@@ -410,7 +395,7 @@ class TestMySQLBootstrapper(object):
             sql_content=mock_sql_content,
             source=good_source_ref['source']
         )
-        self._assert_logged_api_call(
+        _assert_logged_api_call(
             bootstrapper.logged_api_call,
             bootstrapper.api.schemas.register_schema_from_mysql_stmts,
             body={
