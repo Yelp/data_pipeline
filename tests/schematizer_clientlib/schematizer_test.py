@@ -16,6 +16,10 @@ from swaggerpy import exception as swaggerpy_exc
 from data_pipeline.config import get_config
 from data_pipeline.schematizer_clientlib.models.data_source_type_enum import \
     DataSourceTypeEnum
+from data_pipeline.schematizer_clientlib.models.meta_attr_namespace_mapping \
+    import MetaAttributeNamespaceMapping
+from data_pipeline.schematizer_clientlib.models.meta_attr_source_mapping \
+    import MetaAttributeSourceMapping
 from data_pipeline.schematizer_clientlib.models.namespace import Namespace
 from data_pipeline.schematizer_clientlib.models.source import Source
 from data_pipeline.schematizer_clientlib.models.target_schema_type_enum import \
@@ -850,6 +854,282 @@ class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
             assert schema_api_spy.call_count == 0
             assert topic_api_spy.call_count == 0
             assert source_api_spy.call_count == 0
+
+
+class MetaAttrMappingTestBase(SchematizerClientTestBase):
+
+    @pytest.fixture(autouse=True, scope='class')
+    def user_schema(self, yelp_namespace, biz_src_name):
+        return self._register_avro_schema(yelp_namespace, biz_src_name)
+
+    @pytest.fixture
+    def meta_attr_schema_id(self, user_schema):
+        return user_schema.schema_id
+
+    @pytest.fixture
+    def user_namespace(self, user_schema):
+        return user_schema.topic.source.namespace
+
+    @pytest.fixture
+    def user_source(self, user_schema):
+        return user_schema.topic.source
+
+    def register_source_meta_attr_mapping(
+        self,
+        schematizer,
+        source_id,
+        meta_attr_schema_id
+    ):
+        return schematizer.register_source_meta_attr_mapping(
+            source_id,
+            meta_attr_schema_id
+        )
+
+    def register_namespace_meta_attr_mapping(
+        self,
+        schematizer,
+        namespace,
+        meta_attr_schema_id
+    ):
+        return schematizer.register_namespace_meta_attr_mapping(
+            namespace,
+            meta_attr_schema_id
+        )
+
+
+class TestRegisterNamespaceMetaAttrMapping(MetaAttrMappingTestBase):
+
+    def test_register_namespace_meta_attr_mapping(
+        self,
+        schematizer,
+        user_namespace,
+        meta_attr_schema_id
+    ):
+        expected_meta_attr_mapping = MetaAttributeNamespaceMapping(
+            namespace_id=user_namespace.namespace_id,
+            meta_attribute_schema_id=meta_attr_schema_id
+        )
+        actual_meta_attr_mapping = schematizer.register_namespace_meta_attr_mapping(
+            user_namespace.name,
+            meta_attr_schema_id
+        )
+        assert actual_meta_attr_mapping == expected_meta_attr_mapping
+
+    def test_registration_with_empty_namespace(self, schematizer, meta_attr_schema_id):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.register_namespace_meta_attr_mapping(
+                "",
+                meta_attr_schema_id
+            )
+        assert e.value.response.status_code == 400
+
+    def test_registration_with_bad_namespace(self, schematizer, meta_attr_schema_id):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.register_namespace_meta_attr_mapping(
+                "bad_namespace",
+                meta_attr_schema_id
+            )
+        assert e.value.response.status_code == 404
+
+
+class TestDeleteNamespaceMetaAttrMapping(MetaAttrMappingTestBase):
+
+    def test_delete_namespace_meta_attr_mapping(
+        self,
+        schematizer,
+        user_namespace,
+        meta_attr_schema_id
+    ):
+        self.register_namespace_meta_attr_mapping(
+            schematizer,
+            user_namespace.name,
+            meta_attr_schema_id
+        )
+        expected_meta_attr_mapping = MetaAttributeNamespaceMapping(
+            namespace_id=user_namespace.namespace_id,
+            meta_attribute_schema_id=meta_attr_schema_id
+        )
+        actual_meta_attr_mapping = schematizer.delete_namespace_meta_attr_mapping(
+            user_namespace.name,
+            meta_attr_schema_id
+        )
+        assert actual_meta_attr_mapping == expected_meta_attr_mapping
+
+    def test_delete_meta_attr_mapping_with_invalid_namespace(
+        self,
+        schematizer,
+        meta_attr_schema_id
+    ):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.delete_namespace_meta_attr_mapping(
+                "invalid_namespace",
+                meta_attr_schema_id
+            )
+        assert e.value.response.status_code == 404
+
+    def test_delete_meta_attr_mapping_with_empty_namespace(
+        self,
+        schematizer,
+        meta_attr_schema_id
+    ):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.delete_namespace_meta_attr_mapping(
+                "",
+                meta_attr_schema_id
+            )
+        assert e.value.response.status_code == 400
+
+
+class TestGetMetaAttrMappingByNamespace(MetaAttrMappingTestBase):
+
+    def test_get_meta_attributes_by_namespace(
+        self,
+        schematizer,
+        user_namespace,
+        meta_attr_schema_id
+    ):
+        self.register_namespace_meta_attr_mapping(
+            schematizer,
+            user_namespace.name,
+            meta_attr_schema_id
+        )
+        expected_meta_attr_mapping = [MetaAttributeNamespaceMapping(
+            namespace_id=user_namespace.namespace_id,
+            meta_attribute_schema_id=meta_attr_schema_id
+        )]
+        actual = schematizer.get_meta_attributes_by_namespace(user_namespace.name)
+        assert expected_meta_attr_mapping == actual
+
+    def test_get_meta_attr_mapping_for_invalid_namespace(
+        self,
+        schematizer,
+    ):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.get_meta_attributes_by_namespace("bad_namespace")
+        assert e.value.response.status_code == 404
+
+
+class TestRegisterSourceMetaAttrMapping(MetaAttrMappingTestBase):
+
+    def test_register_source_meta_attr_mapping(
+        self,
+        schematizer,
+        user_source,
+        meta_attr_schema_id
+    ):
+        expected_meta_attr_mapping = MetaAttributeSourceMapping(
+            source_id=user_source.source_id,
+            meta_attribute_schema_id=meta_attr_schema_id
+        )
+        actual_meta_attr_mapping = schematizer.register_source_meta_attr_mapping(
+            user_source.source_id,
+            meta_attr_schema_id
+        )
+        assert actual_meta_attr_mapping == expected_meta_attr_mapping
+
+    def test_registration_with_invalid_source(self, schematizer, meta_attr_schema_id):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.register_source_meta_attr_mapping(
+                0,
+                meta_attr_schema_id
+            )
+        assert e.value.response.status_code == 404
+
+
+class TestDeleteSourceMetaAttrMapping(MetaAttrMappingTestBase):
+
+    def test_delete_source_meta_attr_mapping(
+        self,
+        schematizer,
+        user_source,
+        meta_attr_schema_id
+    ):
+        self.register_source_meta_attr_mapping(
+            schematizer,
+            user_source.source_id,
+            meta_attr_schema_id
+        )
+        expected_meta_attr_mapping = MetaAttributeSourceMapping(
+            source_id=user_source.source_id,
+            meta_attribute_schema_id=meta_attr_schema_id
+        )
+        actual_meta_attr_mapping = schematizer.delete_source_meta_attr_mapping(
+            user_source.source_id,
+            meta_attr_schema_id
+        )
+        assert actual_meta_attr_mapping == expected_meta_attr_mapping
+
+    def test_delete_meta_attr_mapping_with_invalid_source(
+        self,
+        schematizer,
+        meta_attr_schema_id
+    ):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.delete_source_meta_attr_mapping(
+                0,
+                meta_attr_schema_id
+            )
+        assert e.value.response.status_code == 404
+
+
+class TestGetMetaAttrMappingBySource(MetaAttrMappingTestBase):
+
+    def test_get_meta_attributes_by_source(
+        self,
+        schematizer,
+        user_source,
+        meta_attr_schema_id
+    ):
+        self.register_source_meta_attr_mapping(
+            schematizer,
+            user_source.source_id,
+            meta_attr_schema_id
+        )
+        expected_meta_attr_mapping = [MetaAttributeSourceMapping(
+            source_id=user_source.source_id,
+            meta_attribute_schema_id=meta_attr_schema_id
+        )]
+        actual = schematizer.get_meta_attributes_by_source(user_source.source_id)
+        assert expected_meta_attr_mapping == actual
+
+    def test_get_meta_attr_mapping_for_invalid_source(
+        self,
+        schematizer,
+    ):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.get_meta_attributes_by_source(0)
+        assert e.value.response.status_code == 404
+
+
+class TestGetMetaAttrMappingBySchemaId(MetaAttrMappingTestBase):
+
+    def test_get_meta_attributes_by_schema_id(
+        self,
+        schematizer,
+        yelp_namespace,
+        user_namespace,
+        meta_attr_schema_id
+    ):
+        self.register_namespace_meta_attr_mapping(
+            schematizer,
+            user_namespace.name,
+            meta_attr_schema_id
+        )
+        expected_meta_attr_mapping = [meta_attr_schema_id]
+        schema = self._register_avro_schema(yelp_namespace, "test_src")
+
+        actual = schematizer.get_meta_attributes_by_schema_id(
+            schema.schema_id
+        )
+        assert expected_meta_attr_mapping == actual
+
+    def test_get_meta_attr_mapping_for_invalid_schema_id(
+        self,
+        schematizer,
+    ):
+        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+            schematizer.get_meta_attributes_by_source(0)
+        assert e.value.response.status_code == 404
 
 
 class TestRegisterSchema(SchematizerClientTestBase):
