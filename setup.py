@@ -30,25 +30,20 @@ setup(
         'avro==1.9.0-yelp4',
         'cached-property>=0.1.5',
         'cffi>=1.1.2',
+        'cryptography<=1.3.4',
+        'data-pipeline-avro-util>=0.2.1',
         'enum34>=1.0.4',
-        'kafka-python==0.9.5.post6',
+        'frozendict==0.5',
+        'kafka-python>0.9.4,<1.0.0',
         'kafka-utils>0.3.3',
         'psutil==4.2.0',
         'pycrypto>=2.6.1',
-        'pyramid_zipkin>=0.12.0,<0.13.0',
+        'pyopenssl==16.0.0',
+        'pyramid_zipkin>=0.16.0',
         'PyStaticConfiguration>=0.9.0',
         'simplejson>=2.1.2',
         'swaggerpy>=0.7.6',
-        'swagger_zipkin>=0.1.0',
-        'data-pipeline-avro-util>=0.2.1',
-        # TODO (DATAPIPE-1879|abrar): remove following 3 packages
-        'pysensu-yelp>=0.2.3',
-        'yelp-kafka>=5.0.0',
-        'yelp-servlib>=4.3.0',
-
-        'cryptography<=1.3.4',
-        'pyopenssl==16.0.0',
-        'frozendict==0.5'
+        'swagger_zipkin>=0.1.0'
     ],
     extras_require={
         'tools': [
@@ -77,7 +72,8 @@ setup(
     package_data={
         str('data_pipeline'): [
             'schemas/*.avsc',
-            'testing_helpers/docker-compose.yml'
+            'testing_helpers/docker-compose.yml',
+            'testing_helpers/docker-compose-opensource.yml'
         ],
     },
     scripts=[
