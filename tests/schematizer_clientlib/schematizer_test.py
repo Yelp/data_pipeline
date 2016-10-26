@@ -35,16 +35,21 @@ class SchematizerClientTestBase(object):
 
     def attach_spy_on_api(self, client, resource_name, api_name):
         # We replace what the client is actually returning instead of just patching
-        # since the client creates a new ResourceDecorator on every call of __getattr__
-        spied_resource = getattr(client, resource_name)
-        callable_operation = getattr(spied_resource, api_name)
+        # since the client and the decorator both create new attributes on every call
+        # to __getattr__, see:
+        # https://github.com/Yelp/swagger_zipkin/blob/master/swagger_zipkin/zipkin_decorator.py
+        # (__getattr__ of ZipkinClientDecorator)
+        # https://github.com/Yelp/bravado/blob/master/bravado/client.py
+        # (__getattr__ of ResourceDecorator)
+        resource = getattr(client, resource_name)
+        spied_callable_operation = getattr(resource, api_name)
 
         def attach_spy(*args, **kwargs):
-            return callable_operation(*args, **kwargs)
+            return spied_callable_operation(*args, **kwargs)
 
-        setattr(client, resource_name, spied_resource)
+        setattr(client, resource_name, resource)
         return mock.patch.object(
-            spied_resource, api_name, side_effect=attach_spy
+            resource, api_name, side_effect=attach_spy
         )
 
     def _get_creation_timestamp(self, created_at):
@@ -956,20 +961,18 @@ class TestRegisterNamespaceMetaAttrMapping(MetaAttrMappingTestBase):
         assert actual_meta_attr_mapping == expected_meta_attr_mapping
 
     def test_registration_with_empty_namespace(self, schematizer, meta_attr_schema_id):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPBadRequest):
             schematizer.register_namespace_meta_attr_mapping(
                 namespace_name="",
                 meta_attr_schema_id=meta_attr_schema_id
             )
-        assert e.value.response.status_code == 400
 
     def test_registration_with_bad_namespace(self, schematizer, meta_attr_schema_id):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.register_namespace_meta_attr_mapping(
                 namespace_name="bad_namespace",
                 meta_attr_schema_id=meta_attr_schema_id
             )
-        assert e.value.response.status_code == 404
 
 
 class TestDeleteNamespaceMetaAttrMapping(MetaAttrMappingTestBase):
@@ -1000,24 +1003,22 @@ class TestDeleteNamespaceMetaAttrMapping(MetaAttrMappingTestBase):
         schematizer,
         meta_attr_schema_id
     ):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.delete_namespace_meta_attr_mapping(
                 namespace_name="invalid_namespace",
                 meta_attr_schema_id=meta_attr_schema_id
             )
-        assert e.value.response.status_code == 404
 
     def test_delete_meta_attr_mapping_with_empty_namespace(
         self,
         schematizer,
         meta_attr_schema_id
     ):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPBadRequest):
             schematizer.delete_namespace_meta_attr_mapping(
                 namespace_name="",
                 meta_attr_schema_id=meta_attr_schema_id
             )
-        assert e.value.response.status_code == 400
 
 
 class TestGetMetaAttrMappingByNamespace(MetaAttrMappingTestBase):
@@ -1046,11 +1047,10 @@ class TestGetMetaAttrMappingByNamespace(MetaAttrMappingTestBase):
         self,
         schematizer,
     ):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_meta_attributes_by_namespace(
                 namespace_name="bad_namespace"
             )
-        assert e.value.response.status_code == 404
 
 
 class TestRegisterSourceMetaAttrMapping(MetaAttrMappingTestBase):
@@ -1072,12 +1072,11 @@ class TestRegisterSourceMetaAttrMapping(MetaAttrMappingTestBase):
         assert actual_meta_attr_mapping == expected_meta_attr_mapping
 
     def test_registration_with_invalid_source(self, schematizer, meta_attr_schema_id):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.register_source_meta_attr_mapping(
                 source_id=0,
                 meta_attr_schema_id=meta_attr_schema_id
             )
-        assert e.value.response.status_code == 404
 
 
 class TestDeleteSourceMetaAttrMapping(MetaAttrMappingTestBase):
@@ -1108,12 +1107,11 @@ class TestDeleteSourceMetaAttrMapping(MetaAttrMappingTestBase):
         schematizer,
         meta_attr_schema_id
     ):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.delete_source_meta_attr_mapping(
                 source_id=0,
                 meta_attr_schema_id=meta_attr_schema_id
             )
-        assert e.value.response.status_code == 404
 
 
 class TestGetMetaAttrMappingBySource(MetaAttrMappingTestBase):
@@ -1140,9 +1138,8 @@ class TestGetMetaAttrMappingBySource(MetaAttrMappingTestBase):
         self,
         schematizer,
     ):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_meta_attributes_by_source(source_id=0)
-        assert e.value.response.status_code == 404
 
 
 class TestGetMetaAttrMappingBySchemaId(MetaAttrMappingTestBase):
@@ -1171,9 +1168,8 @@ class TestGetMetaAttrMappingBySchemaId(MetaAttrMappingTestBase):
         self,
         schematizer,
     ):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_meta_attributes_by_source(0)
-        assert e.value.response.status_code == 404
 
 
 class TestRegisterSchema(SchematizerClientTestBase):
