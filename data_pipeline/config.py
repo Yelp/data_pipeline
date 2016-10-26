@@ -6,9 +6,9 @@ import logging
 import os
 
 import staticconf
+from bravado.client import SwaggerClient
 from cached_property import cached_property
 from kafka_utils.util.config import ClusterConfig
-from swaggerpy import client
 
 
 namespace = 'data_pipeline'
@@ -113,13 +113,13 @@ class Config(object):
 
     @property
     def schematizer_client(self):
-        """Returns a swagger-py client for the schematizer api.
+        """Returns a bravado client for the schematizer api.
 
         By default, this will connect to a schematizer instance running in the
         included docker-compose file.
         """
-        return client.get_client(
-            'http://{0}/api-docs'.format(self.schematizer_host_and_port)
+        return SwaggerClient.from_url(
+            'http://{0}/swagger.json'.format(self.schematizer_host_and_port)
         )
 
     @property
