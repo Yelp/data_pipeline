@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 import warnings
 
+import mock
 import pytest
 from kafka import create_message
 from kafka.common import OffsetAndMessage
@@ -15,6 +16,7 @@ from data_pipeline.message import create_from_offset_and_message
 from data_pipeline.message import CreateMessage
 from data_pipeline.message import InvalidOperation
 from data_pipeline.message import MetaAttribute
+from data_pipeline.message import MissingMetaAttributeException
 from data_pipeline.message import NoEntryPayload
 from data_pipeline.message import PayloadFieldDiff
 from data_pipeline.message_type import _ProtectedMessageType
@@ -203,6 +205,23 @@ class SharedMessageTest(object):
         )
         assert dry_run_message.meta[0].schema_id == valid_meta_param[0].schema_id
         assert dry_run_message.meta[0].payload_data == meta_attr_payload_data
+
+    def test_missing_mandatory_meta_attributes(
+        self,
+        valid_message_data,
+        valid_meta_param,
+    ):
+        invalid_meta_attr_ids = [valid_meta_param[-1].schema_id + 10]
+        with mock.patch.object(
+            get_schematizer(),
+            'get_meta_attributes_by_schema_id',
+            return_value=invalid_meta_attr_ids
+        ):
+            with pytest.raises(MissingMetaAttributeException):
+                self._get_dry_run_message_with_meta(
+                    valid_message_data,
+                    valid_meta_param
+                )
 
     def test_dry_run(self, valid_message_data):
         payload_data = {'data': 'test'}

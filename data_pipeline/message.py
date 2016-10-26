@@ -36,6 +36,10 @@ PayloadFieldDiff = namedtuple('PayloadFieldDiff', [
 ])
 
 
+class MissingMetaAttributeException(Exception):
+    pass
+
+
 class NoEntryPayload(object):
     """ This class denotes that no previous value exists for the field. """
     pass
@@ -239,10 +243,21 @@ class Message(object):
         self._set_encryption_type_if_necessary()
         return self._meta
 
-    def _set_meta(self, meta):
+    def _set_meta(self, meta, schema_id):
         if (not self._is_valid_optional_type(meta, list) or
                 self._any_invalid_type(meta, MetaAttribute)):
             raise TypeError("Meta must be None or list of MetaAttribute objects.")
+        meta_attr_ids = {
+            meta_attr.schema_id for meta_attr in meta
+        } if meta else set()
+        mandatory_meta_ids = set(
+            self._schematizer.get_meta_attributes_by_schema_id(schema_id)
+        )
+        if not mandatory_meta_ids.issubset(meta_attr_ids):
+            raise MissingMetaAttributeException(
+                "Meta Attributes with `{0}` IDs are not found.".format(
+                    mandatory_meta_ids - meta_attr_ids
+                ))
         self._meta = meta
 
     def get_meta_attr_by_type(self, meta, meta_type):
@@ -410,7 +425,7 @@ class Message(object):
             warnings.simplefilter("always", category=DeprecationWarning)
             warnings.warn("Passing in keys explicitly is deprecated.", DeprecationWarning)
         self._keys = None
-        self._set_meta(meta)
+        self._set_meta(meta, schema_id)
         self._should_be_encrypted_state = None
         self._encryption_type = None
         self._contains_pii = None

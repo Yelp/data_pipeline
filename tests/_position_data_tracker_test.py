@@ -32,6 +32,10 @@ class BasePositionDataTrackerTest(object):
             mock_schematizer_client,
             'get_schema_by_id',
             return_value=mock_schema
+        ), mock.patch.object(
+            mock_schematizer_client,
+            'get_meta_attributes_by_schema_id',
+            return_value=[]
         ):
             yield
 
