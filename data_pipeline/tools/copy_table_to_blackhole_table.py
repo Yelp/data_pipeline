@@ -179,11 +179,14 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self.batch_size = self.options.batch_size
         if self.batch_size <= 0:
             raise ValueError("Batch size should be greater than 0")
+        if not self.options.primary_key:
+            raise ValueError("--primary-key must be specified")
         self.primary_key = self.options.primary_key
         self.where_clause = self.options.where_clause
         self.dry_run = self.options.dry_run
         self.topology_path = self.options.topology_path
         self.refresh_id = self.options.refresh_id
+        self.completed = False
         if self.refresh_id:
             signal.signal(signal.SIGTERM, self.handle_terminate)
             signal.signal(signal.SIGINT, self.handle_interupt)
@@ -441,6 +444,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
         if self.refresh_id:
             # Offset is 0 because it doesn't matter (was a success)
+            self.completed = True
             self.schematizer.update_refresh(refresh_id=self.refresh_id, status=RefreshStatus.SUCCESS, offset=0)
 
     def log_info(self):
@@ -461,14 +465,17 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         os._exit(1)
 
     def handle_terminate(self, signal, frame):
-        self.schematizer.update_refresh(
-            refresh_id=self.refresh_id,
-            status=RefreshStatus.PAUSED,
-            offset=self.offset
-        )
+        if not self.completed:
+            self.schematizer.update_refresh(
+                refresh_id=self.refresh_id,
+                status=RefreshStatus.PAUSED,
+                offset=self.offset
+            )
         os._exit(1)
 
     def run(self):
+        import sys
+        self.log.info("Python Version: {}".format(sys.version_info))
         is_success = True
         try:
             self.initial_action()

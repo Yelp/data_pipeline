@@ -59,6 +59,7 @@ class RefreshJob(object):
         If this happens for some reason, the job needs to be paused
         and restarted to get the proper throughput."""
         return (self.status == RefreshStatus.IN_PROGRESS and
+                self.throughput and
                 self.last_throughput and
                 self.last_throughput != self.throughput)
 
@@ -193,7 +194,8 @@ class FullRefreshManager(BatchDaemon):
             # The refresh runner doesn't like composite keys, and gets by just fine using only one of them
             primary_key = primary_keys[0]
         else:
-            # Fallback in case we get bad data from the schematizer (command line default is 'id')
+            # Fallback in case we get bad data from the schematizer
+            # TODO: DATAPIPE-1988
             primary_key = 'id'
         return primary_key
 
@@ -254,10 +256,10 @@ class FullRefreshManager(BatchDaemon):
 
     def modify_job(self, job):
         self.pause_job(job)
+        os.waitpid(job.pid)
         self.run_job(job)
 
     def set_zombie_refresh_to_fail(self, refresh_job):
-        source = refresh_job.source
         current_pid = refresh_job.pid
         if current_pid is None:
             return
@@ -278,6 +280,7 @@ class FullRefreshManager(BatchDaemon):
                 status=RefreshStatus.FAILED,
                 offset=0
             )
+            source = refresh_job.source
             del self.active_refresh_jobs[source]
         os.kill(current_pid, signal.SIGINT)
 
@@ -304,16 +307,14 @@ class FullRefreshManager(BatchDaemon):
             (max_time - datetime.datetime(1970, 1, 1, tzinfo=max_time.tzinfo)).total_seconds()
         )
 
-    def get_next_refresh(self):
-        requests = self.get_refreshes_of_statuses([
-            RefreshStatus.FAILED,
-            RefreshStatus.NOT_STARTED
-        ])
+    def get_next_refresh(self, updated_refreshes):
+        requests = [
+            ref for ref in updated_refreshes if ref.status in INACTIVE_STATUSES
+        ]
         self.log.debug("Sending {} refresh requests to refresh_queue".format(
             len(requests)
         ))
         self.refresh_queue.add_refreshes_to_queue(requests)
-        self.last_updated_timestamp = self.get_last_updated_timestamp(requests)
         return self.determine_next_refresh_set()
 
     def get_cap(self):
@@ -448,23 +449,48 @@ class FullRefreshManager(BatchDaemon):
             )
         return refreshes
 
-    def reset_running_refresh_statuses(self):
-        started_refreshes = self.get_refreshes_of_statuses([
-            RefreshStatus.IN_PROGRESS,
-            RefreshStatus.SUCCESS,
-            RefreshStatus.FAILED
-        ])
+    def get_updated_refreshes(self):
+        statuses = list(INACTIVE_STATUSES)
+        if self.active_refresh_jobs:
+            statuses += list(COMPLETE_STATUSES)
+            statuses.append(RefreshStatus.IN_PROGRESS)
+        return self.get_refreshes_of_statuses(statuses)
+
+    def reset_running_refresh_statuses(self, updated_refreshes):
+        started_refreshes = [
+            ref for ref in updated_refreshes if ref.status not in INACTIVE_STATUSES
+        ]
         for refresh in started_refreshes:
             source = refresh.source_name
             refresh_job = self.active_refresh_jobs.get(source, None)
             if refresh_job:
                 refresh_job.status = refresh.status
 
+    def error_check_running_refreshes(self, updated_refreshes):
+        inactive_refreshes = [
+            ref for ref in updated_refreshes if ref.status in INACTIVE_STATUSES
+        ]
+        for refresh in inactive_refreshes:
+            active_job = self.active_refresh_jobs.get(
+                refresh.source_name, None)
+            if active_job and active_job.refresh_id == refresh.refresh_id:
+                self.log.error(
+                    "Discrepency found: active_job has an inactive status in"
+                    " schematizer. Refresh ID: {} source_name: {}".format(
+                        active_job.refresh_id, refresh.source_name
+                    )
+                )
+
     def step(self):
         self.set_zombie_refreshes_to_fail()
+        updated_refreshes = self.get_updated_refreshes()
+        self.last_updated_timestamp = self.get_last_updated_timestamp(
+            updated_refreshes
+        )
         if self.active_refresh_jobs:
-            self.reset_running_refresh_statuses()
-        next_refresh_set = self.get_next_refresh()
+            self.error_check_running_refreshes(updated_refreshes)
+            self.reset_running_refresh_statuses(updated_refreshes)
+        next_refresh_set = self.get_next_refresh(updated_refreshes)
         self.update_running_jobs_with_refresh_set(next_refresh_set)
         self.reallocate_throughput()
         to_run_jobs, to_modify_jobs, to_pause_jobs = self.update_job_actions()

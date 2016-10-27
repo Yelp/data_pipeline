@@ -8,9 +8,10 @@ from uuid import uuid4
 
 import pytest
 
+from data_pipeline.helpers.priority_refresh_queue import EmptyQueueError
+from data_pipeline.helpers.priority_refresh_queue import PriorityRefreshQueue
 from data_pipeline.schematizer_clientlib.models.refresh import Priority
 from data_pipeline.schematizer_clientlib.models.refresh import Refresh
-from data_pipeline.tools.refresh_manager import PriorityRefreshQueue
 
 
 @pytest.mark.usefixures('containers')
@@ -118,17 +119,16 @@ class TestPriorityRefreshQueue(object):
         refresh_result
     ):
         assert priority_refresh_queue.peek() == {}
-        with pytest.raises(AssertionError) as e:
+        with pytest.raises(EmptyQueueError) as e:
             priority_refresh_queue.pop(fake_source_name)
-            pass
-        assert 'empty queue' in e.value.message
+        assert fake_source_name in e.value.message
 
         priority_refresh_queue.add_refreshes_to_queue([refresh_result])
         assert priority_refresh_queue.pop(fake_source_name) == refresh_result
-        with pytest.raises(AssertionError) as e:
+        with pytest.raises(EmptyQueueError) as e:
             priority_refresh_queue.pop(fake_source_name)
             pass
-        assert 'empty queue' in e.value.message
+        assert fake_source_name in e.value.message
 
     def test_refresh_queue_single_job(
         self,

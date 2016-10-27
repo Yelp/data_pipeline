@@ -5,18 +5,29 @@ from __future__ import unicode_literals
 from data_pipeline.schematizer_clientlib.models.refresh import RefreshStatus
 
 
+class EmptyQueueError(Exception):
+    def __init__(self, source_name):
+        Exception.__init__(
+            self, "Trying to pop from empty queue ({})".format(source_name)
+        )
+
+
 class PriorityRefreshQueue(object):
     """
-    PriorityQueue that sorts each source's queue by age, status and priority in that order,
-    and then sorts sources by the top refresh in their queue with the same scheme.
+    PriorityRefreshQueue orders jobs in the queue by:
+    - higher priority > lower priority
+    - paused status > not_started status
+    - older > newer
+    in that order of preference
+    (i.e an older paused job will be beaten by any job with a higher priority)
 
     The only public ways to add/remove jobs from this queue are add_refreshes_to_queue and pop.
 
     We could implement this faster, but this is unnecessary as we have ample time between
     schematizer polls.
 
-    Works for multiple sources within a single namespace but not across namespaces (since source_names
-    are only unique within a namespace).
+    Works for multiple sources within a single namespace but not across namespaces
+    (since source_names are only unique within a namespace).
     """
 
     def __init__(self):
@@ -79,8 +90,8 @@ class PriorityRefreshQueue(object):
     def pop(self, source_name):
         """Removes and returns the top refresh for the given source using its name
         (Note: source_name does not include its namespace)"""
-        assert source_name in self.source_to_refresh_queue, \
-            "Trying to pop from empty queue ({})".format(source_name)
+        if source_name not in self.source_to_refresh_queue:
+            raise EmptyQueueError(source_name)
         refresh_id = self.source_to_refresh_queue[source_name].pop(0)
         item = self.refresh_ref.pop(refresh_id)
         if not self.source_to_refresh_queue[source_name]:

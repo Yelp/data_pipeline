@@ -85,8 +85,8 @@ class FullRefreshRequester(Batch):
         )
         opt_group.add_option(
             '--avg-rows-per-second-cap',
-            help='Caps the throughput per second. Important since without any control for this '
-            'the batch can cause signifigant pipeline delays. (default: %default)',
+            help='Caps the throughput per second. Important since without any control for this'
+            ' the batch can cause signifigant pipeline delays. (default: %default)',
             type='int',
             default=None
         )
@@ -110,23 +110,29 @@ class FullRefreshRequester(Batch):
             self.options.source_name and
             self.options.namespace
         ):
-            raise ValueError("--source-id or both of--source-name and --namespace must be defined")
+            raise ValueError(
+                "--source-id or both of--source-name and --namespace must be defined"
+            )
         if self.options.source_id and (
             self.options.source_name or
             self.options.namespace
         ):
-            raise ValueError("Cannot use both --source-id and either of --namespace and --source-name")
+            raise ValueError(
+                "Cannot use both --source-id and either of --namespace and --source-name"
+            )
         load_package_config(self.options.config_path)
         self.schematizer = get_schematizer()
         source_ids = self.get_source_ids()
         if len(source_ids) == 0:
-            raise ValueError("Found no sources with namespace_name {} and source_name {}".format(
-                self.options.namespace, self.options.source_name
-            ))
+            raise ValueError(
+                "Found no sources with namespace_name {} and source_name {}".format(
+                    self.options.namespace, self.options.source_name
+                )
+            )
         elif len(source_ids) > 1:
             raise ValueError(
-                "Pair of namespace_name {} and source_name {} somehow received more than one source. "
-                "Investigation as to how is recommended.".format(
+                "Pair of namespace_name {} and source_name {} somehow received more than one"
+                " source. Investigation as to how is recommended.".format(
                     self.options.namespace, self.options.source_name
                 )
             )
