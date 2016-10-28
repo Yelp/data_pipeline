@@ -765,6 +765,34 @@ class TestGetSourcesByNamespace(GetSourcesTestBase):
             assert actual == sources[0]
             assert source_api_spy.call_count == 0
 
+    def test_get_sources_with_min_id(
+            self,
+            schematizer,
+            yelp_namespace,
+            biz_src,
+            usr_src
+    ):
+        actual = schematizer.get_sources_by_namespace(
+            yelp_namespace,
+            min_id=biz_src.source_id + 1
+        )
+        expected = [usr_src]
+        self._assert_source_values(actual, expected)
+
+    def test_get_sources_with_count(
+            self,
+            schematizer,
+            yelp_namespace,
+            biz_src,
+            usr_src
+    ):
+        actual = schematizer.get_sources_by_namespace(
+            yelp_namespace,
+            count=1
+        )
+        expected = [biz_src]
+        self._assert_source_values(actual, expected)
+
 
 class TestGetTopicsBySourceId(SchematizerClientTestBase):
 
