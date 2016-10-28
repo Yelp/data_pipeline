@@ -30,11 +30,21 @@ class _BaseRegisterCommand(IntrospectorCommand):
             help="Flag indicating if schema contains pii. More info at y/pii"
         )
 
+        parser.add_argument(
+            "--cluster-type",
+            dest="cluster_type",
+            default='datapipe',
+            help="Kafka cluster type to connect. Defaults to datapipe. "
+                 "Currectly only datapipe and scribe cluster types are "
+                 "supported."
+        )
+
     def process_args(self, args, parser):
         super(_BaseRegisterCommand, self).process_args(args, parser)
         self.process_source_and_namespace_args(args, parser)
         self.source_owner_email = args.source_owner_email
         self.pii = args.pii
+        self.cluster_type = args.cluster_type
 
     def print_schema(self, schema):
         schema_dict = IntrospectorSchema(
