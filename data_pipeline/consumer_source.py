@@ -231,15 +231,9 @@ class NewTopicOnlyInDataTarget(TopicInDataTarget):
 
     def _is_topic_created_after_last_query(self, topic):
         return (
-            topic.created_at.tzinfo and
             topic.created_at >= datetime.fromtimestamp(
                 self.last_query_timestamp,
                 topic.created_at.tzinfo
-            )
-        ) or (
-            not topic.created_at.tzinfo and
-            topic.created_at >= datetime.utcfromtimestamp(
-                self.last_query_timestamp
             )
         )
 

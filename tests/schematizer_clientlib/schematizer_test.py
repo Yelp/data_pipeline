@@ -8,6 +8,7 @@ from datetime import datetime
 
 import mock
 import pytest
+import pytz
 import simplejson
 from bravado import exception as http_exc
 from requests.exceptions import ConnectionError
@@ -53,20 +54,13 @@ class SchematizerClientTestBase(object):
         )
 
     def _get_creation_timestamp(self, created_at):
-        # Must create these vars with tzinfo/no tzinfo in mind while
-        # schematizer transitions to including this info
-        zero_date = datetime.utcfromtimestamp(0)
-        if created_at.tzinfo:
-            zero_date = datetime.fromtimestamp(0, created_at.tzinfo)
+        zero_date = datetime.fromtimestamp(0, created_at.tzinfo)
         return long((created_at - zero_date).total_seconds())
 
     def _get_created_after(self, created_at=None):
-        # Must create these vars with tzinfo/no tzinfo in mind while
-        # schematizer transitions to including this info
         day_one = (2015, 1, 1, 19, 10, 26, 0)
-        if created_at and created_at.tzinfo:
-            return datetime(*day_one, tzinfo=created_at.tzinfo)
-        return datetime(*day_one)
+        tzinfo = created_at.tzinfo if created_at else pytz.utc
+        return datetime(*day_one, tzinfo=tzinfo)
 
     @pytest.fixture(scope='class')
     def yelp_namespace(self):
@@ -421,14 +415,12 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
     def test_get_schemas_created_after_date_filter(self, schematizer):
         created_after = self._get_created_after()
         creation_timestamp = long(
-            (created_after - datetime.utcfromtimestamp(0)).total_seconds()
+            (created_after - datetime.fromtimestamp(0, created_after.tzinfo)).total_seconds()
         )
-
-        created_after_str2 = "2016-06-10T19:10:26"
-        created_after2 = datetime.strptime(created_after_str2,
-                                           '%Y-%m-%dT%H:%M:%S')
+        day_two = (2016, 6, 10, 19, 10, 26, 0)
+        created_after2 = datetime(*day_two, tzinfo=created_after.tzinfo)
         creation_timestamp2 = long(
-            (created_after2 - datetime.utcfromtimestamp(0)).total_seconds()
+            (created_after2 - datetime.fromtimestamp(0, created_after.tzinfo)).total_seconds()
         )
         schemas = schematizer.get_schemas_created_after_date(
             creation_timestamp
