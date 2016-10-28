@@ -234,6 +234,19 @@ class SharedMessageTest(object):
         dry_run_message = self._get_dry_run_message_with_meta(valid_message_data)
         assert dry_run_message.meta is None
 
+    def test_accepts_valid_meta(
+        self,
+        valid_message_data,
+        valid_meta_param,
+        meta_attr_payload_data
+    ):
+        dry_run_message = self._get_dry_run_message_with_meta(
+            valid_message_data,
+            valid_meta_param
+        )
+        assert dry_run_message.meta[0].schema_id == valid_meta_param[0].schema_id
+        assert dry_run_message.meta[0].payload_data == meta_attr_payload_data
+
     def test_set_meta_with_valid_meta_attributes(
         self,
         message_with_enforced_meta,
