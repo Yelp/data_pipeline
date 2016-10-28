@@ -4,7 +4,6 @@ from __future__ import unicode_literals
 
 import warnings
 
-import mock
 import pytest
 from kafka import create_message
 from kafka.common import OffsetAndMessage
@@ -175,12 +174,54 @@ class SharedMessageTest(object):
         return {'good_payload': 26}
 
     @pytest.fixture
-    def valid_meta_param(self, meta_attr_payload_data, registered_meta_attribute):
-        meta_attr = MetaAttribute(
-            schema_id=registered_meta_attribute.schema_id,
-            payload_data=meta_attr_payload_data
+    def registered_meta_attribute_schema_v2(
+        schematizer_client,
+        example_meta_attr_schema,
+        meta_namespace
+    ):
+        return get_schematizer().register_schema(
+            namespace=meta_namespace,
+            source='good_meta_attribute_v2',
+            schema_str=example_meta_attr_schema,
+            source_owner_email='test_meta@yelp.com',
+            contains_pii=False
         )
-        return [meta_attr]
+
+    @pytest.fixture
+    def valid_meta_param(
+        self,
+        registered_meta_attribute_schema,
+        registered_meta_attribute_schema_v2,
+        meta_attr_payload_data
+    ):
+        return [
+            MetaAttribute(
+                schema_id=registered_meta_attribute_schema.schema_id,
+                payload_data=meta_attr_payload_data
+            ),
+            MetaAttribute(
+                schema_id=registered_meta_attribute_schema_v2.schema_id,
+                payload_data=meta_attr_payload_data
+            )]
+
+    @pytest.fixture
+    def registered_schema_with_enforced_meta_attr(
+        self,
+        registered_meta_attribute_schema,
+        meta_namespace,
+        example_meta_attr_schema
+    ):
+        get_schematizer().register_namespace_meta_attr_mapping(
+            meta_namespace,
+            registered_meta_attribute_schema.schema_id
+        )
+        return get_schematizer().register_schema(
+            namespace=meta_namespace,
+            source='good_meta_attribute_2',
+            schema_str=example_meta_attr_schema,
+            source_owner_email='test_meta@yelp.com',
+            contains_pii=False
+        )
 
     def _get_dry_run_message_with_meta(self, valid_message_data, meta_param=None):
         message_data = self._make_message_data(
@@ -193,35 +234,25 @@ class SharedMessageTest(object):
         dry_run_message = self._get_dry_run_message_with_meta(valid_message_data)
         assert dry_run_message.meta is None
 
-    def test_accepts_valid_meta(
+    def test_set_meta_with_valid_meta_attributes(
         self,
-        valid_message_data,
+        message_with_enforced_meta,
         valid_meta_param,
-        meta_attr_payload_data
     ):
         dry_run_message = self._get_dry_run_message_with_meta(
-            valid_message_data,
+            message_with_enforced_meta,
             valid_meta_param
         )
-        assert dry_run_message.meta[0].schema_id == valid_meta_param[0].schema_id
-        assert dry_run_message.meta[0].payload_data == meta_attr_payload_data
+        assert dry_run_message._meta == valid_meta_param
 
     def test_missing_mandatory_meta_attributes(
         self,
-        valid_message_data,
-        valid_meta_param,
+        message_with_enforced_meta
     ):
-        invalid_meta_attr_ids = [valid_meta_param[-1].schema_id + 10]
-        with mock.patch.object(
-            get_schematizer(),
-            'get_meta_attributes_by_schema_id',
-            return_value=invalid_meta_attr_ids
-        ):
-            with pytest.raises(MissingMetaAttributeException):
-                self._get_dry_run_message_with_meta(
-                    valid_message_data,
-                    valid_meta_param
-                )
+        with pytest.raises(MissingMetaAttributeException):
+            self._get_dry_run_message_with_meta(
+                message_with_enforced_meta
+            )
 
     def test_dry_run(self, valid_message_data):
         payload_data = {'data': 'test'}
@@ -317,6 +348,18 @@ class PayloadOnlyMessageTest(SharedMessageTest):
             'schema_id': registered_schema.schema_id,
             'payload': payload,
             'payload_data': payload_data,
+            'uuid': FastUUID().uuid4()
+        }
+
+    @pytest.fixture
+    def message_with_enforced_meta(
+        self,
+        registered_schema_with_enforced_meta_attr
+    ):
+        return {
+            'schema_id': registered_schema_with_enforced_meta_attr.schema_id,
+            'payload': None,
+            'payload_data': {'good_field': 10},
             'uuid': FastUUID().uuid4()
         }
 
@@ -515,6 +558,20 @@ class TestUpdateMessage(SharedMessageTest):
             'payload_data': payload_data,
             'previous_payload': previous_payload,
             'previous_payload_data': previous_payload_data,
+            'uuid': FastUUID().uuid4()
+        }
+
+    @pytest.fixture
+    def message_with_enforced_meta(
+        self,
+        registered_schema_with_enforced_meta_attr
+    ):
+        return {
+            'schema_id': registered_schema_with_enforced_meta_attr.schema_id,
+            'payload': None,
+            'payload_data': {'good_field': 10},
+            'previous_payload': None,
+            'previous_payload_data': {'good_field': 5},
             'uuid': FastUUID().uuid4()
         }
 
