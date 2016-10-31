@@ -120,11 +120,11 @@ class TestRegisterAvroCommand(BaseTestRegister):
             verbosity=0
         )
 
-    @pytest.mark.parametrize("overrides", [
-        {},
-        {'base_schema_id': 1},
-        {'pii': True},
-        {'cluster_type': 'scribe'}
+    @pytest.mark.parametrize("overrides, expected_overrides", [
+        ({}, {}),
+        ({'base_schema_id': 1}, {'base_schema_id': 1}),
+        ({'pii': True}, {'contains_pii': True}),
+        ({'cluster_type': 'scribe'}, {'cluster_type': 'scribe'})
     ])
     def test_avro_schema(
         self,
@@ -134,7 +134,8 @@ class TestRegisterAvroCommand(BaseTestRegister):
         namespace_name,
         schema_str,
         schema_json,
-        overrides
+        overrides,
+        expected_overrides
     ):
         args = self._create_fake_args(
             source_name=source_name,
@@ -152,7 +153,7 @@ class TestRegisterAvroCommand(BaseTestRegister):
             schema_json=schema_json,
             namespace_name=namespace_name,
             source_name=source_name,
-            **overrides
+            **expected_overrides
         )
 
     def test_avro_schema_with_no_namespace(

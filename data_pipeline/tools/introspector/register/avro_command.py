@@ -24,6 +24,15 @@ class RegisterAvroCommand(_BaseRegisterCommand):
         )
 
         register_avro_command_parser.add_argument(
+            "--cluster-type",
+            dest="cluster_type",
+            default='datapipe',
+            help="Kafka cluster type to connect. Defaults to datapipe. "
+                 "Currectly only datapipe and scribe cluster types are "
+                 "supported."
+        )
+
+        register_avro_command_parser.add_argument(
             "--base-schema-id",
             type=int,
             default=None,
@@ -39,6 +48,7 @@ class RegisterAvroCommand(_BaseRegisterCommand):
     def process_args(self, args, parser):
         super(RegisterAvroCommand, self).process_args(args, parser)
         self.avro_schema = args.avro_schema
+        self.cluster_type = args.cluster_type
         self.base_schema_id = args.base_schema_id
 
     def run(self, args, parser):
