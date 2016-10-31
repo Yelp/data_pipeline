@@ -247,17 +247,18 @@ class Message(object):
         if (not self._is_valid_optional_type(meta, list) or
                 self._any_invalid_type(meta, MetaAttribute)):
             raise TypeError("Meta must be None or list of MetaAttribute objects.")
-        meta_attr_ids = {
+        meta_attr_schema_ids = {
             meta_attr.schema_id for meta_attr in meta
         } if meta else set()
         mandatory_meta_ids = set(
             self._schematizer.get_meta_attributes_by_schema_id(schema_id)
         )
-        if not mandatory_meta_ids.issubset(meta_attr_ids):
+        if not mandatory_meta_ids.issubset(meta_attr_schema_ids):
             raise MissingMetaAttributeException(
-                "Meta Attributes with `{0}` IDs are not found.".format(
-                    mandatory_meta_ids - meta_attr_ids
-                ))
+                "Meta Attributes with IDs `{0}` are not found. ".format(
+                    ", ".join(str(m) for m in (
+                        mandatory_meta_ids - meta_attr_schema_ids
+                    ))))
         self._meta = meta
 
     def get_meta_attr_by_type(self, meta, meta_type):

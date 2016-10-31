@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 import warnings
 
+import mock
 import pytest
 from kafka import create_message
 from kafka.common import OffsetAndMessage
@@ -174,54 +175,16 @@ class SharedMessageTest(object):
         return {'good_payload': 26}
 
     @pytest.fixture
-    def registered_meta_attribute_schema_v2(
-        schematizer_client,
-        example_meta_attr_schema,
-        meta_namespace
-    ):
-        return get_schematizer().register_schema(
-            namespace=meta_namespace,
-            source='good_meta_attribute_v2',
-            schema_str=example_meta_attr_schema,
-            source_owner_email='test_meta@yelp.com',
-            contains_pii=False
-        )
-
-    @pytest.fixture
     def valid_meta_param(
         self,
-        registered_meta_attribute_schema,
-        registered_meta_attribute_schema_v2,
-        meta_attr_payload_data
+        meta_attr_payload_data,
+        registered_meta_attribute_schema
     ):
-        return [
-            MetaAttribute(
-                schema_id=registered_meta_attribute_schema.schema_id,
-                payload_data=meta_attr_payload_data
-            ),
-            MetaAttribute(
-                schema_id=registered_meta_attribute_schema_v2.schema_id,
-                payload_data=meta_attr_payload_data
-            )]
-
-    @pytest.fixture
-    def registered_schema_with_enforced_meta_attr(
-        self,
-        registered_meta_attribute_schema,
-        meta_namespace,
-        example_meta_attr_schema
-    ):
-        get_schematizer().register_namespace_meta_attr_mapping(
-            meta_namespace,
-            registered_meta_attribute_schema.schema_id
+        meta_attr = MetaAttribute(
+            schema_id=registered_meta_attribute_schema.schema_id,
+            payload_data=meta_attr_payload_data
         )
-        return get_schematizer().register_schema(
-            namespace=meta_namespace,
-            source='good_meta_attribute_2',
-            schema_str=example_meta_attr_schema,
-            source_owner_email='test_meta@yelp.com',
-            contains_pii=False
-        )
+        return [meta_attr]
 
     def _get_dry_run_message_with_meta(self, valid_message_data, meta_param=None):
         message_data = self._make_message_data(
@@ -247,25 +210,52 @@ class SharedMessageTest(object):
         assert dry_run_message.meta[0].schema_id == valid_meta_param[0].schema_id
         assert dry_run_message.meta[0].payload_data == meta_attr_payload_data
 
+    @pytest.mark.parametrize('meta_param, mandatory_meta_attr_ids', [
+        (None, []),
+        ([MetaAttribute(schema_id=10, payload_data={'payload_1': 10})], []),
+        ([MetaAttribute(schema_id=10, payload_data={'payload_1': 10})], [10]),
+        ([MetaAttribute(schema_id=10, payload_data={'payload_1': 10}),
+          MetaAttribute(schema_id=20, payload_data={'payload_1': 20})], [10])
+    ])
     def test_set_meta_with_valid_meta_attributes(
         self,
-        message_with_enforced_meta,
-        valid_meta_param,
+        valid_message_data,
+        meta_param,
+        mandatory_meta_attr_ids
     ):
-        dry_run_message = self._get_dry_run_message_with_meta(
-            message_with_enforced_meta,
-            valid_meta_param
-        )
-        assert dry_run_message._meta == valid_meta_param
+        with mock.patch.object(
+            get_schematizer(),
+            'get_meta_attributes_by_schema_id',
+            return_value=mandatory_meta_attr_ids
+        ):
+            dry_run_message = self._get_dry_run_message_with_meta(
+                valid_message_data,
+                meta_param
+            )
+            assert dry_run_message._meta == meta_param
 
+    @pytest.mark.parametrize('meta_param, mandatory_meta_attr_ids', [
+        (None, [10]),
+        ([MetaAttribute(schema_id=10, payload_data={'payload_1': 10})], [20]),
+        ([MetaAttribute(schema_id=10, payload_data={'payload_1': 10}),
+          MetaAttribute(schema_id=20, payload_data={'payload_1': 20})], [10, 30])
+    ])
     def test_missing_mandatory_meta_attributes(
         self,
-        message_with_enforced_meta
+        valid_message_data,
+        meta_param,
+        mandatory_meta_attr_ids
     ):
-        with pytest.raises(MissingMetaAttributeException):
-            self._get_dry_run_message_with_meta(
-                message_with_enforced_meta
-            )
+        with mock.patch.object(
+            get_schematizer(),
+            'get_meta_attributes_by_schema_id',
+            return_value=mandatory_meta_attr_ids
+        ):
+            with pytest.raises(MissingMetaAttributeException):
+                self._get_dry_run_message_with_meta(
+                    valid_message_data,
+                    meta_param
+                )
 
     def test_dry_run(self, valid_message_data):
         payload_data = {'data': 'test'}
@@ -361,18 +351,6 @@ class PayloadOnlyMessageTest(SharedMessageTest):
             'schema_id': registered_schema.schema_id,
             'payload': payload,
             'payload_data': payload_data,
-            'uuid': FastUUID().uuid4()
-        }
-
-    @pytest.fixture
-    def message_with_enforced_meta(
-        self,
-        registered_schema_with_enforced_meta_attr
-    ):
-        return {
-            'schema_id': registered_schema_with_enforced_meta_attr.schema_id,
-            'payload': None,
-            'payload_data': {'good_field': 10},
             'uuid': FastUUID().uuid4()
         }
 
@@ -571,20 +549,6 @@ class TestUpdateMessage(SharedMessageTest):
             'payload_data': payload_data,
             'previous_payload': previous_payload,
             'previous_payload_data': previous_payload_data,
-            'uuid': FastUUID().uuid4()
-        }
-
-    @pytest.fixture
-    def message_with_enforced_meta(
-        self,
-        registered_schema_with_enforced_meta_attr
-    ):
-        return {
-            'schema_id': registered_schema_with_enforced_meta_attr.schema_id,
-            'payload': None,
-            'payload_data': {'good_field': 10},
-            'previous_payload': None,
-            'previous_payload_data': {'good_field': 5},
             'uuid': FastUUID().uuid4()
         }
 
