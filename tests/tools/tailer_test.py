@@ -54,7 +54,7 @@ class TestTailer(object):
             name=topic_name,
             source=source,
             contains_pii=False,
-            cluster_type=None,
+            cluster_type='datapipe',
             primary_keys=[],
             created_at=time.time(),
             updated_at=time.time()
@@ -63,7 +63,7 @@ class TestTailer(object):
             name=topic_two_name,
             source=source,
             contains_pii=False,
-            cluster_type=None,
+            cluster_type='datapipe',
             primary_keys=[],
             created_at=time.time() + 10000,
             updated_at=time.time() + 10000

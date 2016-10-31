@@ -28,7 +28,7 @@ class RegisterAvroCommand(_BaseRegisterCommand):
             dest="cluster_type",
             default='datapipe',
             help="Kafka cluster type to connect. Defaults to datapipe. "
-                 "Currectly only datapipe and scribe cluster types are "
+                 "Currently only 'datapipe' and 'scribe' cluster types are "
                  "supported."
         )
 

@@ -21,7 +21,7 @@ class BasePositionDataTrackerTest(object):
     def patch_contains_pii(self):
         mock_date = '2015-01-01'
         mock_topic = Topic(
-            1, str('my-topic'), None, False, None, [], mock_date, mock_date
+            1, str('my-topic'), None, False, 'datapipe', [], mock_date, mock_date
         )
         mock_schema = AvroSchema(
             1, 'schema', mock_topic, None, 'RW', None, None, mock_date, mock_date

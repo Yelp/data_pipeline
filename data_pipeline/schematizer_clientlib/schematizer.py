@@ -455,9 +455,9 @@ class SchematizerClient(object):
             contains_pii (bool): Indicates if the schema being registered has
                 at least one field that can potentially contain PII.
                 See http://y/pii for help identifying what is or is not PII.
-            cluster_type (Optional[str]): Kafka cluster type to connect like
-                datapipe, scribe, etc. See http://y/datapipe_cluster_types for
-                more info on cluster_types. Defaults to datapipe.
+            cluster_type (Optional[str]): Kafka cluster type to connect to,
+                like 'datapipe', 'scribe', etc. See http://y/datapipe_cluster_types
+                for more info on cluster_types. Defaults to datapipe.
             base_schema_id (Optional[int]): The id of the original schema which
                 the new schema was changed based on
 
