@@ -9,7 +9,7 @@ from data_pipeline.schematizer_clientlib.models.model_base import BaseModel
 
 """
 Represent the data of meta attribute mapping store. Meta attribute namespace
-mapping store should represent a namespace and the corresponding meta
+mapping should represent a mapping of a namespace and the corresponding meta
 attribute schema id.
 """
 MetaAttributeNamespaceMapping = namedtuple(

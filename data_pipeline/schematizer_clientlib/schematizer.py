@@ -13,15 +13,22 @@ from data_pipeline._retry_util import RetryPolicy
 from data_pipeline.config import get_config
 from data_pipeline.helpers.singleton import Singleton
 from data_pipeline.schematizer_clientlib.models.avro_schema import _AvroSchema
-from data_pipeline.schematizer_clientlib.models.avro_schema_element import _AvroSchemaElement
-from data_pipeline.schematizer_clientlib.models.consumer_group import _ConsumerGroup
-from data_pipeline.schematizer_clientlib.models.consumer_group_data_source \
-    import _ConsumerGroupDataSource
+from data_pipeline.schematizer_clientlib.models.avro_schema_element import (
+    _AvroSchemaElement
+)
+from data_pipeline.schematizer_clientlib.models.consumer_group import (
+    _ConsumerGroup
+)
+from data_pipeline.schematizer_clientlib.models.consumer_group_data_source import (
+    _ConsumerGroupDataSource
+)
 from data_pipeline.schematizer_clientlib.models.data_target import _DataTarget
-from data_pipeline.schematizer_clientlib.models.meta_attr_namespace_mapping \
-    import _MetaAttributeNamespaceMapping
-from data_pipeline.schematizer_clientlib.models.meta_attr_source_mapping \
-    import _MetaAttributeSourceMapping
+from data_pipeline.schematizer_clientlib.models.meta_attr_namespace_mapping import (
+    _MetaAttributeNamespaceMapping
+)
+from data_pipeline.schematizer_clientlib.models.meta_attr_source_mapping import (
+    _MetaAttributeSourceMapping
+)
 from data_pipeline.schematizer_clientlib.models.namespace import _Namespace
 from data_pipeline.schematizer_clientlib.models.refresh import _Refresh
 from data_pipeline.schematizer_clientlib.models.source import _Source
@@ -479,7 +486,7 @@ class SchematizerClient(object):
         self._set_cache_by_schema(_schema)
         return _schema.to_result()
 
-    def register_namespace_meta_attr_mapping(
+    def register_namespace_meta_attribute_mapping(
         self,
         namespace_name,
         meta_attr_schema_id
@@ -509,7 +516,7 @@ class SchematizerClient(object):
         )
         return _meta_attr_mapping.to_result()
 
-    def delete_namespace_meta_attr_mapping(
+    def delete_namespace_meta_attribute_mapping(
         self,
         namespace_name,
         meta_attr_schema_id
@@ -539,7 +546,7 @@ class SchematizerClient(object):
         )
         return _meta_attr_mapping.to_result()
 
-    def get_meta_attributes_by_namespace(self, namespace_name):
+    def get_namespace_meta_attribute_mappings(self, namespace_name):
         """ Returns meta attributes for the given namespace.
 
         Args:
@@ -554,16 +561,14 @@ class SchematizerClient(object):
             api=self._client.namespaces.get_namespace_meta_attribute_mappings,
             params={'namespace': namespace_name}
         )
-        result = []
-        for resp_item in response:
-            _meta_attr_mapping = _MetaAttributeNamespaceMapping.from_response(
+        return [
+            _MetaAttributeNamespaceMapping.from_response(
                 namespace_id=resp_item.namespace_id,
                 meta_attribute_schema_id=resp_item.meta_attribute_schema_id
-            )
-            result.append(_meta_attr_mapping.to_result())
-        return result
+            ).to_result()
+            for resp_item in response]
 
-    def register_source_meta_attr_mapping(
+    def register_source_meta_attribute_mapping(
         self,
         source_id,
         meta_attr_schema_id
@@ -593,7 +598,7 @@ class SchematizerClient(object):
         )
         return _meta_attr_mapping.to_result()
 
-    def delete_source_meta_attr_mapping(
+    def delete_source_meta_attribute_mapping(
         self,
         source_id,
         meta_attr_schema_id
@@ -623,7 +628,7 @@ class SchematizerClient(object):
         )
         return _meta_attr_mapping.to_result()
 
-    def get_meta_attributes_by_source(self, source_id):
+    def get_source_meta_attribute_mappings(self, source_id):
         """ Returns meta attributes for the given source.
 
         Args:
