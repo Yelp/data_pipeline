@@ -777,7 +777,8 @@ class TestGetSourcesByNamespace(GetSourcesTestBase):
             min_id=biz_src.source_id + 1
         )
         expected = [usr_src]
-        self._assert_source_values(actual, expected)
+        for actual_src, expected_resp in zip(actual, expected):
+            self._assert_source_values(actual_src, expected_resp)
 
     def test_get_sources_with_count(
             self,
@@ -788,10 +789,11 @@ class TestGetSourcesByNamespace(GetSourcesTestBase):
     ):
         actual = schematizer.get_sources_by_namespace(
             yelp_namespace,
-            count=1
+            page_size=1
         )
         expected = [biz_src]
-        self._assert_source_values(actual, expected)
+        for actual_src, expected_resp in zip(actual, expected):
+            self._assert_source_values(actual_src, expected_resp)
 
 
 class TestGetTopicsBySourceId(SchematizerClientTestBase):
