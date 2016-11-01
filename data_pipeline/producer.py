@@ -48,6 +48,15 @@ class Producer(Client):
     a number of messages are accumulated, or too much time has passed,
     then published all at once.  This process is designed to be largely
     transparent to the user.
+    
+    .. note::
+    
+        The clientlib used to include an AsyncProducer, which published to Kafka in the
+        background.  This producer was somewhat flaky, increased development effort,
+        and didn't provide a concrete performance benefit (see
+        https://pb.yelpcorp.com/150070 for benchmark results).  If we ever want to
+        revive that producer, a SHA containing the producer just before its removal
+        has been tagged as before-async-producer-removal.
 
     **Examples**:
 
