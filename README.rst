@@ -1,53 +1,33 @@
-=============================
-Data Pipeline Clientlib
-=============================
+# Data Pipeline Clientlib
 
+
+What is it?
+-----------
 Provides an interface to tail and publish to data pipeline topics.
 
-Developing
-----------
+[Read More](https://engineeringblog.yelp.com/2016/07/billions-of-messages-a-day-yelps-real-time-data-pipeline.html)
 
-The clientlib is setup for TDD.  A `Guardfile`, used to trigger commands on
-file changes is included, as is a `Procfile`, which is useful for running
-development services.
 
-To run guard, which will run tests and build docs as files are modified::
+How to download
+---------------
+```
+git clone git@github.com:Yelp/data_pipeline.git
+```
 
-  bundle exec guard
 
-To run dependent processes, run::
+Tests
+-----
+Running unit test
+```
+make -f Makefile-opensource test
+```
 
-  bundle exec foreman start
 
-Installing a more modern ruby version may be necessary.  To do this on a dev
-machine, from the data_pipeline project root, install ruby-build, ruby 2.2.2,
-and bundler, then the bundled gems::
+License
+-------
+Data Pipeline Clientlib is licensed under the Apache License, Version 2.0: http://www.apache.org/licenses/LICENSE-2.0
 
-  git clone https://github.com/sstephenson/ruby-build.git ~/.rbenv/plugins/ruby-build
-  export RBENV_ROOT=$HOME/.rbenv
-  rbenv install 2.2.2
-  rbenv local 2.2.2
-  rbenv rehash
-  eval "$(rbenv init -)"
-  gem install bundler
-  rbenv rehash
-  bundle install --path=.bundle
 
-This will start a docker container with Kafka and a documentation server,
-accessible at `http://HOST:8001/docs/build/html/`.  Tests will automatically
-reuse a running Kafka container instead of starting a new one, which can
-decrease test time dramatically.
-
-It is recommended to run `foreman` in a background tab, and `guard` in a
-foreground tab, as `foreman` will let you inspect the logs of the running
-`kafka` containers, while `guard` will show test results as files are changed.
-
-Development Decisions
----------------------
-
-The clientlib used to include an AsyncProducer, which published to Kafka in the
-background.  This producer was somewhat flaky, increased development effort,
-and didn't provide a concrete performance benefit (see
-https://pb.yelpcorp.com/150070 for benchmark results).  If we ever want to
-revive that producer, a SHA containing the producer just before its removal
-has been tagged as before-async-producer-removal.
+Contributing
+------------
+Everyone is encouraged to contribute to Data Pipeline Clientlib by forking the Github repository and making a pull request or opening an issue.
