@@ -321,15 +321,17 @@ class SchematizerClient(object):
         return result
 
     def get_sources_by_namespace(
-            self,
-            namespace_name,
-            min_id=0,
-            page_size=10
+        self,
+        namespace_name,
+        min_id=0,
+        page_size=10
     ):
         """Get the list of sources in the specified namespace.
 
         Args:
             namespace_name (str): namespace name to look up
+            min_id (int): the returned sources should have id bigger or equal to the min_id
+            page_size (int): the maximal number of sources to return in one page
 
         Returns:
             (List[data_pipeline.schematizer_clientlib.models.source.Source]):
