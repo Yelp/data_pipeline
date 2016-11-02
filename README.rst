@@ -26,7 +26,7 @@ make -f Makefile-opensource test
 Configuration
 -------------
 Include the `data_pipeline` namespace in your `module_env_config` of `config.yaml`
-and configure following values for `kafka_ip, zk_ip and schematizer_ip`
+and configure following values for `kafka_ip`, `zk_ip` and `schematizer_ip`
 
 ```
 module_env_config:
@@ -43,7 +43,7 @@ module_env_config:
 
 Usage
 -----
-Registering a simple schema with schematizer
+Registering a simple schema with the Schematizer service.
 ```
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 test_avro_schema_json = {
@@ -66,7 +66,7 @@ schema_info = get_schematizer().register_schema_from_schema_json(
 )
 ```
 
-Creating a simple Data Pipeline Message from Avro Decoded payload data
+Creating a simple Data Pipeline Message from payload data.
 ```
 from data_pipeline.message import Message
 message = Message(
@@ -78,16 +78,17 @@ message = Message(
 )
 ```
 
-Starting a Producer and publish messages to it::
+Starting a Producer and publishing messages with it::
 ```
 from data_pipeline.producer import Producer
 with Producer() as producer:
 	producer.publish(message)
 ```
 
-Starting a Consumer with name 'my_consumer' that
-consumes a message from multiple topics, processes it and
-commits the offset::
+Starting a Consumer with name `my_consumer` that listens for
+messages in all topics within the `test_namespace` and `test_source`.
+In this example, the consumer consumes a single message, processes it, and
+commits the offset.
 ```
 from data_pipeline.consumer import Consumer
 from data_pipeline.consumer_source import TopicInSource
