@@ -3,5 +3,5 @@ include data_pipeline/schemas/monitoring_message_v1.avsc
 include data_pipeline/testing_helpers/docker-compose.yml
 include CONTRIBUTING.rst
 include HISTORY.rst
-include README.rst
+include README.md
 include USAGE.rst

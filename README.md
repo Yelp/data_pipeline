@@ -49,12 +49,12 @@ from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 test_avro_schema_json = {
     "type": "record",
     "namespace": "test_namespace",
-    "source"="test_source",
+    "source": "test_source",
     "name": "test_name",
-    'doc': 'test_doc',
+    "doc": "test_doc",
     "fields": [
-        {"type": "string", 'doc': 'test_doc1', "name": "key1"},
-        {"type": "string", 'doc': 'test_doc2', "name": "key2"}
+        {"type": "string", "doc": "test_doc1", "name": "key1"},
+        {"type": "string", "doc": "test_doc2", "name": "key2"}
     ]
 }
 schema_info = get_schematizer().register_schema_from_schema_json(
@@ -70,11 +70,11 @@ Creating a simple Data Pipeline Message from payload data.
 ```
 from data_pipeline.message import Message
 message = Message(
-	schema_id = schema_info.schema_id,
-	payload_data = {
-		'key1': 'value1',
-		'key2': 'value2'
-	}
+    schema_id = schema_info.schema_id,
+    payload_data = {
+        'key1': 'value1',
+        'key2': 'value2'
+    }
 )
 ```
 
@@ -82,7 +82,7 @@ Starting a Producer and publishing messages with it::
 ```
 from data_pipeline.producer import Producer
 with Producer() as producer:
-	producer.publish(message)
+    producer.publish(message)
 ```
 
 Starting a Consumer with name `my_consumer` that listens for
