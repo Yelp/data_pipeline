@@ -26,7 +26,7 @@ doclink = """
 Documentation
 -------------
 
-The full documentation is at http://servicedocs.yelpcorp.com/docs/data_pipeline/"""
+The full documentation is at TODO (DATAPIPE-2031|abrar): Link to public servicedocs."""
 history = open('HISTORY.rst').read().replace('.. :changelog:', '')
 
 setup(
@@ -37,7 +37,7 @@ setup(
     long_description=readme + '\n\n' + doclink + '\n\n' + history,
     author=data_pipeline.__author__,
     author_email=data_pipeline.__email__,
-    url='http://servicedocs.yelpcorp.com/docs/data_pipeline/',
+    url='https://github.com/Yelp/data_pipeline',
     packages=find_packages(exclude=['tests*', 'benchmarks*']),
     include_package_data=True,
     install_requires=[
