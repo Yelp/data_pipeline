@@ -3,15 +3,12 @@
 # TODO(DATAPIPE-167): Add the packages that don't exist yet to the interal Pypi
 # and remove this extra-index-url
 --extra-index-url https://pypi.python.org/simple/
--r tools.txt
 flake8
 honcho
 ipdb
 ipython
 mock
 pre-commit>=0.4.2
-# Later versions should be ok once INFRA-3779 is fixed
-pysensu_yelp==0.2.3
 pytest<2.8.2
 pytest-cov==1.8.1
 pytest-raisesregexp
@@ -20,4 +17,4 @@ SQLAlchemy==1.0.8
 terminaltables>=1.0.2
 wheel>=0.22
 factory_boy==2.5.2
-pytest-benchmark==3.0.0
+clog

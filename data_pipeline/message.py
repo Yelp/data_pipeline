@@ -1,4 +1,18 @@
 # -*- coding: utf-8 -*-
+# Copyright 2016 Yelp Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
@@ -777,6 +791,7 @@ _message_type_to_class_map = {
 
 def create_from_kafka_message(
     kafka_message,
+    envelope=None,
     force_payload_decoding=True,
     reader_schema_id=None
 ):
@@ -788,8 +803,10 @@ def create_from_kafka_message(
         kafka_message (kafka.common.KafkaMessage): The message info which
             has the topic, partition, offset, key, and value(payload) of
             the received message.
-        force_payload_decoding (boolean): If this is set to `True` then
-            we will decode the payload/previous_payload immediately.
+        envelope (Optional[:class:data_pipeline.envelope.Envelope]): Envelope
+            instance that unpacks the data pipeline messages.
+        force_payload_decoding (Optional[boolean]): If this is set to `True`
+            then we will decode the payload/previous_payload immediately.
             Otherwise the decoding will happen whenever the lazy *_data
             properties are accessed.
         reader_schema_id (Optional[int]): Schema id used to decode the
@@ -807,6 +824,7 @@ def create_from_kafka_message(
     )
     return _create_message_from_packed_message(
         packed_message=kafka_message,
+        envelope=envelope or Envelope(),
         force_payload_decoding=force_payload_decoding,
         kafka_position_info=kafka_position_info,
         reader_schema_id=reader_schema_id
@@ -816,7 +834,8 @@ def create_from_kafka_message(
 def create_from_offset_and_message(
     offset_and_message,
     force_payload_decoding=True,
-    reader_schema_id=None
+    reader_schema_id=None,
+    envelope=None
 ):
     """
     Build a data_pipeline.message.Message from a kafka.common.OffsetAndMessage.
@@ -827,19 +846,22 @@ def create_from_offset_and_message(
         offset_and_message (kafka.common.OffsetAndMessage): a namedtuple
             containing the offset and message. Message contains magic,
             attributes, keys and values.
-        force_payload_decoding (boolean): If this is set to `True` then
-            we will decode the payload/previous_payload immediately.
+        force_payload_decoding (Optional[boolean]): If this is set to `True`
+            then we will decode the payload/previous_payload immediately.
             Otherwise the decoding will happen whenever the lazy *_data
             properties are accessed.
         reader_schema_id (Optional[int]): Schema id used to decode the incoming
             kafka message and build data_pipeline.message.Message message.
             Defaults to None.
+        envelope (Optional[:class:data_pipeline.envelope.Envelope]): Envelope
+            instance that unpacks the data pipeline messages.
 
     Returns (data_pipeline.message.Message):
         The message object
     """
     return _create_message_from_packed_message(
         packed_message=offset_and_message.message,
+        envelope=envelope or Envelope(),
         force_payload_decoding=force_payload_decoding,
         reader_schema_id=reader_schema_id
     )
@@ -847,6 +869,7 @@ def create_from_offset_and_message(
 
 def _create_message_from_packed_message(
     packed_message,
+    envelope,
     force_payload_decoding,
     kafka_position_info=None,
     reader_schema_id=None
@@ -874,7 +897,7 @@ def _create_message_from_packed_message(
     Returns (data_pipeline.message.Message):
         The message object
     """
-    unpacked_message = Envelope().unpack(packed_message.value)
+    unpacked_message = envelope.unpack(packed_message.value)
     message_class = _message_type_to_class_map[unpacked_message['message_type']]
     message = message_class.create_from_unpacked_message(
         unpacked_message=unpacked_message,

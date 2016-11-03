@@ -1,4 +1,18 @@
 # -*- coding: utf-8 -*-
+# Copyright 2016 Yelp Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
@@ -15,9 +29,6 @@ from data_pipeline._kafka_util import get_actual_published_messages_count
 from data_pipeline._pooled_kafka_producer import PooledKafkaProducer
 from data_pipeline.client import Client
 from data_pipeline.config import get_config
-from data_pipeline.tools.meteorite_wrappers import StatsCounter
-from data_pipeline.tools.sensu_alert_manager import SensuAlertManager
-from data_pipeline.tools.sensu_ttl_alerter import SensuTTLAlerter
 
 
 logger = get_config().logger
@@ -37,6 +48,15 @@ class Producer(Client):
     a number of messages are accumulated, or too much time has passed,
     then published all at once.  This process is designed to be largely
     transparent to the user.
+
+    .. note::
+
+        The clientlib used to include an AsyncProducer, which published to Kafka in the
+        background.  This producer was somewhat flaky, increased development effort,
+        and didn't provide a concrete performance benefit (see
+        pb/150070 for benchmark results).  If we ever want to
+        revive that producer, a SHA containing the producer just before its removal
+        has been tagged as before-async-producer-removal.
 
     **Examples**:
 
@@ -179,6 +199,15 @@ class Producer(Client):
         the health of the producer and upstream heartbeat.  The delay monitor
         tracks whether the producer has fallen too far behind the upstream
         data"""
+
+        try:
+            from data_pipeline.tools.meteorite_wrappers import StatsCounter
+            from data_pipeline.tools.sensu_alert_manager import SensuAlertManager
+            from data_pipeline.tools.sensu_ttl_alerter import SensuTTLAlerter
+        except ImportError:
+            self.enable_meteorite = False
+            self.enable_sensu = False
+            return
 
         self.monitors["meteorite"] = StatsCounter(
             stat_counter_name=self.client_name,

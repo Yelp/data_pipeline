@@ -1,4 +1,18 @@
 # -*- coding: utf-8 -*-
+# Copyright 2016 Yelp Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
@@ -6,6 +20,7 @@ import pytest
 import staticconf
 
 from data_pipeline.config import get_config
+from data_pipeline.environment_configs import IS_OPEN_SOURCE_MODE
 from tests.helpers.config import reconfigure
 
 
@@ -81,6 +96,9 @@ class TestConfigDefaults(TestConfigBase):
     def test_producer_max_publish_retry_count(self, config):
         assert config.producer_max_publish_retry_count == 5
 
+    def test_consumer_max_offset_retry_count(self, config):
+        assert config.consumer_max_offset_retry_count == 5
+
     def test_kafka_producer_buffer_size(self, config):
         assert config.kafka_producer_buffer_size == 5000
 
@@ -123,14 +141,26 @@ class TestConfigurationOverrides(TestConfigBase):
     def cluster_type(self):
         return 'datapipe'
 
+    @pytest.mark.skipif(
+        IS_OPEN_SOURCE_MODE,
+        reason="skip this in open source mode."
+    )
     def test_schematizer_host_and_port(self, config, addr):
         with reconfigure(schematizer_host_and_port=addr):
             assert config.schematizer_host_and_port == addr
 
+    @pytest.mark.skipif(
+        IS_OPEN_SOURCE_MODE,
+        reason="skip this in open source mode."
+    )
     def test_load_schematizer_host_and_port_from_smartstack(self, config, yocalhost):
         with reconfigure(load_schematizer_host_and_port_from_smartstack=True):
             assert config.schematizer_host_and_port == '{0}:20912'.format(yocalhost)
 
+    @pytest.mark.skipif(
+        IS_OPEN_SOURCE_MODE,
+        reason="skip this in open source mode."
+    )
     def test_kafka_discovery(self, config, cluster_name, cluster_type):
         with reconfigure(
             kafka_cluster_type=cluster_type,
@@ -139,6 +169,10 @@ class TestConfigurationOverrides(TestConfigBase):
             cluster_config = config.cluster_config
             assert cluster_config.name == cluster_name
 
+    @pytest.mark.skipif(
+        IS_OPEN_SOURCE_MODE,
+        reason="skip this in open source mode."
+    )
     def test_kafka_discovery_precedence(self, config, addr, cluster_name, cluster_type):
         with reconfigure(
             kafka_cluster_type=cluster_type,

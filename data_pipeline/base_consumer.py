@@ -1,4 +1,18 @@
 # -*- coding: utf-8 -*-
+# Copyright 2016 Yelp Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
@@ -7,15 +21,20 @@ from contextlib import contextmanager
 
 from cached_property import cached_property
 from kafka import KafkaClient
+from kafka.common import FailedPayloadsError
 from kafka.common import OffsetCommitRequest
 from kafka.util import kafka_bytestring
 from yelp_kafka import discovery
 from yelp_kafka.config import KafkaConsumerConfig
 
 from data_pipeline._consumer_tick import _ConsumerTick
+from data_pipeline._retry_util import ExpBackoffPolicy
+from data_pipeline._retry_util import retry_on_exception
+from data_pipeline._retry_util import RetryPolicy
 from data_pipeline.client import Client
 from data_pipeline.config import get_config
 from data_pipeline.consumer_source import FixedSchemas
+from data_pipeline.envelope import Envelope
 from data_pipeline.message import Message
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 
@@ -194,6 +213,11 @@ class BaseConsumer(Client):
         self._topic_to_reader_schema_map = self._get_topic_to_reader_schema_map(
             consumer_source
         )
+        self._consumer_retry_policy = RetryPolicy(
+            ExpBackoffPolicy(with_jitter=True),
+            max_retry_count=get_config().consumer_max_offset_retry_count
+        )
+        self._envelope = Envelope()
         self._check_all_topics_have_same_cluster_type(
             self.topic_to_consumer_topic_state_map
         )
@@ -691,7 +715,10 @@ class BaseConsumer(Client):
 
     def _send_offset_commit_requests(self, offset_commit_request_list):
         if len(offset_commit_request_list) > 0:
-            self.kafka_client.send_offset_commit_request(
+            retry_on_exception(
+                self._consumer_retry_policy,
+                (FailedPayloadsError),
+                self.kafka_client.send_offset_commit_request,
                 group=kafka_bytestring(self.client_name),
                 payloads=offset_commit_request_list
             )

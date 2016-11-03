@@ -1,11 +1,25 @@
 # -*- coding: utf-8 -*-
+# Copyright 2016 Yelp Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import simplejson
+from bravado.exception import HTTPNotFound
 from requests.exceptions import RequestException
 from swagger_zipkin.zipkin_decorator import ZipkinClientDecorator
-from swaggerpy.exception import HTTPError
 
 from data_pipeline._retry_util import ExpBackoffPolicy
 from data_pipeline._retry_util import retry_on_exception
@@ -18,6 +32,10 @@ from data_pipeline.schematizer_clientlib.models.consumer_group import _ConsumerG
 from data_pipeline.schematizer_clientlib.models.consumer_group_data_source \
     import _ConsumerGroupDataSource
 from data_pipeline.schematizer_clientlib.models.data_target import _DataTarget
+from data_pipeline.schematizer_clientlib.models.meta_attr_namespace_mapping \
+    import _MetaAttributeNamespaceMapping
+from data_pipeline.schematizer_clientlib.models.meta_attr_source_mapping \
+    import _MetaAttributeSourceMapping
 from data_pipeline.schematizer_clientlib.models.namespace import _Namespace
 from data_pipeline.schematizer_clientlib.models.refresh import _Refresh
 from data_pipeline.schematizer_clientlib.models.source import _Source
@@ -84,8 +102,8 @@ class SchematizerClient(object):
     DEFAULT_PAGE_SIZE = 20
 
     def __init__(self):
-        self._swagger_client = get_config().schematizer_client  # swaggerpy client
-        self._client = ZipkinClientDecorator(self._swagger_client)
+        self._bravado_client = get_config().schematizer_client
+        self._client = ZipkinClientDecorator(self._bravado_client)
         self._cache = _Cache()
 
     def get_schema_by_id(self, schema_id):
@@ -316,25 +334,40 @@ class SchematizerClient(object):
             result.append(_namespace.to_result())
         return result
 
-    def get_sources_by_namespace(self, namespace_name):
+    def get_sources_by_namespace(
+        self,
+        namespace_name,
+        min_id=0,
+        page_size=10
+    ):
         """Get the list of sources in the specified namespace.
 
         Args:
             namespace_name (str): namespace name to look up
+            min_id (Optional[int]): the returned sources should have id greater than or equal to the min_id
+            page_size (Optional[int]): the number of sources to return in one api call to prevent timeout
 
         Returns:
             (List[data_pipeline.schematizer_clientlib.models.source.Source]):
                 The list of schema sources in the given namespace.
         """
-        response = self._call_api(
-            api=self._client.namespaces.list_sources_by_namespace,
-            params={'namespace': namespace_name}
-        )
+        last_page_size = page_size
         result = []
-        for resp_item in response:
-            _source = _Source.from_response(resp_item)
-            result.append(_source.to_result())
-            self._set_cache_by_source(_source)
+        while last_page_size == page_size:
+            response = self._call_api(
+                api=self._client.namespaces.list_sources_by_namespace,
+                params={
+                    'namespace': namespace_name,
+                    'min_id': min_id,
+                    'count': page_size
+                }
+            )
+            for resp_item in response:
+                _source = _Source.from_response(resp_item)
+                result.append(_source.to_result())
+                self._set_cache_by_source(_source)
+                min_id = _source.source_id + 1
+            last_page_size = len(response)
         return result
 
     def get_sources(
@@ -438,6 +471,7 @@ class SchematizerClient(object):
         schema_str,
         source_owner_email,
         contains_pii,
+        cluster_type='datapipe',
         base_schema_id=None
     ):
         """ Register a new schema and return newly created schema object.
@@ -450,6 +484,9 @@ class SchematizerClient(object):
             contains_pii (bool): Indicates if the schema being registered has
                 at least one field that can potentially contain PII.
                 See http://y/pii for help identifying what is or is not PII.
+            cluster_type (Optional[str]): Kafka cluster type to connect to,
+                like 'datapipe', 'scribe', etc. See http://y/datapipe_cluster_types
+                for more info on cluster_types. Defaults to datapipe.
             base_schema_id (Optional[int]): The id of the original schema which
                 the new schema was changed based on
 
@@ -463,6 +500,7 @@ class SchematizerClient(object):
             'source': source,
             'source_owner_email': source_owner_email,
             'contains_pii': contains_pii,
+            'cluster_type': cluster_type
         }
         if base_schema_id:
             request_body['base_schema_id'] = base_schema_id
@@ -475,6 +513,189 @@ class SchematizerClient(object):
         self._set_cache_by_schema(_schema)
         return _schema.to_result()
 
+    def register_namespace_meta_attr_mapping(
+        self,
+        namespace_name,
+        meta_attr_schema_id
+    ):
+        """ Register a meta attribute for the given namespace.
+
+        Args:
+            namespace_name (str): The name of the namespace.
+            meta_attr_schema_id (int): ID of the meta attribute (avro_schema)
+
+        Returns:
+            (data_pipeline.schematizer_clientlib.models.
+            meta_attr_namespace_mapping.MetaAttributeNamespaceMapping): The
+            newly created mapping between specified namespace and
+            schema ID.
+        """
+        response = self._call_api(
+            api=self._client.namespaces.register_namespace_meta_attribute_mapping,
+            params={'namespace': namespace_name},
+            request_body={
+                'meta_attribute_schema_id': meta_attr_schema_id
+            }
+        )
+        _meta_attr_mapping = _MetaAttributeNamespaceMapping.from_response(
+            namespace_id=response.namespace_id,
+            meta_attribute_schema_id=response.meta_attribute_schema_id
+        )
+        return _meta_attr_mapping.to_result()
+
+    def delete_namespace_meta_attr_mapping(
+        self,
+        namespace_name,
+        meta_attr_schema_id
+    ):
+        """ Deletes a meta attribute from the given namespace.
+
+        Args:
+            namespace_name (str): The name of the namespace.
+            meta_attr_schema_id (int): ID of the meta attribute (avro_schema)
+
+        Returns:
+            (data_pipeline.schematizer_clientlib.models.
+            meta_attr_namespace_mapping.MetaAttributeNamespaceMapping): A
+            successfully deleted mapping between specified namespace and
+            schema ID.
+        """
+        response = self._call_api(
+            api=self._client.namespaces.delete_namespace_meta_attribute_mapping,
+            params={'namespace': namespace_name},
+            request_body={
+                'meta_attribute_schema_id': meta_attr_schema_id
+            }
+        )
+        _meta_attr_mapping = _MetaAttributeNamespaceMapping.from_response(
+            namespace_id=response.namespace_id,
+            meta_attribute_schema_id=response.meta_attribute_schema_id
+        )
+        return _meta_attr_mapping.to_result()
+
+    def get_meta_attributes_by_namespace(self, namespace_name):
+        """ Returns meta attributes for the given namespace.
+
+        Args:
+            namespace_name (str): The name of the namespace.
+
+        Returns:
+            (List[data_pipeline.schematizer_clientlib.models.
+            meta_attr_namespace_mapping.MetaAttributeNamespaceMapping]): A
+            list of mappings between specified namespace and schema IDs.
+        """
+        response = self._call_api(
+            api=self._client.namespaces.get_namespace_meta_attribute_mappings,
+            params={'namespace': namespace_name}
+        )
+        result = []
+        for resp_item in response:
+            _meta_attr_mapping = _MetaAttributeNamespaceMapping.from_response(
+                namespace_id=resp_item.namespace_id,
+                meta_attribute_schema_id=resp_item.meta_attribute_schema_id
+            )
+            result.append(_meta_attr_mapping.to_result())
+        return result
+
+    def register_source_meta_attr_mapping(
+        self,
+        source_id,
+        meta_attr_schema_id
+    ):
+        """ Register a meta attribute for the given source.
+
+        Args:
+            source_id (int): The ID of the source.
+            meta_attr_schema_id (int): ID of the meta attribute (avro_schema)
+
+        Returns:
+            (data_pipeline.schematizer_clientlib.models.
+            meta_attr_source_mapping.MetaAttributeSourceMapping): The
+            newly created mapping between specified source and
+            schema ID.
+        """
+        response = self._call_api(
+            api=self._client.sources.register_source_meta_attribute_mapping,
+            params={'source_id': source_id},
+            request_body={
+                'meta_attribute_schema_id': meta_attr_schema_id
+            }
+        )
+        _meta_attr_mapping = _MetaAttributeSourceMapping.from_response(
+            source_id=response.source_id,
+            meta_attribute_schema_id=response.meta_attribute_schema_id
+        )
+        return _meta_attr_mapping.to_result()
+
+    def delete_source_meta_attr_mapping(
+        self,
+        source_id,
+        meta_attr_schema_id
+    ):
+        """ Deletes a meta attribute from the given source.
+
+        Args:
+            source_id (int): The ID of the source.
+            meta_attr_schema_id (int): ID of the meta attribute (avro_schema)
+
+        Returns:
+            (data_pipeline.schematizer_clientlib.models.
+            meta_attr_source_mapping.MetaAttributeSourceMapping): A
+            successfully deleted mapping between the specified source and
+            schema.
+        """
+        response = self._call_api(
+            api=self._client.sources.delete_source_meta_attribute_mapping,
+            params={'source_id': source_id},
+            request_body={
+                'meta_attribute_schema_id': meta_attr_schema_id
+            }
+        )
+        _meta_attr_mapping = _MetaAttributeSourceMapping.from_response(
+            source_id=response.source_id,
+            meta_attribute_schema_id=response.meta_attribute_schema_id
+        )
+        return _meta_attr_mapping.to_result()
+
+    def get_meta_attributes_by_source(self, source_id):
+        """ Returns meta attributes for the given source.
+
+        Args:
+            source_id (int): The ID of the source.
+
+        Returns:
+            (List[data_pipeline.schematizer_clientlib.models.
+            meta_attr_source_mapping.MetaAttributeSourceMapping]): A
+            list of mappings between the specified source and schema IDs.
+        """
+        response = self._call_api(
+            api=self._client.sources.get_source_meta_attribute_mappings,
+            params={'source_id': source_id}
+        )
+        result = []
+        for resp_item in response:
+            _meta_attr_mapping = _MetaAttributeSourceMapping.from_response(
+                source_id=resp_item.source_id,
+                meta_attribute_schema_id=resp_item.meta_attribute_schema_id
+            )
+            result.append(_meta_attr_mapping.to_result())
+        return result
+
+    def get_meta_attributes_by_schema_id(self, schema_id):
+        """ Returns meta attributes for the given schema.
+
+        Args:
+            schema_id (int): The ID of the Avro Schema.
+
+        Returns:
+            (List[int]): A list of meta attribute ids for the given Avro
+            Schema.
+        """
+        return self._call_api(
+            api=self._client.schemas.get_meta_attributes_by_schema_id,
+            params={'schema_id': schema_id}
+        )
+
     def register_schema_from_schema_json(
         self,
         namespace,
@@ -482,6 +703,7 @@ class SchematizerClient(object):
         schema_json,
         source_owner_email,
         contains_pii,
+        cluster_type='datapipe',
         base_schema_id=None
     ):
         """ Register a new schema and return newly created schema object.
@@ -495,6 +717,9 @@ class SchematizerClient(object):
             contains_pii (bool): Indicates if the schema being registered has
                 at least one field that can potentially contain PII.
                 See http://y/pii for help identifying what is or is not PII.
+            cluster_type (Optional[str]): Kafka cluster type to connect like
+                datapipe, scribe, etc. See http://y/datapipe_cluster_types for
+                more info on cluster_types. Defaults to datapipe.
             base_schema_id (Optional[int]): The id of the original schema which
                 the new schema was changed based on
 
@@ -508,6 +733,7 @@ class SchematizerClient(object):
             schema_str=simplejson.dumps(schema_json),
             source_owner_email=source_owner_email,
             contains_pii=contains_pii,
+            cluster_type=cluster_type,
             base_schema_id=base_schema_id
         )
 
@@ -999,7 +1225,7 @@ class SchematizerClient(object):
                 schema = self.get_latest_schema_by_topic_name(topic)
                 if schema.primary_keys:
                     pkey_topics.append(topic)
-            except HTTPError:
+            except HTTPNotFound:
                 # List of topics may include topics not in schematizer
                 pass
         return pkey_topics

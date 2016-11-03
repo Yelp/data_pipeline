@@ -1,4 +1,18 @@
 # -*- coding: utf-8 -*-
+# Copyright 2016 Yelp Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
@@ -7,12 +21,12 @@ from setuptools import setup
 
 import data_pipeline
 
-readme = open('README.rst').read()
+readme = open('README.md').read()
 doclink = """
 Documentation
 -------------
 
-The full documentation is at http://servicedocs.yelpcorp.com/docs/data_pipeline/"""
+The full documentation is at TODO (DATAPIPE-2031|abrar): Link to public servicedocs."""
 history = open('HISTORY.rst').read().replace('.. :changelog:', '')
 
 setup(
@@ -23,30 +37,27 @@ setup(
     long_description=readme + '\n\n' + doclink + '\n\n' + history,
     author=data_pipeline.__author__,
     author_email=data_pipeline.__email__,
-    url='http://servicedocs.yelpcorp.com/docs/data_pipeline/',
+    url='https://github.com/Yelp/data_pipeline',
     packages=find_packages(exclude=['tests*', 'benchmarks*']),
     include_package_data=True,
     install_requires=[
         'avro==1.9.0-yelp4',
+        'bravado>=8.4.0',
         'cached-property>=0.1.5',
         'cffi>=1.1.2',
+        'cryptography<=1.3.4',
+        'data-pipeline-avro-util>=0.2.1',
         'enum34>=1.0.4',
-        'kafka-python==0.9.5.post6',
+        'frozendict==0.5',
+        'kafka-python>0.9.4,<1.0.0',
         'kafka-utils>0.3.3',
         'psutil==4.2.0',
         'pycrypto>=2.6.1',
-        'pyramid_zipkin>=0.12.0,<0.13.0',
-        'pysensu-yelp>=0.2.3',
+        'pyopenssl==16.0.0',
+        'pyramid_zipkin>=0.16.0',
         'PyStaticConfiguration>=0.9.0',
         'simplejson>=2.1.2',
-        'swaggerpy>=0.7.6',
-        'swagger_zipkin>=0.1.0',
-        'yelp-avro>=0.1.9',
-        'yelp-kafka>=5.0.0',
-        'yelp-servlib>=4.3.0',
-        'cryptography<=1.3.4',
-        'pyopenssl==16.0.0',
-        'frozendict==0.5'
+        'swagger_zipkin>=0.1.0'
     ],
     extras_require={
         'tools': [
@@ -65,6 +76,7 @@ setup(
         # inform downstream projects that use data_pipeline consumer to
         # include data_pipeline[internal] to their dependency.
         'internal': [
+            'pysensu-yelp>=0.2.3',
             'yelp-kafka>=5.0.0',
             'yelp-servlib>=4.3.0'
         ]
@@ -74,7 +86,8 @@ setup(
     package_data={
         str('data_pipeline'): [
             'schemas/*.avsc',
-            'testing_helpers/docker-compose.yml'
+            'testing_helpers/docker-compose.yml',
+            'testing_helpers/docker-compose-opensource.yml'
         ],
     },
     scripts=[

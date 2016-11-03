@@ -1,4 +1,18 @@
 # -*- coding: utf-8 -*-
+# Copyright 2016 Yelp Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
@@ -6,10 +20,9 @@ import logging
 import os
 
 import staticconf
+from bravado.client import SwaggerClient
 from cached_property import cached_property
 from kafka_utils.util.config import ClusterConfig
-from swaggerpy import client
-from yelp_kafka.discovery import get_kafka_cluster
 
 
 namespace = 'data_pipeline'
@@ -114,13 +127,13 @@ class Config(object):
 
     @property
     def schematizer_client(self):
-        """Returns a swagger-py client for the schematizer api.
+        """Returns a bravado client for the schematizer api.
 
         By default, this will connect to a schematizer instance running in the
         included docker-compose file.
         """
-        return client.get_client(
-            'http://{0}/api-docs'.format(self.schematizer_host_and_port)
+        return SwaggerClient.from_url(
+            'http://{0}/swagger.json'.format(self.schematizer_host_and_port)
         )
 
     @property
@@ -149,6 +162,7 @@ class Config(object):
             self.kafka_cluster_name is not None and
             not self.should_use_testing_containers
         ):
+            from yelp_kafka.discovery import get_kafka_cluster  # NOQA
             return get_kafka_cluster(self.kafka_cluster_type,
                                      'data_pipeline-client',
                                      self.kafka_cluster_name
@@ -319,6 +333,15 @@ class Config(object):
         """
         return data_pipeline_conf.read_int(
             'producer_max_publish_retry_count',
+            default=5
+        )
+
+    @property
+    def consumer_max_offset_retry_count(self):
+        """Number of times the consumer will retry to set its offsets.
+        """
+        return data_pipeline_conf.read_int(
+            'consumer_max_offset_retry_count',
             default=5
         )
 

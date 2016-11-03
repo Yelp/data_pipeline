@@ -1,4 +1,18 @@
 # -*- coding: utf-8 -*-
+# Copyright 2016 Yelp Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
@@ -20,13 +34,17 @@ def test_container():
 
 
 def test_compose_prefix(test_container):
+    file_name = ("docker-compose-opensource.yml"
+                 if test_container._is_envvar_set('OPEN_SOURCE_MODE')
+                 else "docker-compose.yml")
     project_name = test_container.project
     file_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     expected_result = ("docker-compose "
                        "--file={file_path}"
-                       "/data_pipeline/testing_helpers/docker-compose.yml "
+                       "/data_pipeline/testing_helpers/{file_name} "
                        "--project-name={project_name}").format(
         file_path=file_path,
+        file_name=file_name,
         project_name=project_name)
     actual_result = Containers.compose_prefix()
     assert expected_result == actual_result

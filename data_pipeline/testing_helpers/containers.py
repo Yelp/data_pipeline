@@ -1,4 +1,18 @@
 # -*- coding: utf-8 -*-
+# Copyright 2016 Yelp Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
@@ -77,6 +91,11 @@ class Containers(object):
         containers::
 
             $ PULL_CONTAINERS=true py.test tests/
+
+        The `OPEN_SOURCE_MODE` environment variable should be set when running in
+        open source mode::
+
+            $ OPEN_SOURCE_MODE=true py.test tests/
 
         When running tests using an automated system like Jenkins, both
         `FORCE_FRESH_CONTAINERS` and `PULL_CONTAINERS` should be set, so tests
@@ -292,8 +311,14 @@ class Containers(object):
 
     @property
     def _compose_options(self):
+        file_name = ("docker-compose-opensource.yml"
+                     if self._is_envvar_set('OPEN_SOURCE_MODE')
+                     else "docker-compose.yml")
         compose_file = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "docker-compose.yml")
+            os.path.join(
+                os.path.dirname(__file__),
+                file_name
+            )
         )
         if self.additional_compose_file:
             # The additional compose file need to be put in front.
@@ -357,7 +382,7 @@ class Containers(object):
             time.sleep(0.1)
             try:
                 r = requests.get(
-                    "http://{0}/status".format(get_config().schematizer_host_and_port)
+                    "http://{0}/v1/namespaces".format(get_config().schematizer_host_and_port)
                 )
                 if 200 <= r.status_code < 300:
                     count += 1
