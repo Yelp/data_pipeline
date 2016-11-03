@@ -334,25 +334,40 @@ class SchematizerClient(object):
             result.append(_namespace.to_result())
         return result
 
-    def get_sources_by_namespace(self, namespace_name):
+    def get_sources_by_namespace(
+        self,
+        namespace_name,
+        min_id=0,
+        page_size=10
+    ):
         """Get the list of sources in the specified namespace.
 
         Args:
             namespace_name (str): namespace name to look up
+            min_id (Optional[int]): the returned sources should have id greater than or equal to the min_id
+            page_size (Optional[int]): the number of sources to return in one api call to prevent timeout
 
         Returns:
             (List[data_pipeline.schematizer_clientlib.models.source.Source]):
                 The list of schema sources in the given namespace.
         """
-        response = self._call_api(
-            api=self._client.namespaces.list_sources_by_namespace,
-            params={'namespace': namespace_name}
-        )
+        last_page_size = page_size
         result = []
-        for resp_item in response:
-            _source = _Source.from_response(resp_item)
-            result.append(_source.to_result())
-            self._set_cache_by_source(_source)
+        while last_page_size == page_size:
+            response = self._call_api(
+                api=self._client.namespaces.list_sources_by_namespace,
+                params={
+                    'namespace': namespace_name,
+                    'min_id': min_id,
+                    'count': page_size
+                }
+            )
+            for resp_item in response:
+                _source = _Source.from_response(resp_item)
+                result.append(_source.to_result())
+                self._set_cache_by_source(_source)
+                min_id = _source.source_id + 1
+            last_page_size = len(response)
         return result
 
     def get_sources(
