@@ -330,8 +330,8 @@ class SchematizerClient(object):
 
         Args:
             namespace_name (str): namespace name to look up
-            min_id (int): the returned sources should have id bigger or equal to the min_id
-            page_size (int): the maximal number of sources to return in one page
+            min_id (Optional[int]): the returned sources should have id greater than or equal to the min_id
+            page_size (Optional[int]): the number of sources to return in one api call to prevent timeout
 
         Returns:
             (List[data_pipeline.schematizer_clientlib.models.source.Source]):
