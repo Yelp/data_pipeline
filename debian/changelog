@@ -1,3 +1,9 @@
+data-pipeline-tools (0.9.2) lucid; urgency=low
+
+  * Commit: fix linting error
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Thu, 03 Nov 2016 13:17:29 -0700
+
 data-pipeline-tools (0.9.1) lucid; urgency=low
 
   * Commit: Merge branch 'DATAPIPE-1778-

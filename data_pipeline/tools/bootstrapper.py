@@ -411,7 +411,7 @@ class BootstrapperBatch(yelp_batch.batch.Batch):
             '--schema-ref',
             type='string',
             help='File path to load the schema reference json document from.'
-                 'See https://jira.yelpcorp.com/browse/DATAPIPE-259 for more'
+                 'See DATAPIPE-259 for more'
                  'information on the schema reference json format.'
         )
         opt_group.add_option(

@@ -771,6 +771,52 @@ class TestGetSourcesByNamespace(GetSourcesTestBase):
             assert actual == sources[0]
             assert source_api_spy.call_count == 0
 
+    def test_get_sources_by_namespace_filter_by_min_id(
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src,
+        usr_src
+    ):
+        actual = schematizer.get_sources_by_namespace(
+            yelp_namespace,
+            min_id=biz_src.source_id + 1
+        )
+        expected = [usr_src]
+        for actual_src, expected_resp in zip(actual, expected):
+            self._assert_source_values(actual_src, expected_resp)
+
+    def test_get_sources_by_namespace_filter_by_page_size(
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src,
+        usr_src
+    ):
+        actual = schematizer.get_sources_by_namespace(
+            yelp_namespace,
+            page_size=1
+        )
+        expected = [biz_src]
+        for actual_src, expected_resp in zip(actual, expected):
+            self._assert_source_values(actual_src, expected_resp)
+
+    def test_get_sources_by_namespace_filter_by_page_size_and_min_id(
+        self,
+        schematizer,
+        yelp_namespace,
+        biz_src,
+        usr_src
+    ):
+        actual = schematizer.get_sources_by_namespace(
+            yelp_namespace,
+            page_size=2,
+            min_id=biz_src.source_id + 1
+        )
+        expected = [usr_src]
+        for actual_src, expected_resp in zip(actual, expected):
+            self._assert_source_values(actual_src, expected_resp)
+
 
 class TestGetTopicsBySourceId(SchematizerClientTestBase):
 
@@ -1724,7 +1770,7 @@ class RegistrationTestBase(SchematizerClientTestBase):
         post_body = {
             'name': 'simple_name_{}'.format(random.random()),
             'target_type': 'redshift_{}'.format(random.random()),
-            'destination': 'dwv1.yelpcorp.com.{}'.format(random.random())
+            'destination': '{}.example.org'.format(random.random())
         }
         return self._get_client().data_targets.create_data_target(
             body=post_body

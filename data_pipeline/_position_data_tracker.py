@@ -124,7 +124,7 @@ def _update_nested_dict(original_dict, new_dict):
     """Update the dictionary and its nested dictionary fields.
 
     Note: This was copy-pasted from:
-        https://opengrok.yelpcorp.com/xref/submodules/yelp_lib/yelp_lib/containers/dicts.py?r=92297a46#40
+        opengrok/xref/submodules/yelp_lib/yelp_lib/containers/dicts.py?r=92297a46#40
         The reason is that this revision requires yelp_lib>=11.0.0 but we
         can not use this version yelp-main yet (see YELPLIB-65 for details).
         It's simpler to just temporarily pull this in.

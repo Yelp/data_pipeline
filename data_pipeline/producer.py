@@ -54,7 +54,7 @@ class Producer(Client):
         The clientlib used to include an AsyncProducer, which published to Kafka in the
         background.  This producer was somewhat flaky, increased development effort,
         and didn't provide a concrete performance benefit (see
-        https://pb.yelpcorp.com/150070 for benchmark results).  If we ever want to
+        pb/150070 for benchmark results).  If we ever want to
         revive that producer, a SHA containing the producer just before its removal
         has been tagged as before-async-producer-removal.
 
