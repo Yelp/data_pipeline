@@ -1,53 +1,117 @@
-=============================
-Data Pipeline Clientlib
-=============================
+# Data Pipeline Clientlib
 
-Provides an interface to tail and publish to data pipeline topics.
 
-Developing
-----------
+What is it?
+-----------
+Data Pipeline Clientlib provides an interface to tail and publish to data pipeline topics.
 
-The clientlib is setup for TDD.  A `Guardfile`, used to trigger commands on
-file changes is included, as is a `Procfile`, which is useful for running
-development services.
+[Read More](https://engineeringblog.yelp.com/2016/07/billions-of-messages-a-day-yelps-real-time-data-pipeline.html)
 
-To run guard, which will run tests and build docs as files are modified::
 
-  bundle exec guard
+How to download
+---------------
+```
+git clone git@github.com:Yelp/data_pipeline.git
+```
 
-To run dependent processes, run::
 
-  bundle exec foreman start
+Tests
+-----
+Running unit tests
+```
+make -f Makefile-opensource test
+```
 
-Installing a more modern ruby version may be necessary.  To do this on a dev
-machine, from the data_pipeline project root, install ruby-build, ruby 2.2.2,
-and bundler, then the bundled gems::
 
-  git clone https://github.com/sstephenson/ruby-build.git ~/.rbenv/plugins/ruby-build
-  export RBENV_ROOT=$HOME/.rbenv
-  rbenv install 2.2.2
-  rbenv local 2.2.2
-  rbenv rehash
-  eval "$(rbenv init -)"
-  gem install bundler
-  rbenv rehash
-  bundle install --path=.bundle
+Configuration
+-------------
+Include the `data_pipeline` namespace in your `module_env_config` of `config.yaml`
+and configure following values for `kafka_ip`, `zk_ip` and `schematizer_ip`
 
-This will start a docker container with Kafka and a documentation server,
-accessible at `http://HOST:8001/docs/build/html/`.  Tests will automatically
-reuse a running Kafka container instead of starting a new one, which can
-decrease test time dramatically.
+```
+module_env_config:
+	...
+    - namespace: data_pipeline
+      config:
+        kafka_broker_list:
+            - <kafka_ip>:9092
+        kafka_zookeeper: <zk_ip>:2181
+        schematizer_host_and_port: <schematizer_ip>:8888
+    ...
+```
 
-It is recommended to run `foreman` in a background tab, and `guard` in a
-foreground tab, as `foreman` will let you inspect the logs of the running
-`kafka` containers, while `guard` will show test results as files are changed.
 
-Development Decisions
----------------------
+Usage
+-----
+Registering a simple schema with the Schematizer service.
+```
+from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+test_avro_schema_json = {
+    "type": "record",
+    "namespace": "test_namespace",
+    "source"="test_source",
+    "name": "test_name",
+    'doc': 'test_doc',
+    "fields": [
+        {"type": "string", 'doc': 'test_doc1', "name": "key1"},
+        {"type": "string", 'doc': 'test_doc2', "name": "key2"}
+    ]
+}
+schema_info = get_schematizer().register_schema_from_schema_json(
+    namespace="test_namespace",
+    source="test_source",
+    schema_json=test_avro_schema_json,
+    source_owner_email="test@test.com",
+    contains_pii=False
+)
+```
 
-The clientlib used to include an AsyncProducer, which published to Kafka in the
-background.  This producer was somewhat flaky, increased development effort,
-and didn't provide a concrete performance benefit (see
-https://pb.yelpcorp.com/150070 for benchmark results).  If we ever want to
-revive that producer, a SHA containing the producer just before its removal
-has been tagged as before-async-producer-removal.
+Creating a simple Data Pipeline Message from payload data.
+```
+from data_pipeline.message import Message
+message = Message(
+	schema_id = schema_info.schema_id,
+	payload_data = {
+		'key1': 'value1',
+		'key2': 'value2'
+	}
+)
+```
+
+Starting a Producer and publishing messages with it::
+```
+from data_pipeline.producer import Producer
+with Producer() as producer:
+	producer.publish(message)
+```
+
+Starting a Consumer with name `my_consumer` that listens for
+messages in all topics within the `test_namespace` and `test_source`.
+In this example, the consumer consumes a single message, processes it, and
+commits the offset.
+```
+from data_pipeline.consumer import Consumer
+from data_pipeline.consumer_source import TopicInSource
+consumer_source = TopicInSource("test_namespace", "test_source")
+with Consumer(
+    consumer_name='my_consumer',
+    team_name='bam',
+    expected_frequency_seconds=12345,
+    consumer_source=consumer_source
+) as consumer:
+    while True:
+        message = consumer.get_message()
+        if message is not None:
+            ... do stuff with message ...
+            consumer.commit_message(message)
+```
+
+
+License
+-------
+Data Pipeline Clientlib is licensed under the Apache License, Version 2.0: http://www.apache.org/licenses/LICENSE-2.0
+
+
+Contributing
+------------
+Everyone is encouraged to contribute to Data Pipeline Clientlib by forking the Github repository and making a pull request or opening an issue.
