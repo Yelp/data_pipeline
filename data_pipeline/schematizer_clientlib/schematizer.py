@@ -438,7 +438,6 @@ class SchematizerClient(object):
         schema_str,
         source_owner_email,
         contains_pii,
-        cluster_type='datapipe',
         base_schema_id=None
     ):
         """ Register a new schema and return newly created schema object.
@@ -451,9 +450,6 @@ class SchematizerClient(object):
             contains_pii (bool): Indicates if the schema being registered has
                 at least one field that can potentially contain PII.
                 See http://y/pii for help identifying what is or is not PII.
-            cluster_type (str): Kafka cluster type to connect like datapipe,
-                scribe, etc. See http://y/datapipe_cluster_types for more info
-                on cluster_types. Defaults to datapipe.
             base_schema_id (Optional[int]): The id of the original schema which
                 the new schema was changed based on
 
@@ -467,7 +463,6 @@ class SchematizerClient(object):
             'source': source,
             'source_owner_email': source_owner_email,
             'contains_pii': contains_pii,
-            'cluster_type': cluster_type
         }
         if base_schema_id:
             request_body['base_schema_id'] = base_schema_id
@@ -487,7 +482,6 @@ class SchematizerClient(object):
         schema_json,
         source_owner_email,
         contains_pii,
-        cluster_type='datapipe',
         base_schema_id=None
     ):
         """ Register a new schema and return newly created schema object.
@@ -501,9 +495,6 @@ class SchematizerClient(object):
             contains_pii (bool): Indicates if the schema being registered has
                 at least one field that can potentially contain PII.
                 See http://y/pii for help identifying what is or is not PII.
-            cluster_type (str): Kafka cluster type to connect like datapipe,
-                scribe, etc. See http://y/datapipe_cluster_types for more info
-                on cluster_types. Defaults to datapipe.
             base_schema_id (Optional[int]): The id of the original schema which
                 the new schema was changed based on
 
@@ -517,7 +508,6 @@ class SchematizerClient(object):
             schema_str=simplejson.dumps(schema_json),
             source_owner_email=source_owner_email,
             contains_pii=contains_pii,
-            cluster_type=cluster_type,
             base_schema_id=base_schema_id
         )
 

@@ -21,7 +21,6 @@ AvroArgs = namedtuple(
         "namespace",
         "source_owner_email",
         "pii",
-        "cluster_type",
         "avro_schema",
         "base_schema_id",
         "verbosity"
@@ -52,7 +51,6 @@ class BaseTestRegister(TestIntrospectorBase):
         namespace_name,
         source_name,
         contains_pii=False,
-        cluster_type='datapipe',
         base_schema_id=None
     ):
         assert schema.primary_keys == primary_keys
@@ -61,7 +59,6 @@ class BaseTestRegister(TestIntrospectorBase):
         assert schema.topic.source.name == source_name
         assert schema.topic.source.namespace.name == namespace_name
         assert schema.topic.contains_pii == contains_pii
-        assert schema.topic.cluster_type == cluster_type
 
     @pytest.fixture
     def namespace_name(self):
@@ -105,8 +102,7 @@ class TestRegisterAvroCommand(BaseTestRegister):
         namespace=None,
         avro_schema=None,
         base_schema_id=None,
-        pii=False,
-        cluster_type=None
+        pii=False
     ):
         return AvroArgs(
             source_id=source_id,
@@ -116,7 +112,6 @@ class TestRegisterAvroCommand(BaseTestRegister):
             avro_schema=avro_schema,
             base_schema_id=base_schema_id,
             pii=pii,
-            cluster_type=cluster_type,
             verbosity=0
         )
 
@@ -124,7 +119,6 @@ class TestRegisterAvroCommand(BaseTestRegister):
         {},
         {'base_schema_id': 1},
         {'pii': True},
-        {'cluster_type': 'scribe'}
     ])
     def test_avro_schema(
         self,
