@@ -1724,7 +1724,7 @@ class RegistrationTestBase(SchematizerClientTestBase):
         post_body = {
             'name': 'simple_name_{}'.format(random.random()),
             'target_type': 'redshift_{}'.format(random.random()),
-            'destination': 'dwv1.yc.com.{}'.format(random.random())
+            'destination': '{}.example.org'.format(random.random())
         }
         return self._get_client().data_targets.create_data_target(
             body=post_body
