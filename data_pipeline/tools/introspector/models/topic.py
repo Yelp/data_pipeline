@@ -27,7 +27,7 @@ class IntrospectorTopic(BaseIntrospectorModel):
         )
         self._fields = [
             'name', 'topic_id', 'source_name', 'source_id', 'namespace',
-            'primary_keys', 'contains_pii'
+            'primary_keys', 'contains_pii', 'cluster_type'
         ]
         self.source_name = topic_obj.source.name
         self.source_id = topic_obj.source.source_id
