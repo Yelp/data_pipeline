@@ -981,6 +981,11 @@ class TestDeleteNamespaceMetaAttrMapping(MetaAttrMappingTestBase):
         user_namespace,
         meta_attr_schema_id
     ):
+        """ This test calls the delete api twice and verifies that the mapping
+        gets deleted successfully first time and raises HTTPNotFound exception
+        on calling the delete api again as the mapping has already been
+        deleted.
+        """
         schematizer.register_namespace_meta_attribute_mapping(
             namespace_name=user_namespace.name,
             meta_attr_schema_id=meta_attr_schema_id
@@ -994,6 +999,11 @@ class TestDeleteNamespaceMetaAttrMapping(MetaAttrMappingTestBase):
             meta_attribute_schema_id=meta_attr_schema_id
         )
         assert actual_meta_attr_mapping == expected_meta_attr_mapping
+        with pytest.raises(http_exc.HTTPNotFound):
+            schematizer.delete_namespace_meta_attribute_mapping(
+                namespace_name=user_namespace.name,
+                meta_attr_schema_id=meta_attr_schema_id
+            )
 
     def test_delete_a_non_existent_namespace_meta_attribute_mapping(
         self,
@@ -1058,7 +1068,7 @@ class TestGetMetaAttrMappingByNamespace(MetaAttrMappingTestBase):
         meta_attr_mappings = schematizer.get_namespace_meta_attribute_mappings(
             namespace_name=sample_namespace.name
         )
-        assert not meta_attr_mappings
+        assert meta_attr_mappings == []
 
     def test_get_meta_attr_mapping_for_invalid_namespace(
         self,
@@ -1120,6 +1130,11 @@ class TestDeleteSourceMetaAttrMapping(MetaAttrMappingTestBase):
         user_source,
         meta_attr_schema_id
     ):
+        """ This test calls the delete api twice and verifies that the meta
+        attribute mapping gets deleted successfully first time and raises
+        HTTPNotFound exception on calling the delete api again as the mapping
+        has already been deleted.
+        """
         schematizer.register_source_meta_attribute_mapping(
             source_id=user_source.source_id,
             meta_attr_schema_id=meta_attr_schema_id
@@ -1133,6 +1148,11 @@ class TestDeleteSourceMetaAttrMapping(MetaAttrMappingTestBase):
             meta_attribute_schema_id=meta_attr_schema_id
         )
         assert actual_meta_attr_mapping == expected_meta_attr_mapping
+        with pytest.raises(http_exc.HTTPNotFound):
+            schematizer.delete_source_meta_attribute_mapping(
+                source_id=user_source.source_id,
+                meta_attr_schema_id=meta_attr_schema_id
+            )
 
     def test_delete_a_non_existent_source_meta_attribute_mapping(
         self,
@@ -1184,7 +1204,7 @@ class TestGetMetaAttrMappingBySource(MetaAttrMappingTestBase):
         meta_attr_mappings = schematizer.get_source_meta_attribute_mappings(
             sample_source.source_id
         )
-        assert not meta_attr_mappings
+        assert meta_attr_mappings == []
 
     def test_get_meta_attr_mapping_for_invalid_source(
         self,
@@ -1223,7 +1243,7 @@ class TestGetMetaAttrMappingBySchemaId(MetaAttrMappingTestBase):
         meta_attr_ids = schematizer.get_meta_attributes_by_schema_id(
             schema_id=sample_schema.schema_id
         )
-        assert not meta_attr_ids
+        assert meta_attr_ids == []
 
     def test_get_meta_attr_mapping_for_invalid_schema_id(
         self,
