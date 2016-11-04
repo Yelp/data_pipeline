@@ -1,4 +1,18 @@
 # -*- coding: utf-8 -*-
+# Copyright 2016 Yelp Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
@@ -7,12 +21,12 @@ from setuptools import setup
 
 import data_pipeline
 
-readme = open('README.rst').read()
+readme = open('README.md').read()
 doclink = """
 Documentation
 -------------
 
-The full documentation is at http://servicedocs.yelpcorp.com/docs/data_pipeline/"""
+The full documentation is at TODO (DATAPIPE-2031|abrar): Link to public servicedocs."""
 history = open('HISTORY.rst').read().replace('.. :changelog:', '')
 
 setup(
@@ -23,11 +37,10 @@ setup(
     long_description=readme + '\n\n' + doclink + '\n\n' + history,
     author=data_pipeline.__author__,
     author_email=data_pipeline.__email__,
-    url='http://servicedocs.yelpcorp.com/docs/data_pipeline/',
+    url='https://github.com/Yelp/data_pipeline',
     packages=find_packages(exclude=['tests*', 'benchmarks*']),
     include_package_data=True,
     install_requires=[
-        'avro==1.9.0-yelp4',
         'bravado>=8.4.0',
         'cached-property>=0.1.5',
         'cffi>=1.1.2',
@@ -43,7 +56,8 @@ setup(
         'pyramid_zipkin>=0.16.0',
         'PyStaticConfiguration>=0.9.0',
         'simplejson>=2.1.2',
-        'swagger_zipkin>=0.1.0'
+        'swagger_zipkin>=0.1.0',
+        'yelp-avro==1.9.2'
     ],
     extras_require={
         'tools': [

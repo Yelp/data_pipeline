@@ -1,4 +1,18 @@
 # -*- coding: utf-8 -*-
+# Copyright 2016 Yelp Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
@@ -397,7 +411,7 @@ class BootstrapperBatch(yelp_batch.batch.Batch):
             '--schema-ref',
             type='string',
             help='File path to load the schema reference json document from.'
-                 'See https://jira.yelpcorp.com/browse/DATAPIPE-259 for more'
+                 'See DATAPIPE-259 for more'
                  'information on the schema reference json format.'
         )
         opt_group.add_option(

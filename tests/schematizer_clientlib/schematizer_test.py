@@ -1,4 +1,18 @@
 # -*- coding: utf-8 -*-
+# Copyright 2016 Yelp Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
@@ -756,6 +770,52 @@ class TestGetSourcesByNamespace(GetSourcesTestBase):
             actual = schematizer.get_source_by_id(sources[0].source_id)
             assert actual == sources[0]
             assert source_api_spy.call_count == 0
+
+    def test_get_sources_by_namespace_filter_by_min_id(
+        self,
+        schematizer,
+        yelp_namespace_name,
+        biz_src,
+        usr_src
+    ):
+        actual = schematizer.get_sources_by_namespace(
+            yelp_namespace_name,
+            min_id=biz_src.source_id + 1
+        )
+        expected = [usr_src]
+        for actual_src, expected_resp in zip(actual, expected):
+            self._assert_source_values(actual_src, expected_resp)
+
+    def test_get_sources_by_namespace_filter_by_page_size(
+        self,
+        schematizer,
+        yelp_namespace_name,
+        biz_src,
+        usr_src
+    ):
+        actual = schematizer.get_sources_by_namespace(
+            yelp_namespace_name,
+            page_size=1
+        )
+        expected = [biz_src]
+        for actual_src, expected_resp in zip(actual, expected):
+            self._assert_source_values(actual_src, expected_resp)
+
+    def test_get_sources_by_namespace_filter_by_page_size_and_min_id(
+        self,
+        schematizer,
+        yelp_namespace_name,
+        biz_src,
+        usr_src
+    ):
+        actual = schematizer.get_sources_by_namespace(
+            yelp_namespace_name,
+            page_size=2,
+            min_id=biz_src.source_id + 1
+        )
+        expected = [usr_src]
+        for actual_src, expected_resp in zip(actual, expected):
+            self._assert_source_values(actual_src, expected_resp)
 
 
 class TestGetTopicsBySourceId(SchematizerClientTestBase):
@@ -1799,7 +1859,7 @@ class RegistrationTestBase(SchematizerClientTestBase):
         post_body = {
             'name': 'simple_name_{}'.format(random.random()),
             'target_type': 'redshift_{}'.format(random.random()),
-            'destination': 'dwv1.yelpcorp.com.{}'.format(random.random())
+            'destination': '{}.example.org'.format(random.random())
         }
         return self._get_client().data_targets.create_data_target(
             body=post_body
