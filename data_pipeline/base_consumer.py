@@ -41,8 +41,13 @@ from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 logger = get_config().logger
 
 
-class MultipleClusterTypeTypeError(Exception):
-    pass
+class MultipleClusterTypeError(Exception):
+    def __init__(self, *cluster_types):
+        err_message = (
+            "Consumer can not process topics from different kafka cluster "
+            "types, i.e. (" + ", ".join(cluster_types) + ")."
+        )
+        Exception.__init__(self, err_message)
 
 
 class TopicNotFoundInRegionError(Exception):
@@ -218,26 +223,34 @@ class BaseConsumer(Client):
             max_retry_count=get_config().consumer_max_offset_retry_count
         )
         self._envelope = Envelope()
-        self._check_all_topics_have_same_cluster_type(
-            self.topic_to_consumer_topic_state_map
-        )
+        if self.topic_to_consumer_topic_state_map:
+            self.cluster_type = self._determine_cluster_type_from_topics(
+                self.topic_to_consumer_topic_state_map.keys()
+            )
 
-    def _check_all_topics_have_same_cluster_type(
-        self,
-        topic_to_consumer_topic_state_map
-    ):
-        self.cluster_type = None
-        for topic_name in topic_to_consumer_topic_state_map:
-            topic = get_schematizer().get_topics_by_name(topic_name)
-            if self.cluster_type is None:
-                self.cluster_type = topic.cluster_type
-            elif self.cluster_type != topic.cluster_type:
-                raise MultipleClusterTypeTypeError(
-                    "Consumer can not process topics from different kafka "
-                    "cluster types, i.e. ({}, {}).".format(
-                        self.cluster_type,
-                        topic.cluster_type
-                    ))
+    @cached_property
+    def _schematizer(self):
+        return get_schematizer()
+
+    def _determine_cluster_type_from_topics(self, topic_names):
+        """Checks whether the cluster type of all topics are the same and
+        returns it.
+
+        :param topic_names: list of topic names
+        :raises MultipleClusterTypeError: if all topics don't have the same cluster type.
+        :return: cluster_type
+        """
+        cluster_type = None
+        for topic_name in topic_names:
+            topic = self._schematizer.get_topic_by_name(topic_name)
+            if cluster_type is None:
+                cluster_type = topic.cluster_type
+            elif cluster_type != topic.cluster_type:
+                raise MultipleClusterTypeError(
+                    cluster_type,
+                    topic.cluster_type
+                )
+            return cluster_type
 
     def _get_refreshed_topic_to_consumer_topic_state_map(
         self,
@@ -301,14 +314,14 @@ class BaseConsumer(Client):
         the topic_to_partition_map instance variable with topic names as keys
         and corresponding partition lists as values.
         """
-        self._check_all_topics_have_same_cluster_type(
+        self._determine_cluster_type_from_topics(
             topic_to_consumer_topic_state_map
         )
         self.topic_to_partition_map = {}
         for (
             topic_name, consumer_topic_state
         ) in topic_to_consumer_topic_state_map.iteritems():
-            topics = self._get_valid_topics_in_region_from_topic_name(topic_name)
+            topics = self._get_topics_in_region_from_topic_name(topic_name)
             for topic in topics:
                 self.topic_to_partition_map[topic] = (
                     consumer_topic_state.partition_offset_map.keys()
@@ -316,33 +329,39 @@ class BaseConsumer(Client):
                 )
         self._set_registrar_tracked_schema_ids(topic_to_consumer_topic_state_map)
 
-    def _get_valid_topics_in_region_from_topic_name(self, topic_name):
-        if self.cluster_type is 'scribe':
-            topics_in_region = discovery.get_region_logs_stream(
-                client_id=self.client_name,
-                stream=topic_name,
-                region=self.cluster_name
-            )
-            if not topics_in_region:
-                raise TopicNotFoundInRegionError(
-                    topic_name,
-                    self.cluster_type,
-                    self.cluster_name
-                )
-            topics, _ = topics_in_region[0]
-            return topics
+    def _get_topics_in_region_from_topic_name(self, topic_name):
+        if self.cluster_type == 'scribe':
+            return self._get_scribe_topics_from_topic_name(topic_name)
         else:
-            topics_in_region = discovery.search_topic(
-                topic=topic_name,
-                clusters=[self._region_cluster_config]
+            self._get_kafka_topics_from_topic_name(topic_name)
+
+    def _get_scribe_topics_from_topic_name(self, topic_name):
+        topics_in_region = discovery.get_region_logs_stream(
+            client_id=self.client_name,
+            stream=topic_name,
+            region=self.cluster_name
+        )
+        if not topics_in_region:
+            raise TopicNotFoundInRegionError(
+                topic_name,
+                self.cluster_type,
+                self.cluster_name
             )
-            if not topics_in_region:
-                raise TopicNotFoundInRegionError(
-                    topic_name,
-                    self.cluster_type,
-                    self._region_cluster_config.name
-                )
-            return [topic for topic, _ in topics_in_region]
+        topics, _ = topics_in_region[0]
+        return topics
+
+    def _get_kafka_topics_from_topic_name(self, topic_name):
+        topics_in_region = discovery.search_topic(
+            topic=topic_name,
+            clusters=[self._region_cluster_config]
+        )
+        if not topics_in_region:
+            raise TopicNotFoundInRegionError(
+                topic_name,
+                self.cluster_type,
+                self._region_cluster_config.name
+            )
+        return [topic for topic, _ in topics_in_region]
 
     def _set_registrar_tracked_schema_ids(self, topic_to_consumer_topic_state_map):
         """
@@ -731,10 +750,13 @@ class BaseConsumer(Client):
             return discovery.get_kafka_cluster(
                 cluster_type=self.cluster_type,
                 client_id=self.client_name,
-                region=self.cluster_name
+                cluster_name=self.cluster_name
             )
         else:
-            return get_config().cluster_config
+            return discovery.get_region_cluster(
+                cluster_type=self.cluster_type,
+                client_id=self.client_name,
+            )
 
     @property
     def _kafka_consumer_config(self):
@@ -852,7 +874,7 @@ class BaseConsumer(Client):
         return new_topics
 
     def _get_new_topics(self, topic_filter):
-        new_topics = get_schematizer().get_topics_by_criteria(
+        new_topics = self._schematizer.get_topics_by_criteria(
             namespace_name=topic_filter.namespace_name,
             source_name=topic_filter.source_name,
             created_after=topic_filter.created_after
