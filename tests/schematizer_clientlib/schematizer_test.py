@@ -1,4 +1,18 @@
 # -*- coding: utf-8 -*-
+# Copyright 2016 Yelp Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
@@ -8,10 +22,11 @@ from datetime import datetime
 
 import mock
 import pytest
+import pytz
 import simplejson
+from bravado import exception as http_exc
 from requests.exceptions import ConnectionError
 from requests.exceptions import ReadTimeout
-from swaggerpy import exception as swaggerpy_exc
 
 from data_pipeline.config import get_config
 from data_pipeline.schematizer_clientlib.models.data_source_type_enum import \
@@ -33,32 +48,36 @@ class SchematizerClientTestBase(object):
     def schematizer(self, containers):
         return SchematizerClient()
 
-    def attach_spy_on_api(self, resource, api_name):
-        original_func = getattr(resource, api_name)
+    def attach_spy_on_api(self, client, resource_name, api_name):
+        # We replace what the client is actually returning instead of just patching
+        # since the client and the decorator both create new attributes on every call
+        # to __getattr__, see:
+        # https://github.com/Yelp/swagger_zipkin/blob/master/swagger_zipkin/zipkin_decorator.py
+        # (__getattr__ of ZipkinClientDecorator)
+        # https://github.com/Yelp/bravado/blob/master/bravado/client.py
+        # (__getattr__ of ResourceDecorator)
+        resource = getattr(client, resource_name)
+        spied_callable_operation = getattr(resource, api_name)
 
         def attach_spy(*args, **kwargs):
-            return original_func(*args, **kwargs)
+            return spied_callable_operation(*args, **kwargs)
 
-        return mock.patch.object(resource, api_name, side_effect=attach_spy)
+        setattr(client, resource_name, resource)
+        return mock.patch.object(
+            resource, api_name, side_effect=attach_spy
+        )
 
     def _get_creation_timestamp(self, created_at):
-        # Must create these vars with tzinfo/no tzinfo in mind while
-        # schematizer transitions to including this info
-        zero_date = datetime.utcfromtimestamp(0)
-        if created_at.tzinfo:
-            zero_date = datetime.fromtimestamp(0, created_at.tzinfo)
+        zero_date = datetime.fromtimestamp(0, created_at.tzinfo)
         return long((created_at - zero_date).total_seconds())
 
     def _get_created_after(self, created_at=None):
-        # Must create these vars with tzinfo/no tzinfo in mind while
-        # schematizer transitions to including this info
         day_one = (2015, 1, 1, 19, 10, 26, 0)
-        if created_at and created_at.tzinfo:
-            return datetime(*day_one, tzinfo=created_at.tzinfo)
-        return datetime(*day_one)
+        tzinfo = created_at.tzinfo if created_at else pytz.utc
+        return datetime(*day_one, tzinfo=tzinfo)
 
     @pytest.fixture(scope='class')
-    def yelp_namespace(self):
+    def yelp_namespace_name(self):
         return 'yelp_{0}'.format(random.random())
 
     @pytest.fixture(scope='class')
@@ -70,9 +89,9 @@ class SchematizerClientTestBase(object):
         return 'biz_{0}'.format(random.random())
 
     @pytest.fixture(scope='class')
-    def biz_src_resp(self, yelp_namespace, biz_src_name):
+    def biz_src_resp(self, yelp_namespace_name, biz_src_name):
         return self._register_avro_schema(
-            yelp_namespace,
+            yelp_namespace_name,
             biz_src_name
         ).topic.source
 
@@ -85,8 +104,8 @@ class SchematizerClientTestBase(object):
         return 'cta_{0}'.format(random.random())
 
     @pytest.fixture(scope='class')
-    def biz_topic_resp(self, yelp_namespace, biz_src_name):
-        return self._register_avro_schema(yelp_namespace, biz_src_name).topic
+    def biz_topic_resp(self, yelp_namespace_name, biz_src_name):
+        return self._register_avro_schema(yelp_namespace_name, biz_src_name).topic
 
     @property
     def source_owner_email(self):
@@ -132,9 +151,9 @@ class SchematizerClientTestBase(object):
             params.update(**overrides)
         return self._get_client().schemas.register_schema(body=params).result()
 
-    def _create_note(self, reference_id, type):
+    def _create_note(self, reference_id, reference_type):
         note = {
-            'reference_type': type,
+            'reference_type': reference_type,
             'reference_id': reference_id,
             'note': self.note,
             'last_updated_by': self.source_owner_email
@@ -152,13 +171,13 @@ class SchematizerClientTestBase(object):
             'base_schema_id',
             'status',
             'primary_keys',
-            'note',
             'created_at',
             'updated_at'
         )
         self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
         assert actual.schema_json == simplejson.loads(expected_resp.schema)
         self._assert_topic_values(actual.topic, expected_resp.topic)
+        self._assert_note_values(actual.note, expected_resp.note)
 
     def _assert_schema_element_values(self, actual, expected_resp):
         assert len(actual) == len(expected_resp)
@@ -180,6 +199,21 @@ class SchematizerClientTestBase(object):
         self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
         assert actual.schema_json == expected_resp.schema_json
         self._assert_topic_values(actual.topic, expected_resp.topic)
+
+    def _assert_note_values(self, actual, expected_resp):
+        if actual is None or expected_resp is None:
+            assert actual == expected_resp
+            return
+        attrs = (
+            'reference_type',
+            'note',
+            'reference_id',
+            'id',
+            'created_at',
+            'updated_at',
+            'last_updated_by'
+        )
+        self._assert_equal_multi_attrs(actual, expected_resp, *attrs)
 
     def _assert_topic_values(self, actual, expected_resp):
         attrs = (
@@ -206,8 +240,8 @@ class SchematizerClientTestBase(object):
 class TestAPIClient(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
-    def biz_schema(self, yelp_namespace, biz_src_name, containers):
-        return self._register_avro_schema(yelp_namespace, biz_src_name)
+    def biz_schema(self, yelp_namespace_name, biz_src_name, containers):
+        return self._register_avro_schema(yelp_namespace_name, biz_src_name)
 
     def test_retry_api_call(self, schematizer, biz_schema):
         with mock.patch.object(
@@ -225,15 +259,16 @@ class TestAPIClient(SchematizerClientTestBase):
 class TestGetSchemaById(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
-    def biz_schema(self, yelp_namespace, biz_src_name):
-        schema = self._register_avro_schema(yelp_namespace, biz_src_name)
+    def biz_schema(self, yelp_namespace_name, biz_src_name):
+        schema = self._register_avro_schema(yelp_namespace_name, biz_src_name)
         note = self._create_note(schema.schema_id, 'schema')
         schema.note = note
         return schema
 
     def test_get_non_cached_schema_by_id(self, schematizer, biz_schema):
         with self.attach_spy_on_api(
-            schematizer._swagger_client.schemas,
+            schematizer._client,
+            'schemas',
             'get_schema_by_id'
         ) as api_spy:
             actual = schematizer.get_schema_by_id(biz_schema.schema_id)
@@ -244,13 +279,16 @@ class TestGetSchemaById(SchematizerClientTestBase):
         schematizer.get_schema_by_id(biz_schema.schema_id)
 
         with self.attach_spy_on_api(
-            schematizer._swagger_client.schemas,
+            schematizer._client,
+            'schemas',
             'get_schema_by_id'
         ) as schema_api_spy, self.attach_spy_on_api(
-            schematizer._swagger_client.topics,
+            schematizer._client,
+            'topics',
             'get_topic_by_topic_name'
         ) as topic_api_spy, self.attach_spy_on_api(
-            schematizer._swagger_client.sources,
+            schematizer._client,
+            'sources',
             'get_source_by_id'
         ) as source_api_spy:
             actual = schematizer.get_schema_by_id(biz_schema.schema_id)
@@ -263,12 +301,13 @@ class TestGetSchemaById(SchematizerClientTestBase):
 class TestGetSchemaElementsBySchemaId(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
-    def biz_schema(self, yelp_namespace, biz_src_name):
-        return self._register_avro_schema(yelp_namespace, biz_src_name)
+    def biz_schema(self, yelp_namespace_name, biz_src_name):
+        return self._register_avro_schema(yelp_namespace_name, biz_src_name)
 
     def test_get_schema_elements_by_schema_id(self, schematizer, biz_schema):
         with self.attach_spy_on_api(
-            schematizer._swagger_client.schemas,
+            schematizer._client,
+            'schemas',
             'get_schema_elements_by_schema_id'
         ) as api_spy:
             actual = schematizer.get_schema_elements_by_schema_id(
@@ -288,9 +327,9 @@ class TestGetSchemaElementsBySchemaId(SchematizerClientTestBase):
 class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
-    def sorted_schemas(self, yelp_namespace, biz_src_name):
+    def sorted_schemas(self, yelp_namespace_name, biz_src_name):
         biz_schema = self._register_avro_schema(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name
         )
 
@@ -298,12 +337,12 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
         schema_json = {
             'type': 'record',
             'name': biz_src_name,
-            'namespace': yelp_namespace,
+            'namespace': yelp_namespace_name,
             'doc': 'test',
             'fields': [{'type': 'int', 'doc': 'test', 'name': 'simple'}]
         }
         simple_schema = self._register_avro_schema(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name,
             schema_json=schema_json
         )
@@ -312,12 +351,12 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
         schema_json = {
             'type': 'record',
             'name': biz_src_name,
-            'namespace': yelp_namespace,
+            'namespace': yelp_namespace_name,
             'doc': 'test',
             'fields': [{'type': 'int', 'doc': 'test', 'name': 'baz'}]
         }
         baz_schema = self._register_avro_schema(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name,
             schema_json=schema_json
         )
@@ -333,7 +372,8 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
         creation_timestamp = self._get_creation_timestamp(created_at)
         min_id = sorted_schemas[1].schema_id
         with self.attach_spy_on_api(
-            schematizer._swagger_client.schemas,
+            schematizer._client,
+            'schemas',
             'get_schemas_created_after'
         ) as schemas_api_spy:
             schemas = schematizer.get_schemas_created_after_date(
@@ -354,7 +394,8 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
         creation_timestamp = self._get_creation_timestamp(created_at)
 
         with self.attach_spy_on_api(
-            schematizer._swagger_client.schemas,
+            schematizer._client,
+            'schemas',
             'get_schemas_created_after'
         ) as schemas_api_spy:
             schemas = schematizer.get_schemas_created_after_date(
@@ -371,7 +412,8 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
         created_after = self._get_created_after()
         creation_timestamp = self._get_creation_timestamp(created_after)
         with self.attach_spy_on_api(
-            schematizer._swagger_client.schemas,
+            schematizer._client,
+            'schemas',
             'get_schemas_created_after'
         ) as api_spy:
             schemas = schematizer.get_schemas_created_after_date(
@@ -387,14 +429,12 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
     def test_get_schemas_created_after_date_filter(self, schematizer):
         created_after = self._get_created_after()
         creation_timestamp = long(
-            (created_after - datetime.utcfromtimestamp(0)).total_seconds()
+            (created_after - datetime.fromtimestamp(0, created_after.tzinfo)).total_seconds()
         )
-
-        created_after_str2 = "2016-06-10T19:10:26"
-        created_after2 = datetime.strptime(created_after_str2,
-                                           '%Y-%m-%dT%H:%M:%S')
+        day_two = (2016, 6, 10, 19, 10, 26, 0)
+        created_after2 = datetime(*day_two, tzinfo=created_after.tzinfo)
         creation_timestamp2 = long(
-            (created_after2 - datetime.utcfromtimestamp(0)).total_seconds()
+            (created_after2 - datetime.fromtimestamp(0, created_after.tzinfo)).total_seconds()
         )
         schemas = schematizer.get_schemas_created_after_date(
             creation_timestamp
@@ -411,7 +451,8 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
             creation_timestamp)
         # Assert each element was cached properly
         with self.attach_spy_on_api(
-            schematizer._swagger_client.schemas,
+            schematizer._client,
+            'schemas',
             'get_schema_by_id'
         ) as schema_api_spy:
             for schema in schemas:
@@ -423,9 +464,9 @@ class TestGetSchemasCreatedAfterDate(SchematizerClientTestBase):
 class TestGetSchmasByCriteria(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
-    def sorted_schemas(self, yelp_namespace, biz_src_name):
+    def sorted_schemas(self, yelp_namespace_name, biz_src_name):
         biz_schema = self._register_avro_schema(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name
         )
 
@@ -433,12 +474,12 @@ class TestGetSchmasByCriteria(SchematizerClientTestBase):
         schema_json = {
             'type': 'record',
             'name': biz_src_name,
-            'namespace': yelp_namespace,
+            'namespace': yelp_namespace_name,
             'doc': 'test',
             'fields': [{'type': 'int', 'doc': 'test', 'name': 'simple'}]
         }
         simple_schema = self._register_avro_schema(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name,
             schema_json=schema_json
         )
@@ -447,12 +488,12 @@ class TestGetSchmasByCriteria(SchematizerClientTestBase):
         schema_json = {
             'type': 'record',
             'name': biz_src_name,
-            'namespace': yelp_namespace,
+            'namespace': yelp_namespace_name,
             'doc': 'test',
             'fields': [{'type': 'int', 'doc': 'test', 'name': 'baz'}]
         }
         baz_schema = self._register_avro_schema(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name,
             schema_json=schema_json
         )
@@ -484,7 +525,8 @@ class TestGetSchmasByCriteria(SchematizerClientTestBase):
         schemas = schematizer.get_schemas_by_criteria(count=2)
         # Assert each element was cached properly
         with self.attach_spy_on_api(
-            schematizer._swagger_client.schemas,
+            schematizer._client,
+            'schemas',
             'get_schema_by_id'
         ) as schema_api_spy:
             for schema in schemas:
@@ -496,12 +538,13 @@ class TestGetSchmasByCriteria(SchematizerClientTestBase):
 class TestGetSchemasByTopic(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
-    def biz_schema(self, yelp_namespace, biz_src_name):
-        return self._register_avro_schema(yelp_namespace, biz_src_name)
+    def biz_schema(self, yelp_namespace_name, biz_src_name):
+        return self._register_avro_schema(yelp_namespace_name, biz_src_name)
 
     def test_get_schemas_by_topic(self, schematizer, biz_schema):
         with self.attach_spy_on_api(
-            schematizer._swagger_client.topics,
+            schematizer._client,
+            'topics',
             'list_schemas_by_topic_name'
         ) as api_spy:
             topic_name = biz_schema.topic.name
@@ -532,11 +575,11 @@ class TestGetNamespaces(SchematizerClientTestBase):
 class TestGetSchemaBySchemaJson(SchematizerClientTestBase):
 
     @pytest.fixture
-    def schema_json(self, yelp_namespace, biz_src_name):
+    def schema_json(self, yelp_namespace_name, biz_src_name):
         return {
             'type': 'record',
             'name': biz_src_name,
-            'namespace': yelp_namespace,
+            'namespace': yelp_namespace_name,
             'doc': 'test',
             'fields': [{'type': 'int', 'doc': 'test', 'name': 'biz_id'}]
         }
@@ -549,12 +592,13 @@ class TestGetSchemaBySchemaJson(SchematizerClientTestBase):
 class TestGetTopicByName(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
-    def biz_topic(self, yelp_namespace, biz_src_name):
-        return self._register_avro_schema(yelp_namespace, biz_src_name).topic
+    def biz_topic(self, yelp_namespace_name, biz_src_name):
+        return self._register_avro_schema(yelp_namespace_name, biz_src_name).topic
 
     def test_get_non_cached_topic_by_name(self, schematizer, biz_topic):
         with self.attach_spy_on_api(
-            schematizer._swagger_client.topics,
+            schematizer._client,
+            'topics',
             'get_topic_by_topic_name'
         ) as api_spy:
             actual = schematizer.get_topic_by_name(biz_topic.name)
@@ -565,10 +609,12 @@ class TestGetTopicByName(SchematizerClientTestBase):
         schematizer.get_topic_by_name(biz_topic.name)
 
         with self.attach_spy_on_api(
-            schematizer._swagger_client.topics,
+            schematizer._client,
+            'topics',
             'get_topic_by_topic_name'
         ) as topic_api_spy, self.attach_spy_on_api(
-            schematizer._swagger_client.sources,
+            schematizer._client,
+            'sources',
             'get_source_by_id'
         ) as source_api_spy:
             actual = schematizer.get_topic_by_name(biz_topic.name)
@@ -580,16 +626,16 @@ class TestGetTopicByName(SchematizerClientTestBase):
 class GetSourcesTestBase(SchematizerClientTestBase):
 
     @pytest.fixture(scope='class')
-    def biz_src(self, yelp_namespace, biz_src_name):
+    def biz_src(self, yelp_namespace_name, biz_src_name):
         return self._register_avro_schema(
-            yelp_namespace,
+            yelp_namespace_name,
             biz_src_name
         ).topic.source
 
     @pytest.fixture(scope='class')
-    def usr_src(self, yelp_namespace, usr_src_name):
+    def usr_src(self, yelp_namespace_name, usr_src_name):
         return self._register_avro_schema(
-            yelp_namespace,
+            yelp_namespace_name,
             usr_src_name
         ).topic.source
 
@@ -648,7 +694,8 @@ class TestGetSources(GetSourcesTestBase):
         schematizer
     ):
         with self.attach_spy_on_api(
-            schematizer._swagger_client.sources,
+            schematizer._client,
+            'sources',
             'list_sources'
         ) as sources_api_spy:
             actual_sources = schematizer.get_sources(
@@ -664,15 +711,16 @@ class TestGetSources(GetSourcesTestBase):
 class TestGetSourceById(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
-    def biz_src(self, yelp_namespace, biz_src_name):
+    def biz_src(self, yelp_namespace_name, biz_src_name):
         return self._register_avro_schema(
-            yelp_namespace,
+            yelp_namespace_name,
             biz_src_name
         ).topic.source
 
     def test_get_non_cached_source_by_id(self, schematizer, biz_src):
         with self.attach_spy_on_api(
-            schematizer._swagger_client.sources,
+            schematizer._client,
+            'sources',
             'get_source_by_id'
         ) as api_spy:
             actual = schematizer.get_source_by_id(biz_src.source_id)
@@ -683,7 +731,8 @@ class TestGetSourceById(SchematizerClientTestBase):
         schematizer.get_source_by_id(biz_src.source_id)
 
         with self.attach_spy_on_api(
-            schematizer._swagger_client.sources,
+            schematizer._client,
+            'sources',
             'get_source_by_id'
         ) as source_api_spy:
             actual = schematizer.get_source_by_id(biz_src.source_id)
@@ -693,14 +742,14 @@ class TestGetSourceById(SchematizerClientTestBase):
 
 class TestGetSourcesByNamespace(GetSourcesTestBase):
 
-    def test_get_sources_in_yelp_namespace(
+    def test_get_sources_in_yelp_namespace_name(
         self,
         schematizer,
-        yelp_namespace,
+        yelp_namespace_name,
         biz_src,
         usr_src
     ):
-        actual = schematizer.get_sources_by_namespace(yelp_namespace)
+        actual = schematizer.get_sources_by_namespace(yelp_namespace_name)
 
         sorted_expected = sorted([biz_src, usr_src], key=lambda o: o.source_id)
         sorted_actual = sorted(actual, key=lambda o: o.source_id)
@@ -708,31 +757,77 @@ class TestGetSourcesByNamespace(GetSourcesTestBase):
             self._assert_source_values(actual_src, expected_resp)
 
     def test_get_sources_of_bad_namespace(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_sources_by_namespace('bad_namespace')
-        assert e.value.response.status_code == 404
 
-    def test_sources_should_be_cached(self, schematizer, yelp_namespace):
-        sources = schematizer.get_sources_by_namespace(yelp_namespace)
+    def test_sources_should_be_cached(self, schematizer, yelp_namespace_name):
+        sources = schematizer.get_sources_by_namespace(yelp_namespace_name)
         with self.attach_spy_on_api(
-            schematizer._swagger_client.sources,
+            schematizer._client,
+            'sources',
             'get_source_by_id'
         ) as source_api_spy:
             actual = schematizer.get_source_by_id(sources[0].source_id)
             assert actual == sources[0]
             assert source_api_spy.call_count == 0
 
+    def test_get_sources_by_namespace_filter_by_min_id(
+        self,
+        schematizer,
+        yelp_namespace_name,
+        biz_src,
+        usr_src
+    ):
+        actual = schematizer.get_sources_by_namespace(
+            yelp_namespace_name,
+            min_id=biz_src.source_id + 1
+        )
+        expected = [usr_src]
+        for actual_src, expected_resp in zip(actual, expected):
+            self._assert_source_values(actual_src, expected_resp)
+
+    def test_get_sources_by_namespace_filter_by_page_size(
+        self,
+        schematizer,
+        yelp_namespace_name,
+        biz_src,
+        usr_src
+    ):
+        actual = schematizer.get_sources_by_namespace(
+            yelp_namespace_name,
+            page_size=1
+        )
+        expected = [biz_src]
+        for actual_src, expected_resp in zip(actual, expected):
+            self._assert_source_values(actual_src, expected_resp)
+
+    def test_get_sources_by_namespace_filter_by_page_size_and_min_id(
+        self,
+        schematizer,
+        yelp_namespace_name,
+        biz_src,
+        usr_src
+    ):
+        actual = schematizer.get_sources_by_namespace(
+            yelp_namespace_name,
+            page_size=2,
+            min_id=biz_src.source_id + 1
+        )
+        expected = [usr_src]
+        for actual_src, expected_resp in zip(actual, expected):
+            self._assert_source_values(actual_src, expected_resp)
+
 
 class TestGetTopicsBySourceId(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
-    def biz_topic(self, yelp_namespace, biz_src_name):
-        return self._register_avro_schema(yelp_namespace, biz_src_name).topic
+    def biz_topic(self, yelp_namespace_name, biz_src_name):
+        return self._register_avro_schema(yelp_namespace_name, biz_src_name).topic
 
     @pytest.fixture(autouse=True, scope='class')
-    def pii_biz_topic(self, yelp_namespace, biz_src_name):
+    def pii_biz_topic(self, yelp_namespace_name, biz_src_name):
         return self._register_avro_schema(
-            yelp_namespace,
+            yelp_namespace_name,
             biz_src_name,
             contains_pii=True
         ).topic
@@ -756,19 +851,20 @@ class TestGetTopicsBySourceId(SchematizerClientTestBase):
             self._assert_topic_values(actual_topic, expected_resp)
 
     def test_get_topics_of_bad_source_id(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_topics_by_source_id(0)
-        assert e.value.response.status_code == 404
 
     def test_topics_should_be_cached(self, schematizer, biz_topic):
         topics = schematizer.get_topics_by_source_id(
             biz_topic.source.source_id
         )
         with self.attach_spy_on_api(
-            schematizer._swagger_client.topics,
+            schematizer._client,
+            'topics',
             'get_topic_by_topic_name'
         ) as topic_api_spy, self.attach_spy_on_api(
-            schematizer._swagger_client.sources,
+            schematizer._client,
+            'sources',
             'get_source_by_id'
         ) as source_api_spy:
             actual = schematizer.get_topic_by_name(topics[0].name)
@@ -780,9 +876,9 @@ class TestGetTopicsBySourceId(SchematizerClientTestBase):
 class TestGetLatestTopicBySourceId(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
-    def biz_topic(self, yelp_namespace, biz_src_name):
+    def biz_topic(self, yelp_namespace_name, biz_src_name):
         return self._register_avro_schema(
-            yelp_namespace,
+            yelp_namespace_name,
             biz_src_name
         ).topic
 
@@ -794,16 +890,15 @@ class TestGetLatestTopicBySourceId(SchematizerClientTestBase):
         self._assert_topic_values(actual, expected)
 
     def test_get_latest_topic_of_bad_source(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_latest_topic_by_source_id(0)
-        assert e.value.response.status_code == 404
 
 
 class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
-    def biz_schema(self, yelp_namespace, biz_src_name):
-        return self._register_avro_schema(yelp_namespace, biz_src_name)
+    def biz_schema(self, yelp_namespace_name, biz_src_name):
+        return self._register_avro_schema(yelp_namespace_name, biz_src_name)
 
     @pytest.fixture(autouse=True, scope='class')
     def biz_topic(self, biz_schema):
@@ -831,22 +926,24 @@ class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
         self._assert_schema_values(actual, biz_schema_two)
 
     def test_latest_schema_of_bad_topic(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_latest_schema_by_topic_name('bad_topic')
-        assert e.value.response.status_code == 404
 
     def test_latest_schema_should_be_cached(self, schematizer, biz_topic):
         latest_schema = schematizer.get_latest_schema_by_topic_name(
             biz_topic.name
         )
         with self.attach_spy_on_api(
-            schematizer._swagger_client.schemas,
+            schematizer._client,
+            'schemas',
             'get_schema_by_id'
         ) as schema_api_spy, self.attach_spy_on_api(
-            schematizer._swagger_client.topics,
+            schematizer._client,
+            'topics',
             'get_topic_by_topic_name'
         ) as topic_api_spy, self.attach_spy_on_api(
-            schematizer._swagger_client.sources,
+            schematizer._client,
+            'sources',
             'get_source_by_id'
         ) as source_api_spy:
             actual = schematizer.get_schema_by_id(latest_schema.schema_id)
@@ -859,12 +956,16 @@ class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
 class MetaAttrMappingTestBase(SchematizerClientTestBase):
 
     @pytest.fixture(scope='class')
-    def user_schema(self, yelp_namespace, biz_src_name):
-        return self._register_avro_schema(yelp_namespace, biz_src_name)
+    def user_schema(self, yelp_namespace_name, biz_src_name):
+        return self._register_avro_schema(yelp_namespace_name, biz_src_name)
 
     @pytest.fixture
-    def meta_attr_schema_id(self, user_schema):
-        return user_schema.schema_id
+    def sample_schema(self, aux_namespace, biz_src_name):
+        return self._register_avro_schema(aux_namespace, biz_src_name)
+
+    @pytest.fixture
+    def meta_attr_schema_id(self, registered_meta_attribute):
+        return registered_meta_attribute.schema_id
 
     @pytest.fixture
     def user_namespace(self, user_schema):
@@ -874,235 +975,303 @@ class MetaAttrMappingTestBase(SchematizerClientTestBase):
     def user_source(self, user_schema):
         return user_schema.topic.source
 
-    def register_source_meta_attr_mapping(
-        self,
-        schematizer,
-        source_id,
-        meta_attr_schema_id
-    ):
-        return schematizer.register_source_meta_attr_mapping(
-            source_id=source_id,
-            meta_attr_schema_id=meta_attr_schema_id
-        )
+    @pytest.fixture
+    def sample_namespace(self, sample_schema):
+        return sample_schema.topic.source.namespace
 
-    def register_namespace_meta_attr_mapping(
-        self,
-        schematizer,
-        namespace,
-        meta_attr_schema_id
-    ):
-        return schematizer.register_namespace_meta_attr_mapping(
-            namespace_name=namespace,
-            meta_attr_schema_id=meta_attr_schema_id
-        )
+    @pytest.fixture
+    def sample_source(self, sample_schema):
+        return sample_schema.topic.source
 
 
 class TestRegisterNamespaceMetaAttrMapping(MetaAttrMappingTestBase):
 
-    def test_register_namespace_meta_attr_mapping(
+    def test_register_namespace_meta_attribute_mapping(
         self,
         schematizer,
         user_namespace,
         meta_attr_schema_id
     ):
+        actual_meta_attr_mapping = schematizer.register_namespace_meta_attribute_mapping(
+            namespace_name=user_namespace.name,
+            meta_attr_schema_id=meta_attr_schema_id
+        )
         expected_meta_attr_mapping = MetaAttributeNamespaceMapping(
             namespace_id=user_namespace.namespace_id,
             meta_attribute_schema_id=meta_attr_schema_id
         )
-        actual_meta_attr_mapping = schematizer.register_namespace_meta_attr_mapping(
+        assert actual_meta_attr_mapping == expected_meta_attr_mapping
+
+    def test_register_same_namespace_meta_attribute_mapping_twice(
+        self,
+        schematizer,
+        user_namespace,
+        meta_attr_schema_id
+    ):
+        meta_attr_mapping_1 = schematizer.register_namespace_meta_attribute_mapping(
             namespace_name=user_namespace.name,
             meta_attr_schema_id=meta_attr_schema_id
         )
-        assert actual_meta_attr_mapping == expected_meta_attr_mapping
+        meta_attr_mapping_2 = schematizer.register_namespace_meta_attribute_mapping(
+            namespace_name=user_namespace.name,
+            meta_attr_schema_id=meta_attr_schema_id
+        )
+        assert meta_attr_mapping_1 == meta_attr_mapping_2
 
     def test_registration_with_empty_namespace(self, schematizer, meta_attr_schema_id):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
-            schematizer.register_namespace_meta_attr_mapping(
+        with pytest.raises(http_exc.HTTPBadRequest):
+            schematizer.register_namespace_meta_attribute_mapping(
                 namespace_name="",
                 meta_attr_schema_id=meta_attr_schema_id
             )
-        assert e.value.response.status_code == 400
 
     def test_registration_with_bad_namespace(self, schematizer, meta_attr_schema_id):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
-            schematizer.register_namespace_meta_attr_mapping(
+        with pytest.raises(http_exc.HTTPNotFound):
+            schematizer.register_namespace_meta_attribute_mapping(
                 namespace_name="bad_namespace",
                 meta_attr_schema_id=meta_attr_schema_id
             )
-        assert e.value.response.status_code == 404
 
 
 class TestDeleteNamespaceMetaAttrMapping(MetaAttrMappingTestBase):
 
-    def test_delete_namespace_meta_attr_mapping(
+    def test_delete_namespace_meta_attribute_mapping(
         self,
         schematizer,
         user_namespace,
         meta_attr_schema_id
     ):
-        self.register_namespace_meta_attr_mapping(
-            schematizer,
-            user_namespace.name,
-            meta_attr_schema_id
+        """ This test calls the delete api twice and verifies that the mapping
+        gets deleted successfully first time and raises HTTPNotFound exception
+        on calling the delete api again as the mapping has already been
+        deleted.
+        """
+        schematizer.register_namespace_meta_attribute_mapping(
+            namespace_name=user_namespace.name,
+            meta_attr_schema_id=meta_attr_schema_id
+        )
+        actual_meta_attr_mapping = schematizer.delete_namespace_meta_attribute_mapping(
+            namespace_name=user_namespace.name,
+            meta_attr_schema_id=meta_attr_schema_id
         )
         expected_meta_attr_mapping = MetaAttributeNamespaceMapping(
             namespace_id=user_namespace.namespace_id,
             meta_attribute_schema_id=meta_attr_schema_id
         )
-        actual_meta_attr_mapping = schematizer.delete_namespace_meta_attr_mapping(
-            namespace_name=user_namespace.name,
-            meta_attr_schema_id=meta_attr_schema_id
-        )
         assert actual_meta_attr_mapping == expected_meta_attr_mapping
+        with pytest.raises(http_exc.HTTPNotFound):
+            schematizer.delete_namespace_meta_attribute_mapping(
+                namespace_name=user_namespace.name,
+                meta_attr_schema_id=meta_attr_schema_id
+            )
+
+    def test_delete_a_non_existent_namespace_meta_attribute_mapping(
+        self,
+        schematizer,
+        user_namespace,
+    ):
+        with pytest.raises(http_exc.HTTPNotFound):
+            schematizer.delete_namespace_meta_attribute_mapping(
+                namespace_name=user_namespace.name,
+                meta_attr_schema_id=0
+            )
 
     def test_delete_meta_attr_mapping_with_invalid_namespace(
         self,
         schematizer,
         meta_attr_schema_id
     ):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
-            schematizer.delete_namespace_meta_attr_mapping(
+        with pytest.raises(http_exc.HTTPNotFound):
+            schematizer.delete_namespace_meta_attribute_mapping(
                 namespace_name="invalid_namespace",
                 meta_attr_schema_id=meta_attr_schema_id
             )
-        assert e.value.response.status_code == 404
 
     def test_delete_meta_attr_mapping_with_empty_namespace(
         self,
         schematizer,
         meta_attr_schema_id
     ):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
-            schematizer.delete_namespace_meta_attr_mapping(
+        with pytest.raises(http_exc.HTTPBadRequest):
+            schematizer.delete_namespace_meta_attribute_mapping(
                 namespace_name="",
                 meta_attr_schema_id=meta_attr_schema_id
             )
-        assert e.value.response.status_code == 400
 
 
 class TestGetMetaAttrMappingByNamespace(MetaAttrMappingTestBase):
 
-    def test_get_meta_attributes_by_namespace(
+    def test_get_namespace_meta_attribute_mappings(
         self,
         schematizer,
         user_namespace,
         meta_attr_schema_id
     ):
-        self.register_namespace_meta_attr_mapping(
-            schematizer,
-            user_namespace.name,
-            meta_attr_schema_id
+        schematizer.register_namespace_meta_attribute_mapping(
+            namespace_name=user_namespace.name,
+            meta_attr_schema_id=meta_attr_schema_id
+        )
+        actual = schematizer.get_namespace_meta_attribute_mappings(
+            namespace_name=user_namespace.name
         )
         expected_meta_attr_mapping = [MetaAttributeNamespaceMapping(
             namespace_id=user_namespace.namespace_id,
             meta_attribute_schema_id=meta_attr_schema_id
         )]
-        actual = schematizer.get_meta_attributes_by_namespace(
-            namespace_name=user_namespace.name
-        )
         assert expected_meta_attr_mapping == actual
+
+    def test_get_namespace_meta_attribute_mappings_when_none_exist(
+        self,
+        schematizer,
+        sample_namespace
+    ):
+        meta_attr_mappings = schematizer.get_namespace_meta_attribute_mappings(
+            namespace_name=sample_namespace.name
+        )
+        assert meta_attr_mappings == []
 
     def test_get_meta_attr_mapping_for_invalid_namespace(
         self,
         schematizer,
     ):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
-            schematizer.get_meta_attributes_by_namespace(
+        with pytest.raises(http_exc.HTTPNotFound):
+            schematizer.get_namespace_meta_attribute_mappings(
                 namespace_name="bad_namespace"
             )
-        assert e.value.response.status_code == 404
 
 
 class TestRegisterSourceMetaAttrMapping(MetaAttrMappingTestBase):
 
-    def test_register_source_meta_attr_mapping(
+    def test_register_source_meta_attribute_mapping(
         self,
         schematizer,
         user_source,
         meta_attr_schema_id
     ):
+        actual_meta_attr_mapping = schematizer.register_source_meta_attribute_mapping(
+            source_id=user_source.source_id,
+            meta_attr_schema_id=meta_attr_schema_id
+        )
         expected_meta_attr_mapping = MetaAttributeSourceMapping(
             source_id=user_source.source_id,
             meta_attribute_schema_id=meta_attr_schema_id
         )
-        actual_meta_attr_mapping = schematizer.register_source_meta_attr_mapping(
+        assert actual_meta_attr_mapping == expected_meta_attr_mapping
+
+    def test_register_same_source_meta_attribute_mapping_twice(
+        self,
+        schematizer,
+        user_source,
+        meta_attr_schema_id
+    ):
+        meta_attr_mapping_1 = schematizer.register_source_meta_attribute_mapping(
             source_id=user_source.source_id,
             meta_attr_schema_id=meta_attr_schema_id
         )
-        assert actual_meta_attr_mapping == expected_meta_attr_mapping
+        meta_attr_mapping_2 = schematizer.register_source_meta_attribute_mapping(
+            source_id=user_source.source_id,
+            meta_attr_schema_id=meta_attr_schema_id
+        )
+        assert meta_attr_mapping_1 == meta_attr_mapping_2
 
     def test_registration_with_invalid_source(self, schematizer, meta_attr_schema_id):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
-            schematizer.register_source_meta_attr_mapping(
+        with pytest.raises(http_exc.HTTPNotFound):
+            schematizer.register_source_meta_attribute_mapping(
                 source_id=0,
                 meta_attr_schema_id=meta_attr_schema_id
             )
-        assert e.value.response.status_code == 404
 
 
 class TestDeleteSourceMetaAttrMapping(MetaAttrMappingTestBase):
 
-    def test_delete_source_meta_attr_mapping(
+    def test_delete_source_meta_attribute_mapping(
         self,
         schematizer,
         user_source,
         meta_attr_schema_id
     ):
-        self.register_source_meta_attr_mapping(
-            schematizer,
-            user_source.source_id,
-            meta_attr_schema_id
+        """ This test calls the delete api twice and verifies that the meta
+        attribute mapping gets deleted successfully first time and raises
+        HTTPNotFound exception on calling the delete api again as the mapping
+        has already been deleted.
+        """
+        schematizer.register_source_meta_attribute_mapping(
+            source_id=user_source.source_id,
+            meta_attr_schema_id=meta_attr_schema_id
+        )
+        actual_meta_attr_mapping = schematizer.delete_source_meta_attribute_mapping(
+            source_id=user_source.source_id,
+            meta_attr_schema_id=meta_attr_schema_id
         )
         expected_meta_attr_mapping = MetaAttributeSourceMapping(
             source_id=user_source.source_id,
             meta_attribute_schema_id=meta_attr_schema_id
         )
-        actual_meta_attr_mapping = schematizer.delete_source_meta_attr_mapping(
-            source_id=user_source.source_id,
-            meta_attr_schema_id=meta_attr_schema_id
-        )
         assert actual_meta_attr_mapping == expected_meta_attr_mapping
+        with pytest.raises(http_exc.HTTPNotFound):
+            schematizer.delete_source_meta_attribute_mapping(
+                source_id=user_source.source_id,
+                meta_attr_schema_id=meta_attr_schema_id
+            )
+
+    def test_delete_a_non_existent_source_meta_attribute_mapping(
+        self,
+        schematizer,
+        user_source,
+    ):
+        with pytest.raises(http_exc.HTTPNotFound):
+            schematizer.delete_source_meta_attribute_mapping(
+                source_id=user_source.source_id,
+                meta_attr_schema_id=0
+            )
 
     def test_delete_meta_attr_mapping_with_invalid_source(
         self,
         schematizer,
         meta_attr_schema_id
     ):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
-            schematizer.delete_source_meta_attr_mapping(
+        with pytest.raises(http_exc.HTTPNotFound):
+            schematizer.delete_source_meta_attribute_mapping(
                 source_id=0,
                 meta_attr_schema_id=meta_attr_schema_id
             )
-        assert e.value.response.status_code == 404
 
 
 class TestGetMetaAttrMappingBySource(MetaAttrMappingTestBase):
 
-    def test_get_meta_attributes_by_source(
+    def test_get_source_meta_attribute_mappings(
         self,
         schematizer,
         user_source,
         meta_attr_schema_id
     ):
-        self.register_source_meta_attr_mapping(
-            schematizer,
-            user_source.source_id,
-            meta_attr_schema_id
+        schematizer.register_source_meta_attribute_mapping(
+            source_id=user_source.source_id,
+            meta_attr_schema_id=meta_attr_schema_id
         )
+        actual = schematizer.get_source_meta_attribute_mappings(user_source.source_id)
         expected_meta_attr_mapping = [MetaAttributeSourceMapping(
             source_id=user_source.source_id,
             meta_attribute_schema_id=meta_attr_schema_id
         )]
-        actual = schematizer.get_meta_attributes_by_source(user_source.source_id)
         assert expected_meta_attr_mapping == actual
+
+    def test_get_source_meta_attribute_mappings_when_none_exist(
+        self,
+        schematizer,
+        sample_source
+    ):
+        meta_attr_mappings = schematizer.get_source_meta_attribute_mappings(
+            sample_source.source_id
+        )
+        assert meta_attr_mappings == []
 
     def test_get_meta_attr_mapping_for_invalid_source(
         self,
         schematizer,
     ):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
-            schematizer.get_meta_attributes_by_source(source_id=0)
-        assert e.value.response.status_code == 404
+        with pytest.raises(http_exc.HTTPNotFound):
+            schematizer.get_source_meta_attribute_mappings(source_id=0)
 
 
 class TestGetMetaAttrMappingBySchemaId(MetaAttrMappingTestBase):
@@ -1110,40 +1279,48 @@ class TestGetMetaAttrMappingBySchemaId(MetaAttrMappingTestBase):
     def test_get_meta_attributes_by_schema_id(
         self,
         schematizer,
-        yelp_namespace,
+        yelp_namespace_name,
         user_namespace,
         meta_attr_schema_id
     ):
-        self.register_namespace_meta_attr_mapping(
-            schematizer,
-            user_namespace.name,
-            meta_attr_schema_id
+        schematizer.register_namespace_meta_attribute_mapping(
+            namespace_name=user_namespace.name,
+            meta_attr_schema_id=meta_attr_schema_id
         )
-        expected_meta_attr_mapping = [meta_attr_schema_id]
-        schema = self._register_avro_schema(yelp_namespace, "test_src")
+        schema = self._register_avro_schema(yelp_namespace_name, "test_src")
 
         actual = schematizer.get_meta_attributes_by_schema_id(
             schema_id=schema.schema_id
         )
+        expected_meta_attr_mapping = [meta_attr_schema_id]
         assert expected_meta_attr_mapping == actual
+
+    def test_get_meta_attributes_by_schema_id_when_none_exist(
+        self,
+        schematizer,
+        sample_schema
+    ):
+        meta_attr_ids = schematizer.get_meta_attributes_by_schema_id(
+            schema_id=sample_schema.schema_id
+        )
+        assert meta_attr_ids == []
 
     def test_get_meta_attr_mapping_for_invalid_schema_id(
         self,
         schematizer,
     ):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
-            schematizer.get_meta_attributes_by_source(0)
-        assert e.value.response.status_code == 404
+        with pytest.raises(http_exc.HTTPNotFound):
+            schematizer.get_source_meta_attribute_mappings(0)
 
 
 class TestRegisterSchema(SchematizerClientTestBase):
 
     @pytest.fixture
-    def schema_json(self, yelp_namespace, biz_src_name):
+    def schema_json(self, yelp_namespace_name, biz_src_name):
         return {
             'type': 'record',
             'name': biz_src_name,
-            'namespace': yelp_namespace,
+            'namespace': yelp_namespace_name,
             'doc': 'test',
             'fields': [{'type': 'int', 'doc': 'test', 'name': 'biz_id'}]
         }
@@ -1155,12 +1332,12 @@ class TestRegisterSchema(SchematizerClientTestBase):
     def test_register_schema(
         self,
         schematizer,
-        yelp_namespace,
+        yelp_namespace_name,
         biz_src_name,
         schema_str
     ):
         actual = schematizer.register_schema(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name,
             schema_str=schema_str,
             source_owner_email=self.source_owner_email,
@@ -1172,12 +1349,12 @@ class TestRegisterSchema(SchematizerClientTestBase):
     def test_register_schema_with_schema_json(
         self,
         schematizer,
-        yelp_namespace,
+        yelp_namespace_name,
         biz_src_name,
         schema_json
     ):
         actual = schematizer.register_schema_from_schema_json(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name,
             schema_json=schema_json,
             source_owner_email=self.source_owner_email,
@@ -1189,12 +1366,12 @@ class TestRegisterSchema(SchematizerClientTestBase):
     def test_register_schema_with_base_schema(
         self,
         schematizer,
-        yelp_namespace,
+        yelp_namespace_name,
         biz_src_name,
         schema_str
     ):
         actual = schematizer.register_schema(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name,
             schema_str=schema_str,
             source_owner_email=self.source_owner_email,
@@ -1207,19 +1384,19 @@ class TestRegisterSchema(SchematizerClientTestBase):
     def test_register_same_schema_twice(
         self,
         schematizer,
-        yelp_namespace,
+        yelp_namespace_name,
         biz_src_name,
         schema_str
     ):
         schema_one = schematizer.register_schema(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name,
             schema_str=schema_str,
             source_owner_email=self.source_owner_email,
             contains_pii=False
         )
         schema_two = schematizer.register_schema(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name,
             schema_str=schema_str,
             source_owner_email=self.source_owner_email,
@@ -1230,12 +1407,12 @@ class TestRegisterSchema(SchematizerClientTestBase):
     def test_register_same_schema_with_diff_base_schema(
         self,
         schematizer,
-        yelp_namespace,
+        yelp_namespace_name,
         biz_src_name,
         schema_str
     ):
         schema_one = schematizer.register_schema(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name,
             schema_str=schema_str,
             source_owner_email=self.source_owner_email,
@@ -1243,7 +1420,7 @@ class TestRegisterSchema(SchematizerClientTestBase):
             base_schema_id=10
         )
         schema_two = schematizer.register_schema(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name,
             schema_str=schema_str,
             source_owner_email=self.source_owner_email,
@@ -1256,19 +1433,19 @@ class TestRegisterSchema(SchematizerClientTestBase):
     def test_register_same_schema_with_diff_pii(
         self,
         schematizer,
-        yelp_namespace,
+        yelp_namespace_name,
         biz_src_name,
         schema_str
     ):
         schema_one = schematizer.register_schema(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name,
             schema_str=schema_str,
             source_owner_email=self.source_owner_email,
             contains_pii=False
         )
         schema_two = schematizer.register_schema(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name,
             schema_str=schema_str,
             source_owner_email=self.source_owner_email,
@@ -1282,20 +1459,20 @@ class TestRegisterSchema(SchematizerClientTestBase):
     def test_register_same_schema_with_diff_source(
         self,
         schematizer,
-        yelp_namespace,
+        yelp_namespace_name,
         biz_src_name,
         schema_str
     ):
         another_src = 'biz_user'
         schema_one = schematizer.register_schema(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name,
             schema_str=schema_str,
             source_owner_email=self.source_owner_email,
             contains_pii=False
         )
         schema_two = schematizer.register_schema(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=another_src,
             schema_str=schema_str,
             source_owner_email=self.source_owner_email,
@@ -1349,11 +1526,11 @@ class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
     def test_register_for_new_table(
         self,
         schematizer,
-        yelp_namespace,
+        yelp_namespace_name,
         biz_src_name
     ):
         actual = schematizer.register_schema_from_mysql_stmts(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name,
             source_owner_email=self.source_owner_email,
             contains_pii=False,
@@ -1365,11 +1542,11 @@ class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
     def test_register_for_updated_existing_table(
         self,
         schematizer,
-        yelp_namespace,
+        yelp_namespace_name,
         biz_src_name
     ):
         actual = schematizer.register_schema_from_mysql_stmts(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name,
             source_owner_email=self.source_owner_email,
             contains_pii=False,
@@ -1383,18 +1560,18 @@ class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
     def test_register_same_schema_with_diff_pii(
         self,
         schematizer,
-        yelp_namespace,
+        yelp_namespace_name,
         biz_src_name
     ):
         non_pii_schema = schematizer.register_schema_from_mysql_stmts(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name,
             source_owner_email=self.source_owner_email,
             contains_pii=False,
             new_create_table_stmt=self.new_create_biz_table_stmt
         )
         pii_schema = schematizer.register_schema_from_mysql_stmts(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name,
             source_owner_email=self.source_owner_email,
             contains_pii=True,
@@ -1414,13 +1591,13 @@ class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
     def test_register_schema_with_primary_keys(
         self,
         schematizer,
-        yelp_namespace,
+        yelp_namespace_name,
         biz_src_name
     ):
         schema_sql = ('create table biz(id int(11) not null, name varchar(8), '
                       'primary key (id));')
         actual = schematizer.register_schema_from_mysql_stmts(
-            namespace=yelp_namespace,
+            namespace=yelp_namespace_name,
             source=biz_src_name,
             source_owner_email=self.source_owner_email,
             contains_pii=False,
@@ -1433,16 +1610,16 @@ class TestRegisterSchemaFromMySQL(SchematizerClientTestBase):
 class TestGetTopicsByCriteria(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
-    def yelp_biz_topic(self, yelp_namespace, biz_src_name):
-        return self._register_avro_schema(yelp_namespace, biz_src_name).topic
+    def yelp_biz_topic(self, yelp_namespace_name, biz_src_name):
+        return self._register_avro_schema(yelp_namespace_name, biz_src_name).topic
 
     @pytest.fixture(autouse=True, scope='class')
-    def yelp_usr_topic(self, yelp_namespace, usr_src_name, yelp_biz_topic):
+    def yelp_usr_topic(self, yelp_namespace_name, usr_src_name, yelp_biz_topic):
         # Because the minimum unit for created_at and updated_at timestamps
         # stored in the db table is 1 second, here it explicitly waits for 1
         # second to ensure these topics don't have the same created_at value.
         time.sleep(1)
-        return self._register_avro_schema(yelp_namespace, usr_src_name).topic
+        return self._register_avro_schema(yelp_namespace_name, usr_src_name).topic
 
     @pytest.fixture(autouse=True, scope='class')
     def aux_biz_topic(self, aux_namespace, biz_src_name, yelp_usr_topic):
@@ -1452,12 +1629,12 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
     def test_get_topics_in_one_namespace(
         self,
         schematizer,
-        yelp_namespace,
+        yelp_namespace_name,
         yelp_biz_topic,
         yelp_usr_topic
     ):
         actual = schematizer.get_topics_by_criteria(
-            namespace_name=yelp_namespace
+            namespace_name=yelp_namespace_name
         )
         self._assert_topics_values(
             actual,
@@ -1493,15 +1670,17 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
         )
         assert actual == []
 
-    def test_topics_should_be_cached(self, schematizer, yelp_namespace):
+    def test_topics_should_be_cached(self, schematizer, yelp_namespace_name):
         topics = schematizer.get_topics_by_criteria(
-            namespace_name=yelp_namespace
+            namespace_name=yelp_namespace_name
         )
         with self.attach_spy_on_api(
-            schematizer._swagger_client.topics,
+            schematizer._client,
+            'topics',
             'get_topic_by_topic_name'
         ) as topic_api_spy, self.attach_spy_on_api(
-            schematizer._swagger_client.sources,
+            schematizer._client,
+            'sources',
             'get_source_by_id'
         ) as source_api_spy:
             actual = schematizer.get_topic_by_name(topics[0].name)
@@ -1531,7 +1710,8 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
             expected_topics.append(topic)
 
         with self.attach_spy_on_api(
-            schematizer._swagger_client.topics,
+            schematizer._client,
+            'topics',
             'get_topics_by_criteria'
         ) as topic_api_spy:
             actual = schematizer.get_topics_by_criteria(
@@ -1546,12 +1726,12 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
     def test_get_topics_with_id_greater_than_min_id(
         self,
         schematizer,
-        yelp_namespace,
+        yelp_namespace_name,
         yelp_biz_topic,
         yelp_usr_topic
     ):
         actual = schematizer.get_topics_by_criteria(
-            namespace_name=yelp_namespace,
+            namespace_name=yelp_namespace_name,
             min_id=yelp_biz_topic.topic_id + 1
         )
         self._assert_topics_values(
@@ -1559,9 +1739,9 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
             expected_topics=[yelp_usr_topic]
         )
 
-    def test_get_only_one_topic(self, schematizer, yelp_namespace, yelp_biz_topic):
+    def test_get_only_one_topic(self, schematizer, yelp_namespace_name, yelp_biz_topic):
         actual = schematizer.get_topics_by_criteria(
-            namespace_name=yelp_namespace,
+            namespace_name=yelp_namespace_name,
             max_count=1
         )
         self._assert_topics_values(actual, expected_topics=[yelp_biz_topic])
@@ -1575,11 +1755,11 @@ class TestGetTopicsByCriteria(SchematizerClientTestBase):
 class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
 
     @pytest.fixture(scope='class')
-    def schema_json(self, yelp_namespace, biz_src_name):
+    def schema_json(self, yelp_namespace_name, biz_src_name):
         return {
             'type': 'record',
             'name': biz_src_name,
-            'namespace': yelp_namespace,
+            'namespace': yelp_namespace_name,
             'doc': 'test',
             'fields': [
                 {'type': 'int', 'doc': 'test', 'name': 'biz_id'}
@@ -1587,11 +1767,11 @@ class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
         }
 
     @pytest.fixture
-    def schema_json_incompatible(self, yelp_namespace, biz_src_name):
+    def schema_json_incompatible(self, yelp_namespace_name, biz_src_name):
         return {
             'type': 'record',
             'name': biz_src_name,
-            'namespace': yelp_namespace,
+            'namespace': yelp_namespace_name,
             'doc': 'test',
             'fields': [
                 {'type': 'int', 'doc': 'test', 'name': 'biz_id'},
@@ -1608,9 +1788,9 @@ class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
         return simplejson.dumps(schema_json_incompatible)
 
     @pytest.fixture(autouse=True, scope='class')
-    def biz_schema(self, yelp_namespace, biz_src_name, schema_str):
+    def biz_schema(self, yelp_namespace_name, biz_src_name, schema_str):
         return self._register_avro_schema(
-            yelp_namespace,
+            yelp_namespace_name,
             biz_src_name,
             schema=schema_str
         )
@@ -1618,19 +1798,19 @@ class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
     def test_is_avro_schema_compatible(
         self,
         schematizer,
-        yelp_namespace,
+        yelp_namespace_name,
         biz_src_name,
         schema_str,
         schema_str_incompatible
     ):
         assert schematizer.is_avro_schema_compatible(
             avro_schema_str=schema_str,
-            namespace_name=yelp_namespace,
+            namespace_name=yelp_namespace_name,
             source_name=biz_src_name
         )
         assert not schematizer.is_avro_schema_compatible(
             avro_schema_str=schema_str_incompatible,
-            namespace_name=yelp_namespace,
+            namespace_name=yelp_namespace_name,
             source_name=biz_src_name
         )
 
@@ -1638,11 +1818,11 @@ class TestIsAvroSchemaCompatible(SchematizerClientTestBase):
 class TestFilterTopicsByPkeys(SchematizerClientTestBase):
 
     @pytest.fixture(autouse=True, scope='class')
-    def pk_topic_resp(self, yelp_namespace, usr_src_name):
+    def pk_topic_resp(self, yelp_namespace_name, usr_src_name):
         pk_schema_json = {
             'type': 'record',
             'name': usr_src_name,
-            'namespace': yelp_namespace,
+            'namespace': yelp_namespace_name,
             'doc': 'test',
             'fields': [
                 {'type': 'int', 'doc': 'test', 'name': 'id', 'pkey': 1},
@@ -1651,7 +1831,7 @@ class TestFilterTopicsByPkeys(SchematizerClientTestBase):
             'pkey': ['id']
         }
         return self._register_avro_schema(
-            yelp_namespace,
+            yelp_namespace_name,
             usr_src_name,
             schema=simplejson.dumps(pk_schema_json)
         ).topic
@@ -1679,7 +1859,7 @@ class RegistrationTestBase(SchematizerClientTestBase):
         post_body = {
             'name': 'simple_name_{}'.format(random.random()),
             'target_type': 'redshift_{}'.format(random.random()),
-            'destination': 'dwv1.yelpcorp.com.{}'.format(random.random())
+            'destination': '{}.example.org'.format(random.random())
         }
         return self._get_client().data_targets.create_data_target(
             body=post_body
@@ -1756,31 +1936,28 @@ class TestCreateDataTarget(RegistrationTestBase):
         assert actual.destination == self.random_destination
 
     def test_invalid_empty_name(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPBadRequest):
             schematizer.create_data_target(
                 name='',
                 target_type=self.random_target_type,
                 destination=self.random_destination
             )
-        assert e.value.response.status_code == 400
 
     def test_invalid_empty_target_type(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPBadRequest):
             schematizer.create_data_target(
                 name=self.random_name,
                 target_type='',
                 destination=self.random_destination
             )
-        assert e.value.response.status_code == 400
 
     def test_invalid_empty_destination(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPBadRequest):
             schematizer.create_data_target(
                 name=self.random_name,
                 target_type=self.random_target_type,
                 destination=''
             )
-        assert e.value.response.status_code == 400
 
     def _get_data_target_resp(self, data_target_id):
         return self._get_client().data_targets.get_data_target_by_id(
@@ -1796,7 +1973,8 @@ class TestGetDataTargetById(RegistrationTestBase):
         dw_data_target_resp
     ):
         with self.attach_spy_on_api(
-            schematizer._swagger_client.data_targets,
+            schematizer._client,
+            'data_targets',
             'get_data_target_by_id'
         ) as api_spy:
             actual = schematizer.get_data_target_by_id(
@@ -1809,7 +1987,8 @@ class TestGetDataTargetById(RegistrationTestBase):
         schematizer.get_data_target_by_id(dw_data_target_resp.data_target_id)
 
         with self.attach_spy_on_api(
-            schematizer._swagger_client.data_targets,
+            schematizer._client,
+            'data_targets',
             'get_data_target_by_id'
         ) as data_target_api_spy:
             actual = schematizer.get_data_target_by_id(
@@ -1819,9 +1998,8 @@ class TestGetDataTargetById(RegistrationTestBase):
             assert data_target_api_spy.call_count == 0
 
     def test_non_existing_data_target_id(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_data_target_by_id(data_target_id=0)
-        assert e.value.response.status_code == 404
 
 
 class TestGetDataTargetByName(RegistrationTestBase):
@@ -1832,7 +2010,8 @@ class TestGetDataTargetByName(RegistrationTestBase):
         dw_data_target_resp
     ):
         with self.attach_spy_on_api(
-            schematizer._swagger_client.data_targets,
+            schematizer._client,
+            'data_targets',
             'get_data_target_by_name'
         ) as api_spy:
             actual = schematizer.get_data_target_by_name(
@@ -1845,7 +2024,8 @@ class TestGetDataTargetByName(RegistrationTestBase):
         schematizer.get_data_target_by_name(dw_data_target_resp.name)
 
         with self.attach_spy_on_api(
-            schematizer._swagger_client.data_targets,
+            schematizer._client,
+            'data_targets',
             'get_data_target_by_name'
         ) as data_target_api_spy:
             actual = schematizer.get_data_target_by_name(
@@ -1855,11 +2035,10 @@ class TestGetDataTargetByName(RegistrationTestBase):
             assert data_target_api_spy.call_count == 0
 
     def test_non_existing_data_target_name(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_data_target_by_name(
                 data_target_name='bad test name'
             )
-        assert e.value.response.status_code == 404
 
 
 class TestCreateConsumerGroup(RegistrationTestBase):
@@ -1885,12 +2064,11 @@ class TestCreateConsumerGroup(RegistrationTestBase):
         assert actual.group_name == random_group_name
 
     def test_invalid_empty_group_name(self, schematizer, dw_data_target_resp):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPBadRequest):
             schematizer.create_consumer_group(
                 group_name='',
                 data_target_id=dw_data_target_resp.data_target_id
             )
-        assert e.value.response.status_code == 400
 
     def test_duplicate_group_name(
         self,
@@ -1902,20 +2080,18 @@ class TestCreateConsumerGroup(RegistrationTestBase):
             group_name=random_group_name,
             data_target_id=dw_data_target_resp.data_target_id
         )
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPBadRequest):
             schematizer.create_consumer_group(
                 group_name=random_group_name,
                 data_target_id=dw_data_target_resp.data_target_id
             )
-        assert e.value.response.status_code == 400
 
     def test_non_existing_data_target(self, schematizer, random_group_name):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.create_consumer_group(
                 group_name=random_group_name,
                 data_target_id=0
             )
-        assert e.value.response.status_code == 404
 
     def _get_consumer_group_resp(self, consumer_group_id):
         return self._get_client().consumer_groups.get_consumer_group_by_id(
@@ -1931,7 +2107,8 @@ class TestGetConsumerGroupById(RegistrationTestBase):
         dw_con_group_resp
     ):
         with self.attach_spy_on_api(
-            schematizer._swagger_client.consumer_groups,
+            schematizer._client,
+            'consumer_groups',
             'get_consumer_group_by_id'
         ) as api_spy:
             actual = schematizer.get_consumer_group_by_id(
@@ -1946,7 +2123,8 @@ class TestGetConsumerGroupById(RegistrationTestBase):
         )
 
         with self.attach_spy_on_api(
-            schematizer._swagger_client.consumer_groups,
+            schematizer._client,
+            'consumer_groups',
             'get_consumer_group_by_id'
         ) as consumer_group_api_spy:
             actual = schematizer.get_consumer_group_by_id(
@@ -1956,9 +2134,8 @@ class TestGetConsumerGroupById(RegistrationTestBase):
             assert consumer_group_api_spy.call_count == 0
 
     def test_non_existing_consumer_group_id(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_consumer_group_by_id(consumer_group_id=0)
-        assert e.value.response.status_code == 404
 
 
 class TestCreateConsumerGroupDataSource(RegistrationTestBase):
@@ -1979,22 +2156,20 @@ class TestCreateConsumerGroupDataSource(RegistrationTestBase):
         assert actual.data_source_id == biz_src_resp.source_id
 
     def test_non_existing_consumer_group(self, schematizer, biz_src_resp):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.create_consumer_group_data_source(
                 consumer_group_id=0,
                 data_source_type=DataSourceTypeEnum.Source,
                 data_source_id=biz_src_resp.source_id
             )
-        assert e.value.response.status_code == 404
 
     def test_non_existing_data_source(self, schematizer, dw_con_group_resp):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.create_consumer_group_data_source(
                 consumer_group_id=dw_con_group_resp.consumer_group_id,
                 data_source_type=DataSourceTypeEnum.Source,
                 data_source_id=0
             )
-        assert e.value.response.status_code == 404
 
 
 class TestGetTopicsByDataTargetId(RegistrationTestBase):
@@ -2024,9 +2199,8 @@ class TestGetTopicsByDataTargetId(RegistrationTestBase):
         assert actual == []
 
     def test_non_existing_data_target(self, schematizer):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_topics_by_data_target_id(data_target_id=0)
-        assert e.value.response.status_code == 404
 
 
 class TestGetSchemaMigration(SchematizerClientTestBase):
@@ -2052,7 +2226,8 @@ class TestGetSchemaMigration(SchematizerClientTestBase):
         old_schema
     ):
         with self.attach_spy_on_api(
-            schematizer._swagger_client.schema_migrations,
+            schematizer._client,
+            'schema_migrations',
             'get_schema_migration'
         ) as api_spy:
             actual = schematizer.get_schema_migration(
@@ -2069,7 +2244,7 @@ class TestGetSchemaMigration(SchematizerClientTestBase):
         schematizer,
         new_schema
     ):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPUnprocessableEntity):
             schematizer._call_api(
                 api=schematizer._client.schema_migrations.get_schema_migration,
                 request_body={
@@ -2077,27 +2252,25 @@ class TestGetSchemaMigration(SchematizerClientTestBase):
                     'target_schema_type': TargetSchemaTypeEnum.redshift.name,
                 }
             )
-        assert e.value.response.status_code == 422
 
     def test_unsupported_schema_migration(
         self,
         schematizer,
         new_schema
     ):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotImplemented):
             schematizer.get_schema_migration(
                 new_schema=new_schema,
                 target_schema_type=TargetSchemaTypeEnum.unsupported
             )
-        assert e.value.response.status_code == 501
 
 
 class TestGetDataTargetsBySchemaID(RegistrationTestBase):
 
     @pytest.fixture
-    def biz_schema_id(self, yelp_namespace, biz_src_name):
+    def biz_schema_id(self, yelp_namespace_name, biz_src_name):
         return self._register_avro_schema(
-            yelp_namespace,
+            yelp_namespace_name,
             biz_src_name
         ).schema_id
 
@@ -2109,7 +2282,8 @@ class TestGetDataTargetsBySchemaID(RegistrationTestBase):
         biz_schema_id
     ):
         with self.attach_spy_on_api(
-            schematizer._swagger_client.schemas,
+            schematizer._client,
+            'schemas',
             'get_data_targets_by_schema_id'
         ) as api_spy:
             actual = schematizer.get_data_targets_by_schema_id(
@@ -2122,9 +2296,8 @@ class TestGetDataTargetsBySchemaID(RegistrationTestBase):
         self,
         schematizer,
     ):
-        with pytest.raises(swaggerpy_exc.HTTPError) as e:
+        with pytest.raises(http_exc.HTTPNotFound):
             schematizer.get_data_targets_by_schema_id(-1)
-        assert e.value.response.status_code == 404
 
     def test_data_targets_should_be_cached(
         self,
@@ -2136,7 +2309,8 @@ class TestGetDataTargetsBySchemaID(RegistrationTestBase):
             biz_schema_id
         )
         with self.attach_spy_on_api(
-            schematizer._swagger_client.data_targets,
+            schematizer._client,
+            'data_targets',
             'get_data_target_by_id'
         ) as schema_api_spy:
             actual = schematizer.get_data_target_by_id(

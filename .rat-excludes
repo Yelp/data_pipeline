@@ -1,0 +1,12 @@
+build
+dist
+venv
+.tox
+data_pipeline.egg-info/
+__pycache__
+.cache/
+logs
+debian
+.pip
+.distlib
+bin

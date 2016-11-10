@@ -20,10 +20,9 @@
 # should be at least 1.2.1 for trusty compatibility.
 
 argparse==1.4.0
-avro==1.9.0-yelp4
 boto==2.38.0
 bravado==8.3.0
-bravado-core==4.2.2
+bravado-core==4.5.0
 bravado-decorators==0.6.0
 cached-property==1.2.0
 cffi==1.6.0
@@ -33,8 +32,10 @@ crochet==1.4.0
 cryptography==1.3.4
 dateglob==0.1
 enum34==1.0.4
+fido==4.0.1
 functools32==3.2.3-2
 future==0.14.3
+futures==3.0.3
 geogrid==1.0.9
 ipaddress==1.0.14
 iso8601==0.1.10
@@ -64,11 +65,12 @@ simplejson==3.6.5
 six==1.9.0
 SQLAlchemy==0.9.8
 subprocess32==3.2.6
-swaggerpy==0.7.10
+swagger-spec-validator==2.0.2
 thriftpy==0.1.15
 tornado==2.4.1
 Twisted==15.4.0
 data-pipeline-avro-util==0.2.1
+yelp-avro==1.9.2
 yelp-batch==0.19.8
 yelp-bytes==0.2.0
 yelp-cgeom==1.3.1

@@ -1,4 +1,18 @@
 # -*- coding: utf-8 -*-
+# Copyright 2016 Yelp Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
@@ -7,11 +21,11 @@ import logging
 from collections import OrderedDict
 from contextlib import contextmanager
 
+from bravado.exception import HTTPNotFound
 from cached_property import cached_property
 from kafka import KafkaClient
 from kafka_utils.util import offsets
 from kafka_utils.util.zookeeper import ZK
-from swaggerpy.exception import HTTPError
 
 from data_pipeline.config import get_config
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
@@ -152,9 +166,8 @@ class IntrospectorCommand(object):
                 topic_result = self.schematizer.get_topic_by_name(topic)._asdict()
                 topic_result['range_map'] = range_map
                 output.append(topic_result)
-            except HTTPError as e:
-                if e.response.status_code != 404:
-                    raise
+            except HTTPNotFound:
+                pass
         return output
 
     @cached_property

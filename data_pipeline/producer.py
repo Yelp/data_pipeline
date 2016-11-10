@@ -1,4 +1,18 @@
 # -*- coding: utf-8 -*-
+# Copyright 2016 Yelp Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
@@ -34,6 +48,15 @@ class Producer(Client):
     a number of messages are accumulated, or too much time has passed,
     then published all at once.  This process is designed to be largely
     transparent to the user.
+
+    .. note::
+
+        The clientlib used to include an AsyncProducer, which published to Kafka in the
+        background.  This producer was somewhat flaky, increased development effort,
+        and didn't provide a concrete performance benefit (see
+        pb/150070 for benchmark results).  If we ever want to
+        revive that producer, a SHA containing the producer just before its removal
+        has been tagged as before-async-producer-removal.
 
     **Examples**:
 
