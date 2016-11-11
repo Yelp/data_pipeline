@@ -211,7 +211,9 @@ class BaseConsumer(Client):
         self.post_rebalance_callback = post_rebalance_callback
         self.fetch_offsets_for_topics = fetch_offsets_for_topics
         self.pre_topic_refresh_callback = pre_topic_refresh_callback
-        self.cluster_name = cluster_name
+        self.cluster_name = (
+            cluster_name if cluster_name else get_config().kafka_cluster_name
+        )
         self._refresh_timer = _ConsumerTick(
             refresh_time_seconds=topic_refresh_frequency_seconds
         )
@@ -250,7 +252,7 @@ class BaseConsumer(Client):
                     cluster_type,
                     topic.cluster_type
                 )
-            return cluster_type
+        return cluster_type
 
     def _get_refreshed_topic_to_consumer_topic_state_map(
         self,
@@ -314,8 +316,8 @@ class BaseConsumer(Client):
         the topic_to_partition_map instance variable with topic names as keys
         and corresponding partition lists as values.
         """
-        self._determine_cluster_type_from_topics(
-            topic_to_consumer_topic_state_map
+        self.cluster_type = self._determine_cluster_type_from_topics(
+            topic_to_consumer_topic_state_map.keys()
         )
         self.topic_to_partition_map = {}
         for (
@@ -333,7 +335,7 @@ class BaseConsumer(Client):
         if self.cluster_type == 'scribe':
             return self._get_scribe_topics_from_topic_name(topic_name)
         else:
-            self._get_kafka_topics_from_topic_name(topic_name)
+            return self._get_kafka_topics_from_topic_name(topic_name)
 
     def _get_scribe_topics_from_topic_name(self, topic_name):
         topics_in_region = discovery.get_region_logs_stream(
@@ -753,10 +755,7 @@ class BaseConsumer(Client):
                 cluster_name=self.cluster_name
             )
         else:
-            return discovery.get_region_cluster(
-                cluster_type=self.cluster_type,
-                client_id=self.client_name,
-            )
+            return get_config().cluster_config
 
     @property
     def _kafka_consumer_config(self):

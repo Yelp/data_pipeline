@@ -34,6 +34,7 @@ from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import CreateMessage
 from tests.consumer.base_consumer_test import BaseConsumerSourceBaseTest
 from tests.consumer.base_consumer_test import BaseConsumerTest
+from tests.consumer.base_consumer_test import FakeScribeKafka
 from tests.consumer.base_consumer_test import FixedSchemasSetupMixin
 from tests.consumer.base_consumer_test import MultiTopicsSetupMixin
 from tests.consumer.base_consumer_test import RefreshDynamicTopicTests
@@ -105,44 +106,67 @@ class TestConsumer(BaseConsumerTest):
             'post_rebalance_callback': post_rebalance_callback,
         }
 
-    @pytest.fixture
+    @pytest.yield_fixture
     def consumer_instance(
         self,
         topic,
         pii_topic,
         consumer_init_kwargs,
     ):
-        return Consumer(
+        consumer = Consumer(
             topic_to_consumer_topic_state_map={topic: None, pii_topic: None},
             auto_offset_reset='largest',  # start from the tail of the topic,
             **consumer_init_kwargs
         )
+        with mock.patch.object(
+            consumer,
+            '_get_topics_in_region_from_topic_name',
+            side_effect=[
+                [x] for x in consumer.topic_to_consumer_topic_state_map.keys()
+            ]
+        ):
+            yield consumer
 
-    @pytest.fixture
+    @pytest.yield_fixture
     def consumer_two_instance(
         self,
         topic,
         pii_topic,
         consumer_init_kwargs
     ):
-        return Consumer(
+        consumer_two = Consumer(
             topic_to_consumer_topic_state_map={topic: None, pii_topic: None},
             **consumer_init_kwargs
         )
+        with mock.patch.object(
+            consumer_two,
+            '_get_topics_in_region_from_topic_name',
+            side_effect=[
+                [x] for x in consumer_two.topic_to_consumer_topic_state_map.keys()
+            ]
+        ):
+            yield consumer_two
 
-    @pytest.fixture
+    @pytest.yield_fixture
     def log_consumer_instance(
         self,
-        topic,
-        pii_topic,
+        log_topic,
         consumer_init_kwargs,
     ):
-        return Consumer(
-            topic_to_consumer_topic_state_map={topic: None, pii_topic: None},
+        log_consumer = Consumer(
+            topic_to_consumer_topic_state_map={log_topic: None},
             auto_offset_reset='largest',  # start from the tail of the topic,
-            cluster_type='scribe',
             **consumer_init_kwargs
         )
+        with mock.patch.object(
+            log_consumer,
+            '_get_scribe_topics_from_topic_name',
+            side_effect=[
+                [FakeScribeKafka().get_scribe_kafka_topic_name_from_clog_logname(x)]
+                for x in log_consumer.topic_to_consumer_topic_state_map.keys()
+            ]
+        ):
+            yield log_consumer
 
     def test_offset_retry_on_network_flake(
         self,
@@ -281,14 +305,22 @@ class TestConsumer(BaseConsumerTest):
 
 class TestRefreshTopics(RefreshNewTopicsTest):
 
-    @pytest.fixture
+    @pytest.yield_fixture
     def consumer_instance(self, topic, team_name):
-        return Consumer(
+        consumer = Consumer(
             consumer_name='test_consumer',
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
             topic_to_consumer_topic_state_map={topic: None}
         )
+        with mock.patch.object(
+            consumer,
+            '_get_topics_in_region_from_topic_name',
+            side_effect=[
+                [x] for x in consumer.topic_to_consumer_topic_state_map.keys()
+            ]
+        ):
+            yield consumer
 
 
 class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):
@@ -450,7 +482,7 @@ class TestReaderSchemaMapFixedSchemas(BaseConsumerSourceBaseTest):
         containers.create_kafka_topic(topic_name)
         return topic_name
 
-    @pytest.fixture
+    @pytest.yield_fixture
     def consumer_instance(
         self,
         consumer_group_name,
@@ -468,7 +500,7 @@ class TestReaderSchemaMapFixedSchemas(BaseConsumerSourceBaseTest):
             registered_non_compatible_schema.schema_id
         )
 
-        return Consumer(
+        consumer = Consumer(
             consumer_name=consumer_group_name,
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
@@ -479,6 +511,12 @@ class TestReaderSchemaMapFixedSchemas(BaseConsumerSourceBaseTest):
             pre_rebalance_callback=pre_rebalance_callback,
             post_rebalance_callback=post_rebalance_callback,
         )
+        with mock.patch.object(
+            consumer,
+            '_get_topics_in_region_from_topic_name',
+            side_effect=[[x] for x in consumer_source.get_topics()]
+        ):
+            yield consumer
 
     @pytest.fixture
     def registered_non_compatible_schema(

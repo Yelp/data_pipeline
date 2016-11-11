@@ -24,13 +24,15 @@ from uuid import uuid4
 
 import mock
 import pytest
-from yelp_kafka import discovery
+from kafka import create_message
+from yelp_kafka.producer import YelpKafkaSimpleProducer
 
 from data_pipeline.base_consumer import BaseConsumer
 from data_pipeline.base_consumer import ConsumerTopicState
-from data_pipeline.base_consumer import MultipleClusterTypeTypeError
+from data_pipeline.base_consumer import MultipleClusterTypeError
 from data_pipeline.base_consumer import TopicFilter
 from data_pipeline.base_consumer import TopicNotFoundInRegionError
+from data_pipeline.config import get_config
 from data_pipeline.consumer_source import FixedSchemas
 from data_pipeline.consumer_source import FixedTopics
 from data_pipeline.consumer_source import NewTopicOnlyInDataTarget
@@ -39,6 +41,7 @@ from data_pipeline.consumer_source import NewTopicsOnlyInFixedNamespaces
 from data_pipeline.consumer_source import TopicInDataTarget
 from data_pipeline.consumer_source import TopicInSource
 from data_pipeline.consumer_source import TopicsInFixedNamespaces
+from data_pipeline.envelope import Envelope
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import UpdateMessage
 from data_pipeline.producer import Producer
@@ -66,6 +69,34 @@ faster and flake-proof
 """
 
 
+@pytest.mark.usefixtures("containers")
+class FakeScribeKafka(object):
+
+    def setup(self, containers):
+        self.kafka_client = containers.get_kafka_connection()
+        self.cluster_config = get_config().cluster_config
+        self.producer = YelpKafkaSimpleProducer(
+            client=self.kafka_client,
+            cluster_config=self.cluster_config
+        )
+
+    def publish(self, containers, topic, message, count):
+        self.setup(containers)
+        assert count > 0
+        scribe_topic = self.get_scribe_kafka_topic_name_from_clog_logname(
+            topic
+        )
+        for _ in range(count):
+            self.producer.send_messages(scribe_topic, self.prepare_message(message))
+
+    def prepare_message(self, message):
+        envelope = Envelope()
+        return create_message(envelope.pack(message)).value
+
+    def get_scribe_kafka_topic_name_from_clog_logname(self, log_topic):
+        return str('scribe_test.devc_test.{0}'.format(log_topic))
+
+
 @pytest.mark.usefixtures("configure_teams")
 class BaseConsumerTest(object):
 
@@ -88,6 +119,12 @@ class BaseConsumerTest(object):
             producer.flush()
         return _publish_messages
 
+    @pytest.fixture
+    def publish_log_messages(self, containers):
+        def _publish_messages(topic, message, count):
+            FakeScribeKafka().publish(containers, topic, message, count)
+        return _publish_messages
+
     @pytest.fixture(scope="module")
     def topic(self, registered_schema):
         return str(registered_schema.topic.name)
@@ -101,8 +138,12 @@ class BaseConsumerTest(object):
         return [0]
 
     @pytest.fixture(scope="module", autouse=True)
-    def ensure_topic_exist(self, containers, topic):
+    def ensure_topic_exist(self, containers, topic, log_topic):
         containers.create_kafka_topic(topic)
+        containers.create_kafka_topic(
+            FakeScribeKafka().get_scribe_kafka_topic_name_from_clog_logname(
+                log_topic
+            ))
 
     def test_skip_commit_offset_if_offset_unchanged(
             self,
@@ -224,7 +265,12 @@ class BaseConsumerTest(object):
                 assert func_spy.call_count == 1
                 topic_map = {topic: None for topic in consumer.topic_to_partition_map}
 
-                consumer.reset_topics(topic_to_consumer_topic_state_map=topic_map)
+                with mock.patch.object(
+                    consumer,
+                    '_get_topics_in_region_from_topic_name',
+                    side_effect=[[x] for x in topic_map.keys()]
+                ):
+                    consumer.reset_topics(topic_to_consumer_topic_state_map=topic_map)
 
                 func_spy.reset_mock()
 
@@ -288,7 +334,18 @@ class BaseConsumerTest(object):
             _message = consumer.get_message(blocking=True, timeout=TIMEOUT)
             asserter.assert_messages([_message], expected_count=1)
 
-    def test_get_messages(self, consumer_instance, publish_messages, message):
+    @pytest.yield_fixture
+    def mocked_consumer_instance(self, consumer_instance):
+        with mock.patch.object(
+            consumer_instance,
+            '_get_topics_in_region_from_topic_name',
+            side_effect=[
+                [x] for x in consumer_instance.topic_to_consumer_topic_state_map.keys()
+            ]
+        ):
+            yield consumer_instance
+
+    def test_get_messages_askatti(self, consumer_instance, publish_messages, message):
         with consumer_instance as consumer:
             publish_messages(message, count=2)
             asserter = ConsumerAsserter(
@@ -336,7 +393,12 @@ class BaseConsumerTest(object):
                     },
                     last_seen_schema_id=None
                 )
-            consumer.reset_topics(topic_to_consumer_topic_state_map=topic_map)
+            with mock.patch.object(
+                consumer,
+                '_get_topics_in_region_from_topic_name',
+                side_effect=[[x] for x in topic_map.keys()]
+            ):
+                consumer.reset_topics(topic_to_consumer_topic_state_map=topic_map)
 
             # Verify that we do get the same two messages again
             messages = consumer.get_messages(
@@ -350,17 +412,21 @@ class BaseConsumerTest(object):
         self,
         log_consumer_instance,
         publish_log_messages,
-        log_message
+        log_message,
+        log_topic
     ):
-        with log_consumer_instance as consumer:
-            # publish_log_messages has not been implemented yet! Need help
-            publish_log_messages(log_message, count=1)
-            asserter = ConsumerAsserter(
-                consumer=consumer,
-                expected_message=log_message
-            )
-            _message = consumer.get_message(blocking=True, timeout=TIMEOUT)
-            asserter.assert_messages([_message], expected_count=1)
+        with mock.patch(
+            'yelp_kafka.discovery.get_region_cluster',
+            return_value=get_config().cluster_config
+        ):
+            with log_consumer_instance as consumer:
+                publish_log_messages(log_topic, log_message, count=1)
+                asserter = ConsumerAsserter(
+                    consumer=consumer,
+                    expected_message=log_message
+                )
+                _message = consumer.get_message(blocking=True, timeout=TIMEOUT)
+                asserter.assert_messages([_message], expected_count=1)
 
     def test_handle_log_and_non_log_topics_fails(
         self,
@@ -368,35 +434,82 @@ class BaseConsumerTest(object):
         log_topic,
         consumer_init_kwargs
     ):
-        with pytest.raises(MultipleClusterTypeTypeError):
+        with pytest.raises(MultipleClusterTypeError):
             BaseConsumer(
                 topic_to_consumer_topic_state_map={topic: None, log_topic: None},
-                auto_offset_reset='largest',  # start from the tail of the topic,
+                auto_offset_reset='largest',
                 **consumer_init_kwargs
             )
 
     @pytest.mark.parametrize("cluster_type, discovery_method", [
-        ('scribe', discovery.get_region_logs_stream),
-        ('datapipe', discovery.search_topic)
+        ('scribe', 'yelp_kafka.discovery.get_region_logs_stream'),
+        ('datapipe', 'yelp_kafka.discovery.search_topic')
     ])
     def test_no_topics_in_cluster_name(
         self,
-        consumer_instance,
         cluster_type,
-        discovery_method
+        discovery_method,
+        topic,
+        consumer_init_kwargs
     ):
+        consumer = BaseConsumer(
+            topic_to_consumer_topic_state_map={topic: None},
+            auto_offset_reset='largest',
+            **consumer_init_kwargs
+        )
+        consumer.cluster_type = cluster_type
         with mock.patch(discovery_method) as mock_discovery_method:
             mock_discovery_method.return_value = []
-            with consumer_instance as consumer:
-                consumer.cluster_type = cluster_type
-                with pytest.raises(TopicNotFoundInRegionError):
-                    consumer._get_valid_topics_in_region_from_topic_name(
-                        'dummy'
-                    )
+            with pytest.raises(TopicNotFoundInRegionError):
+                consumer._get_topics_in_region_from_topic_name(topic)
 
-    @pytest.mark.parametrize("cluster_name", [None, 'uswest2-devc'])
-    def test_cluster_name(self, cluster_name):
-        pass
+    def test_base_consumer_with_cluster_name(
+        self,
+        topic,
+        consumer_init_kwargs
+    ):
+        cluster_name = 'uswest2-devc'
+        with mock.patch(
+            'yelp_kafka.discovery.get_kafka_cluster'
+        ) as mock_get_kafka_cluster:
+            consumer = BaseConsumer(
+                topic_to_consumer_topic_state_map={topic: None},
+                auto_offset_reset='largest',
+                cluster_name=cluster_name,
+                **consumer_init_kwargs
+            )
+            consumer._region_cluster_config
+            mock_get_kafka_cluster.assert_called_once_with(
+                client_id=consumer.client_name,
+                cluster_name=cluster_name,
+                cluster_type=consumer.cluster_type
+            )
+
+    def test_base_consumer_without_cluster_name(
+        self,
+        topic,
+        consumer_init_kwargs
+    ):
+        with mock.patch(
+            'yelp_kafka.discovery.get_kafka_cluster'
+        ) as mock_get_kafka_cluster, mock.patch(
+            'kafka_utils.util.config.ClusterConfig.__init__',
+            return_value=None
+        ) as mock_cluster_config_init:
+            consumer = BaseConsumer(
+                topic_to_consumer_topic_state_map={topic: None},
+                auto_offset_reset='largest',
+                **consumer_init_kwargs
+            )
+            consumer._region_cluster_config
+            assert mock_get_kafka_cluster.call_count == 0
+            config = get_config()
+            mock_cluster_config_init.assert_called_once_with(
+                type='standard',
+                name='data_pipeline',
+                broker_list=config.kafka_broker_list,
+                zookeeper=config.kafka_zookeeper
+            )
 
 
 class BaseConsumerSourceBaseTest(object):
