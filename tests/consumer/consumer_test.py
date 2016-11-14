@@ -162,7 +162,7 @@ class TestConsumer(BaseConsumerTest):
             log_consumer,
             '_get_scribe_topics_from_topic_name',
             side_effect=[
-                [FakeScribeKafka().get_scribe_kafka_topic_name_from_clog_logname(x)]
+                [FakeScribeKafka().get_scribe_kafka_topic_from_logname(x)]
                 for x in log_consumer.topic_to_consumer_topic_state_map.keys()
             ]
         ):
@@ -305,22 +305,14 @@ class TestConsumer(BaseConsumerTest):
 
 class TestRefreshTopics(RefreshNewTopicsTest):
 
-    @pytest.yield_fixture
+    @pytest.fixture
     def consumer_instance(self, topic, team_name):
-        consumer = Consumer(
+        return Consumer(
             consumer_name='test_consumer',
             team_name=team_name,
             expected_frequency_seconds=ExpectedFrequency.constantly,
             topic_to_consumer_topic_state_map={topic: None}
         )
-        with mock.patch.object(
-            consumer,
-            '_get_topics_in_region_from_topic_name',
-            side_effect=[
-                [x] for x in consumer.topic_to_consumer_topic_state_map.keys()
-            ]
-        ):
-            yield consumer
 
 
 class ConsumerAutoRefreshTest(BaseConsumerSourceBaseTest):

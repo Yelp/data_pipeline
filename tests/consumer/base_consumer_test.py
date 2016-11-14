@@ -80,20 +80,21 @@ class FakeScribeKafka(object):
             cluster_config=self.cluster_config
         )
 
-    def publish(self, containers, topic, message, count):
+    def clog_publish(self, containers, logname, message, count):
         self.setup(containers)
         assert count > 0
-        scribe_topic = self.get_scribe_kafka_topic_name_from_clog_logname(
-            topic
-        )
+        scribe_topic = self.get_scribe_kafka_topic_from_logname(logname)
         for _ in range(count):
-            self.producer.send_messages(scribe_topic, self.prepare_message(message))
+            self.producer.send_messages(
+                scribe_topic,
+                self.prepare_message(message)
+            )
 
     def prepare_message(self, message):
         envelope = Envelope()
         return create_message(envelope.pack(message)).value
 
-    def get_scribe_kafka_topic_name_from_clog_logname(self, log_topic):
+    def get_scribe_kafka_topic_from_logname(self, log_topic):
         return str('scribe_test.devc_test.{0}'.format(log_topic))
 
 
@@ -122,7 +123,12 @@ class BaseConsumerTest(object):
     @pytest.fixture
     def publish_log_messages(self, containers):
         def _publish_messages(topic, message, count):
-            FakeScribeKafka().publish(containers, topic, message, count)
+            FakeScribeKafka().clog_publish(
+                containers,
+                topic,
+                message,
+                count
+            )
         return _publish_messages
 
     @pytest.fixture(scope="module")
@@ -141,9 +147,8 @@ class BaseConsumerTest(object):
     def ensure_topic_exist(self, containers, topic, log_topic):
         containers.create_kafka_topic(topic)
         containers.create_kafka_topic(
-            FakeScribeKafka().get_scribe_kafka_topic_name_from_clog_logname(
-                log_topic
-            ))
+            FakeScribeKafka().get_scribe_kafka_topic_from_logname(log_topic)
+        )
 
     def test_skip_commit_offset_if_offset_unchanged(
             self,
@@ -334,18 +339,7 @@ class BaseConsumerTest(object):
             _message = consumer.get_message(blocking=True, timeout=TIMEOUT)
             asserter.assert_messages([_message], expected_count=1)
 
-    @pytest.yield_fixture
-    def mocked_consumer_instance(self, consumer_instance):
-        with mock.patch.object(
-            consumer_instance,
-            '_get_topics_in_region_from_topic_name',
-            side_effect=[
-                [x] for x in consumer_instance.topic_to_consumer_topic_state_map.keys()
-            ]
-        ):
-            yield consumer_instance
-
-    def test_get_messages_askatti(self, consumer_instance, publish_messages, message):
+    def test_get_messages(self, consumer_instance, publish_messages, message):
         with consumer_instance as consumer:
             publish_messages(message, count=2)
             asserter = ConsumerAsserter(
