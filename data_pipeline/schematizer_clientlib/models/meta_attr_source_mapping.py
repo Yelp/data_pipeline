@@ -23,8 +23,8 @@ from data_pipeline.schematizer_clientlib.models.model_base import BaseModel
 
 """
 Represent the data of meta attribute mapping store. Meta attribute source
-mapping store should represent a source and the corresponding meta attribute
-schema id.
+mapping should represent a mapping of a source and the corresponding meta
+attribute schema id.
 """
 MetaAttributeSourceMapping = namedtuple(
     'MetaAttributeSourceMapping',
@@ -43,9 +43,6 @@ class _MetaAttributeSourceMapping(BaseModel):
 
     @classmethod
     def from_response(cls, source_id, meta_attribute_schema_id):
-        # Currently schematizer is not returning entity_id, entity_type. update
-        # schematizer service to include that as well in MetaAttributeMapping
-        # as well. taj.
         return cls(
             source_id=source_id,
             meta_attribute_schema_id=meta_attribute_schema_id
