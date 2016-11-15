@@ -14,7 +14,6 @@ from data_pipeline.schematizer_clientlib.models.refresh import Priority
 from data_pipeline.schematizer_clientlib.models.refresh import Refresh
 
 
-@pytest.mark.usefixures('containers')
 class TestPriorityRefreshQueue(object):
 
     @pytest.fixture
@@ -127,7 +126,6 @@ class TestPriorityRefreshQueue(object):
         assert priority_refresh_queue.pop(fake_source_name) == refresh_result
         with pytest.raises(EmptyQueueError) as e:
             priority_refresh_queue.pop(fake_source_name)
-            pass
         assert fake_source_name in e.value.message
 
     def test_refresh_queue_single_job(

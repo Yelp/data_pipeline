@@ -687,10 +687,6 @@ class TestFullRefreshRunner(object):
             'avg_rows_per_second_cap',
             1000
         ), mock.patch.object(
-            refresh_batch,
-            'process_row_start_time',
-            0.0
-        ), mock.patch.object(
             time,
             'time',
             return_value=0.1  # Simulating that it took 100 milliseconds to run the actual row processing
@@ -699,6 +695,7 @@ class TestFullRefreshRunner(object):
             'sleep',
             return_value=None
         ) as mock_sleep:
+            refresh_batch.process_row_start_time = 0.0
             refresh_batch._wait_for_throughput(count=100)
             mock_sleep.assert_called_with(0.0)
             refresh_batch._wait_for_throughput(count=1)

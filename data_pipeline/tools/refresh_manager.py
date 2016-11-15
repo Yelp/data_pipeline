@@ -25,7 +25,6 @@ import time
 from optparse import OptionGroup
 
 import psutil
-from cached_property import cached_property
 from yelp_batch import BatchDaemon
 from yelp_batch.batch import batch_command_line_options
 from yelp_batch.batch import batch_configure
@@ -106,7 +105,7 @@ class FullRefreshManager(BatchDaemon):
         self.refresh_queue = PriorityRefreshQueue()
         self.last_updated_timestamp = None
 
-    @cached_property
+    @property
     def schematizer(self):
         return get_schematizer()
 
@@ -269,8 +268,9 @@ class FullRefreshManager(BatchDaemon):
         job.pid = None
 
     def modify_job(self, job):
+        pid = job.pid
         self.pause_job(job)
-        os.waitpid(job.pid)
+        os.waitpid(pid)
         self.run_job(job)
 
     def set_zombie_refresh_to_fail(self, refresh_job):
@@ -306,12 +306,12 @@ class FullRefreshManager(BatchDaemon):
         for source, refresh_job in self.active_refresh_jobs.iteritems():
             self.set_zombie_refresh_to_fail(refresh_job)
 
-    def determine_next_refresh_set(self):
-        next_refresh_set = self.refresh_queue.peek()
-        self.log.debug("next_refresh_set: {}...".format(
-            next_refresh_set
+    def determine_refresh_candidates(self):
+        refresh_candidates = self.refresh_queue.peek()
+        self.log.debug("refresh_candidates: {}...".format(
+            refresh_candidates
         ))
-        return next_refresh_set
+        return refresh_candidates
 
     def get_last_updated_timestamp(self, requests):
         if not requests:
@@ -321,7 +321,7 @@ class FullRefreshManager(BatchDaemon):
             (max_time - datetime.datetime(1970, 1, 1, tzinfo=max_time.tzinfo)).total_seconds()
         )
 
-    def get_next_refresh(self, updated_refreshes):
+    def get_refresh_candidates(self, updated_refreshes):
         requests = [
             ref for ref in updated_refreshes if ref.status in INACTIVE_STATUSES
         ]
@@ -329,7 +329,7 @@ class FullRefreshManager(BatchDaemon):
             len(requests)
         ))
         self.refresh_queue.add_refreshes_to_queue(requests)
-        return self.determine_next_refresh_set()
+        return self.determine_refresh_candidates()
 
     def get_cap(self):
         cap_left = self.total_throughput_cap - self.total_throughput_being_used
@@ -384,9 +384,11 @@ class FullRefreshManager(BatchDaemon):
         return to_run_jobs, to_modify_jobs, to_pause_jobs
 
     def reallocate_for_source(self, source):
-        cap = self.get_cap()
-        job = self.active_refresh_jobs[source]
-        self.allocate_throughput_to_job(job, cap)
+        """Rellocates available throughput to the currently running job
+        in case more/less of it is available."""
+        available_cap = self.get_cap()
+        running_job = self.active_refresh_jobs[source]
+        self.allocate_throughput_to_job(running_job, available_cap)
 
     def run_all_job_actions(self, to_run_jobs, to_modify_jobs, to_pause_jobs):
         for job in to_pause_jobs:
@@ -403,36 +405,38 @@ class FullRefreshManager(BatchDaemon):
             if refresh_job.is_active()
         }
 
-    def _should_run_new_job(self, candidate_job):
-        source = candidate_job.source
+    def _should_run_new_job(self, refresh_candidate):
+        source = refresh_candidate.source_name
         running_job = self.active_refresh_jobs.get(source, None)
         return (not running_job or
                 running_job.status in COMPLETE_STATUSES or
-                running_job.priority < candidate_job.priority)
+                running_job.priority < refresh_candidate.priority)
 
     def _remove_running_job(self, source):
         running_job = self.active_refresh_jobs[source]
         self.total_throughput_being_used -= running_job.throughput
+        # Pause the current running job so that it will stop running,
+        # it will be added to the queue automatically next step
         self.pause_job(running_job)
         del self.active_refresh_jobs[source]
 
-    def update_running_jobs_with_refresh(self, refresh_to_add):
-        source = refresh_to_add.source_name
-        new_refresh_job = RefreshJob(
-            refresh_id=refresh_to_add.refresh_id,
-            cap=(refresh_to_add.avg_rows_per_second_cap or
-                 FullRefreshRunner.DEFAULT_AVG_ROWS_PER_SECOND_CAP),
-            priority=refresh_to_add.priority,
-            status=refresh_to_add.status,
-            source=source
-        )
-        if self._should_run_new_job(new_refresh_job):
+    def update_running_jobs_with_refresh(self, refresh_candidate):
+        if self._should_run_new_job(refresh_candidate):
+            source = refresh_candidate.source_name
+            new_refresh_job = RefreshJob(
+                refresh_id=refresh_candidate.refresh_id,
+                cap=(refresh_candidate.avg_rows_per_second_cap or
+                     FullRefreshRunner.DEFAULT_AVG_ROWS_PER_SECOND_CAP),
+                priority=refresh_candidate.priority,
+                status=refresh_candidate.status,
+                source=source
+            )
             if source in self.active_refresh_jobs:
                 self._remove_running_job(source)
             self.active_refresh_jobs[source] = new_refresh_job
 
-    def update_running_jobs_with_refresh_set(self, refresh_set):
-        for source, refresh in refresh_set.iteritems():
+    def update_running_jobs_with_refresh_candidates(self, refresh_candidates):
+        for source, refresh in refresh_candidates.iteritems():
             self.log.debug("Constructing running refreshes for {}...".format(
                 source
             ))
@@ -470,30 +474,28 @@ class FullRefreshManager(BatchDaemon):
             statuses.append(RefreshStatus.IN_PROGRESS)
         return self.get_refreshes_of_statuses(statuses)
 
-    def reset_running_refresh_statuses(self, updated_refreshes):
-        started_refreshes = [
-            ref for ref in updated_refreshes if ref.status not in INACTIVE_STATUSES
-        ]
-        for refresh in started_refreshes:
-            source = refresh.source_name
-            refresh_job = self.active_refresh_jobs.get(source, None)
-            if refresh_job:
-                refresh_job.status = refresh.status
+    def active_job_has_invalid_status(self, active_job, updated_refresh):
+        return (active_job and
+                active_job.refresh_id == updated_refresh.refresh_id and
+                updated_refresh.status == RefreshStatus.NOT_STARTED)
 
-    def error_check_running_refreshes(self, updated_refreshes):
-        inactive_refreshes = [
-            ref for ref in updated_refreshes if ref.status in INACTIVE_STATUSES
-        ]
-        for refresh in inactive_refreshes:
-            active_job = self.active_refresh_jobs.get(
-                refresh.source_name, None)
-            if active_job and active_job.refresh_id == refresh.refresh_id:
-                self.log.error(
-                    "Discrepency found: active_job has an inactive status in"
-                    " schematizer. Refresh ID: {} source_name: {}".format(
-                        active_job.refresh_id, refresh.source_name
-                    )
+    def validate_running_job_status(self, active_job, updated_refresh):
+        if self.active_job_has_invalid_status(active_job, updated_refresh):
+            self.log.error(
+                "Discrepency found: active_job has not_started status in"
+                " schematizer. Refresh ID: {} source_name: {}".format(
+                    active_job.refresh_id, updated_refresh.source_name
                 )
+            )
+
+    def update_refreshes_status(self, updated_refreshes):
+        for updated_refresh in updated_refreshes:
+            source = updated_refresh.source_name
+            active_job = self.active_refresh_jobs.get(source)
+            if not active_job:
+                continue
+            self.validate_running_job_status(active_job, updated_refresh)
+            active_job.status = updated_refresh.status
 
     def step(self):
         self.set_zombie_refreshes_to_fail()
@@ -502,10 +504,9 @@ class FullRefreshManager(BatchDaemon):
             updated_refreshes
         )
         if self.active_refresh_jobs:
-            self.error_check_running_refreshes(updated_refreshes)
-            self.reset_running_refresh_statuses(updated_refreshes)
-        next_refresh_set = self.get_next_refresh(updated_refreshes)
-        self.update_running_jobs_with_refresh_set(next_refresh_set)
+            self.update_refreshes_status(updated_refreshes)
+        refresh_candidates = self.get_refresh_candidates(updated_refreshes)
+        self.update_running_jobs_with_refresh_candidates(refresh_candidates)
         self.reallocate_throughput()
         to_run_jobs, to_modify_jobs, to_pause_jobs = self.update_job_actions()
         self.run_all_job_actions(to_run_jobs, to_modify_jobs, to_pause_jobs)

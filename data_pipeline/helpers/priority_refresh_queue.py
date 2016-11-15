@@ -14,7 +14,7 @@ class EmptyQueueError(Exception):
 
 class PriorityRefreshQueue(object):
     """
-    PriorityRefreshQueue orders jobs in the queue by:
+    PriorityRefreshQueue orders paused/non-started jobs in the queue by:
     - higher priority > lower priority
     - paused status > not_started status
     - older > newer
@@ -28,6 +28,9 @@ class PriorityRefreshQueue(object):
 
     Works for multiple sources within a single namespace but not across namespaces
     (since source_names are only unique within a namespace).
+
+    Should only manage jobs that are either paused or non-started. This means when starting a job
+    retrieved from peek, it should be popped from the queue.
     """
 
     def __init__(self):

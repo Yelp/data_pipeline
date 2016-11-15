@@ -19,6 +19,7 @@ from __future__ import unicode_literals
 import os
 import re
 import signal
+import sys
 import time
 from datetime import datetime
 from optparse import OptionGroup
@@ -99,6 +100,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
                  '(default: %default).'
         )
         opt_group.add_option(
+            # TODO: Grab this data from database (DATAPIPE-2069)
             '--primary-key',
             dest='primary_key',
             help='Required: A single primary key column name (if composite use one).'
@@ -186,7 +188,6 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self.temp_table = '{table}_data_pipeline_refresh'.format(
             table=self.table_name
         )
-        self.process_row_start_time = time.time()
         self.offset = self.options.offset
         if self.offset < 0:
             raise ValueError("--offset should be a non-negative number")
@@ -298,9 +299,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         ))
         self._execute_query(session, refresh_table_create_query)
 
-    def _after_processing_rows(self, session, count):
-        """Commits changes and makes sure replication and throughput cap
-        catches up before moving on.
+    def unlock_tables(self, session):
+        """Commits changes and allows replication to start catching up
         """
         self._commit(session)
 
@@ -316,10 +316,15 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self._execute_query(session, 'UNLOCK TABLES')
         session.commit()
 
+    def throttle_throughput(self, count):
         with self.rw_conn() as rw_conn:
             self.throttle_to_replication(rw_conn)
 
         self._wait_for_throughput(count)
+
+    def _after_processing_rows(self, session, count):
+        self.unlock_tables(session)
+        self.throttle_throughput(count)
 
     def _wait_for_throughput(self, count):
         """Used to cap throughput when given the --avg-rows-per-second-cap flag.
@@ -370,7 +375,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self._commit(session)
             self.log.info("Dropped table: {table}".format(table=self.temp_table))
 
-    def setup_transaction(self, session):
+    def lock_tables(self, session):
         self._use_db(session)
         self._execute_query(
             session,
@@ -447,7 +452,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         while min_pk < max_pk:
             self.process_row_start_time = time.time()
             with self.write_session() as session:
-                self.setup_transaction(session)
+                self.lock_tables(session)
                 batch_max_pk = min_pk + self.batch_size
                 inserted = self.count_inserted(session, min_pk, batch_max_pk)
                 self.insert_batch(session, min_pk, batch_max_pk)
@@ -459,7 +464,11 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         if self.refresh_id:
             # Offset is 0 because it doesn't matter (was a success)
             self.completed = True
-            self.schematizer.update_refresh(refresh_id=self.refresh_id, status=RefreshStatus.SUCCESS, offset=0)
+            self.schematizer.update_refresh(
+                refresh_id=self.refresh_id,
+                status=RefreshStatus.SUCCESS,
+                offset=0
+            )
 
     def log_info(self):
         elapsed_time = time.time() - self.starttime
@@ -479,16 +488,15 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         os._exit(1)
 
     def handle_terminate(self, signal, frame):
-        if not self.completed:
-            self.schematizer.update_refresh(
-                refresh_id=self.refresh_id,
-                status=RefreshStatus.PAUSED,
-                offset=self.offset
-            )
+        status = RefreshStatus.SUCESS if self.completed else RefreshStatus.PAUSED
+        self.schematizer.update_refresh(
+            refresh_id=self.refresh_id,
+            status=status,
+            offset=self.offset
+        )
         os._exit(1)
 
     def run(self):
-        import sys
         self.log.info("Python Version: {}".format(sys.version_info))
         is_success = True
         try:
