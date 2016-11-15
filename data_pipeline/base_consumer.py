@@ -336,12 +336,24 @@ class BaseConsumer(Client):
         self._set_registrar_tracked_schema_ids(topic_to_consumer_topic_state_map)
 
     def _get_topics_in_region_from_topic_name(self, topic_name):
+        """We use yelp_kafka discovery to get topic for a specific
+        cluster_type and cluster_name. There should 0 or 1 topic for a given
+        name in a particular cluster_type and cluster_name. However the
+        discovery methods returns a list of topics. Hence keeping yelp_kafka
+        as the source of truth for topic info, we will tail all topics that it
+        returns, which almost always is 0 or 1.
+        """
         if self.cluster_type == 'scribe':
             return self._get_scribe_topics_from_topic_name(topic_name)
         else:
             return self._get_kafka_topics_from_topic_name(topic_name)
 
     def _get_scribe_topics_from_topic_name(self, topic_name):
+        """yelp_kafka.discovery.get_region_logs_stream returns a list of
+        ([topics], cluster) tuple. However if the region is specified we should
+        have 0 or 1 tuple of ([topics], cluster) returned
+        http://servicedocs.yelpcorp.com/docs/yelp_kafka/discovery.html#yelp_kafka.discovery.get_region_logs_stream
+        """
         topics_in_region = discovery.get_region_logs_stream(
             client_id=self.client_name,
             stream=topic_name,
@@ -357,6 +369,11 @@ class BaseConsumer(Client):
         return topics
 
     def _get_kafka_topics_from_topic_name(self, topic_name):
+        """yelp_kafka.discovery.search_topic returns a list of (topic, cluster)
+        tuple. However if the region is specified we should have 0 or 1 tuple
+        of (topic, cluster) returned
+        http://servicedocs.yelpcorp.com/docs/yelp_kafka/discovery.html#yelp_kafka.discovery.search_topic
+        """
         topics_in_region = discovery.search_topic(
             topic=topic_name,
             clusters=[self._region_cluster_config]
