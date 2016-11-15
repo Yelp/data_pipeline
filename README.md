@@ -109,7 +109,7 @@ with Consumer(
 
 Disclaimer
 -------
-We're still in the process of setting up this service as a stand-alone. There may be additional work required to run MySQL Streamer instances and integrate with other applications.
+We're still in the process of setting up this service as a stand-alone. There may be additional work required to run Producers/Consumers and integrate with other applications.
 
 
 License
