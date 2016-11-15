@@ -193,13 +193,18 @@ def pii_schema(schematizer_client, example_schema, namespace):
 
 
 @pytest.fixture
+def meta_namespace():
+    return 'meta_attr_namespace'
+
+
+@pytest.fixture
 def registered_meta_attribute_schema(
     schematizer_client,
     example_meta_attr_schema,
-    namespace
+    meta_namespace
 ):
     return schematizer_client.register_schema(
-        namespace=namespace,
+        namespace=meta_namespace,
         source='good_meta_attribute',
         schema_str=example_meta_attr_schema,
         source_owner_email='test_meta@yelp.com',

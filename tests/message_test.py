@@ -249,10 +249,11 @@ class SharedMessageTest(object):
             assert dry_run_message._meta == meta_param
 
     @pytest.mark.parametrize('meta_param, mandatory_meta_attr_ids', [
-        (None, [10]),
+        ([], [10]),
         ([MetaAttribute(schema_id=10, payload_data={'payload_1': 10})], [20]),
         ([MetaAttribute(schema_id=10, payload_data={'payload_1': 10}),
-          MetaAttribute(schema_id=20, payload_data={'payload_1': 20})], [10, 30])
+          MetaAttribute(schema_id=20, payload_data={'payload_1': 20})],
+         [10, 30])
     ])
     def test_missing_mandatory_meta_attributes(
         self,
@@ -265,11 +266,21 @@ class SharedMessageTest(object):
             'get_meta_attributes_by_schema_id',
             return_value=mandatory_meta_attr_ids
         ):
-            with pytest.raises(MissingMetaAttributeException):
+            with pytest.raises(MissingMetaAttributeException) as e:
                 self._get_dry_run_message_with_meta(
                     valid_message_data,
                     meta_param
                 )
+            assert e.value.args
+            assert (
+                "Meta Attributes with IDs `{0}` are not found for "
+                "schema_id `{1}`.".format(
+                    ", ".join(str(m) for m in (
+                        {id for id in mandatory_meta_attr_ids} -
+                        {m.schema_id for m in meta_param}
+                    )),
+                    valid_message_data['schema_id']
+                )) in e.value.args[0]
 
     def test_dry_run(self, valid_message_data):
         payload_data = {'data': 'test'}

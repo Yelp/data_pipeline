@@ -51,7 +51,14 @@ PayloadFieldDiff = namedtuple('PayloadFieldDiff', [
 
 
 class MissingMetaAttributeException(Exception):
-    pass
+    def __init__(self, schema_id, meta_ids, mandatory_meta_ids):
+        Exception.__init__(
+            self,
+            "Meta Attributes with IDs `{0}` are not found for schema_id "
+            "`{1}`.".format(
+                ", ".join(str(m) for m in (mandatory_meta_ids - meta_ids)),
+                schema_id
+            ))
 
 
 class NoEntryPayload(object):
@@ -269,10 +276,10 @@ class Message(object):
         )
         if not mandatory_meta_ids.issubset(meta_attr_schema_ids):
             raise MissingMetaAttributeException(
-                "Meta Attributes with IDs `{0}` are not found. ".format(
-                    ", ".join(str(m) for m in (
-                        mandatory_meta_ids - meta_attr_schema_ids
-                    ))))
+                schema_id,
+                meta_attr_schema_ids,
+                mandatory_meta_ids
+            )
         self._meta = meta
 
     def get_meta_attr_by_type(self, meta, meta_type):
