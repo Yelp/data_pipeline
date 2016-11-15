@@ -1,4 +1,18 @@
 # -*- coding: utf-8 -*-
+# Copyright 2016 Yelp Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
@@ -13,15 +27,22 @@ from data_pipeline._retry_util import RetryPolicy
 from data_pipeline.config import get_config
 from data_pipeline.helpers.singleton import Singleton
 from data_pipeline.schematizer_clientlib.models.avro_schema import _AvroSchema
-from data_pipeline.schematizer_clientlib.models.avro_schema_element import _AvroSchemaElement
-from data_pipeline.schematizer_clientlib.models.consumer_group import _ConsumerGroup
-from data_pipeline.schematizer_clientlib.models.consumer_group_data_source \
-    import _ConsumerGroupDataSource
+from data_pipeline.schematizer_clientlib.models.avro_schema_element import (
+    _AvroSchemaElement
+)
+from data_pipeline.schematizer_clientlib.models.consumer_group import (
+    _ConsumerGroup
+)
+from data_pipeline.schematizer_clientlib.models.consumer_group_data_source import (
+    _ConsumerGroupDataSource
+)
 from data_pipeline.schematizer_clientlib.models.data_target import _DataTarget
-from data_pipeline.schematizer_clientlib.models.meta_attr_namespace_mapping \
-    import _MetaAttributeNamespaceMapping
-from data_pipeline.schematizer_clientlib.models.meta_attr_source_mapping \
-    import _MetaAttributeSourceMapping
+from data_pipeline.schematizer_clientlib.models.meta_attr_namespace_mapping import (
+    _MetaAttributeNamespaceMapping
+)
+from data_pipeline.schematizer_clientlib.models.meta_attr_source_mapping import (
+    _MetaAttributeSourceMapping
+)
 from data_pipeline.schematizer_clientlib.models.namespace import _Namespace
 from data_pipeline.schematizer_clientlib.models.refresh import _Refresh
 from data_pipeline.schematizer_clientlib.models.source import _Source
@@ -320,25 +341,40 @@ class SchematizerClient(object):
             result.append(_namespace.to_result())
         return result
 
-    def get_sources_by_namespace(self, namespace_name):
+    def get_sources_by_namespace(
+        self,
+        namespace_name,
+        min_id=0,
+        page_size=10
+    ):
         """Get the list of sources in the specified namespace.
 
         Args:
             namespace_name (str): namespace name to look up
+            min_id (Optional[int]): the returned sources should have id greater than or equal to the min_id
+            page_size (Optional[int]): the number of sources to return in one api call to prevent timeout
 
         Returns:
             (List[data_pipeline.schematizer_clientlib.models.source.Source]):
                 The list of schema sources in the given namespace.
         """
-        response = self._call_api(
-            api=self._client.namespaces.list_sources_by_namespace,
-            params={'namespace': namespace_name}
-        )
+        last_page_size = page_size
         result = []
-        for resp_item in response:
-            _source = _Source.from_response(resp_item)
-            result.append(_source.to_result())
-            self._set_cache_by_source(_source)
+        while last_page_size == page_size:
+            response = self._call_api(
+                api=self._client.namespaces.list_sources_by_namespace,
+                params={
+                    'namespace': namespace_name,
+                    'min_id': min_id,
+                    'count': page_size
+                }
+            )
+            for resp_item in response:
+                _source = _Source.from_response(resp_item)
+                result.append(_source.to_result())
+                self._set_cache_by_source(_source)
+                min_id = _source.source_id + 1
+            last_page_size = len(response)
         return result
 
     def get_sources(
@@ -442,6 +478,7 @@ class SchematizerClient(object):
         schema_str,
         source_owner_email,
         contains_pii,
+        cluster_type='datapipe',
         base_schema_id=None
     ):
         """ Register a new schema and return newly created schema object.
@@ -454,6 +491,9 @@ class SchematizerClient(object):
             contains_pii (bool): Indicates if the schema being registered has
                 at least one field that can potentially contain PII.
                 See http://y/pii for help identifying what is or is not PII.
+            cluster_type (Optional[str]): Kafka cluster type to connect to,
+                like 'datapipe', 'scribe', etc. See http://y/datapipe_cluster_types
+                for more info on cluster_types. Defaults to datapipe.
             base_schema_id (Optional[int]): The id of the original schema which
                 the new schema was changed based on
 
@@ -467,6 +507,7 @@ class SchematizerClient(object):
             'source': source,
             'source_owner_email': source_owner_email,
             'contains_pii': contains_pii,
+            'cluster_type': cluster_type
         }
         if base_schema_id:
             request_body['base_schema_id'] = base_schema_id
@@ -479,7 +520,7 @@ class SchematizerClient(object):
         self._set_cache_by_schema(_schema)
         return _schema.to_result()
 
-    def register_namespace_meta_attr_mapping(
+    def register_namespace_meta_attribute_mapping(
         self,
         namespace_name,
         meta_attr_schema_id
@@ -509,7 +550,7 @@ class SchematizerClient(object):
         )
         return _meta_attr_mapping.to_result()
 
-    def delete_namespace_meta_attr_mapping(
+    def delete_namespace_meta_attribute_mapping(
         self,
         namespace_name,
         meta_attr_schema_id
@@ -539,7 +580,7 @@ class SchematizerClient(object):
         )
         return _meta_attr_mapping.to_result()
 
-    def get_meta_attributes_by_namespace(self, namespace_name):
+    def get_namespace_meta_attribute_mappings(self, namespace_name):
         """ Returns meta attributes for the given namespace.
 
         Args:
@@ -554,16 +595,14 @@ class SchematizerClient(object):
             api=self._client.namespaces.get_namespace_meta_attribute_mappings,
             params={'namespace': namespace_name}
         )
-        result = []
-        for resp_item in response:
-            _meta_attr_mapping = _MetaAttributeNamespaceMapping.from_response(
+        return [
+            _MetaAttributeNamespaceMapping.from_response(
                 namespace_id=resp_item.namespace_id,
                 meta_attribute_schema_id=resp_item.meta_attribute_schema_id
-            )
-            result.append(_meta_attr_mapping.to_result())
-        return result
+            ).to_result()
+            for resp_item in response]
 
-    def register_source_meta_attr_mapping(
+    def register_source_meta_attribute_mapping(
         self,
         source_id,
         meta_attr_schema_id
@@ -593,7 +632,7 @@ class SchematizerClient(object):
         )
         return _meta_attr_mapping.to_result()
 
-    def delete_source_meta_attr_mapping(
+    def delete_source_meta_attribute_mapping(
         self,
         source_id,
         meta_attr_schema_id
@@ -623,7 +662,7 @@ class SchematizerClient(object):
         )
         return _meta_attr_mapping.to_result()
 
-    def get_meta_attributes_by_source(self, source_id):
+    def get_source_meta_attribute_mappings(self, source_id):
         """ Returns meta attributes for the given source.
 
         Args:
@@ -669,6 +708,7 @@ class SchematizerClient(object):
         schema_json,
         source_owner_email,
         contains_pii,
+        cluster_type='datapipe',
         base_schema_id=None
     ):
         """ Register a new schema and return newly created schema object.
@@ -682,6 +722,9 @@ class SchematizerClient(object):
             contains_pii (bool): Indicates if the schema being registered has
                 at least one field that can potentially contain PII.
                 See http://y/pii for help identifying what is or is not PII.
+            cluster_type (Optional[str]): Kafka cluster type to connect like
+                datapipe, scribe, etc. See http://y/datapipe_cluster_types for
+                more info on cluster_types. Defaults to datapipe.
             base_schema_id (Optional[int]): The id of the original schema which
                 the new schema was changed based on
 
@@ -695,6 +738,7 @@ class SchematizerClient(object):
             schema_str=simplejson.dumps(schema_json),
             source_owner_email=source_owner_email,
             contains_pii=contains_pii,
+            cluster_type=cluster_type,
             base_schema_id=base_schema_id
         )
 

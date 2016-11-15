@@ -20,7 +20,6 @@
 # should be at least 1.2.1 for trusty compatibility.
 
 argparse==1.4.0
-avro==1.9.0-yelp4
 boto==2.38.0
 bravado==8.3.0
 bravado-core==4.5.0
@@ -71,6 +70,7 @@ thriftpy==0.1.15
 tornado==2.4.1
 Twisted==15.4.0
 data-pipeline-avro-util==0.2.1
+yelp-avro==1.9.2
 yelp-batch==0.19.8
 yelp-bytes==0.2.0
 yelp-cgeom==1.3.1

@@ -1,4 +1,18 @@
 # -*- coding: utf-8 -*-
+# Copyright 2016 Yelp Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
@@ -21,6 +35,7 @@ AvroArgs = namedtuple(
         "namespace",
         "source_owner_email",
         "pii",
+        "cluster_type",
         "avro_schema",
         "base_schema_id",
         "verbosity"
@@ -51,6 +66,7 @@ class BaseTestRegister(TestIntrospectorBase):
         namespace_name,
         source_name,
         contains_pii=False,
+        cluster_type='datapipe',
         base_schema_id=None
     ):
         assert schema.primary_keys == primary_keys
@@ -59,6 +75,7 @@ class BaseTestRegister(TestIntrospectorBase):
         assert schema.topic.source.name == source_name
         assert schema.topic.source.namespace.name == namespace_name
         assert schema.topic.contains_pii == contains_pii
+        assert schema.topic.cluster_type == cluster_type
 
     @pytest.fixture
     def namespace_name(self):
@@ -102,7 +119,8 @@ class TestRegisterAvroCommand(BaseTestRegister):
         namespace=None,
         avro_schema=None,
         base_schema_id=None,
-        pii=False
+        pii=False,
+        cluster_type=None
     ):
         return AvroArgs(
             source_id=source_id,
@@ -112,9 +130,16 @@ class TestRegisterAvroCommand(BaseTestRegister):
             avro_schema=avro_schema,
             base_schema_id=base_schema_id,
             pii=pii,
+            cluster_type=cluster_type,
             verbosity=0
         )
 
+    @pytest.mark.parametrize("overrides, expected_overrides", [
+        ({}, {}),
+        ({'base_schema_id': 1}, {'base_schema_id': 1}),
+        ({'pii': True}, {'contains_pii': True}),
+        ({'cluster_type': 'scribe'}, {'cluster_type': 'scribe'})
+    ])
     def test_avro_schema(
         self,
         register_command,
@@ -122,40 +147,15 @@ class TestRegisterAvroCommand(BaseTestRegister):
         source_name,
         namespace_name,
         schema_str,
-        schema_json
-    ):
-        args = self._create_fake_args(
-            source_name=source_name,
-            namespace=namespace_name,
-            avro_schema=schema_str
-        )
-        register_command.run(args, parser)
-        assert register_command.print_schema.call_count == 1
-        call_args, _ = register_command.print_schema.call_args
-        schema = call_args[0]
-        self._assert_correct_schema(
-            schema=schema,
-            primary_keys=[],
-            schema_json=schema_json,
-            namespace_name=namespace_name,
-            source_name=source_name
-        )
-
-    def test_avro_schema_base_id_and_pii(
-        self,
-        register_command,
-        parser,
-        source_name,
-        namespace_name,
-        schema_str,
-        schema_json
+        schema_json,
+        overrides,
+        expected_overrides
     ):
         args = self._create_fake_args(
             source_name=source_name,
             namespace=namespace_name,
             avro_schema=schema_str,
-            base_schema_id=1,
-            pii=True
+            **overrides
         )
         register_command.run(args, parser)
         assert register_command.print_schema.call_count == 1
@@ -167,8 +167,7 @@ class TestRegisterAvroCommand(BaseTestRegister):
             schema_json=schema_json,
             namespace_name=namespace_name,
             source_name=source_name,
-            base_schema_id=1,
-            contains_pii=True
+            **expected_overrides
         )
 
     def test_avro_schema_with_no_namespace(
