@@ -398,7 +398,7 @@ class BaseConsumer(Client):
 
         Returns:
             (Optional(data_pipeline.message.Message)): Message object or None
-                if no message could be retrieved.
+            if no message could be retrieved.
         """
         return next(iter(
             self.get_messages(
