@@ -107,6 +107,11 @@ with Consumer(
 ```
 
 
+Disclaimer
+-------
+We're still in the process of setting up this service as a stand-alone. There may be additional work required to run MySQL Streamer instances and integrate with other applications.
+
+
 License
 -------
 Data Pipeline Clientlib is licensed under the Apache License, Version 2.0: http://www.apache.org/licenses/LICENSE-2.0
