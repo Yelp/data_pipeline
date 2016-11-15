@@ -211,9 +211,7 @@ class BaseConsumer(Client):
         self.post_rebalance_callback = post_rebalance_callback
         self.fetch_offsets_for_topics = fetch_offsets_for_topics
         self.pre_topic_refresh_callback = pre_topic_refresh_callback
-        self.cluster_name = (
-            cluster_name if cluster_name else get_config().kafka_cluster_name
-        )
+        self.cluster_name = self._set_cluster_name(cluster_name)
         self._refresh_timer = _ConsumerTick(
             refresh_time_seconds=topic_refresh_frequency_seconds
         )
@@ -233,6 +231,12 @@ class BaseConsumer(Client):
     @cached_property
     def _schematizer(self):
         return get_schematizer()
+
+    def _set_cluster_name(self, cluster_name):
+        if cluster_name:
+            return cluster_name
+        else:
+            return get_config().kafka_cluster_name
 
     def _determine_cluster_type_from_topics(self, topic_names):
         """Checks whether the cluster type of all topics are the same and

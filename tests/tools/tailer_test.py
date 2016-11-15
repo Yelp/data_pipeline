@@ -25,6 +25,7 @@ import pytest
 from yelp_batch.batch import BatchOptionParser
 
 import data_pipeline
+from data_pipeline.consumer import Consumer
 from data_pipeline.expected_frequency import ExpectedFrequency
 from data_pipeline.message import CreateMessage
 from data_pipeline.message import RefreshMessage
@@ -151,6 +152,18 @@ class TestTailer(object):
         topic, offset = self._get_published_topic_and_offset(message, producer)
         return self._construct_topic_with_offset_arg(topic, offset + 1)
 
+    def run_dp_tailer(self, dp_tailer):
+        with mock.patch.object(
+            Consumer,
+            '_get_topics_in_region_from_topic_name',
+            side_effect=[[x] for x in dp_tailer.topic_to_offsets_map.keys()]
+        ), mock.patch.object(
+            Consumer,
+            '_set_cluster_name',
+            return_value=None
+        ):
+            dp_tailer.run()
+
     def test_version(self, dp_tailer):
         assert dp_tailer.version == "data_pipeline {}".format(
             data_pipeline.__version__
@@ -266,7 +279,7 @@ class TestTailer(object):
             'keep_running',
             side_effect=run_once_publishing_message
         ):
-            dp_tailer.run()
+            self.run_dp_tailer(dp_tailer)
 
         out, _ = capsys.readouterr()
         assert out == "{u'payload_data': {u'good_field': 100}}\n"
@@ -277,7 +290,7 @@ class TestTailer(object):
             ['--topic', topic_with_good_offset, '--message-limit', '1']
         )
 
-        dp_tailer.run()
+        self.run_dp_tailer(dp_tailer)
 
         out, _ = capsys.readouterr()
         assert out == "{u'payload_data': {u'good_field': 100}}\n"
@@ -318,7 +331,7 @@ class TestTailer(object):
             '--message-limit', '1',
             '--json'
         ])
-        dp_tailer.run()
+        self.run_dp_tailer(dp_tailer)
 
         out, _ = capsys.readouterr()
         assert out == '{"payload_data": {"good_field": 100}}\n'
@@ -330,7 +343,7 @@ class TestTailer(object):
             '--all-fields'
         ])
 
-        dp_tailer.run()
+        self.run_dp_tailer(dp_tailer)
 
         out, _ = capsys.readouterr()
         assert "{u'good_field': 100}" in out
@@ -352,7 +365,7 @@ class TestTailer(object):
             '--all-fields'
         ])
 
-        dp_tailer.run()
+        self.run_dp_tailer(dp_tailer)
 
         out, _ = capsys.readouterr()
         assert "{u'good_field': 200}" in out
@@ -375,7 +388,7 @@ class TestTailer(object):
             '--iso-time'
         ])
 
-        dp_tailer.run()
+        self.run_dp_tailer(dp_tailer)
 
         out, _ = capsys.readouterr()
         assert "u'timestamp': '1970-01-01T00:25:00'" in out
@@ -393,7 +406,7 @@ class TestTailer(object):
             '--end-timestamp', str(message.timestamp)
         ])
 
-        dp_tailer.run()
+        self.run_dp_tailer(dp_tailer)
 
         out, _ = capsys.readouterr()
         assert "good_field" not in out  # No message should be printed
@@ -411,7 +424,7 @@ class TestTailer(object):
             '--message-limit', '1'
         ])
 
-        dp_tailer.run()
+        self.run_dp_tailer(dp_tailer)
 
         out, _ = capsys.readouterr()
         assert "u'payload_data': {u'good_field': 100}" in out
@@ -425,23 +438,41 @@ class TestTailer(object):
         capsys
     ):
         self._get_published_topic_and_offset(message, producer)
-        self._init_batch(dp_tailer, [
-            '--topic', topic_name,
-            '--start-timestamp', str(message.timestamp),
-            '--message-limit', '1'
-        ])
+        with mock.patch.object(
+            Consumer,
+            '_get_topics_in_region_from_topic_name',
+            return_value=[topic_name]
+        ), mock.patch.object(
+            Consumer,
+            '_set_cluster_name',
+            return_value=None
+        ):
+            self._init_batch(dp_tailer, [
+                '--topic', topic_name,
+                '--start-timestamp', str(message.timestamp),
+                '--message-limit', '1'
+            ])
 
-        dp_tailer.run()
+        self.run_dp_tailer(dp_tailer)
 
         out, _ = capsys.readouterr()
         assert "u'payload_data': {u'good_field': 100}" in out
 
     def test_bad_start_timestamp(self, dp_tailer, producer, message, topic_name):
         topic, offset = self._get_published_topic_and_offset(message, producer)
-        self._init_batch(dp_tailer, [
-            '--topic', topic_name,
-            '--start-timestamp', str(message.timestamp + 1)
-        ])
+        with mock.patch.object(
+            Consumer,
+            '_get_topics_in_region_from_topic_name',
+            return_value=[topic_name]
+        ), mock.patch.object(
+            Consumer,
+            '_set_cluster_name',
+            return_value=None
+        ):
+            self._init_batch(dp_tailer, [
+                '--topic', topic_name,
+                '--start-timestamp', str(message.timestamp + 1)
+            ])
 
         partition = 0
         actual = dp_tailer.topic_to_offsets_map[
