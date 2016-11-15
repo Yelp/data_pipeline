@@ -398,9 +398,20 @@ class Producer(Client):
                 # when we know that it has.  This breaks things if the
                 # application crashes after this procedure, but before saving
                 # again.
+                topic_of_message = message.topic
+                already_published_count = topic_actual_published_count_map.get(
+                    topic_of_message,
+                    0
+                )
+                saved_offset = topic_offsets.get(topic_of_message, 0)
+                highmark_for_topic = already_published_count + saved_offset
                 if message in already_published_messages:
                     self._kafka_producer.position_data_tracker.record_message(
                         message
+                    )
+                    self._kafka_producer.position_data_tracker.update_highmark(
+                        topic_of_message,
+                        highmark_for_topic
                     )
                 else:
                     self.publish(message)

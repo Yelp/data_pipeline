@@ -60,6 +60,12 @@ class _PositionDataTracker(object):
             self._update_position_info(message)
         self._update_merged_upstream_position_info(message)
 
+    def update_highmark(self, topic, highmark):
+        """This is only to be used during recovery to keep the topic to offset
+        map updated with the latest offset.
+        """
+        self.topic_to_kafka_offset_map[topic] = highmark
+
     def record_message_buffered(self, message):
         debug_log(lambda: "Message buffered: %s" % repr(message))
         self.record_message(message)

@@ -886,6 +886,9 @@ class TestEnsureMessagesPublished(TestProducerBase):
             position_info = producer.get_checkpoint_position_data()
             last_position = position_info.last_published_message_position_info
             assert last_position['position'] == self.number_of_messages
+            existing_offset = topic_offsets.get(topic, 0)
+            new_hwm = producer._kafka_producer.position_data_tracker.topic_to_kafka_offset_map[topic] - existing_offset
+            assert  new_hwm == len(messages)
 
             self._assert_logged_info_correct(
                 mock_logger,
