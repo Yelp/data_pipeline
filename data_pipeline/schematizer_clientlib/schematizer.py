@@ -1164,7 +1164,7 @@ class SchematizerClient(object):
             (data_pipeline.schematizer_client.models.data_source_type_enum.DataSourceTypeEnum):
                 Type of the data source.
             data_source_id (int): The id of the data source, which could be a
-                namespace id or source id.
+            namespace id or source id.
 
         Returns:
             (data_pipeline.schematizer_clientlib.models.consumer_group_data_source

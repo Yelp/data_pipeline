@@ -32,26 +32,20 @@ class MetaAttribute(object):
 
     1. Get a new meta attribute object from `schema_id` and `payload_data`
 
-    **Examples**:
+    Example:
 
         MetaAttribute(
             schema_id=schema_id,
-            payload_data={
-                'cluster_name': 'cluster1',
-                'log_file': 'binlog.0001',
-                'log_pos': 12332
-            }
+            payload_data={'cluster_name': 'cluster1',
+            'log_file': 'binlog.0001', 'log_pos': 12332})
 
     2. Recover a MetaAttribute object from serialized MetaAttribute payload.
     This will be usefull specifically in the case where we want to reconstruct
     MetaAttribute object from serialized payload coming out of Kafka.
 
-    **Examples**:
+    Example:
 
-        MetaAttribute(
-            schema_id=schema_id,
-            payload=byte(10)
-        )
+        MetaAttribute(schema_id=schema_id,payload=byte(10))
 
     Args:
         schema_id (int): Identifies the schema used to encode the payload.
