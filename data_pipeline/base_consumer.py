@@ -233,10 +233,7 @@ class BaseConsumer(Client):
         return get_schematizer()
 
     def _set_cluster_name(self, cluster_name):
-        if cluster_name:
-            return cluster_name
-        else:
-            return get_config().kafka_cluster_name
+        return cluster_name or get_config().kafka_cluster_name
 
     def _determine_cluster_type_from_topics(self, topic_names):
         """Checks whether the cluster type of all topics are the same and

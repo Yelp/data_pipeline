@@ -91,8 +91,7 @@ class FakeScribeKafka(object):
             )
 
     def prepare_message(self, message):
-        envelope = Envelope()
-        return create_message(envelope.pack(message)).value
+        return create_message(Envelope().pack(message)).value
 
     def get_scribe_kafka_topic_from_logname(self, log_topic):
         return str('scribe_test.devc_test.{0}'.format(log_topic))

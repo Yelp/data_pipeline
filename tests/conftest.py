@@ -28,6 +28,7 @@ from data_pipeline_avro_util.util import get_avro_schema_object
 
 from data_pipeline.config import configure_from_dict
 from data_pipeline.message import CreateMessage
+from data_pipeline.message import LogMessage
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.testing_helpers.containers import Containers
 from data_pipeline.tools.schema_ref import SchemaRef
@@ -292,7 +293,7 @@ def message(registered_schema, payload):
 
 @pytest.fixture
 def log_message(registered_log_schema, payload):
-    return CreateMessage(
+    return LogMessage(
         schema_id=registered_log_schema.schema_id,
         payload=payload
     )
