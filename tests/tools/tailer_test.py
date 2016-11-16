@@ -178,6 +178,10 @@ class TestTailer(object):
         self._init_batch(dp_tailer, ['--topic=topic1', '--topic=topic2'])
         assert set(dp_tailer.options.topics) == {'topic1', 'topic2'}
 
+    def test_with_cluster_name(self, dp_tailer):
+        self._init_batch(dp_tailer, ['--topic=topic1', '--cluster-name=uswest2-devc'])
+        assert dp_tailer.options.cluster_name == 'uswest2-devc'
+
     def test_without_fields(self, dp_tailer, mock_exit, default_fields):
         self._init_batch(dp_tailer, [])
         assert set(dp_tailer.options.fields) == set(default_fields)
