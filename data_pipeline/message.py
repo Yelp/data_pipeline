@@ -677,8 +677,8 @@ class UpdateMessage(Message):
     Args:
         previous_payload (bytes): Avro-encoded message - encoded with schema
             identified by `schema_id`  Required when message type is
-            MessageType.update.  Either `previous_payload` or `previous_payload_data`
-            must be provided but not both.
+            MessageType.update.  Either `previous_payload` or
+            `previous_payload_data` must be provided but not both.
         previous_payload_data (dict): The contents of message, which will be
             lazily encoded with schema identified by `schema_id`.  Required
             when message type is MessageType.update.  Either `previous_payload`
