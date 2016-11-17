@@ -29,6 +29,7 @@ from data_pipeline_avro_util.avro_string_writer import AvroStringWriter
 from kafka.common import FailedPayloadsError
 from kafka.common import ProduceRequest
 from kafka.common import ProduceResponse
+from kafka_utils.util.offsets import get_topics_watermarks
 
 import data_pipeline._clog_writer
 import data_pipeline.producer
@@ -886,9 +887,10 @@ class TestEnsureMessagesPublished(TestProducerBase):
             position_info = producer.get_checkpoint_position_data()
             last_position = position_info.last_published_message_position_info
             assert last_position['position'] == self.number_of_messages
-            existing_offset = topic_offsets.get(topic, 0)
-            new_hwm = producer._kafka_producer.position_data_tracker.topic_to_kafka_offset_map[topic] - existing_offset
-            assert  new_hwm == len(messages)
+            self._test_highwatermarks(
+                topics=[topic],
+                producer=producer
+            )
 
             self._assert_logged_info_correct(
                 mock_logger,
@@ -897,6 +899,26 @@ class TestEnsureMessagesPublished(TestProducerBase):
                 topic_offsets=topic_offsets,
                 message_count=len(messages)
             )
+
+    def _get_topic_details(self, kafka_client, topics):
+        return get_topics_watermarks(
+            kafka_client=kafka_client,
+            topics=topics,
+            raise_on_error=True
+        )
+
+    def _test_highwatermarks(self, topics, producer):
+        topics_details = get_topics_watermarks(
+            kafka_client=producer._kafka_producer.kafka_client,
+            topics=topics,
+            raise_on_error=True
+        )
+        position_tracker = producer._kafka_producer.position_data_tracker
+
+        for topic in topics:
+            actual_hwm = topics_details[topic][0][2]
+            expected_hwm = position_tracker.topic_to_kafka_offset_map[topic]
+            assert actual_hwm == expected_hwm
 
     def test_multitopic_offsets(
         self,
@@ -930,6 +952,11 @@ class TestEnsureMessagesPublished(TestProducerBase):
 
             position_info = producer.get_checkpoint_position_data()
             last_position = position_info.last_published_message_position_info
+            self._test_highwatermarks(
+                topics=[topic, secondary_topic],
+                producer=producer
+            )
+
             assert last_position['position'] == self.number_of_messages
             assert len(consumer.get_messages(10)) == len(secondary_messages)
 
@@ -980,6 +1007,7 @@ class TestEnsureMessagesPublished(TestProducerBase):
                 topic_offsets,
                 message_count=len(messages[:2])
             )
+            self._test_highwatermarks(topics=[topic], producer=producer)
 
             assert len(consumer.get_messages(10)) == 2
 
@@ -1168,16 +1196,6 @@ class TestPublishMessagesWithRetry(TestProducerBase):
                 another_message,
                 expected_published_msgs_count=1
             )
-
-    def test_populate_topic_to_offset_map(self, producer, topic):
-        response_one = ProduceResponse(topic, partition=0, error=0, offset=1)
-        response_two = FailedPayloadsError(payload=mock.Mock())
-        responses = [response_one, response_two]
-        topics_map = producer._kafka_producer._populate_topics_to_offset_map(
-            responses
-        )
-        assert len(topics_map) == 1
-        assert topic in topics_map
 
     def test_retry_false_failed_publish(self, message, producer):
         # TODO(DATAPIPE-606|clin) investigate better way than mocking response

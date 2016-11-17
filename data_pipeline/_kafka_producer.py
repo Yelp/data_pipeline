@@ -22,19 +22,17 @@ from collections import namedtuple
 from contextlib import contextmanager
 
 from cached_property import cached_property
-from kafka import create_message
 from kafka import KafkaClient
+from kafka import create_message
 from kafka.common import ProduceRequest
-from kafka.common import ProduceResponse
-from kafka_utils.util.offsets import get_topics_watermarks
 
 from data_pipeline._position_data_tracker import PositionDataTracker
 from data_pipeline._producer_retry import RetryHandler
 from data_pipeline._retry_util import ExpBackoffPolicy
 from data_pipeline._retry_util import MaxRetryError
 from data_pipeline._retry_util import Predicate
-from data_pipeline._retry_util import retry_on_condition
 from data_pipeline._retry_util import RetryPolicy
+from data_pipeline._retry_util import retry_on_condition
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
 
@@ -175,34 +173,12 @@ class KafkaProducer(object):
             retry_handler.requests_to_be_sent
         )
 
-        topics_watermarks = self._populate_topics_to_offset_map(responses)
-        self.position_data_tracker.topic_to_kafka_offset_map.update(
-            topics_watermarks
-        )
-
         retry_handler.update_requests_to_be_sent(
             responses,
             self.position_data_tracker.topic_to_kafka_offset_map
         )
         self._record_success_requests(retry_handler.success_topic_stats_map)
         return retry_handler
-
-    def _populate_topics_to_offset_map(self, responses):
-        topics_from_responses = [
-            response.topic for response in responses
-            if isinstance(response, ProduceResponse)
-        ]
-
-        topics_watermarks = get_topics_watermarks(
-            kafka_client=self.kafka_client,
-            topics=topics_from_responses,
-            raise_on_error=True
-        )
-        topics_watermarks = {
-            topic: partition_offsets[0].highmark
-            for topic, partition_offsets in topics_watermarks.iteritems()
-        }
-        return topics_watermarks
 
     def _try_send_produce_requests(self, requests):
         # Either it throws exceptions and none of them succeeds, or it returns
