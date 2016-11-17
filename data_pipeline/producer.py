@@ -409,6 +409,9 @@ class Producer(Client):
                     position_tracker.record_message(
                         message
                     )
+                    # This is required to update the high watermark for all the
+                    # messages individually on the position tracker in-order to
+                    # avoid offset in there from becoming stale.
                     position_tracker.update_high_watermark(
                         topic=message.topic,
                         offset=saved_offset,
