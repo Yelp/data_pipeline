@@ -1,3 +1,9 @@
+data-pipeline-tools (0.9.4) lucid; urgency=low
+
+  * Commit: DATAPIPE-1320-Make-consumer-connect-to-Scribe-kafka-cluster
+
+ -- Amit Katti <askatti@yelp.com>  Wed, 16 Nov 2016 17:02:19 -0800
+
 data-pipeline-tools (0.9.3) lucid; urgency=low
 
   * Commit: Merge branch 'master' of
