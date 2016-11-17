@@ -50,6 +50,17 @@ PayloadFieldDiff = namedtuple('PayloadFieldDiff', [
 ])
 
 
+class MissingMetaAttributeException(Exception):
+    def __init__(self, schema_id, meta_ids, mandatory_meta_ids):
+        Exception.__init__(
+            self,
+            "Meta Attributes with IDs `{0}` are not found for schema_id "
+            "`{1}`.".format(
+                ", ".join(str(m) for m in (mandatory_meta_ids - meta_ids)),
+                schema_id
+            ))
+
+
 class NoEntryPayload(object):
     """ This class denotes that no previous value exists for the field. """
     pass
@@ -253,10 +264,22 @@ class Message(object):
         self._set_encryption_type_if_necessary()
         return self._meta
 
-    def _set_meta(self, meta):
+    def _set_meta(self, meta, schema_id):
         if (not self._is_valid_optional_type(meta, list) or
                 self._any_invalid_type(meta, MetaAttribute)):
             raise TypeError("Meta must be None or list of MetaAttribute objects.")
+        meta_attr_schema_ids = {
+            meta_attr.schema_id for meta_attr in meta
+        } if meta else set()
+        mandatory_meta_ids = set(
+            self._schematizer.get_meta_attributes_by_schema_id(schema_id)
+        )
+        if not mandatory_meta_ids.issubset(meta_attr_schema_ids):
+            raise MissingMetaAttributeException(
+                schema_id,
+                meta_attr_schema_ids,
+                mandatory_meta_ids
+            )
         self._meta = meta
 
     def get_meta_attr_by_type(self, meta, meta_type):
@@ -424,7 +447,7 @@ class Message(object):
             warnings.simplefilter("always", category=DeprecationWarning)
             warnings.warn("Passing in keys explicitly is deprecated.", DeprecationWarning)
         self._keys = None
-        self._set_meta(meta)
+        self._set_meta(meta, schema_id)
         self._should_be_encrypted_state = None
         self._encryption_type = None
         self._contains_pii = None
@@ -654,8 +677,8 @@ class UpdateMessage(Message):
     Args:
         previous_payload (bytes): Avro-encoded message - encoded with schema
             identified by `schema_id`  Required when message type is
-            MessageType.update.  Either `previous_payload` or `previous_payload_data`
-            must be provided but not both.
+            MessageType.update.  Either `previous_payload` or
+            `previous_payload_data` must be provided but not both.
         previous_payload_data (dict): The contents of message, which will be
             lazily encoded with schema identified by `schema_id`.  Required
             when message type is MessageType.update.  Either `previous_payload`

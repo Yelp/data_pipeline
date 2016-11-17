@@ -37,11 +37,15 @@ class TestEnvelope(object):
         return request.param
 
     @pytest.fixture
-    def valid_meta(self, meta_attr_payload_data, registered_meta_attribute):
+    def valid_meta(
+        self,
+        meta_attr_payload_data,
+        registered_meta_attribute_schema
+    ):
         if meta_attr_payload_data is None:
             return None
         meta_attr = MetaAttribute(
-            schema_id=registered_meta_attribute.schema_id,
+            schema_id=registered_meta_attribute_schema.schema_id,
             payload_data=meta_attr_payload_data
         )
         return [meta_attr]

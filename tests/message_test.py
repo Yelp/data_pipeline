@@ -18,6 +18,7 @@ from __future__ import unicode_literals
 
 import warnings
 
+import mock
 import pytest
 from kafka import create_message
 from kafka.common import OffsetAndMessage
@@ -29,6 +30,7 @@ from data_pipeline.message import create_from_offset_and_message
 from data_pipeline.message import CreateMessage
 from data_pipeline.message import InvalidOperation
 from data_pipeline.message import MetaAttribute
+from data_pipeline.message import MissingMetaAttributeException
 from data_pipeline.message import NoEntryPayload
 from data_pipeline.message import PayloadFieldDiff
 from data_pipeline.message_type import _ProtectedMessageType
@@ -187,9 +189,13 @@ class SharedMessageTest(object):
         return {'good_payload': 26}
 
     @pytest.fixture
-    def valid_meta_param(self, meta_attr_payload_data, registered_meta_attribute):
+    def valid_meta_param(
+        self,
+        meta_attr_payload_data,
+        registered_meta_attribute_schema
+    ):
         meta_attr = MetaAttribute(
-            schema_id=registered_meta_attribute.schema_id,
+            schema_id=registered_meta_attribute_schema.schema_id,
             payload_data=meta_attr_payload_data
         )
         return [meta_attr]
@@ -217,6 +223,64 @@ class SharedMessageTest(object):
         )
         assert dry_run_message.meta[0].schema_id == valid_meta_param[0].schema_id
         assert dry_run_message.meta[0].payload_data == meta_attr_payload_data
+
+    @pytest.mark.parametrize('meta_param, mandatory_meta_attr_ids', [
+        (None, []),
+        ([MetaAttribute(schema_id=10, payload_data={'payload_1': 10})], []),
+        ([MetaAttribute(schema_id=10, payload_data={'payload_1': 10})], [10]),
+        ([MetaAttribute(schema_id=10, payload_data={'payload_1': 10}),
+          MetaAttribute(schema_id=20, payload_data={'payload_1': 20})], [10])
+    ])
+    def test_set_meta_with_valid_meta_attributes(
+        self,
+        valid_message_data,
+        meta_param,
+        mandatory_meta_attr_ids
+    ):
+        with mock.patch.object(
+            get_schematizer(),
+            'get_meta_attributes_by_schema_id',
+            return_value=mandatory_meta_attr_ids
+        ):
+            dry_run_message = self._get_dry_run_message_with_meta(
+                valid_message_data,
+                meta_param
+            )
+            assert dry_run_message._meta == meta_param
+
+    @pytest.mark.parametrize('meta_param, mandatory_meta_attr_ids', [
+        ([], [10]),
+        ([MetaAttribute(schema_id=10, payload_data={'payload_1': 10})], [20]),
+        ([MetaAttribute(schema_id=10, payload_data={'payload_1': 10}),
+          MetaAttribute(schema_id=20, payload_data={'payload_1': 20})],
+         [10, 30])
+    ])
+    def test_missing_mandatory_meta_attributes(
+        self,
+        valid_message_data,
+        meta_param,
+        mandatory_meta_attr_ids
+    ):
+        with mock.patch.object(
+            get_schematizer(),
+            'get_meta_attributes_by_schema_id',
+            return_value=mandatory_meta_attr_ids
+        ):
+            with pytest.raises(MissingMetaAttributeException) as e:
+                self._get_dry_run_message_with_meta(
+                    valid_message_data,
+                    meta_param
+                )
+            assert e.value.args
+            assert (
+                "Meta Attributes with IDs `{0}` are not found for "
+                "schema_id `{1}`.".format(
+                    ", ".join(str(m) for m in (
+                        {id for id in mandatory_meta_attr_ids} -
+                        {m.schema_id for m in meta_param}
+                    )),
+                    valid_message_data['schema_id']
+                )) in e.value.args[0]
 
     def test_dry_run(self, valid_message_data):
         payload_data = {'data': 'test'}

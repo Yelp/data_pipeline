@@ -41,9 +41,9 @@ def get_first_offset_at_or_after_start_timestamp(kafka_client, topics, start_tim
     :param start_timestamp: epoch timestamp eg. 1463086536
 
     :returns: a dict mapping topic to the nearest starting timestamp.
-              eg. {'test_topic_1': ConsumerTopicState({0: 43}, None),
-                   'test_topic_2': ConsumerTopicState({0: 55, 1: 32}, None),
-                   }
+              eg.
+              {'test_topic_1': ConsumerTopicState({0: 43}, None),
+              'test_topic_2': ConsumerTopicState({0: 55, 1: 32}, None)}
     """
     watermarks = offsets.get_topics_watermarks(
         kafka_client,
