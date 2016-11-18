@@ -400,15 +400,14 @@ class Producer(Client):
                 # application crashes after this procedure, but before saving
                 # again.
                 if message in already_published_messages:
+                    position_tracker.record_message(message)
+
                     topic_of_message = message.topic
                     already_published_count = topic_actual_published_count_map.get(
                         topic_of_message,
                         0
                     )
                     saved_offset = topic_offsets.get(topic_of_message, 0)
-                    position_tracker.record_message(
-                        message
-                    )
                     # This is required to update the high watermark for all the
                     # messages individually on the position tracker in-order to
                     # avoid offset in there from becoming stale.
