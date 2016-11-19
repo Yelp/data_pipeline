@@ -22,8 +22,8 @@ from collections import namedtuple
 from contextlib import contextmanager
 
 from cached_property import cached_property
-from kafka import KafkaClient
 from kafka import create_message
+from kafka import KafkaClient
 from kafka.common import ProduceRequest
 
 from data_pipeline._position_data_tracker import PositionDataTracker
@@ -31,8 +31,8 @@ from data_pipeline._producer_retry import RetryHandler
 from data_pipeline._retry_util import ExpBackoffPolicy
 from data_pipeline._retry_util import MaxRetryError
 from data_pipeline._retry_util import Predicate
-from data_pipeline._retry_util import RetryPolicy
 from data_pipeline._retry_util import retry_on_condition
+from data_pipeline._retry_util import RetryPolicy
 from data_pipeline.config import get_config
 from data_pipeline.envelope import Envelope
 
