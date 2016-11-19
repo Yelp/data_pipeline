@@ -313,12 +313,12 @@ class TestConsumer(BaseConsumerTest):
             publish_messages(message, count=1)
             real_consumer_group_next = consumer.consumer_group.next
             with mock.patch.object(
-                    consumer.consumer_group,
-                    'next',
-                    side_effect=[
-                        IOError(errno.EINTR, 'Interrupted system call'),
-                        real_consumer_group_next()
-                    ]
+                consumer.consumer_group,
+                'next',
+                side_effect=[
+                    IOError(errno.EINTR, 'Interrupted system call'),
+                    real_consumer_group_next()
+                ]
             ) as mock_consumer_group_next:
                 messages = consumer.get_messages(
                     count=1,

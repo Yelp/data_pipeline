@@ -219,32 +219,31 @@ class Consumer(BaseConsumer):
                     has_timeout,
                     max_time
                 )
+
+                # It's possible kafka_message is None if we used all our time
+                # stuck getting EINTR IOErrors
+                if kafka_message:
+                    message = create_from_kafka_message(
+                        kafka_message,
+                        self._envelope,
+                        self.force_payload_decode,
+                        reader_schema_id=self._topic_to_reader_schema_map.get(
+                            kafka_message.topic
+                        )
+                    )
+                    messages.append(message)
+                    # Update state in registrar for Producer/Consumer
+                    # registration in milliseconds
+                    self.registrar.update_schema_last_used_timestamp(
+                        message.reader_schema_id,
+                        timestamp_in_milliseconds=long(1000 * time())
+                    )
+                if self._break_consume_loop(blocking, has_timeout, max_time):
+                    break
             except ConsumerTimeout:
-                kafka_message = None
                 break
             finally:
                 self.consumer_group.iter_timeout = default_iter_timeout
-
-            # It's possible kafka_message is  None if we used all our time
-            # stuck getting EINTR IOErrors
-            if kafka_message:
-                message = create_from_kafka_message(
-                    kafka_message,
-                    self._envelope,
-                    self.force_payload_decode,
-                    reader_schema_id=self._topic_to_reader_schema_map.get(
-                        kafka_message.topic
-                    )
-                )
-                messages.append(message)
-                # Update state in registrar for Producer/Consumer registration in milliseconds
-                self.registrar.update_schema_last_used_timestamp(
-                    message.reader_schema_id,
-                    timestamp_in_milliseconds=long(1000 * time())
-                )
-
-            if self._break_consume_loop(blocking, has_timeout, max_time):
-                break
         return messages
 
     def _get_next_kafka_message(
@@ -254,17 +253,16 @@ class Consumer(BaseConsumer):
             max_time
     ):
         """ Helper function which will retry when encountering an IOError with
-            the errno of EINTR. This is now standard behavior in Python3.5. For
-            more details see https://www.python.org/dev/peps/pep-0475/
+        the errno of EINTR. This is now standard behavior in Python3.5. For
+        more details see https://www.python.org/dev/peps/pep-0475/
         """
-        while True:
+        while not self._break_consume_loop(blocking, has_timeout, max_time):
             try:
                 return self.consumer_group.next()
             except IOError as e:
                 if e.errno != errno.EINTR:
                     raise
-                if self._break_consume_loop(blocking, has_timeout, max_time):
-                    return None
+        return None
 
     def _break_consume_loop(self, blocking, has_timeout, max_time):
         return not blocking or (has_timeout and time() > max_time)
