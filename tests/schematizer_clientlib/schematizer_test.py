@@ -964,8 +964,8 @@ class MetaAttrMappingTestBase(SchematizerClientTestBase):
         return self._register_avro_schema(aux_namespace, biz_src_name)
 
     @pytest.fixture
-    def meta_attr_schema_id(self, registered_meta_attribute):
-        return registered_meta_attribute.schema_id
+    def meta_attr_schema_id(self, registered_meta_attribute_schema):
+        return registered_meta_attribute_schema.schema_id
 
     @pytest.fixture
     def user_namespace(self, user_schema):

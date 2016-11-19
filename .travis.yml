@@ -1,0 +1,22 @@
+branches:
+  only:
+  - master
+  - /^v[0-9.]+$/
+language: python
+python:
+- '2.7'
+env:
+  matrix:
+  - MAKE_TARGET=test
+install: pip install coveralls tox
+script: make -f Makefile-opensource "$MAKE_TARGET"
+after_success:
+  - coveralls
+deploy:
+  provider: pypi
+  user: <TODO>
+  password:
+    secure: <TODO>
+  on:
+    tags: true
+    repo: Yelp/data_pipeline

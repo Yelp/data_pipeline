@@ -28,6 +28,7 @@ from data_pipeline_avro_util.util import get_avro_schema_object
 
 from data_pipeline.config import configure_from_dict
 from data_pipeline.message import CreateMessage
+from data_pipeline.message import LogMessage
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.testing_helpers.containers import Containers
 from data_pipeline.tools.schema_ref import SchemaRef
@@ -79,6 +80,28 @@ def registered_schema(schematizer_client, example_schema, namespace, source):
         schema_str=example_schema,
         source_owner_email='test@yelp.com',
         contains_pii=False
+    )
+
+
+@pytest.fixture(scope="module")
+def log_source():
+    return 'good_log_source_{}'.format(uuid4())
+
+
+@pytest.fixture(scope="module")
+def registered_log_schema(
+    schematizer_client,
+    example_schema,
+    namespace,
+    log_source
+):
+    return schematizer_client.register_schema(
+        namespace=namespace,
+        source=log_source,
+        schema_str=example_schema,
+        source_owner_email='test@yelp.com',
+        contains_pii=False,
+        cluster_type='scribe'
     )
 
 
@@ -193,9 +216,18 @@ def pii_schema(schematizer_client, example_schema, namespace):
 
 
 @pytest.fixture
-def registered_meta_attribute(schematizer_client, example_meta_attr_schema, namespace):
+def meta_namespace():
+    return 'meta_attr_namespace'
+
+
+@pytest.fixture
+def registered_meta_attribute_schema(
+    schematizer_client,
+    example_meta_attr_schema,
+    meta_namespace
+):
     return schematizer_client.register_schema(
-        namespace=namespace,
+        namespace=meta_namespace,
         source='good_meta_attribute',
         schema_str=example_meta_attr_schema,
         source_owner_email='test_meta@yelp.com',
@@ -264,6 +296,14 @@ def team_name():
 def message(registered_schema, payload):
     return CreateMessage(
         schema_id=registered_schema.schema_id,
+        payload=payload
+    )
+
+
+@pytest.fixture
+def log_message(registered_log_schema, payload):
+    return LogMessage(
+        schema_id=registered_log_schema.schema_id,
         payload=payload
     )
 
