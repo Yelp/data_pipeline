@@ -78,6 +78,16 @@ class Tailer(Batch):
             ),
         )
         opt_group.add_option(
+            '--cluster-name',
+            type='string',
+            help=(
+                'The cluster_name (region) of kafka cluster to connect to. '
+                'All topics should belong to the same kafka cluster name. '
+                'Defaults to local region where the tailer is running. '
+                '(Example: uswest1-devc, uswest2-prod)'
+            ),
+        )
+        opt_group.add_option(
             '--config-file',
             help=(
                 'If set, will use the provided configuration file to setup '
@@ -382,7 +392,8 @@ class Tailer(Batch):
             'bam',
             ExpectedFrequency.constantly,
             self.topic_to_offsets_map,
-            auto_offset_reset=self.options.offset_reset_location
+            auto_offset_reset=self.options.offset_reset_location,
+            cluster_name=self.options.cluster_name
         ) as consumer:
             message_count = 0
             while self.keep_running(message_count):

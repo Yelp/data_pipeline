@@ -384,6 +384,7 @@ class Producer(Client):
         # triggered, which can cause downstream applications to update state
         # that really shouldn't be updated until all messages are published
         # successfully.
+        position_tracker = self._kafka_producer.position_data_tracker
         with self._kafka_producer.disable_automatic_flushing():
             for message in messages:
                 # We're recording already published messages here so that if
@@ -399,8 +400,21 @@ class Producer(Client):
                 # application crashes after this procedure, but before saving
                 # again.
                 if message in already_published_messages:
-                    self._kafka_producer.position_data_tracker.record_message(
-                        message
+                    position_tracker.record_message(message)
+
+                    topic_of_message = message.topic
+                    already_published_count = topic_actual_published_count_map.get(
+                        topic_of_message,
+                        0
+                    )
+                    saved_offset = topic_offsets.get(topic_of_message, 0)
+                    # This is required to update the high watermark for all the
+                    # messages individually on the position tracker in-order to
+                    # avoid offset in there from becoming stale.
+                    position_tracker.update_high_watermark(
+                        topic=message.topic,
+                        offset=saved_offset,
+                        message_count=already_published_count
                     )
                 else:
                     self.publish(message)

@@ -60,6 +60,9 @@ class _PositionDataTracker(object):
             self._update_position_info(message)
         self._update_merged_upstream_position_info(message)
 
+    def update_high_watermark(self, topic, offset, message_count):
+        self.topic_to_kafka_offset_map[topic] = offset + message_count
+
     def record_message_buffered(self, message):
         debug_log(lambda: "Message buffered: %s" % repr(message))
         self.record_message(message)
@@ -69,7 +72,7 @@ class _PositionDataTracker(object):
         debug_log(
             lambda: "Messages published: %s, %s" % (topic, message_count)
         )
-        self.topic_to_kafka_offset_map[topic] = offset + message_count
+        self.update_high_watermark(topic, offset, message_count)
         self.unpublished_messages -= message_count
 
     def get_position_data(self):
