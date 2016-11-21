@@ -16,6 +16,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import errno
 import random
 import time
 from multiprocessing import Event
@@ -301,6 +302,31 @@ class TestConsumer(BaseConsumerTest):
             rebalanced_event.wait()
 
             another_consumer.get_message(blocking=True, timeout=TIMEOUT)
+
+    def test_get_messages_retries_on_IOError_EINTR(
+        self,
+        consumer_instance,
+        publish_messages,
+        message
+    ):
+        with consumer_instance as consumer:
+            publish_messages(message, count=1)
+            real_consumer_group_next = consumer.consumer_group.next
+            with mock.patch.object(
+                consumer.consumer_group,
+                'next',
+                side_effect=[
+                    IOError(errno.EINTR, 'Interrupted system call'),
+                    real_consumer_group_next()
+                ]
+            ) as mock_consumer_group_next:
+                messages = consumer.get_messages(
+                    count=1,
+                    blocking=True,
+                    timeout=TIMEOUT
+                )
+                assert len(messages) == 1
+                assert mock_consumer_group_next.call_count == 2
 
 
 class TestRefreshTopics(RefreshNewTopicsTest):
