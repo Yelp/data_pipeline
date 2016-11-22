@@ -164,7 +164,7 @@ class Containers(object):
             raise ContainerUnavailableError(project=project, service=service)
 
     @classmethod
-    def get_container_ip_address(cls, project, service, timeout_seconds=200):
+    def get_container_ip_address(cls, project, service, timeout_seconds=400):
         """Fetches the ip address assigned to the running container.
         Throws ContainerUnavailableError if the retry limit is reached.
 
