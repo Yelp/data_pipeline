@@ -69,12 +69,9 @@ def get_first_offset_at_or_after_start_timestamp(
         watermarks
     )
     topic_to_range_map = _build_topic_to_range_map(watermarks)
-    # Build an empty consumer_topic_state_map from a list of topics where
-    # all of the interior partition_offset_maps are empty
-    result_topic_to_consumer_topic_state_map = {
-        topic: ConsumerTopicState({}, None)
-        for topic in topics
-    }
+    result_topic_to_consumer_topic_state_map = _build_empty_topic_to_consumer_topic_state_map(
+        topics
+    )
 
     _move_finished_topics_to_result_map(
         topic_to_consumer_topic_state_map,
@@ -125,6 +122,15 @@ def _build_topic_to_consumer_topic_state_map(watermarks):
     }
 
 
+def _build_empty_topic_to_consumer_topic_state_map(topics):
+    """Builds a topic_to_consumer_topic_state_map from a list of topics where
+    all of the interior partition_offset_maps are empty"""
+    return {
+        topic: ConsumerTopicState({}, None)
+        for topic in topics
+    }
+
+
 def _get_message_and_alter_range(
     topic_to_consumer_map,
     start_timestamp,
@@ -150,13 +156,14 @@ def _get_message_and_alter_range(
         )
         if response is None:
             return
-        (partition, raw_message) = response
-        unpacked_message = Envelope().unpack(raw_message[1].value)
+        offset, partition, timestamp = _get_update_info_from_simple_consumer_response(
+            response
+        )
         _update_ranges(
             topic=topic,
-            offset=raw_message[0],
+            offset=offset,
             partition=partition,
-            timestamp=unpacked_message['timestamp'],
+            timestamp=timestamp,
             start_timestamp=start_timestamp,
             topic_to_consumer_topic_state_map=topic_to_consumer_topic_state_map,
             topic_to_range_map=topic_to_range_map
@@ -166,6 +173,14 @@ def _get_message_and_alter_range(
         topic_to_range_map,
         result_topic_to_consumer_topic_state_map
     )
+
+
+def _get_update_info_from_simple_consumer_response(response):
+    (partition, raw_message) = response
+    unpacked_message = Envelope().unpack(raw_message[1].value)
+    offset = raw_message[0]
+    timestamp = unpacked_message['timestamp']
+    return offset, partition, timestamp
 
 
 def _move_finished_topics_to_result_map(
