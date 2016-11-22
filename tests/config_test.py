@@ -124,6 +124,8 @@ class TestConfigurationOverrides(TestConfigBase):
         """SmartStack needs to be configured to use service discovery, so
         doing that for the entire class.
         """
+        if IS_OPEN_SOURCE_MODE:
+            return
         staticconf.YamlConfiguration(
             '/nail/etc/services/services.yaml',
             namespace='smartstack_services'
