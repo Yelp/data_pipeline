@@ -6,7 +6,7 @@ language: python
 python:
 - '2.7'
 install: pip install coveralls tox
-script: make -f Makefile-opensource "$MAKE_TARGET"
+script: make -f Makefile-opensource test
 after_success:
   - coveralls
 deploy:
