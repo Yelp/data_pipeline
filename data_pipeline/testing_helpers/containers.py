@@ -164,7 +164,7 @@ class Containers(object):
             raise ContainerUnavailableError(project=project, service=service)
 
     @classmethod
-    def get_container_ip_address(cls, project, service, timeout_seconds=60):
+    def get_container_ip_address(cls, project, service, timeout_seconds=200):
         """Fetches the ip address assigned to the running container.
         Throws ContainerUnavailableError if the retry limit is reached.
 
@@ -370,7 +370,7 @@ class Containers(object):
 
     def _wait_for_services(self, timeout_seconds=60):
         self.use_testing_containers()
-        self._wait_for_schematizer(timeout_seconds=200)
+        self._wait_for_schematizer(timeout_seconds=90)
         self._wait_for_kafka(timeout_seconds)
 
     def _wait_for_schematizer(self, timeout_seconds):
