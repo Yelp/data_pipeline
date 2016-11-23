@@ -315,8 +315,6 @@ class Containers(object):
         file_name = ("docker-compose-opensource.yml"
                      if self._is_envvar_set('OPEN_SOURCE_MODE')
                      else "docker-compose.yml")
-        import ipdb
-        ipdb.set_trace()
         compose_file = os.path.abspath(
             os.path.join(
                 os.path.dirname(__file__),
