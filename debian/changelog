@@ -1,3 +1,10 @@
+data-pipeline-tools (0.9.9) lucid; urgency=low
+
+  * Commit: Merge remote-tracking branch 'origin/DATAPIPE-1745-
+    joshszep_force_bravado_lt_8_4_0'
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Wed, 23 Nov 2016 14:53:44 -0800
+
 data-pipeline-tools (0.9.8) lucid; urgency=low
 
   * Commit: Disables excessive calls to schematizer to check for

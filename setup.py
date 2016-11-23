@@ -41,7 +41,7 @@ setup(
     packages=find_packages(exclude=['tests*', 'benchmarks*']),
     include_package_data=True,
     install_requires=[
-        'bravado>=8.3.0',
+        'bravado>=8.3.0,<8.4.0',
         'cached-property>=0.1.5',
         'cffi>=1.1.2',
         'cryptography<=1.3.4',

@@ -26,7 +26,6 @@ from data_pipeline_avro_util.avro_string_writer import AvroStringWriter
 from data_pipeline_avro_util.testing_helpers.generate_payload_data import generate_payload_data
 from data_pipeline_avro_util.util import get_avro_schema_object
 
-from data_pipeline.config import configure_from_dict
 from data_pipeline.message import CreateMessage
 from data_pipeline.message import LogMessage
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
@@ -317,20 +316,20 @@ def payload_data_message(registered_schema, example_payload_data):
 
 
 @pytest.yield_fixture(scope='session')
-def containers():
+def containers(config_containers_connections):
     with Containers() as containers:
         yield containers
 
 
 @pytest.yield_fixture(scope='session')
 def config_containers_connections():
-    configure_from_dict(dict(
+    with reconfigure(
         schematizer_host_and_port='schematizer:8888',
         kafka_zookeeper='zk:2181',
         kafka_broker_list=['kafka:9092'],
         should_use_testing_containers=True
-    ))
-    yield
+    ):
+        yield
 
 
 @pytest.fixture(scope='session')
