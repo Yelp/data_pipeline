@@ -36,7 +36,8 @@ logger = get_config().logger
 
 class ContainerUnavailableError(Exception):
     def __init__(self, project='unknown', service='unknown'):
-        Exception.__init__(self, "Container for project {0} and service {1} failed to start".format(project, service))
+        msg = open("logs/docker-compose.log", 'r').read()
+        Exception.__init__(self, "Container for project {0} and service {1} failed to start with msg {2}".format(project, service, msg))
 
 
 class Containers(object):
@@ -164,7 +165,7 @@ class Containers(object):
             raise ContainerUnavailableError(project=project, service=service)
 
     @classmethod
-    def get_container_ip_address(cls, project, service, timeout_seconds=400):
+    def get_container_ip_address(cls, project, service, timeout_seconds=100):
         """Fetches the ip address assigned to the running container.
         Throws ContainerUnavailableError if the retry limit is reached.
 
