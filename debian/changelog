@@ -1,3 +1,11 @@
+data-pipeline-tools (0.9.6) lucid; urgency=low
+
+  * Commit: Merge remote-tracking branch 'origin/DATAPIPE-2093-
+    joshszep_timestamp_to_offset_mapper_should_not_create_new_consumers_
+    and_commit_offsets'
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Wed, 23 Nov 2016 10:38:13 -0800
+
 data-pipeline-tools (0.9.5) lucid; urgency=low
 
   * Commit: Merge remote-tracking branch 'origin/DATAPIPE-1745-
