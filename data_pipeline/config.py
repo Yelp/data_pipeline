@@ -533,8 +533,8 @@ class Config(object):
         return data_pipeline_conf.read_int('sensu_max_delay_seconds', 300)
 
     @property
-    def ecosystem_file_patch(self):
-        return data_pipeline_conf.read_string('ecosystem_file_patch', "/nail/etc/ecosystem")
+    def ecosystem_file_path(self):
+        return data_pipeline_conf.read_string('ecosystem_file_path', "/nail/etc/ecosystem")
 
 
 def configure_from_dict(config_dict):
