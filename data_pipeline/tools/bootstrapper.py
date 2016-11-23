@@ -383,6 +383,7 @@ class MySQLBootstrapper(FileBootstrapperBase):
 def is_file_bootstrapper_class(obj):
     return inspect.isclass(obj) and FileBootstrapperBase in obj.__bases__
 
+
 FILE_BOOTSTRAPPER_CLASSES = [
     obj for _, obj in inspect.getmembers(sys.modules[__name__], is_file_bootstrapper_class)
 ]

@@ -7,10 +7,6 @@ services:
   - docker
 python:
   - '2.7'
-env:
-  OPEN_SOURCE_MODE: true
-  PULL_CONTAINERS: true
-  FORCE_FRESH_CONTAINERS: true
 install: pip install coveralls tox
 script: make -f Makefile-opensource test
 after_success:

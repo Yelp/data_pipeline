@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # Copyright 2016 Yelp Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -464,6 +465,7 @@ class RedshiftSQLToAVSCBatch(yelp_batch.batch.Batch):
                 indent='    ',
                 sort_keys=True
             )
+
 
 if __name__ == "__main__":
     RedshiftSQLToAVSCBatch().start()
