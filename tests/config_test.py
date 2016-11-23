@@ -88,7 +88,7 @@ class TestConfigDefaults(TestConfigBase):
         assert config.encryption_type is None
 
     def test_data_pipeline_teams_config_file_path(self, config):
-        assert config.data_pipeline_teams_config_file_path == '/nail/etc/services/data_pipeline/teams.yaml'
+        assert config.data_pipeline_teams_config_file_path == 'teams.yaml'
 
     def test_kafka_client_ack_count(self, config):
         assert config.kafka_client_ack_count == -1

@@ -314,7 +314,7 @@ class Config(object):
         """
         return data_pipeline_conf.read_string(
             'data_pipeline_teams_config_file_path',
-            default='/nail/etc/services/data_pipeline/teams.yaml'
+            default='teams.yaml'
         )
 
     @property
