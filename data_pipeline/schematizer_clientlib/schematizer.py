@@ -17,7 +17,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import simplejson
-from bravado.exception import HTTPNotFound
+from bravado.exception import HTTPError
 from requests.exceptions import RequestException
 from swagger_zipkin.zipkin_decorator import ZipkinClientDecorator
 
@@ -1230,7 +1230,7 @@ class SchematizerClient(object):
                 schema = self.get_latest_schema_by_topic_name(topic)
                 if schema.primary_keys:
                     pkey_topics.append(topic)
-            except HTTPNotFound:
+            except HTTPError:
                 # List of topics may include topics not in schematizer
                 pass
         return pkey_topics
