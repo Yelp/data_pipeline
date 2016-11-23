@@ -25,6 +25,8 @@ from data_pipeline.envelope import Envelope
 
 logger = get_config().logger
 
+# TODO (joshszep|DATAPIPE-2119) We could use some tests for this stuff.. :)
+
 
 def get_first_offset_at_or_after_start_timestamp(
     kafka_client,
@@ -54,16 +56,7 @@ def get_first_offset_at_or_after_start_timestamp(
         raise_on_error=False
     )
 
-    # TODO(joshszep|DATAPIPE-2113): Update to use ConsumerGroup rather than SimpleConsumers
-    topic_to_consumer_map = {
-        topic: SimpleConsumer(
-            client=kafka_client,
-            group=None,
-            topic=topic,
-            auto_commit=False
-        )
-        for topic in topics
-    }
+    topic_to_consumer_map = _build_topic_to_consumer_map(kafka_client, topics)
 
     topic_to_consumer_topic_state_map = _build_topic_to_consumer_topic_state_map(
         watermarks
@@ -93,6 +86,23 @@ def get_first_offset_at_or_after_start_timestamp(
         )
     )
     return result_topic_to_consumer_topic_state_map
+
+
+def _build_topic_to_consumer_map(kafka_client, topics):
+    """Build a mapping of topic to SimpleConsumer object for each topic. We
+    use a single SingleConsumer per topic since SimpleConsumer allows us to
+    seek, but only supports a single topic.
+    """
+    # TODO(joshszep|DATAPIPE-2113): Update to use ConsumerGroup rather than SimpleConsumers
+    return {
+        topic: SimpleConsumer(
+            client=kafka_client,
+            group=None,
+            topic=topic,
+            auto_commit=False
+        )
+        for topic in topics
+    }
 
 
 def _build_topic_to_range_map(watermarks):
@@ -176,9 +186,10 @@ def _get_message_and_alter_range(
 
 
 def _get_update_info_from_simple_consumer_response(response):
-    (partition, raw_message) = response
-    unpacked_message = Envelope().unpack(raw_message[1].value)
-    offset = raw_message[0]
+    (partition, (offset, raw_message)) = response
+    # message is of type kafka.common.Message
+    raw_message_bytes = raw_message.value
+    unpacked_message = Envelope().unpack(packed_message=raw_message_bytes)
     timestamp = unpacked_message['timestamp']
     return offset, partition, timestamp
 
@@ -197,16 +208,30 @@ def _move_finished_topics_to_result_map(
         for partition in partition_offset_map.keys():
             topic_range = topic_to_range_map[topic][partition]
             if topic_range['high'] == topic_range['low']:
-                result_topic_to_consumer_topic_state_map[
+                _pop_partition_offset_into_result_map(
+                    partition,
+                    partition_offset_map,
+                    result_topic_to_consumer_topic_state_map,
                     topic
-                ].partition_offset_map[partition] = partition_offset_map.pop(
-                    partition
                 )
 
     for topic in topic_to_consumer_topic_state_map.keys():
         consumer_topic_state_map = topic_to_consumer_topic_state_map[topic]
         if not consumer_topic_state_map.partition_offset_map:
             topic_to_consumer_topic_state_map.pop(topic)
+
+
+def _pop_partition_offset_into_result_map(
+        partition,
+        partition_offset_map,
+        result_topic_to_consumer_topic_state_map,
+        topic
+):
+    result_topic_to_consumer_topic_state_map[
+        topic
+    ].partition_offset_map[partition] = partition_offset_map.pop(
+        partition
+    )
 
 
 def _update_ranges(
@@ -221,24 +246,18 @@ def _update_ranges(
     """Updates our topic_to_range_maps and sets the new state of the
     topic_to_consumer_topic_state_map, based on start_timestamp"""
 
+    partition_range_map = topic_to_range_map[topic]
+    partition_range = partition_range_map[partition]
     if timestamp < start_timestamp:
-        topic_to_range_map[topic][partition]['low'] = offset + 1
+        partition_range['low'] = offset + 1
     else:
-        topic_to_range_map[topic][partition]['high'] = offset
-    new_mid = int(
-        (
-            topic_to_range_map[topic][partition]['high'] +
-            topic_to_range_map[topic][partition]['low']
-        ) / 2
-    )
-    topic_to_consumer_topic_state_map[
-        topic
-    ].partition_offset_map[
-        partition
-    ] = new_mid
+        partition_range['high'] = offset
+    new_mid = int((partition_range['high'] + partition_range['low']) / 2)
+    partition_offset_map = topic_to_consumer_topic_state_map[topic].partition_offset_map
+    partition_offset_map[partition] = new_mid
     logger.debug(
         "During start-date offset search got message from "
         "topic|offset|part: {}|{}|{}, new range: {}".format(
-            topic, offset, partition, topic_to_range_map[topic]
+            topic, offset, partition, partition_range_map
         )
     )
