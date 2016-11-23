@@ -16,321 +16,352 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import os
+import signal
 from collections import namedtuple
-from datetime import datetime
+from uuid import uuid4
 
 import mock
-import psutil
 import pytest
+import simplejson
 
-import data_pipeline.tools.refresh_manager
-from data_pipeline.schematizer_clientlib.models import namespace
-from data_pipeline.schematizer_clientlib.models import refresh
-from data_pipeline.schematizer_clientlib.models import source
+from data_pipeline.schematizer_clientlib.models.refresh import Priority
+from data_pipeline.schematizer_clientlib.models.refresh import RefreshStatus
+from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.tools.refresh_manager import FullRefreshManager
 
+DEFAULT_CAP = 50
 
+
+@pytest.mark.usefixures('containers')
 class TestFullRefreshManager(object):
 
-    @pytest.fixture
-    def fake_namespace(self):
-        return 'fake_namespace.yelp'
+    def _create_schema(self, namespace, source):
+        return simplejson.dumps(
+            {
+                "type": "record",
+                "namespace": namespace,
+                "name": source,
+                "doc": "test",
+                "fields": [
+                    {"type": "int", "name": "field", "doc": "test_field", "default": 1}
+                ]
+            })
 
-    @pytest.fixture
-    def fake_source(self):
-        return 'fake_source'
-
-    @pytest.fixture
-    def fake_config_path(self):
+    @property
+    def config_path(self):
         return '/nail/srv/configs/data_pipeline_tools.yaml'
 
-    @pytest.fixture
-    def fake_created_at(self):
-        return datetime(2015, 1, 1, 17, 0, 0)
+    @property
+    def source_owner_email(self):
+        return "bam+test+refresh+manager@yelp.com"
 
-    @pytest.fixture
-    def fake_updated_at(self):
-        return datetime(2015, 1, 1, 17, 0, 1)
+    @property
+    def pid(self):
+        return 42
 
-    @pytest.fixture
-    def fake_schema(self):
-        return namedtuple('Schema', ['primary_keys'])(['id'])
+    @pytest.fixture(scope='class')
+    def schematizer(self, containers):
+        return get_schematizer()
 
     @pytest.fixture
     def fake_worker(self):
-        return namedtuple('Worker', ['start', 'pid'])(mock.Mock(), 0)
+        return namedtuple('Worker', ['pid'])(self.pid)
 
     @pytest.fixture
-    def refresh_params(
-        self,
-        source_response,
-        fake_created_at,
-        fake_updated_at
-    ):
-        return {
-            'source': source_response,
-            'offset': 0,
-            'batch_size': 200,
-            'filter_condition': None,
-            'created_at': fake_created_at,
-            'updated_at': fake_updated_at
-        }
+    def fake_cluster(self):
+        return "refresh_primary"
 
     @pytest.fixture
-    def namespace_response(self, fake_namespace):
-        return namespace._Namespace(
-            namespace_id=1,
-            name=fake_namespace
+    def fake_database(self):
+        return "yelp{}".format(uuid4())
+
+    @pytest.fixture
+    def fake_namespace(self, fake_cluster, fake_database):
+        return "{}.{}".format(fake_cluster, fake_database)
+
+    @pytest.fixture
+    def fake_source_name(self):
+        return 'manager_source_{}'.format(uuid4())
+
+    @pytest.fixture
+    def fake_source_two_name(self):
+        return 'manager_source_two_{}'.format(uuid4())
+
+    @pytest.fixture
+    def fake_topic(self, schematizer, fake_source_name, fake_namespace):
+        schema = schematizer.register_schema(
+            namespace=fake_namespace,
+            source=fake_source_name,
+            schema_str=self._create_schema(fake_namespace, fake_source_name),
+            source_owner_email=self.source_owner_email,
+            contains_pii=False,
+            base_schema_id=None
+        )
+        return schema.topic
+
+    @pytest.fixture(autouse=True)
+    def fake_source(self, fake_topic):
+        return fake_topic.source
+
+    @pytest.fixture
+    def fake_topic_two(self, schematizer, fake_source_two_name, fake_namespace):
+        schema = schematizer.register_schema(
+            namespace=fake_namespace,
+            source=fake_source_two_name,
+            schema_str=self._create_schema(fake_namespace, fake_source_two_name),
+            source_owner_email=self.source_owner_email,
+            contains_pii=False,
+            base_schema_id=None
+        )
+        return schema.topic
+
+    @pytest.fixture(autouse=True)
+    def fake_source_two(self, fake_topic_two):
+        return fake_topic_two.source
+
+    @pytest.fixture
+    def real_refresh(self, schematizer, fake_source):
+        return schematizer.create_refresh(
+            source_id=fake_source.source_id,
+            offset=0,
+            batch_size=500,
+            priority=Priority.MEDIUM.value,
+            filter_condition=None,
+            avg_rows_per_second_cap=(DEFAULT_CAP * 2)
+            # if cap is too high we should still only use 50
         )
 
     @pytest.fixture
-    def source_response(self, namespace_response, fake_source):
-        return source._Source(
-            source_id=1,
-            name=fake_source,
-            owner_email='fake_email@yelp.com',
-            namespace=namespace_response,
-            category='fake_category'
+    def high_priority_real_refresh(self, schematizer, fake_source):
+        return schematizer.create_refresh(
+            source_id=fake_source.source_id,
+            offset=0,
+            batch_size=500,
+            priority=Priority.HIGH.value,
+            filter_condition=None,
+            avg_rows_per_second_cap=None
         )
 
     @pytest.fixture
-    def refresh_result(self, refresh_params):
-        refresh_params['refresh_id'] = 1
-        refresh_params['status'] = 'NOT_STARTED'
-        refresh_params['priority'] = 'MEDIUM'
-        return refresh._Refresh(**refresh_params).to_result()
+    def real_refresh_source_two(self, schematizer, fake_source_two):
+        return schematizer.create_refresh(
+            source_id=fake_source_two.source_id,
+            offset=0,
+            batch_size=500,
+            priority=Priority.MEDIUM.value,
+            filter_condition="country='CA' AND city='Waterloo'",
+            avg_rows_per_second_cap=None
+        )
 
     @pytest.fixture
-    def high_refresh_result(self, refresh_params):
-        refresh_params['refresh_id'] = 2
-        refresh_params['status'] = 'NOT_STARTED'
-        refresh_params['priority'] = 'HIGH'
-        return refresh._Refresh(**refresh_params).to_result()
-
-    @pytest.fixture
-    def complete_refresh_result(self, refresh_params):
-        refresh_params['refresh_id'] = 3
-        refresh_params['status'] = 'SUCCESS'
-        refresh_params['priority'] = 'MEDIUM'
-        return refresh._Refresh(**refresh_params).to_result()
-
-    @pytest.yield_fixture
-    def mock_config(self):
-        with mock.patch(
-            'data_pipeline.tools.refresh_manager.load_package_config'
-        ), mock.patch(
-            'data_pipeline.tools.refresh_manager.get_schematizer'
-        ):
-            yield
-
-    @pytest.fixture
-    def refresh_manager(self, fake_config_path, fake_namespace, mock_config):
+    def refresh_manager(self, fake_cluster, fake_database):
         refresh_manager = FullRefreshManager()
-        refresh_manager.options = namedtuple('Options', ['namespace', 'config_path', 'dry_run'])(
-            fake_namespace,
-            fake_config_path,
-            True
+        refresh_manager.options = namedtuple(
+            'Options',
+            ['cluster', 'database', 'config_path', 'dry_run', 'verbose',
+             'per_source_throughput_cap', 'total_throughput_cap']
+        )(
+            fake_cluster,
+            fake_database,
+            self.config_path,
+            True,
+            0,
+            DEFAULT_CAP,
+            1000
         )
         refresh_manager._init_global_state()
         return refresh_manager
 
     @pytest.yield_fixture
-    def mock_setup(self, refresh_manager):
-        with mock.patch.object(
-            refresh_manager,
-            'setup_new_refresh'
-        ) as mock_setup:
-            yield mock_setup
-
-    def test_should_run_next_refresh(
-        self,
-        refresh_manager,
-        mock_setup,
-        refresh_result
-    ):
-        assert refresh_manager._should_run_next_refresh(refresh_result)
-        assert refresh_manager.schematizer.get_refresh_by_id.call_count == 0
-
-    def test_should_run_next_refresh_replace_active_refresh(
-        self,
-        refresh_manager,
-        mock_setup,
-        refresh_result,
-        high_refresh_result
-    ):
-        refresh_manager.active_refresh['id'] = 1
-        mock_schematizer = refresh_manager.schematizer
-        mock_schematizer.get_refresh_by_id.return_value = refresh_result
-        assert refresh_manager._should_run_next_refresh(high_refresh_result)
-        mock_schematizer.get_refresh_by_id.assert_called_once_with(1)
-
-    def test_should_run_next_refresh_no_replace(
-        self,
-        refresh_manager,
-        mock_setup,
-        refresh_result,
-        high_refresh_result
-    ):
-        refresh_manager.active_refresh['id'] = 2
-        mock_schematizer = refresh_manager.schematizer
-        mock_schematizer.get_refresh_by_id.return_value = high_refresh_result
-        assert not refresh_manager._should_run_next_refresh(refresh_result)
-        mock_schematizer.get_refresh_by_id.assert_called_once_with(2)
-
-    def test_should_run_next_refresh_completed_refresh(
-        self,
-        refresh_manager,
-        mock_setup,
-        refresh_result,
-        complete_refresh_result
-    ):
-        refresh_manager.active_refresh['id'] = 3
-        schematizer = refresh_manager.schematizer
-        schematizer.get_refresh_by_id.return_value = complete_refresh_result
-        assert refresh_manager._should_run_next_refresh(refresh_result)
-        schematizer.get_refresh_by_id.assert_called_once_with(3)
-
-    def test_determine_best_refreshes(
-        self,
-        refresh_manager,
-        refresh_result,
-        high_refresh_result
-    ):
-        medium_result_list = [refresh_result, refresh_result]
-        high_result_list = [high_refresh_result, high_refresh_result]
-        best_refresh = refresh_manager.determine_best_refresh(
-            medium_result_list,
-            high_result_list
-        )
-        assert best_refresh == high_refresh_result
-
-    def test_determine_best_refresh(
-        self,
-        refresh_manager,
-        refresh_result,
-        high_refresh_result
-    ):
-        medium_result_list = [refresh_result]
-        high_result_list = [high_refresh_result]
-        best_refresh = refresh_manager.determine_best_refresh(
-            medium_result_list,
-            high_result_list
-        )
-        assert best_refresh == high_refresh_result
-
-    def test_determine_best_refresh_both_empty(self, refresh_manager):
-        result_list_a = []
-        result_list_b = []
-        best_refresh = refresh_manager.determine_best_refresh(
-            result_list_a,
-            result_list_b
-        )
-        assert best_refresh is None
-
-    def test_determine_best_refresh_first_empty(
-        self,
-        refresh_manager,
-        refresh_result
-    ):
-        result_list_a = []
-        result_list_b = [refresh_result]
-        best_refresh = refresh_manager.determine_best_refresh(
-            result_list_a,
-            result_list_b
-        )
-        assert best_refresh == refresh_result
-
-    def test_determine_best_refresh_second_empty(
-        self,
-        refresh_manager,
-        refresh_result
-    ):
-        result_list_a = [refresh_result]
-        result_list_b = []
-        best_refresh = refresh_manager.determine_best_refresh(
-            result_list_a,
-            result_list_b
-        )
-        assert best_refresh == refresh_result
-
-    def test_set_zombie_refresh_to_fail(self, refresh_manager):
-        refresh_manager.active_refresh['id'] = 1
-        refresh_manager.active_refresh['pid'] = 1
+    def mock_popen(self, fake_worker):
         with mock.patch(
-            'data_pipeline.tools.refresh_manager.psutil.Process',
-        ) as mock_ps:
-            mock_ps.return_value.status.return_value = psutil.STATUS_ZOMBIE
-            mock_sch = refresh_manager.schematizer
-            mock_sch.get_refresh_by_id.return_value.status = refresh.RefreshStatus.IN_PROGRESS
-            refresh_manager.set_zombie_refresh_to_fail()
-            mock_sch.get_refresh_by_id.assert_called_once_with(1)
-            mock_sch.update_refresh.assert_called_once_with(1, refresh.RefreshStatus.FAILED, 0)
+            'data_pipeline.tools.refresh_manager.subprocess.Popen'
+        ) as mock_popen:
+            mock_popen.return_value = fake_worker
+            yield mock_popen
 
-    def test_get_next_refresh(self, refresh_manager, refresh_result):
-        with mock.patch.object(
-            refresh_manager,
-            'determine_best_refresh'
-        ) as mock_determine:
-            not_started = [refresh_result]
-            paused = []
-            mock_schematizer = refresh_manager.schematizer
-            mock_schematizer.get_refreshes_by_criteria.side_effect = [
-                not_started,
-                paused
-            ]
-            refresh_manager.get_next_refresh()
-            mock_determine.assert_called_once_with(not_started, paused)
-
-    def test_begin_refresh_job(
-        self,
-        refresh_manager,
-        refresh_result,
-        fake_source,
-        fake_namespace,
-        fake_config_path,
-        fake_schema
-    ):
-        with mock.patch.object(
-            data_pipeline.tools.refresh_manager,
-            'FullRefreshRunner'
-        ) as mock_refresh_runner, mock.patch.object(
-            refresh_manager.schematizer,
-            'get_latest_schema_by_topic_name',
-            return_value=fake_schema
-        ):
-            refresh_manager._begin_refresh_job(refresh_result)
-            mock_refresh_runner.assert_called_once_with(
-                refresh_id=None,
-                cluster='fake_namespace',
-                database='yelp',
-                config_path=fake_config_path,
-                table_name=fake_source,
-                offset=0,
-                batch_size=200,
-                primary='id',
-                where_clause=None,
-                dry_run=True,
-                avg_rows_per_second_cap=None
-            )
-
-    def test_setup_new_refresh(
-        self,
-        refresh_manager,
-        refresh_result,
-        fake_source,
-        fake_namespace,
-        fake_config_path,
-        fake_worker
-    ):
-        with mock.patch.object(
-            data_pipeline.tools.refresh_manager,
-            'Process',
-            return_value=fake_worker
-        ), mock.patch.object(
-            os,
-            'kill'
+    @pytest.yield_fixture
+    def mock_kill(self):
+        with mock.patch(
+            'data_pipeline.tools.refresh_manager.os.kill'
         ) as mock_kill:
-            refresh_manager.setup_new_refresh(refresh_result)
-            assert fake_worker.start.call_count == 1
-            assert mock_kill.call_count == 0
+            yield mock_kill
+
+    def test_get_most_recent_topic_name(
+        self,
+        refresh_manager,
+        fake_topic,
+        fake_source_name,
+        fake_namespace
+    ):
+        assert fake_topic == refresh_manager.get_most_recent_topic(
+            fake_source_name, fake_namespace
+        )
+
+    def test_step(
+        self,
+        refresh_manager,
+        schematizer,
+        real_refresh,
+        high_priority_real_refresh,
+        fake_source,
+        fake_cluster,
+        fake_database,
+        mock_popen,
+        mock_kill
+    ):
+        refresh_manager.step()
+        mock_popen.assert_called_once_with(
+            # testing refresh_runner_path is a seperate test
+            ['python', refresh_manager.refresh_runner_path,
+             '--cluster={}'.format(fake_cluster),
+             '--database={}'.format(fake_database),
+             '--table-name={}'.format(fake_source.name), '--offset=0',
+             '--config-path={}'.format(refresh_manager.config_path),
+             '--avg-rows-per-second-cap={}'.format(DEFAULT_CAP),
+             '--batch-size={}'.format(high_priority_real_refresh.batch_size),
+             '--refresh-id={}'.format(high_priority_real_refresh.refresh_id),
+             '--dry-run', '--primary-key=id'
+             ]
+        )
+        assert mock_kill.call_count == 0
+        high_priority_real_refresh = schematizer.update_refresh(
+            high_priority_real_refresh.refresh_id,
+            RefreshStatus.IN_PROGRESS,
+            0
+        )
+        refresh_manager.step()
+        assert mock_kill.call_count == 0
+        assert mock_popen.call_count == 1
+        high_priority_real_refresh = schematizer.update_refresh(
+            high_priority_real_refresh.refresh_id,
+            RefreshStatus.SUCCESS,
+            0
+        )
+        refresh_manager.step()
+        mock_popen.assert_called_with(
+            # testing refresh_runner_path is a seperate test
+            ['python', refresh_manager.refresh_runner_path,
+             '--cluster={}'.format(fake_cluster),
+             '--database={}'.format(fake_database),
+             '--table-name={}'.format(fake_source.name), '--offset=0',
+             '--config-path={}'.format(refresh_manager.config_path),
+             '--avg-rows-per-second-cap={}'.format(DEFAULT_CAP),
+             '--batch-size={}'.format(real_refresh.batch_size),
+             '--refresh-id={}'.format(real_refresh.refresh_id),
+             '--dry-run', '--primary-key=id'
+             ]
+        )
+        assert mock_kill.call_count == 0
+        schematizer.update_refresh(
+            real_refresh.refresh_id,
+            RefreshStatus.SUCCESS,
+            0
+        )
+        refresh_manager.step()
+        assert mock_kill.call_count == 0
+        assert mock_popen.call_count == 2
+
+    def test_multisource_step_low_cap(
+        self,
+        refresh_manager,
+        schematizer,
+        high_priority_real_refresh,
+        real_refresh_source_two,
+        fake_source,
+        fake_source_two,
+        fake_cluster,
+        fake_database,
+        mock_popen
+    ):
+        refresh_manager.total_throughput_cap = (DEFAULT_CAP * 2) - 30
+        refresh_manager.step()
+        assert mock_popen.call_count == 2
+        mock_popen.assert_any_call(
+            ['python', refresh_manager.refresh_runner_path,
+             '--cluster={}'.format(fake_cluster),
+             '--database={}'.format(fake_database),
+             '--table-name={}'.format(fake_source.name), '--offset=0',
+             '--config-path={}'.format(refresh_manager.config_path),
+             '--avg-rows-per-second-cap={}'.format(DEFAULT_CAP),
+             '--batch-size={}'.format(high_priority_real_refresh.batch_size),
+             '--refresh-id={}'.format(high_priority_real_refresh.refresh_id),
+             '--dry-run', '--primary-key=id'
+             ]
+        )
+        mock_popen.assert_any_call(
+            ['python', refresh_manager.refresh_runner_path,
+             '--cluster={}'.format(fake_cluster),
+             '--database={}'.format(fake_database),
+             '--table-name={}'.format(fake_source_two.name), '--offset=0',
+             '--config-path={}'.format(refresh_manager.config_path),
+             '--avg-rows-per-second-cap={}'.format(DEFAULT_CAP - 30),
+             '--batch-size={}'.format(real_refresh_source_two.batch_size),
+             '--refresh-id={}'.format(real_refresh_source_two.refresh_id),
+             '--dry-run',
+             '--where="country=\'CA\' AND city=\'Waterloo\'"',
+             '--primary-key=id'
+             ]
+        )
+
+    def test_two_job_in_source(
+        self,
+        refresh_manager,
+        schematizer,
+        real_refresh,
+        fake_source,
+        fake_cluster,
+        fake_database,
+        mock_popen,
+        mock_kill
+    ):
+        refresh_manager.per_source_throughput_cap = 60
+        refresh_manager.step()
+        mock_popen.assert_called_once_with(
+            ['python', refresh_manager.refresh_runner_path,
+             '--cluster={}'.format(fake_cluster),
+             '--database={}'.format(fake_database),
+             '--table-name={}'.format(fake_source.name), '--offset=0',
+             '--config-path={}'.format(refresh_manager.config_path),
+             '--avg-rows-per-second-cap={}'.format(60),
+             '--batch-size={}'.format(real_refresh.batch_size),
+             '--refresh-id={}'.format(real_refresh.refresh_id),
+             '--dry-run', '--primary-key=id'
+             ]
+        )
+        assert mock_kill.call_count == 0
+        schematizer.update_refresh(
+            real_refresh.refresh_id,
+            status=RefreshStatus.IN_PROGRESS,
+            offset=0
+        )
+        new_refresh = schematizer.create_refresh(
+            source_id=fake_source.source_id,
+            offset=0,
+            batch_size=500,
+            priority=Priority.HIGH.value,
+            filter_condition=None,
+            avg_rows_per_second_cap=None
+        )
+        mock_kill.side_effect = lambda pid, signal: schematizer.update_refresh(
+            real_refresh.refresh_id,
+            status=RefreshStatus.PAUSED,
+            offset=500
+        )
+        refresh_manager.step()
+        mock_kill.assert_called_once_with(
+            self.pid, signal.SIGTERM
+        )
+        mock_popen.assert_called_with(
+            ['python', refresh_manager.refresh_runner_path,
+             '--cluster={}'.format(fake_cluster),
+             '--database={}'.format(fake_database),
+             '--table-name={}'.format(fake_source.name), '--offset=0',
+             '--config-path={}'.format(refresh_manager.config_path),
+             '--avg-rows-per-second-cap={}'.format(DEFAULT_CAP),
+             '--batch-size={}'.format(new_refresh.batch_size),
+             '--refresh-id={}'.format(new_refresh.refresh_id),
+             '--dry-run', '--primary-key=id'
+             ]
+        )
+        assert mock_popen.call_count == 2
