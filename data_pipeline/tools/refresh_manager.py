@@ -16,6 +16,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import copy
 import datetime
 import os
 import signal
@@ -479,23 +480,27 @@ class FullRefreshManager(BatchDaemon):
                 active_job.refresh_id == updated_refresh.refresh_id and
                 updated_refresh.status == RefreshStatus.NOT_STARTED)
 
-    def validate_running_job_status(self, active_job, updated_refresh):
+    def validate_running_job_status(self, active_job, updated_refresh, updated_refreshes):
         if self.active_job_has_invalid_status(active_job, updated_refresh):
-            self.log.error(
+            self.log.warning(
                 "Discrepency found: active_job has not_started status in"
-                " schematizer. Refresh ID: {} source_name: {}".format(
+                " schematizer. Refresh ID: {} source_name: {}"
+                ". If this warning is found shortly after the refresh is started"
+                " then it's most likely not an issue. "
+                "Removing from updated_refreshes list...".format(
                     active_job.refresh_id, updated_refresh.source_name
                 )
             )
+            updated_refreshes.remove(updated_refresh)
 
     def update_refreshes_status(self, updated_refreshes):
-        for updated_refresh in updated_refreshes:
+        for updated_refresh in copy.copy(updated_refreshes):
             source = updated_refresh.source_name
             active_job = self.active_refresh_jobs.get(source)
             if not active_job or active_job.refresh_id != updated_refresh.refresh_id:
                 continue
-            self.validate_running_job_status(active_job, updated_refresh)
             active_job.status = updated_refresh.status
+            self.validate_running_job_status(active_job, updated_refresh, updated_refreshes)
 
     def step(self):
         self.set_zombie_refreshes_to_fail()
