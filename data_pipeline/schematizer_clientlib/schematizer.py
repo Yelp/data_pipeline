@@ -1230,9 +1230,10 @@ class SchematizerClient(object):
                 schema = self.get_latest_schema_by_topic_name(topic)
                 if schema.primary_keys:
                     pkey_topics.append(topic)
-            except HTTPError:
+            except HTTPError as error:
                 # List of topics may include topics not in schematizer
-                pass
+                if error.response.status_code != 404:
+                    raise
         return pkey_topics
 
     def get_schema_migration(self, new_schema, target_schema_type, old_schema=None):

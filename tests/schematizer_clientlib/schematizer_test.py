@@ -18,13 +18,14 @@ from __future__ import unicode_literals
 
 import random
 import time
+from contextlib import contextmanager
 from datetime import datetime
 
 import mock
 import pytest
 import pytz
 import simplejson
-from bravado import exception as http_exc
+from bravado.exception import HTTPError
 from requests.exceptions import ConnectionError
 from requests.exceptions import ReadTimeout
 
@@ -757,7 +758,7 @@ class TestGetSourcesByNamespace(GetSourcesTestBase):
             self._assert_source_values(actual_src, expected_resp)
 
     def test_get_sources_of_bad_namespace(self, schematizer):
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.get_sources_by_namespace('bad_namespace')
 
     def test_sources_should_be_cached(self, schematizer, yelp_namespace_name):
@@ -851,7 +852,7 @@ class TestGetTopicsBySourceId(SchematizerClientTestBase):
             self._assert_topic_values(actual_topic, expected_resp)
 
     def test_get_topics_of_bad_source_id(self, schematizer):
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.get_topics_by_source_id(0)
 
     def test_topics_should_be_cached(self, schematizer, biz_topic):
@@ -890,7 +891,7 @@ class TestGetLatestTopicBySourceId(SchematizerClientTestBase):
         self._assert_topic_values(actual, expected)
 
     def test_get_latest_topic_of_bad_source(self, schematizer):
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.get_latest_topic_by_source_id(0)
 
 
@@ -926,7 +927,7 @@ class TestGetLatestSchemaByTopicName(SchematizerClientTestBase):
         self._assert_schema_values(actual, biz_schema_two)
 
     def test_latest_schema_of_bad_topic(self, schematizer):
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.get_latest_schema_by_topic_name('bad_topic')
 
     def test_latest_schema_should_be_cached(self, schematizer, biz_topic):
@@ -1019,14 +1020,18 @@ class TestRegisterNamespaceMetaAttrMapping(MetaAttrMappingTestBase):
         assert meta_attr_mapping_1 == meta_attr_mapping_2
 
     def test_registration_with_empty_namespace(self, schematizer, meta_attr_schema_id):
-        with pytest.raises(http_exc.HTTPBadRequest):
+        with expect_HTTPError(400):
             schematizer.register_namespace_meta_attribute_mapping(
                 namespace_name="",
                 meta_attr_schema_id=meta_attr_schema_id
             )
 
-    def test_registration_with_bad_namespace(self, schematizer, meta_attr_schema_id):
-        with pytest.raises(http_exc.HTTPNotFound):
+    def test_registration_with_bad_namespace(
+        self,
+        schematizer,
+        meta_attr_schema_id
+    ):
+        with expect_HTTPError(404):
             schematizer.register_namespace_meta_attribute_mapping(
                 namespace_name="bad_namespace",
                 meta_attr_schema_id=meta_attr_schema_id
@@ -1059,7 +1064,7 @@ class TestDeleteNamespaceMetaAttrMapping(MetaAttrMappingTestBase):
             meta_attribute_schema_id=meta_attr_schema_id
         )
         assert actual_meta_attr_mapping == expected_meta_attr_mapping
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.delete_namespace_meta_attribute_mapping(
                 namespace_name=user_namespace.name,
                 meta_attr_schema_id=meta_attr_schema_id
@@ -1070,7 +1075,7 @@ class TestDeleteNamespaceMetaAttrMapping(MetaAttrMappingTestBase):
         schematizer,
         user_namespace,
     ):
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.delete_namespace_meta_attribute_mapping(
                 namespace_name=user_namespace.name,
                 meta_attr_schema_id=0
@@ -1081,7 +1086,7 @@ class TestDeleteNamespaceMetaAttrMapping(MetaAttrMappingTestBase):
         schematizer,
         meta_attr_schema_id
     ):
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.delete_namespace_meta_attribute_mapping(
                 namespace_name="invalid_namespace",
                 meta_attr_schema_id=meta_attr_schema_id
@@ -1092,7 +1097,7 @@ class TestDeleteNamespaceMetaAttrMapping(MetaAttrMappingTestBase):
         schematizer,
         meta_attr_schema_id
     ):
-        with pytest.raises(http_exc.HTTPBadRequest):
+        with expect_HTTPError(400):
             schematizer.delete_namespace_meta_attribute_mapping(
                 namespace_name="",
                 meta_attr_schema_id=meta_attr_schema_id
@@ -1134,7 +1139,7 @@ class TestGetMetaAttrMappingByNamespace(MetaAttrMappingTestBase):
         self,
         schematizer,
     ):
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.get_namespace_meta_attribute_mappings(
                 namespace_name="bad_namespace"
             )
@@ -1175,7 +1180,7 @@ class TestRegisterSourceMetaAttrMapping(MetaAttrMappingTestBase):
         assert meta_attr_mapping_1 == meta_attr_mapping_2
 
     def test_registration_with_invalid_source(self, schematizer, meta_attr_schema_id):
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.register_source_meta_attribute_mapping(
                 source_id=0,
                 meta_attr_schema_id=meta_attr_schema_id
@@ -1208,7 +1213,7 @@ class TestDeleteSourceMetaAttrMapping(MetaAttrMappingTestBase):
             meta_attribute_schema_id=meta_attr_schema_id
         )
         assert actual_meta_attr_mapping == expected_meta_attr_mapping
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.delete_source_meta_attribute_mapping(
                 source_id=user_source.source_id,
                 meta_attr_schema_id=meta_attr_schema_id
@@ -1219,7 +1224,7 @@ class TestDeleteSourceMetaAttrMapping(MetaAttrMappingTestBase):
         schematizer,
         user_source,
     ):
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.delete_source_meta_attribute_mapping(
                 source_id=user_source.source_id,
                 meta_attr_schema_id=0
@@ -1230,7 +1235,7 @@ class TestDeleteSourceMetaAttrMapping(MetaAttrMappingTestBase):
         schematizer,
         meta_attr_schema_id
     ):
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.delete_source_meta_attribute_mapping(
                 source_id=0,
                 meta_attr_schema_id=meta_attr_schema_id
@@ -1270,7 +1275,7 @@ class TestGetMetaAttrMappingBySource(MetaAttrMappingTestBase):
         self,
         schematizer,
     ):
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.get_source_meta_attribute_mappings(source_id=0)
 
 
@@ -1309,7 +1314,7 @@ class TestGetMetaAttrMappingBySchemaId(MetaAttrMappingTestBase):
         self,
         schematizer,
     ):
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.get_source_meta_attribute_mappings(0)
 
 
@@ -1936,7 +1941,7 @@ class TestCreateDataTarget(RegistrationTestBase):
         assert actual.destination == self.random_destination
 
     def test_invalid_empty_name(self, schematizer):
-        with pytest.raises(http_exc.HTTPBadRequest):
+        with expect_HTTPError(400):
             schematizer.create_data_target(
                 name='',
                 target_type=self.random_target_type,
@@ -1944,7 +1949,7 @@ class TestCreateDataTarget(RegistrationTestBase):
             )
 
     def test_invalid_empty_target_type(self, schematizer):
-        with pytest.raises(http_exc.HTTPBadRequest):
+        with expect_HTTPError(400):
             schematizer.create_data_target(
                 name=self.random_name,
                 target_type='',
@@ -1952,7 +1957,7 @@ class TestCreateDataTarget(RegistrationTestBase):
             )
 
     def test_invalid_empty_destination(self, schematizer):
-        with pytest.raises(http_exc.HTTPBadRequest):
+        with expect_HTTPError(400):
             schematizer.create_data_target(
                 name=self.random_name,
                 target_type=self.random_target_type,
@@ -1998,7 +2003,7 @@ class TestGetDataTargetById(RegistrationTestBase):
             assert data_target_api_spy.call_count == 0
 
     def test_non_existing_data_target_id(self, schematizer):
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.get_data_target_by_id(data_target_id=0)
 
 
@@ -2035,7 +2040,7 @@ class TestGetDataTargetByName(RegistrationTestBase):
             assert data_target_api_spy.call_count == 0
 
     def test_non_existing_data_target_name(self, schematizer):
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.get_data_target_by_name(
                 data_target_name='bad test name'
             )
@@ -2064,7 +2069,7 @@ class TestCreateConsumerGroup(RegistrationTestBase):
         assert actual.group_name == random_group_name
 
     def test_invalid_empty_group_name(self, schematizer, dw_data_target_resp):
-        with pytest.raises(http_exc.HTTPBadRequest):
+        with expect_HTTPError(400):
             schematizer.create_consumer_group(
                 group_name='',
                 data_target_id=dw_data_target_resp.data_target_id
@@ -2080,14 +2085,14 @@ class TestCreateConsumerGroup(RegistrationTestBase):
             group_name=random_group_name,
             data_target_id=dw_data_target_resp.data_target_id
         )
-        with pytest.raises(http_exc.HTTPBadRequest):
+        with expect_HTTPError(400):
             schematizer.create_consumer_group(
                 group_name=random_group_name,
                 data_target_id=dw_data_target_resp.data_target_id
             )
 
     def test_non_existing_data_target(self, schematizer, random_group_name):
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.create_consumer_group(
                 group_name=random_group_name,
                 data_target_id=0
@@ -2134,7 +2139,7 @@ class TestGetConsumerGroupById(RegistrationTestBase):
             assert consumer_group_api_spy.call_count == 0
 
     def test_non_existing_consumer_group_id(self, schematizer):
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.get_consumer_group_by_id(consumer_group_id=0)
 
 
@@ -2156,7 +2161,7 @@ class TestCreateConsumerGroupDataSource(RegistrationTestBase):
         assert actual.data_source_id == biz_src_resp.source_id
 
     def test_non_existing_consumer_group(self, schematizer, biz_src_resp):
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.create_consumer_group_data_source(
                 consumer_group_id=0,
                 data_source_type=DataSourceTypeEnum.Source,
@@ -2164,7 +2169,7 @@ class TestCreateConsumerGroupDataSource(RegistrationTestBase):
             )
 
     def test_non_existing_data_source(self, schematizer, dw_con_group_resp):
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.create_consumer_group_data_source(
                 consumer_group_id=dw_con_group_resp.consumer_group_id,
                 data_source_type=DataSourceTypeEnum.Source,
@@ -2199,7 +2204,7 @@ class TestGetTopicsByDataTargetId(RegistrationTestBase):
         assert actual == []
 
     def test_non_existing_data_target(self, schematizer):
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.get_topics_by_data_target_id(data_target_id=0)
 
 
@@ -2244,7 +2249,7 @@ class TestGetSchemaMigration(SchematizerClientTestBase):
         schematizer,
         new_schema
     ):
-        with pytest.raises(http_exc.HTTPUnprocessableEntity):
+        with expect_HTTPError(422):
             schematizer._call_api(
                 api=schematizer._client.schema_migrations.get_schema_migration,
                 request_body={
@@ -2258,7 +2263,7 @@ class TestGetSchemaMigration(SchematizerClientTestBase):
         schematizer,
         new_schema
     ):
-        with pytest.raises(http_exc.HTTPNotImplemented):
+        with expect_HTTPError(501):
             schematizer.get_schema_migration(
                 new_schema=new_schema,
                 target_schema_type=TargetSchemaTypeEnum.unsupported
@@ -2296,7 +2301,7 @@ class TestGetDataTargetsBySchemaID(RegistrationTestBase):
         self,
         schematizer,
     ):
-        with pytest.raises(http_exc.HTTPNotFound):
+        with expect_HTTPError(404):
             schematizer.get_data_targets_by_schema_id(-1)
 
     def test_data_targets_should_be_cached(
@@ -2318,3 +2323,10 @@ class TestGetDataTargetsBySchemaID(RegistrationTestBase):
             )
             self._assert_data_target_values(actual, data_targets[0])
             assert schema_api_spy.call_count == 0
+
+
+@contextmanager
+def expect_HTTPError(status_code):
+    with pytest.raises(HTTPError) as exc_info:
+        yield
+    assert exc_info.value.response.status_code == status_code

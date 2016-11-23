@@ -166,8 +166,9 @@ class IntrospectorCommand(object):
                 topic_result = self.schematizer.get_topic_by_name(topic)._asdict()
                 topic_result['range_map'] = range_map
                 output.append(topic_result)
-            except HTTPError:
-                pass
+            except HTTPError as error:
+                if error.response.status_code != 404:
+                    raise
         return output
 
     @cached_property
