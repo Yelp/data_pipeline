@@ -304,7 +304,7 @@ class Config(object):
         """Directory in which to look for key to encrypt pii."""
         return data_pipeline_conf.read_string(
             'key_location',
-            default='/nail/srv/configs/data_pipeline/'
+            default='./'
         )
 
     @property
