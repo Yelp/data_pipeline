@@ -255,16 +255,12 @@ class FullRefreshManager(BatchDaemon):
 
         args = self.get_refresh_args(job)
         self.log.info("Starting refresh with args: {}".format(args))
-
-        new_worker = subprocess.Popen(args)
-
-        job.pid = new_worker.pid
+        job.pid = subprocess.Popen(args).pid
 
     def pause_job(self, job):
-        if job.status not in COMPLETE_STATUSES:
-            # This signal will cause the refresh runner to update
-            # the job to paused
-            os.kill(job.pid, signal.SIGTERM)
+        # This signal will cause the refresh runner to update
+        # the job to paused
+        os.kill(job.pid, signal.SIGTERM)
         job.pid = None
 
     def modify_job(self, job):
@@ -417,7 +413,8 @@ class FullRefreshManager(BatchDaemon):
         self.total_throughput_being_used -= running_job.throughput
         # Pause the current running job so that it will stop running,
         # it will be added to the queue automatically next step
-        self.pause_job(running_job)
+        if running_job.status not in COMPLETE_STATUSES:
+            self.pause_job(running_job)
         del self.active_refresh_jobs[source]
 
     def update_running_jobs_with_refresh(self, refresh_candidate):
@@ -468,6 +465,9 @@ class FullRefreshManager(BatchDaemon):
         return refreshes
 
     def get_updated_refreshes(self):
+        # We have to do it this way until the schematizer
+        # is fixed for this call
+        # (TODO: DATAPIPE-2074)
         statuses = list(INACTIVE_STATUSES)
         if self.active_refresh_jobs:
             statuses += list(COMPLETE_STATUSES)
@@ -492,7 +492,7 @@ class FullRefreshManager(BatchDaemon):
         for updated_refresh in updated_refreshes:
             source = updated_refresh.source_name
             active_job = self.active_refresh_jobs.get(source)
-            if not active_job:
+            if not active_job or active_job.refresh_id != updated_refresh.refresh_id:
                 continue
             self.validate_running_job_status(active_job, updated_refresh)
             active_job.status = updated_refresh.status

@@ -250,12 +250,20 @@ class TestFullRefreshRunner(object):
         yield
 
     @pytest.yield_fixture
-    def mock_process_rows(self):
+    def mock_unlock_tables(self):
         with mock.patch.object(
             FullRefreshRunner,
-            '_after_processing_rows'
-        ) as mock_process_rows:
-            yield mock_process_rows
+            'unlock_tables'
+        ) as mock_unlock_tables:
+            yield mock_unlock_tables
+
+    @pytest.yield_fixture
+    def mock_throttle_throughput(self):
+        with mock.patch.object(
+            FullRefreshRunner,
+            'throttle_throughput'
+        ) as mock_throttle_throughput:
+            yield mock_throttle_throughput
 
     @pytest.yield_fixture
     def mock_row_count(self):
@@ -307,7 +315,8 @@ class TestFullRefreshRunner(object):
         database_name,
         refresh_batch,
         mock_execute,
-        mock_process_rows,
+        mock_unlock_tables,
+        mock_throttle_throughput,
         mock_create_table_src,
         sessions,
         write_session
@@ -330,7 +339,8 @@ class TestFullRefreshRunner(object):
         database_name,
         managed_refresh_batch,
         mock_execute,
-        mock_process_rows,
+        mock_unlock_tables,
+        mock_throttle_throughput,
         mock_create_table_src,
         sessions,
         managed_write_session
@@ -382,7 +392,8 @@ class TestFullRefreshRunner(object):
             return_value=None
         ) as mock_wait:
             # count can be anything since self.avg_throughput_cap is set to None
-            refresh_batch._after_processing_rows(write_session, count=0)
+            refresh_batch.unlock_tables(write_session)
+            refresh_batch.throttle_throughput(count=0)
 
         assert write_session.rollback.call_count == 1
         write_session.execute.assert_called_once_with('UNLOCK TABLES')
@@ -563,7 +574,8 @@ class TestFullRefreshRunner(object):
         self,
         refresh_batch,
         mock_row_count,
-        mock_process_rows,
+        mock_unlock_tables,
+        mock_throttle_throughput,
         sessions,
         write_session,
         read_session,
@@ -603,7 +615,8 @@ class TestFullRefreshRunner(object):
         self,
         managed_refresh_batch,
         mock_row_count,
-        mock_process_rows,
+        mock_unlock_tables,
+        mock_throttle_throughput,
         sessions,
         managed_write_session
     ):

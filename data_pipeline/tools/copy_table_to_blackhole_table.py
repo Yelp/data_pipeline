@@ -322,10 +322,6 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
         self._wait_for_throughput(count)
 
-    def _after_processing_rows(self, session, count):
-        self.unlock_tables(session)
-        self.throttle_throughput(count)
-
     def _wait_for_throughput(self, count):
         """Used to cap throughput when given the --avg-rows-per-second-cap flag.
         Sleeps for a certain amount of time based on elapsed time to process row, the number of rows processed (count)
@@ -456,7 +452,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
                 batch_max_pk = min_pk + self.batch_size
                 inserted = self.count_inserted(session, min_pk, batch_max_pk)
                 self.insert_batch(session, min_pk, batch_max_pk)
-                self._after_processing_rows(session, inserted)
+                self.unlock_tables(session)
+                self.throttle_throughput(inserted)
             self.offset = batch_max_pk
             min_pk = batch_max_pk
             self.processed_row_count += inserted
@@ -488,7 +485,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         os._exit(1)
 
     def handle_terminate(self, signal, frame):
-        status = RefreshStatus.SUCESS if self.completed else RefreshStatus.PAUSED
+        status = RefreshStatus.SUCCESS if self.completed else RefreshStatus.PAUSED
         self.schematizer.update_refresh(
             refresh_id=self.refresh_id,
             status=status,
