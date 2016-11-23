@@ -301,7 +301,8 @@ class Config(object):
 
     @property
     def key_location(self):
-        """Directory in which to look for key to encrypt pii."""
+        """Directory in which to look for key to encrypt pii. ./key-1.key is meant for
+        unit tests and documentation purpose, please use a different key in production."""
         return data_pipeline_conf.read_string(
             'key_location',
             default='./'
@@ -534,7 +535,8 @@ class Config(object):
 
     @property
     def ecosystem_file_path(self):
-        return data_pipeline_conf.read_string('ecosystem_file_path', "/nail/etc/ecosystem")
+        """Path to the file that specifies the ecosystem."""
+        return data_pipeline_conf.read_string('ecosystem_file_path', "ecosystem")
 
 
 def configure_from_dict(config_dict):

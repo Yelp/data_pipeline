@@ -36,8 +36,11 @@ logger = get_config().logger
 
 class ContainerUnavailableError(Exception):
     def __init__(self, project='unknown', service='unknown'):
-        msg = open("logs/docker-compose.log", 'r').read()
-        Exception.__init__(self, "Container for project {0} and service {1} failed to start with msg {2}".format(
+        try:
+            msg = open("logs/docker-compose.log", 'r').read()
+        except IOError:
+            msg = ""
+        Exception.__init__(self, "Container for project {0} and service {1} failed to start with {2}".format(
             project,
             service,
             msg

@@ -130,6 +130,8 @@ class TestZKLock(TestZK):
         self,
         patch_exit
     ):
+        # TODO (DATAPIPE-2122|abrar): this test is aqcuiring
+        # lock on actual zookeeper instance, needs to be fixed.
         with ZKLock(self.fake_name, self.fake_namespace):
             assert patch_exit.call_count == 0
             with ZKLock(self.fake_name, self.fake_namespace):
