@@ -316,12 +316,12 @@ def payload_data_message(registered_schema, example_payload_data):
 
 
 @pytest.yield_fixture(scope='session')
-def containers(config_containers_connections):
+def containers():
     with Containers() as containers:
         yield containers
 
 
-@pytest.yield_fixture(scope='session')
+@pytest.yield_fixture()
 def config_containers_connections():
     with reconfigure(
         schematizer_host_and_port='schematizer:8888',
