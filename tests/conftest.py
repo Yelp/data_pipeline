@@ -322,7 +322,10 @@ def containers():
 
 
 @pytest.yield_fixture()
-def config_containers_connections():
+def config_benchmark_containers_connections():
+    """Reconfigures the clientlib to talk to benchmark containers, when both the
+    clientlib and benchmarks are run inside docker containers.
+    """
     with reconfigure(
         schematizer_host_and_port='schematizer:8888',
         kafka_zookeeper='zk:2181',
