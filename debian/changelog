@@ -1,3 +1,9 @@
+data-pipeline-tools (0.9.10) lucid; urgency=low
+
+  * Commit: Renamed method and added comment
+
+ -- Justin Cunningham <justinc@yelp.com>  Wed, 23 Nov 2016 16:41:01 -0800
+
 data-pipeline-tools (0.9.9) lucid; urgency=low
 
   * Commit: Merge remote-tracking branch 'origin/DATAPIPE-1745-
