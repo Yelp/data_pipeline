@@ -39,7 +39,7 @@ class ContainerUnavailableError(Exception):
         try:
             msg = open("logs/docker-compose.log", 'r').read()
         except IOError:
-            msg = ""
+            msg = "no error log."
         Exception.__init__(self, "Container for project {0} and service {1} failed to start with {2}".format(
             project,
             service,
