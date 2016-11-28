@@ -174,6 +174,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self.config_path = self.options.config_path
         load_default_config(self.config_path)
         self._connection_set = None
+        self.last_checkpoint_processed_row_count = 0
         self.processed_row_count = 0
         if self.options.batch_size <= 0:
             raise ValueError("Batch size should be greater than 0")
@@ -437,6 +438,21 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             session.commit()
         return max_pk.scalar()
 
+    def should_update_schematizer_progress(self):
+        processed_since_last_checkpoint = (
+            self.processed_row_count - self.last_checkpoint_processed_row_count
+        )
+        checkpoint_marker = self.batch_size * 10
+        return self.refresh_id and processed_since_last_checkpoint > checkpoint_marker
+
+    def update_schematizer_progress(self):
+        self.last_checkpoint_processed_row_count = self.processed_row_count
+        self.schematizer.update_refresh(
+            refresh_id=self.refresh_id,
+            status=RefreshStatus.IN_PROGRESS,
+            offset=self.offset
+        )
+
     def process_table(self):
         self.log.info(
             "Total rows to be processed: {row_count}".format(
@@ -457,6 +473,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.offset = batch_max_pk
             min_pk = batch_max_pk
             self.processed_row_count += inserted
+            if self.should_update_schematizer_progress():
+                self.update_schematizer_progress()
 
         if self.refresh_id:
             # Offset is 0 because it doesn't matter (was a success)
