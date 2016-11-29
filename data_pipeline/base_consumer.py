@@ -351,19 +351,22 @@ class BaseConsumer(Client):
         have 0 or 1 tuple of ([topics], cluster) returned
         http://servicedocs.yelpcorp.com/docs/yelp_kafka/discovery.html#yelp_kafka.discovery.get_region_logs_stream
         """
-        topics_in_region = discovery.get_region_logs_stream(
-            client_id=self.client_name,
-            stream=topic_name,
-            region=self.cluster_name
-        )
-        if not topics_in_region:
-            raise TopicNotFoundInRegionError(
-                topic_name,
-                self.cluster_type,
-                self.cluster_name
-            )
-        topics, _ = topics_in_region[0]
-        return topics
+        # TODO [askatti#DATAPIPE-2137|2016-11-28] Use discovery methods after
+        # adding kafkadiscovery container to make tests work
+        # topics_in_region = discovery.get_region_logs_stream(
+        #     client_id=self.client_name,
+        #     stream=topic_name,
+        #     region=self.cluster_name
+        # )
+        # if not topics_in_region:
+        #     raise TopicNotFoundInRegionError(
+        #         topic_name,
+        #         self.cluster_type,
+        #         self.cluster_name
+        #     )
+        # topics, _ = topics_in_region[0]
+        # return topics
+        return [topic_name]
 
     def _get_kafka_topics_from_topic_name(self, topic_name):
         """yelp_kafka.discovery.search_topic returns a list of (topic, cluster)
@@ -371,17 +374,20 @@ class BaseConsumer(Client):
         of (topic, cluster) returned
         http://servicedocs.yelpcorp.com/docs/yelp_kafka/discovery.html#yelp_kafka.discovery.search_topic
         """
-        topics_in_region = discovery.search_topic(
-            topic=topic_name,
-            clusters=[self._region_cluster_config]
-        )
-        if not topics_in_region:
-            raise TopicNotFoundInRegionError(
-                topic_name,
-                self.cluster_type,
-                self._region_cluster_config.name
-            )
-        return [topic for topic, _ in topics_in_region]
+        # TODO [askatti#DATAPIPE-2137|2016-11-28] Use discovery methods after
+        # adding kafkadiscovery container to make tests work
+        # topics_in_region = discovery.search_topic(
+        #     topic=topic_name,
+        #     clusters=[self._region_cluster_config]
+        # )
+        # if not topics_in_region:
+        #     raise TopicNotFoundInRegionError(
+        #         topic_name,
+        #         self.cluster_type,
+        #         self._region_cluster_config.name
+        #     )
+        # return [topic for topic, _ in topics_in_region]
+        return [topic_name]
 
     def _set_registrar_tracked_schema_ids(self, topic_to_consumer_topic_state_map):
         """
