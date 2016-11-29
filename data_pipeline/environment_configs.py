@@ -18,4 +18,4 @@ from __future__ import unicode_literals
 
 import os
 
-IS_OPEN_SOURCE_MODE = os.getenv('OPEN_SOURCE_MODE', 'true').lower() in ['t', 'true', 'y', 'yes']
+IS_OPEN_SOURCE_MODE = os.getenv('OPEN_SOURCE_MODE', 'false').lower() in ['t', 'true', 'y', 'yes']
