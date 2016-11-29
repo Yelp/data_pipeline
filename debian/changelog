@@ -1,3 +1,10 @@
+data-pipeline-tools (0.9.12) lucid; urgency=low
+
+  * Commit: Removed all yelp_kafka discovery calls intriduced in
+    DATAPIPE-1320 to fix upstream tests
+
+ -- Amit Katti <askatti@yelp.com>  Mon, 28 Nov 2016 21:21:45 -0800
+
 data-pipeline-tools (0.9.11) lucid; urgency=low
 
   * Commit: Rolled back changes in DATAPIP-1320 to fix upstream braking
