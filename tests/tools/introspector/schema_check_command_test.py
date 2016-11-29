@@ -30,6 +30,7 @@ from data_pipeline.tools.introspector.schema_check_command import SchemaCheckCom
 class FakeParserError(Exception):
     pass
 
+
 Args = namedtuple(
     "Namespace", [
         "schema",

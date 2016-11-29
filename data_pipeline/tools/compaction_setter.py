@@ -148,5 +148,6 @@ class CompactionSetter(Batch):
         self.log.info("Found {} topics to compact".format(len(topics)))
         self.apply_log_compaction(topics)
 
+
 if __name__ == '__main__':
     CompactionSetter().start()

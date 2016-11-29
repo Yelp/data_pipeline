@@ -465,5 +465,6 @@ class RedshiftSQLToAVSCBatch(yelp_batch.batch.Batch):
                 sort_keys=True
             )
 
+
 if __name__ == "__main__":
     RedshiftSQLToAVSCBatch().start()
