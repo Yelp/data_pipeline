@@ -24,7 +24,6 @@ from kafka import KafkaClient
 from kafka.common import FailedPayloadsError
 from kafka.common import OffsetCommitRequest
 from kafka.util import kafka_bytestring
-from yelp_kafka import discovery
 from yelp_kafka.config import KafkaConsumerConfig
 
 from data_pipeline._consumer_tick import _ConsumerTick
@@ -37,6 +36,7 @@ from data_pipeline.consumer_source import FixedSchemas
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import Message
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+# from yelp_kafka import discovery
 
 logger = get_config().logger
 
@@ -772,14 +772,17 @@ class BaseConsumer(Client):
     def _region_cluster_config(self):
         """ The ClusterConfig for Kafka cluster to connect to. If cluster_name
         is not specified, it will default to the value set in Config"""
-        if self.cluster_name:
-            return discovery.get_kafka_cluster(
-                cluster_type=self.cluster_type,
-                client_id=self.client_name,
-                cluster_name=self.cluster_name
-            )
-        else:
-            return get_config().cluster_config
+        # TODO [askatti#DATAPIPE-2137|2016-11-28] Use discovery methods after
+        # adding kafkadiscovery container to make tests work
+        # if self.cluster_name:
+        #     return discovery.get_kafka_cluster(
+        #         cluster_type=self.cluster_type,
+        #         client_id=self.client_name,
+        #         cluster_name=self.cluster_name
+        #     )
+        # else:
+        #     return get_config().cluster_config
+        return get_config().cluster_config
 
     @property
     def _kafka_consumer_config(self):

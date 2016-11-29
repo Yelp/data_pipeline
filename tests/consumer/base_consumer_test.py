@@ -456,28 +456,28 @@ class BaseConsumerTest(object):
     #         mock_discovery_method.return_value = []
     #         with pytest.raises(TopicNotFoundInRegionError):
     #             consumer._get_topics_in_region_from_topic_name(topic)
-
-    def test_base_consumer_with_cluster_name(
-        self,
-        topic,
-        consumer_init_kwargs
-    ):
-        cluster_name = 'uswest2-devc'
-        with mock.patch(
-            'yelp_kafka.discovery.get_kafka_cluster'
-        ) as mock_get_kafka_cluster:
-            consumer = BaseConsumer(
-                topic_to_consumer_topic_state_map={topic: None},
-                auto_offset_reset='largest',
-                cluster_name=cluster_name,
-                **consumer_init_kwargs
-            )
-            consumer._region_cluster_config
-            mock_get_kafka_cluster.assert_called_once_with(
-                client_id=consumer.client_name,
-                cluster_name=cluster_name,
-                cluster_type=consumer.cluster_type
-            )
+    #
+    # def test_base_consumer_with_cluster_name(
+    #     self,
+    #     topic,
+    #     consumer_init_kwargs
+    # ):
+    #     cluster_name = 'uswest2-devc'
+    #     with mock.patch(
+    #         'yelp_kafka.discovery.get_kafka_cluster'
+    #     ) as mock_get_kafka_cluster:
+    #         consumer = BaseConsumer(
+    #             topic_to_consumer_topic_state_map={topic: None},
+    #             auto_offset_reset='largest',
+    #             cluster_name=cluster_name,
+    #             **consumer_init_kwargs
+    #         )
+    #         consumer._region_cluster_config
+    #         mock_get_kafka_cluster.assert_called_once_with(
+    #             client_id=consumer.client_name,
+    #             cluster_name=cluster_name,
+    #             cluster_type=consumer.cluster_type
+    #         )
 
     def test_base_consumer_without_cluster_name(
         self,
