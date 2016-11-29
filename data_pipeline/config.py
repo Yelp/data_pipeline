@@ -228,7 +228,7 @@ class Config(object):
     def zookeeper_discovery_path(self):
         return data_pipeline_conf.read_string(
             'zookeeper_discovery_path',
-            default='/nail/etc/zookeeper_discovery/generic/uswest2{ecosystem}.yaml'
+            default='zookeeper_discovery{ecosystem}.yaml'
         )
 
     @property
@@ -301,10 +301,11 @@ class Config(object):
 
     @property
     def key_location(self):
-        """Directory in which to look for key to encrypt pii."""
+        """Directory in which to look for key to encrypt pii. ./key-1.key is meant for
+        unit tests and documentation purpose, please use a different key in production."""
         return data_pipeline_conf.read_string(
             'key_location',
-            default='/nail/srv/configs/data_pipeline/'
+            default='./'
         )
 
     @property
@@ -314,7 +315,7 @@ class Config(object):
         """
         return data_pipeline_conf.read_string(
             'data_pipeline_teams_config_file_path',
-            default='/nail/etc/services/data_pipeline/teams.yaml'
+            default='teams.yaml'
         )
 
     @property
@@ -531,6 +532,11 @@ class Config(object):
         and the time the producer is to publish the message to kafka.  Anything
         greater than this time will produce an alert"""
         return data_pipeline_conf.read_int('sensu_max_delay_seconds', 300)
+
+    @property
+    def ecosystem_file_path(self):
+        """Path to the file that specifies the ecosystem."""
+        return data_pipeline_conf.read_string('ecosystem_file_path', "ecosystem")
 
 
 def configure_from_dict(config_dict):

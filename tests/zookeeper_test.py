@@ -23,6 +23,7 @@ import pytest
 from kazoo.client import KazooClient
 from kazoo.exceptions import LockTimeout
 
+from data_pipeline.environment_configs import IS_OPEN_SOURCE_MODE
 from data_pipeline.zookeeper import ZK
 from data_pipeline.zookeeper import ZKLock
 
@@ -121,10 +122,16 @@ class TestZKLock(TestZK):
         assert locked_zk_client.stop.call_count >= 1
         assert locked_zk_client.close.call_count >= 1
 
+    @pytest.mark.skipif(
+        IS_OPEN_SOURCE_MODE,
+        reason="This test is acquiring lock on local ZK instance and not on the mock."
+    )
     def test_double_lock(
         self,
         patch_exit
     ):
+        # TODO (DATAPIPE-2122|abrar): this test is aqcuiring
+        # lock on actual zookeeper instance, needs to be fixed.
         with ZKLock(self.fake_name, self.fake_namespace):
             assert patch_exit.call_count == 0
             with ZKLock(self.fake_name, self.fake_namespace):

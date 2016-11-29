@@ -11,11 +11,11 @@ kafka:
 # TODO (DATAPIPE-1858|abrar): change all the yelpcorp url's to docker hub once we
 # push our docker images to docker hub.
 schematizerdatabase:
-  image: docker-dev.yelpcorp.com/schematizer_database:latest
+  image: docker.io/yelp/schematizer_database:latest
 schematizerconfigs:
-  image: docker-dev.yelpcorp.com/schematizer_configs:latest
+  image: docker.io/yelp/schematizer_configs:latest
 schematizer:
-  image: docker-dev.yelpcorp.com/schematizer_service:latestopensource
+  image: docker.io/yelp/schematizer_service:latest
   links:
     - schematizerdatabase
   volumes_from:

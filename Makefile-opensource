@@ -41,8 +41,7 @@ clean-vim:
 	find . -name '*.swo' -exec rm -f {} +
 
 test:
-	# This will timeout after 15 minutes, in case there is a hang on jenkins
-	OPEN_SOURCE_MODE=true PULL_CONTAINERS=true FORCE_FRESH_CONTAINERS=true timeout -9 1800 tox -c tox-opensource.ini $(REBUILD_FLAG)
+	OPEN_SOURCE_MODE=true PULL_CONTAINERS=true FORCE_FRESH_CONTAINERS=true tox -c tox-opensource.ini $(REBUILD_FLAG)
 
 docs: clean-docs 
 	tox -c tox-opensource.ini -e docs $(REBUILD_FLAG)

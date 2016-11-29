@@ -19,4 +19,3 @@ terminaltables>=1.0.2
 wheel>=0.22
 factory_boy==2.5.2
 pytest-benchmark==3.0.0
-clog

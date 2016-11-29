@@ -342,7 +342,7 @@ def kafka_docker(containers):
 def configure_teams():
     config_path = os.path.join(
         os.path.dirname(__file__),
-        'config/teams.yaml'
+        '../teams.yaml'
     )
     with reconfigure(data_pipeline_teams_config_file_path=config_path):
         yield
