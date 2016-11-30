@@ -24,7 +24,6 @@ from kafka import KafkaClient
 from kafka.common import FailedPayloadsError
 from kafka.common import OffsetCommitRequest
 from kafka.util import kafka_bytestring
-from yelp_kafka import discovery
 from yelp_kafka.config import KafkaConsumerConfig
 
 from data_pipeline._consumer_tick import _ConsumerTick
@@ -37,6 +36,7 @@ from data_pipeline.consumer_source import FixedSchemas
 from data_pipeline.envelope import Envelope
 from data_pipeline.message import Message
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
+# from yelp_kafka import discovery
 
 logger = get_config().logger
 
@@ -351,19 +351,22 @@ class BaseConsumer(Client):
         have 0 or 1 tuple of ([topics], cluster) returned
         http://servicedocs.yelpcorp.com/docs/yelp_kafka/discovery.html#yelp_kafka.discovery.get_region_logs_stream
         """
-        topics_in_region = discovery.get_region_logs_stream(
-            client_id=self.client_name,
-            stream=topic_name,
-            region=self.cluster_name
-        )
-        if not topics_in_region:
-            raise TopicNotFoundInRegionError(
-                topic_name,
-                self.cluster_type,
-                self.cluster_name
-            )
-        topics, _ = topics_in_region[0]
-        return topics
+        # TODO [askatti#DATAPIPE-2137|2016-11-28] Use discovery methods after
+        # adding kafkadiscovery container to make tests work
+        # topics_in_region = discovery.get_region_logs_stream(
+        #     client_id=self.client_name,
+        #     stream=topic_name,
+        #     region=self.cluster_name
+        # )
+        # if not topics_in_region:
+        #     raise TopicNotFoundInRegionError(
+        #         topic_name,
+        #         self.cluster_type,
+        #         self.cluster_name
+        #     )
+        # topics, _ = topics_in_region[0]
+        # return topics
+        return [topic_name]
 
     def _get_kafka_topics_from_topic_name(self, topic_name):
         """yelp_kafka.discovery.search_topic returns a list of (topic, cluster)
@@ -371,17 +374,20 @@ class BaseConsumer(Client):
         of (topic, cluster) returned
         http://servicedocs.yelpcorp.com/docs/yelp_kafka/discovery.html#yelp_kafka.discovery.search_topic
         """
-        topics_in_region = discovery.search_topic(
-            topic=topic_name,
-            clusters=[self._region_cluster_config]
-        )
-        if not topics_in_region:
-            raise TopicNotFoundInRegionError(
-                topic_name,
-                self.cluster_type,
-                self._region_cluster_config.name
-            )
-        return [topic for topic, _ in topics_in_region]
+        # TODO [askatti#DATAPIPE-2137|2016-11-28] Use discovery methods after
+        # adding kafkadiscovery container to make tests work
+        # topics_in_region = discovery.search_topic(
+        #     topic=topic_name,
+        #     clusters=[self._region_cluster_config]
+        # )
+        # if not topics_in_region:
+        #     raise TopicNotFoundInRegionError(
+        #         topic_name,
+        #         self.cluster_type,
+        #         self._region_cluster_config.name
+        #     )
+        # return [topic for topic, _ in topics_in_region]
+        return [topic_name]
 
     def _set_registrar_tracked_schema_ids(self, topic_to_consumer_topic_state_map):
         """
@@ -766,14 +772,17 @@ class BaseConsumer(Client):
     def _region_cluster_config(self):
         """ The ClusterConfig for Kafka cluster to connect to. If cluster_name
         is not specified, it will default to the value set in Config"""
-        if self.cluster_name:
-            return discovery.get_kafka_cluster(
-                cluster_type=self.cluster_type,
-                client_id=self.client_name,
-                cluster_name=self.cluster_name
-            )
-        else:
-            return get_config().cluster_config
+        # TODO [askatti#DATAPIPE-2137|2016-11-28] Use discovery methods after
+        # adding kafkadiscovery container to make tests work
+        # if self.cluster_name:
+        #     return discovery.get_kafka_cluster(
+        #         cluster_type=self.cluster_type,
+        #         client_id=self.client_name,
+        #         cluster_name=self.cluster_name
+        #     )
+        # else:
+        #     return get_config().cluster_config
+        return get_config().cluster_config
 
     @property
     def _kafka_consumer_config(self):
@@ -795,7 +804,11 @@ class BaseConsumer(Client):
             partitioner_cooldown=self.partitioner_cooldown,
             use_group_sha=self.use_group_sha,
             pre_rebalance_callback=self.pre_rebalance_callback,
-            post_rebalance_callback=self._apply_post_rebalance_callback_to_partition
+            post_rebalance_callback=self._apply_post_rebalance_callback_to_partition,
+
+            # TODO(joshszep|DATAPIPE-2143): switch to offset_storage='kafka'
+            # after all consumers are migrated
+            offset_storage='dual',
         )
 
     def _apply_post_rebalance_callback_to_partition(self, partitions):

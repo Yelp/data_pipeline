@@ -1,3 +1,24 @@
+data-pipeline-tools (0.9.13) lucid; urgency=low
+
+  * Commit: Merge remote-tracking branch 'origin/DATAPIPE-2143-
+    joshszep_use_dual_offset_storage'
+
+ -- Joshua Szepietowski <joshszep@yelp.com>  Tue, 29 Nov 2016 16:17:13 -0800
+
+data-pipeline-tools (0.9.12) lucid; urgency=low
+
+  * Commit: Removed all yelp_kafka discovery calls intriduced in
+    DATAPIPE-1320 to fix upstream tests
+
+ -- Amit Katti <askatti@yelp.com>  Mon, 28 Nov 2016 21:21:45 -0800
+
+data-pipeline-tools (0.9.11) lucid; urgency=low
+
+  * Commit: Rolled back changes in DATAPIP-1320 to fix upstream braking
+    tests
+
+ -- Amit Katti <askatti@yelp.com>  Mon, 28 Nov 2016 18:23:14 -0800
+
 data-pipeline-tools (0.9.10) lucid; urgency=low
 
   * Commit: Renamed method and added comment

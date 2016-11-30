@@ -31,7 +31,6 @@ from data_pipeline.base_consumer import BaseConsumer
 from data_pipeline.base_consumer import ConsumerTopicState
 from data_pipeline.base_consumer import MultipleClusterTypeError
 from data_pipeline.base_consumer import TopicFilter
-from data_pipeline.base_consumer import TopicNotFoundInRegionError
 from data_pipeline.config import get_config
 from data_pipeline.consumer_source import FixedSchemas
 from data_pipeline.consumer_source import FixedTopics
@@ -49,6 +48,7 @@ from data_pipeline.schematizer_clientlib.models.data_source_type_enum \
     import DataSourceTypeEnum
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from tests.helpers.mock_utils import attach_spy_on_func
+# from data_pipeline.base_consumer import TopicNotFoundInRegionError
 
 
 TIMEOUT = 3
@@ -433,50 +433,51 @@ class BaseConsumerTest(object):
                 auto_offset_reset='largest',
                 **consumer_init_kwargs
             )
-
-    @pytest.mark.parametrize("cluster_type, discovery_method", [
-        ('scribe', 'yelp_kafka.discovery.get_region_logs_stream'),
-        ('datapipe', 'yelp_kafka.discovery.search_topic')
-    ])
-    def test_no_topics_in_cluster_name(
-        self,
-        cluster_type,
-        discovery_method,
-        topic,
-        consumer_init_kwargs
-    ):
-        consumer = BaseConsumer(
-            topic_to_consumer_topic_state_map={topic: None},
-            auto_offset_reset='largest',
-            **consumer_init_kwargs
-        )
-        consumer.cluster_type = cluster_type
-        with mock.patch(discovery_method) as mock_discovery_method:
-            mock_discovery_method.return_value = []
-            with pytest.raises(TopicNotFoundInRegionError):
-                consumer._get_topics_in_region_from_topic_name(topic)
-
-    def test_base_consumer_with_cluster_name(
-        self,
-        topic,
-        consumer_init_kwargs
-    ):
-        cluster_name = 'uswest2-devc'
-        with mock.patch(
-            'yelp_kafka.discovery.get_kafka_cluster'
-        ) as mock_get_kafka_cluster:
-            consumer = BaseConsumer(
-                topic_to_consumer_topic_state_map={topic: None},
-                auto_offset_reset='largest',
-                cluster_name=cluster_name,
-                **consumer_init_kwargs
-            )
-            consumer._region_cluster_config
-            mock_get_kafka_cluster.assert_called_once_with(
-                client_id=consumer.client_name,
-                cluster_name=cluster_name,
-                cluster_type=consumer.cluster_type
-            )
+    # TODO [askatti#DATAPIPE-2137|2016-11-28] Use discovery methods after
+    # adding kafkadiscovery container to make tests work
+    # @pytest.mark.parametrize("cluster_type, discovery_method", [
+    #     ('scribe', 'yelp_kafka.discovery.get_region_logs_stream'),
+    #     ('datapipe', 'yelp_kafka.discovery.search_topic')
+    # ])
+    # def test_no_topics_in_cluster_name(
+    #     self,
+    #     cluster_type,
+    #     discovery_method,
+    #     topic,
+    #     consumer_init_kwargs
+    # ):
+    #     consumer = BaseConsumer(
+    #         topic_to_consumer_topic_state_map={topic: None},
+    #         auto_offset_reset='largest',
+    #         **consumer_init_kwargs
+    #     )
+    #     consumer.cluster_type = cluster_type
+    #     with mock.patch(discovery_method) as mock_discovery_method:
+    #         mock_discovery_method.return_value = []
+    #         with pytest.raises(TopicNotFoundInRegionError):
+    #             consumer._get_topics_in_region_from_topic_name(topic)
+    #
+    # def test_base_consumer_with_cluster_name(
+    #     self,
+    #     topic,
+    #     consumer_init_kwargs
+    # ):
+    #     cluster_name = 'uswest2-devc'
+    #     with mock.patch(
+    #         'yelp_kafka.discovery.get_kafka_cluster'
+    #     ) as mock_get_kafka_cluster:
+    #         consumer = BaseConsumer(
+    #             topic_to_consumer_topic_state_map={topic: None},
+    #             auto_offset_reset='largest',
+    #             cluster_name=cluster_name,
+    #             **consumer_init_kwargs
+    #         )
+    #         consumer._region_cluster_config
+    #         mock_get_kafka_cluster.assert_called_once_with(
+    #             client_id=consumer.client_name,
+    #             cluster_name=cluster_name,
+    #             cluster_type=consumer.cluster_type
+    #         )
 
     def test_base_consumer_without_cluster_name(
         self,
