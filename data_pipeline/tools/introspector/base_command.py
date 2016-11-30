@@ -21,7 +21,7 @@ import logging
 from collections import OrderedDict
 from contextlib import contextmanager
 
-from bravado.exception import HTTPNotFound
+from bravado.exception import HTTPError
 from cached_property import cached_property
 from kafka import KafkaClient
 from kafka_utils.util import offsets
@@ -166,8 +166,9 @@ class IntrospectorCommand(object):
                 topic_result = self.schematizer.get_topic_by_name(topic)._asdict()
                 topic_result['range_map'] = range_map
                 output.append(topic_result)
-            except HTTPNotFound:
-                pass
+            except HTTPError as error:
+                if error.response.status_code != 404:
+                    raise
         return output
 
     @cached_property

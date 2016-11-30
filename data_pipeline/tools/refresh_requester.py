@@ -27,14 +27,14 @@ from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.servlib.config_util import load_package_config
 
 
-class FullRefreshJob(Batch):
+class FullRefreshRequester(Batch):
     """
-    FullRefreshJob parses command line arguments specifying full refresh jobs
+    FullRefreshRequester parses command line arguments specifying full refresh jobs
     and registers the refresh jobs with the Schematizer.
     """
 
     def __init__(self):
-        super(FullRefreshJob, self).__init__()
+        super(FullRefreshRequester, self).__init__()
         self.notify_emails = ['bam+batch@yelp.com']
 
     @property
@@ -71,7 +71,7 @@ class FullRefreshJob(Batch):
             dest='offset',
             type='int',
             default=0,
-            help='Row offset to start refreshing from. '
+            help='Primary key id to start refreshing from. '
                  '(default: %default)'
         )
         opt_group.add_option(
@@ -99,8 +99,8 @@ class FullRefreshJob(Batch):
         )
         opt_group.add_option(
             '--avg-rows-per-second-cap',
-            help='Caps the throughput per second. Important since without any control for this '
-            'the batch can cause signifigant pipeline delays. (default: %default)',
+            help='Caps the throughput per second. Important since without any control for this'
+            ' the batch can cause signifigant pipeline delays. (default: %default)',
             type='int',
             default=None
         )
@@ -114,7 +114,7 @@ class FullRefreshJob(Batch):
         return opt_group
 
     def process_commandline_options(self, args=None):
-        super(FullRefreshJob, self).process_commandline_options(args=args)
+        super(FullRefreshRequester, self).process_commandline_options(args=args)
         if (self.options.avg_rows_per_second_cap is not None and
                 self.options.avg_rows_per_second_cap <= 0):
             raise ValueError("--avg-rows-per-second-cap must be greater than 0")
@@ -124,56 +124,65 @@ class FullRefreshJob(Batch):
             self.options.source_name and
             self.options.namespace
         ):
-            raise ValueError("--source-id or both of--source-name and --namespace must be defined")
+            raise ValueError(
+                "--source-id or both of--source-name and --namespace must be defined"
+            )
         if self.options.source_id and (
             self.options.source_name or
             self.options.namespace
         ):
-            raise ValueError("Cannot use both --source-id and either of --namespace and --source-name")
-
+            raise ValueError(
+                "Cannot use both --source-id and either of --namespace and --source-name"
+            )
         load_package_config(self.options.config_path)
         self.schematizer = get_schematizer()
+        source_ids = self.get_source_ids()
+        if len(source_ids) == 0:
+            raise ValueError(
+                "Found no sources with namespace_name {} and source_name {}".format(
+                    self.options.namespace, self.options.source_name
+                )
+            )
+        elif len(source_ids) > 1:
+            raise ValueError(
+                "Pair of namespace_name {} and source_name {} somehow received more than one"
+                " source. Investigation as to how is recommended.".format(
+                    self.options.namespace, self.options.source_name
+                )
+            )
+        self.source_id = source_ids[0]
 
-    @property
-    def source_id(self):
+    def get_source_ids(self):
         if self.options.source_id:
-            return self.options.source_id
-        source_ids = [
+            return [self.options.source_id]
+        return [
             source.source_id
             for source in self.schematizer.get_sources_by_namespace(
                 self.options.namespace
             ) if source.name == self.options.source_name
         ]
-        if len(source_ids) == 1:
-            return source_ids[0]
-        elif len(source_ids) == 0:
-            raise ValueError("Found no sources with namespace_name {} and source_name {}".format(
-                self.options.namespace, self.options.source_name
-            ))
-        raise ValueError(
-            "Pair of namespace_name {} and source_name {} somehow received more than one source. "
-            "Investigation as to how is recommended.".format(
-                self.options.namespace, self.options.source_name
-            )
-        )
 
-    def run(self):
-        self.job = self.schematizer.create_refresh(
+    def create_request(self):
+        return self.schematizer.create_refresh(
             source_id=self.source_id,
             offset=self.options.offset,
             batch_size=self.options.batch_size,
-            priority=Priority[self.options.priority],
+            priority=Priority[self.options.priority].value,
             filter_condition=self.options.filter_condition,
             avg_rows_per_second_cap=self.options.avg_rows_per_second_cap
         )
+
+    def run(self):
+        request = self.create_request()
         self.log.info(
             "Refresh registered with refresh id: {rid} "
-            "on source id: {sid}".format(
-                rid=self.job.refresh_id,
-                sid=self.job.source.source_id
+            "on source: {source_name}, namespace: {namespace_name}".format(
+                rid=request.refresh_id,
+                source_name=request.source_name,
+                namespace_name=request.namespace_name
             )
         )
 
 
 if __name__ == '__main__':
-    FullRefreshJob().start()
+    FullRefreshRequester().start()

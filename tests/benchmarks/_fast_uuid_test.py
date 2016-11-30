@@ -22,7 +22,7 @@ from data_pipeline._fast_uuid import FastUUID
 
 
 @pytest.mark.usefixtures(
-    "config_containers_connections"
+    "config_benchmark_containers_connections"
 )
 @pytest.mark.benchmark
 class TestBenchFastUUID(object):

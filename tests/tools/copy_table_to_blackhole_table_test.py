@@ -126,7 +126,7 @@ class TestFullRefreshRunner(object):
         batch.process_commandline_options([
             '--dry-run',
             '--table-name={0}'.format(table_name),
-            '--primary=id',
+            '--primary-key=id',
             '--cluster={0}'.format(cluster),
             '--topology-path={0}'.format(topology_path),
             '--database={0}'.format(database_name)
@@ -140,7 +140,7 @@ class TestFullRefreshRunner(object):
         batch.process_commandline_options([
             '--dry-run',
             '--table-name={0}'.format(table_name),
-            '--primary=id',
+            '--primary-key=id',
             '--where={0}'.format("country='CA'"),
             '--database={0}'.format(database_name)
         ])
@@ -150,27 +150,24 @@ class TestFullRefreshRunner(object):
     @pytest.yield_fixture
     def managed_refresh_batch(
         self,
-        mock_get_schematizer,
+        table_name,
+        cluster,
         mock_load_config,
-        refresh_params
+        database_name,
+        mock_get_schematizer
     ):
-        # Initialize the batch the same way the refresh manager would.
-        batch = FullRefreshRunner(**refresh_params)
-        with mock.patch.object(
-            batch,
-            'get_connection_set_from_cluster'
-        ):
-            batch.setup_connections()
-            yield batch
-
-    @pytest.yield_fixture
-    def managed_refresh_batch_custom_where(
-        self,
-        mock_load_config,
-        refresh_params
-    ):
-        refresh_params['where_clause'] = "country='CA'"
-        batch = FullRefreshRunner(**refresh_params)
+        batch = FullRefreshRunner()
+        batch.process_commandline_options([
+            '--dry-run',
+            '--table-name={}'.format(table_name),
+            '--database={}'.format(database_name),
+            '--cluster={}'.format(cluster),
+            '--offset=0',
+            '--batch-size=200',
+            '--primary-key=id',
+            '--refresh-id=1'
+        ])
+        batch._init_global_state()
         yield batch
 
     @pytest.yield_fixture
@@ -253,12 +250,20 @@ class TestFullRefreshRunner(object):
         yield
 
     @pytest.yield_fixture
-    def mock_process_rows(self):
+    def mock_unlock_tables(self):
         with mock.patch.object(
             FullRefreshRunner,
-            '_after_processing_rows'
-        ) as mock_process_rows:
-            yield mock_process_rows
+            'unlock_tables'
+        ) as mock_unlock_tables:
+            yield mock_unlock_tables
+
+    @pytest.yield_fixture
+    def mock_throttle_throughput(self):
+        with mock.patch.object(
+            FullRefreshRunner,
+            'throttle_throughput'
+        ) as mock_throttle_throughput:
+            yield mock_throttle_throughput
 
     @pytest.yield_fixture
     def mock_row_count(self):
@@ -310,7 +315,8 @@ class TestFullRefreshRunner(object):
         database_name,
         refresh_batch,
         mock_execute,
-        mock_process_rows,
+        mock_unlock_tables,
+        mock_throttle_throughput,
         mock_create_table_src,
         sessions,
         write_session
@@ -333,7 +339,8 @@ class TestFullRefreshRunner(object):
         database_name,
         managed_refresh_batch,
         mock_execute,
-        mock_process_rows,
+        mock_unlock_tables,
+        mock_throttle_throughput,
         mock_create_table_src,
         sessions,
         managed_write_session
@@ -385,7 +392,8 @@ class TestFullRefreshRunner(object):
             return_value=None
         ) as mock_wait:
             # count can be anything since self.avg_throughput_cap is set to None
-            refresh_batch._after_processing_rows(write_session, count=0)
+            refresh_batch.unlock_tables(write_session)
+            refresh_batch.throttle_throughput(count=0)
 
         assert write_session.rollback.call_count == 1
         write_session.execute.assert_called_once_with('UNLOCK TABLES')
@@ -566,7 +574,8 @@ class TestFullRefreshRunner(object):
         self,
         refresh_batch,
         mock_row_count,
-        mock_process_rows,
+        mock_unlock_tables,
+        mock_throttle_throughput,
         sessions,
         write_session,
         read_session,
@@ -606,7 +615,8 @@ class TestFullRefreshRunner(object):
         self,
         managed_refresh_batch,
         mock_row_count,
-        mock_process_rows,
+        mock_unlock_tables,
+        mock_throttle_throughput,
         sessions,
         managed_write_session
     ):
@@ -690,10 +700,6 @@ class TestFullRefreshRunner(object):
             'avg_rows_per_second_cap',
             1000
         ), mock.patch.object(
-            refresh_batch,
-            'process_row_start_time',
-            0.0
-        ), mock.patch.object(
             time,
             'time',
             return_value=0.1  # Simulating that it took 100 milliseconds to run the actual row processing
@@ -702,6 +708,7 @@ class TestFullRefreshRunner(object):
             'sleep',
             return_value=None
         ) as mock_sleep:
+            refresh_batch.process_row_start_time = 0.0
             refresh_batch._wait_for_throughput(count=100)
             mock_sleep.assert_called_with(0.0)
             refresh_batch._wait_for_throughput(count=1)

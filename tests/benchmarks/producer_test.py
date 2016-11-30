@@ -28,7 +28,7 @@ from tests.factories.base_factory import MessageFactory
 
 @pytest.mark.usefixtures(
     "configure_teams",
-    "config_containers_connections"
+    "config_benchmark_containers_connections"
 )
 @pytest.mark.benchmark
 class TestBenchProducer(object):

@@ -426,4 +426,4 @@ class Containers(object):
             )
 
     def _is_envvar_set(self, envvar):
-        return os.getenv(envvar, 'true').lower() in ['t', 'true', 'y', 'yes']
+        return os.getenv(envvar, 'false').lower() in ['t', 'true', 'y', 'yes']

@@ -17,7 +17,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import simplejson
-from bravado.exception import HTTPNotFound
+from bravado.exception import HTTPError
 from requests.exceptions import RequestException
 from swagger_zipkin.zipkin_decorator import ZipkinClientDecorator
 
@@ -982,7 +982,8 @@ class SchematizerClient(object):
         self,
         namespace_name=None,
         status=None,
-        created_after=None
+        created_after=None,
+        updated_after=None
     ):
         """Get all the refreshes that match the specified criteria. If no
         criterion is specified, it returns all refreshes.
@@ -992,6 +993,9 @@ class SchematizerClient(object):
             status (Optional[RefreshStatus]): The status associated with the refresh.
             created_after (Optional[int]): Epoch timestamp the refreshes should
                 be created after. The refreshes created at the same timestamp
+                are also included.
+            updated_after (Optional[int]): Epoch timestamp the refreshes should
+                be updated after. The refreshes updated at the same timestamp
                 are also included.
 
         Returns:
@@ -1003,7 +1007,8 @@ class SchematizerClient(object):
             params={
                 'namespace': namespace_name,
                 'status': status.value if status is not None else None,
-                'created_after': created_after
+                'created_after': created_after,
+                'updated_after': updated_after
             }
         )
         return [self._get_refresh_result_from_response(resp) for resp in response]
@@ -1023,7 +1028,7 @@ class SchematizerClient(object):
             source_id (int): The id of the source of the refresh.
             offset (int): The last known offset that has been refreshed.
             batch_size (int): The number of rows to be refreshed per batch.
-            priority (Priority): The priority of the refresh
+            priority (int): The priority of the refresh
             filter_condition (Optional[str]): The filter condition associated with
              the refresh.
             avg_rows_per_second_cap (Optional[int]): Throughput throttle of the refresh.
@@ -1035,7 +1040,7 @@ class SchematizerClient(object):
         request_body = {
             'offset': offset,
             'batch_size': batch_size,
-            'priority': priority.name
+            'priority': priority
         }
         if filter_condition:
             request_body['filter_condition'] = filter_condition
@@ -1230,9 +1235,10 @@ class SchematizerClient(object):
                 schema = self.get_latest_schema_by_topic_name(topic)
                 if schema.primary_keys:
                     pkey_topics.append(topic)
-            except HTTPNotFound:
+            except HTTPError as error:
                 # List of topics may include topics not in schematizer
-                pass
+                if error.response.status_code != 404:
+                    raise
         return pkey_topics
 
     def get_schema_migration(self, new_schema, target_schema_type, old_schema=None):

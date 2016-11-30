@@ -16,21 +16,23 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import copy
+import datetime
 import os
 import signal
+import subprocess
 import sys
 import time
-from multiprocessing import Process
 from optparse import OptionGroup
 
 import psutil
-from cached_property import cached_property
 from yelp_batch import BatchDaemon
 from yelp_batch.batch import batch_command_line_options
 from yelp_batch.batch import batch_configure
 
 from data_pipeline import __version__
 from data_pipeline._namespace_util import DBSourcedNamespace
+from data_pipeline.helpers.priority_refresh_queue import PriorityRefreshQueue
 from data_pipeline.schematizer_clientlib.models.refresh import RefreshStatus
 from data_pipeline.schematizer_clientlib.schematizer import get_schematizer
 from data_pipeline.servlib.config_util import load_package_config
@@ -39,16 +41,72 @@ from data_pipeline.zookeeper import ZKLock
 
 SCHEMATIZER_POLL_FREQUENCY_SECONDS = 5
 COMPLETE_STATUSES = {RefreshStatus.SUCCESS, RefreshStatus.FAILED}
+INACTIVE_STATUSES = {RefreshStatus.NOT_STARTED, RefreshStatus.PAUSED}
+DEFAULT_PER_SOURCE_THROUGHPUT_CAP = 50
+DEFAULT_TOTAL_THROUGHPUT_CAP = 1000
+
+
+class RefreshJob(object):
+    def __init__(
+        self,
+        refresh_id,
+        cap,
+        priority,
+        status,
+        source,
+        throughput=0,
+        last_throughput=0,
+        pid=None
+    ):
+        self.refresh_id = refresh_id
+        self.cap = cap
+        self.priority = priority
+        self.status = status
+        self.source = source
+        self.throughput = throughput
+        self.last_throughput = last_throughput
+        self.pid = pid
+
+    def should_modify(self):
+        """A job should be modified rather than ran or paused if
+        for some reason, a _running_ job's throughput has changed.
+        If this happens for some reason, the job needs to be paused
+        and restarted to get the proper throughput."""
+        return (self.status == RefreshStatus.IN_PROGRESS and
+                self.throughput and
+                self.last_throughput and
+                self.last_throughput != self.throughput)
+
+    def should_run(self):
+        return (self.status in INACTIVE_STATUSES and
+                self.throughput and
+                not self.last_throughput)
+
+    def should_pause(self):
+        return (self.status == RefreshStatus.IN_PROGRESS and
+                not self.throughput)
+
+    def is_active(self):
+        return self.pid is not None and self.status not in COMPLETE_STATUSES
 
 
 class FullRefreshManager(BatchDaemon):
+    """
+    A Daemon that monitors all refreshes on a given namespace that need to be run
+    (getting this info from the schematizer), and allocates throughput on a per-source basis
+    to do this without taxing other functionality. It runs the refreshes using FullRefreshRunner
+    subprocesses. To create a refresh request, use FullRefreshJob.
+    """
 
     def __init__(self):
         super(FullRefreshManager, self).__init__()
         self.notify_emails = ['bam+batch@yelp.com']
-        self.active_refresh = {'id': None, 'pid': None}
+        self.active_refresh_jobs = {}
+        self.total_throughput_being_used = 0
+        self.refresh_queue = PriorityRefreshQueue()
+        self.last_updated_timestamp = None
 
-    @cached_property
+    @property
     def schematizer(self):
         return get_schematizer()
 
@@ -62,13 +120,17 @@ class FullRefreshManager(BatchDaemon):
     @batch_command_line_options
     def define_options(self, option_parser):
         opt_group = OptionGroup(option_parser, 'Full Refresh Manager Options')
-
         opt_group.add_option(
-            '--namespace',
-            type=str,
-            default=None,
-            help='Name of the namespace this refresh manager will handle. Expected format: '
-            '"cluster.database"'
+            '--cluster',
+            dest='cluster',
+            default='refresh_primary',
+            help='Required: Specifies table cluster (default: %default).'
+        )
+        opt_group.add_option(
+            '--database',
+            dest='database',
+            help='Specify the database to switch to after connecting to the '
+                 'cluster.'
         )
         opt_group.add_option(
             '--config-path',
@@ -85,105 +147,131 @@ class FullRefreshManager(BatchDaemon):
             help="Will execute all refreshes as dry runs, will still affect "
             "the schematizer's records. (default: %default)"
         )
+        opt_group.add_option(
+            '--per-source-throughput-cap',
+            default=DEFAULT_PER_SOURCE_THROUGHPUT_CAP,
+            dest="per_source_throughput_cap",
+            help="The cap that each source within the namespace is given. Any source in this "
+                 "namespace cannot have a throughput higher than this cap. (default: %default)"
+        )
+        opt_group.add_option(
+            '--total-throughput-cap',
+            default=DEFAULT_TOTAL_THROUGHPUT_CAP,
+            dest="total_throughput_cap",
+            help="The cap that the namespace gives in general. The cumulative running refreshes "
+                 "cannot have a throughput higher than this number. (default: %default)"
+        )
         return opt_group
 
     @batch_configure
     def _init_global_state(self):
-        if self.options.namespace is None:
-            raise ValueError("--namespace is required to be defined")
-        self.namespace = self.options.namespace
-        self._set_cluster_and_database()
+        if self.options.database is None:
+            raise ValueError("--database is required to be defined")
+        self.cluster = self.options.cluster
+        self.database = self.options.database
+        self.namespace = DBSourcedNamespace(
+            cluster=self.cluster,
+            database=self.database
+        ).get_name()
         self.config_path = self.options.config_path
         self.dry_run = self.options.dry_run
+        self.per_source_throughput_cap = self.options.per_source_throughput_cap
+        self.total_throughput_cap = self.options.total_throughput_cap
         load_package_config(self.config_path)
+        self.refresh_runner_path = self.get_refresh_runner_path()
         # Removing the cmd line arguments to prevent child process error.
         sys.argv = sys.argv[:1]
 
-    def _set_cluster_and_database(self):
-        namespace_info = DBSourcedNamespace.create_from_namespace_name(self.namespace)
-        self.cluster = namespace_info.cluster
-        self.database = namespace_info.database
+    def get_refresh_runner_path(self):
+        return os.path.join(
+            *(os.path.split(
+                os.path.abspath(__file__)
+            )[:-1] + ("copy_table_to_blackhole_table.py",))
+        )
 
-    def _begin_refresh_job(self, refresh):
-        # We need to make 2 schematizer requests to get the primary_keys, but this happens infrequently enough
-        # where it's not paricularly vital to make a new end point for it
-        topic = self.schematizer.get_latest_topic_by_source_id(refresh.source.source_id)
-        primary_keys = self.schematizer.get_latest_schema_by_topic_name(topic.name).primary_keys
-        if len(primary_keys):
-            primary_keys = ','.join(primary_keys)
+    def get_most_recent_topic(self, source_name, namespace_name):
+        # TODO: DATAPIPE-1866
+        # This should realistically be something like get_latest_topic_by_names
+        # or something similar
+        topics = self.schematizer.get_topics_by_criteria(
+            source_name=source_name,
+            namespace_name=namespace_name
+        )
+        return max(
+            topics,
+            key=lambda topic: topic.created_at
+        )
+
+    def get_primary_key_from_topic(self, topic):
+        primary_keys = topic.primary_keys
+        if primary_keys:
+            # The refresh runner doesn't like composite keys, and gets by just fine using only one of them
+            primary_key = primary_keys[0]
         else:
-            # Fallback in case we get bad data from the schematizer (command line default is 'id')
-            primary_keys = 'id'
-        refresh_batch = FullRefreshRunner(
-            refresh_id=self.active_refresh['id'],
-            cluster=self.cluster,
-            database=self.database,
-            config_path=self.config_path,
-            table_name=refresh.source.name,
-            offset=refresh.offset,
-            batch_size=refresh.batch_size,
-            primary=primary_keys,
-            where_clause=refresh.filter_condition,
-            dry_run=self.dry_run,
-            avg_rows_per_second_cap=getattr(refresh, 'avg_rows_per_second_cap', None)
+            # Fallback in case we get bad data from the schematizer
+            # TODO: DATAPIPE-1988
+            primary_key = 'id'
+        return primary_key
+
+    def get_refresh_args(self, job):
+        # Important to grab fresh refresh here to get offset in case of
+        # a paused job
+        refresh = self.schematizer.get_refresh_by_id(
+            job.refresh_id
         )
-        self.log.info(
-            "Starting a batch table_name: {}, refresh_id: {}, worker_id: {}".format(
-                refresh.source.name,
-                self.active_refresh['id'],
-                self.active_refresh['pid']
-            )
+        args = [
+            "python", self.refresh_runner_path,
+            "--cluster={}".format(self.cluster),
+            "--database={}".format(self.database),
+            "--table-name={}".format(refresh.source_name),
+            "--offset={}".format(refresh.offset),
+            "--config-path={}".format(self.config_path),
+            "--avg-rows-per-second-cap={}".format(job.throughput),
+            "--batch-size={}".format(refresh.batch_size),
+            "--refresh-id={}".format(job.refresh_id)
+        ]
+        if self.dry_run:
+            args.append("--dry-run")
+        if refresh.filter_condition:
+            args.append("--where=\"{}\"".format(
+                refresh.filter_condition
+            ))
+        if self.options.verbose:
+            vs = "v" * self.options.verbose
+            args.append("-{}".format(vs))
+
+        topic = self.get_most_recent_topic(
+            refresh.source_name,
+            refresh.namespace_name
         )
-        refresh_batch.start()
-
-    def setup_new_refresh(self, refresh):
-        active_pid = self.active_refresh['pid']
-        if active_pid is not None:
-            # If we somehow have an active worker but not an active refresh (refresh died somehow),
-            # then we want to kill that worker.
-            os.kill(active_pid, signal.SIGTERM)
-        new_worker = Process(
-            target=self._begin_refresh_job,
-            args=(refresh,)
+        primary_key = self.get_primary_key_from_topic(topic)
+        args.append(
+            "--primary-key={}".format(primary_key)
         )
-        self.active_refresh['id'] = refresh.refresh_id
-        new_worker.start()
-        self.active_refresh['pid'] = new_worker.pid
+        return args
 
-    def _should_run_next_refresh(self, next_refresh):
-        if not self.active_refresh['id']:
-            return True
-        current_refresh = self.schematizer.get_refresh_by_id(
-            self.active_refresh['id']
-        )
-        next_priority = next_refresh.priority.value
-        current_priority = current_refresh.priority.value
-        return (next_priority > current_priority or
-                current_refresh.status in COMPLETE_STATUSES)
+    def run_job(self, job):
+        if not job.last_throughput:
+            self.refresh_queue.pop(job.source)
 
-    def determine_best_refresh(self, not_started_jobs, paused_jobs):
-        if not_started_jobs and paused_jobs:
-            not_started_job = not_started_jobs[0]
-            paused_job = paused_jobs[0]
-            if not_started_job.priority.value > paused_job.priority.value:
-                return not_started_job
-            else:
-                return paused_job
+        args = self.get_refresh_args(job)
+        self.log.info("Starting refresh with args: {}".format(args))
+        job.pid = subprocess.Popen(args).pid
 
-        if not_started_jobs:
-            return not_started_jobs[0]
+    def pause_job(self, job):
+        # This signal will cause the refresh runner to update
+        # the job to paused
+        os.kill(job.pid, signal.SIGTERM)
+        job.pid = None
 
-        if paused_jobs:
-            return paused_jobs[0]
+    def modify_job(self, job):
+        pid = job.pid
+        self.pause_job(job)
+        os.waitpid(pid)
+        self.run_job(job)
 
-        return None
-
-    def set_zombie_refresh_to_fail(self):
-        """The manager sometimes gets in to situations where
-        the worker becomes a zombie but the refresh stays 'IN_PROGRESS'.
-        For these situations we want to correct the refresh status to failed.
-        """
-        current_pid = self.active_refresh['pid']
+    def set_zombie_refresh_to_fail(self, refresh_job):
+        current_pid = refresh_job.pid
         if current_pid is None:
             return
 
@@ -192,43 +280,258 @@ class FullRefreshManager(BatchDaemon):
             return
 
         refresh = self.schematizer.get_refresh_by_id(
-            self.active_refresh['id']
+            refresh_job.refresh_id
         )
-        if refresh.status.value == RefreshStatus.IN_PROGRESS.value:
+        if refresh.status == RefreshStatus.IN_PROGRESS:
+            # Must update manually (not relying on the signal),
+            # as the process may not properly handle the signal
+            # if it's a zombie
             self.schematizer.update_refresh(
-                self.active_refresh['id'],
-                RefreshStatus.FAILED,
-                0
+                refresh_id=refresh_job.refresh_id,
+                status=RefreshStatus.FAILED,
+                offset=0
             )
-            self.active_refresh['id'] = None
-            self.active_refresh['pid'] = None
+            source = refresh_job.source
+            del self.active_refresh_jobs[source]
+        os.kill(current_pid, signal.SIGINT)
 
-    def get_next_refresh(self):
-        not_started_jobs = self.schematizer.get_refreshes_by_criteria(
-            self.namespace,
-            RefreshStatus.NOT_STARTED
+    def set_zombie_refreshes_to_fail(self):
+        """The manager sometimes gets in to situations where
+        a worker becomes a zombie but the refresh stays 'IN_PROGRESS'.
+        For these situations we want to correct the refresh status to failed.
+        """
+        for source, refresh_job in self.active_refresh_jobs.iteritems():
+            self.set_zombie_refresh_to_fail(refresh_job)
+
+    def determine_refresh_candidates(self):
+        refresh_candidates = self.refresh_queue.peek()
+        self.log.debug("refresh_candidates: {}...".format(
+            refresh_candidates
+        ))
+        return refresh_candidates
+
+    def get_last_updated_timestamp(self, requests):
+        if not requests:
+            return self.last_updated_timestamp
+        max_time = max([request.updated_at for request in requests])
+        return int(
+            (max_time - datetime.datetime(1970, 1, 1, tzinfo=max_time.tzinfo)).total_seconds()
         )
-        paused_jobs = self.schematizer.get_refreshes_by_criteria(
-            self.namespace,
-            RefreshStatus.PAUSED
+
+    def get_refresh_candidates(self, updated_refreshes):
+        requests = [
+            ref for ref in updated_refreshes if ref.status in INACTIVE_STATUSES
+        ]
+        self.log.debug("Sending {} refresh requests to refresh_queue".format(
+            len(requests)
+        ))
+        self.refresh_queue.add_refreshes_to_queue(requests)
+        return self.determine_refresh_candidates()
+
+    def get_cap(self):
+        cap_left = self.total_throughput_cap - self.total_throughput_being_used
+        return min(cap_left, self.per_source_throughput_cap)
+
+    def _sort_by_running_first(self, sources):
+        return sorted(
+            sources,
+            key=lambda source:
+                (0 if self.active_refresh_jobs[source].status == RefreshStatus.IN_PROGRESS
+                 else 1)
         )
-        return self.determine_best_refresh(not_started_jobs, paused_jobs)
+
+    def _sort_by_descending_priority(self, sources):
+        return sorted(
+            sources,
+            key=lambda source:
+                self.active_refresh_jobs[source].priority,
+            reverse=True
+        )
+
+    def sort_sources(self):
+        source_names = self.active_refresh_jobs.keys()
+        source_names = self._sort_by_running_first(
+            source_names
+        )
+        return self._sort_by_descending_priority(
+            source_names
+        )
+
+    def allocate_throughput_to_job(self, job, cap):
+        job.last_throughput = job.throughput
+        job.throughput = min(cap, job.cap)
+        self.total_throughput_being_used += (
+            job.throughput - job.last_throughput
+        )
+
+    def update_job_actions(self):
+        to_run_jobs = []
+        to_modify_jobs = []
+        to_pause_jobs = []
+        for source, refresh_job in self.active_refresh_jobs.iteritems():
+            if refresh_job.should_run():
+                to_run_jobs.append(refresh_job)
+            elif refresh_job.should_modify():
+                to_modify_jobs.append(refresh_job)
+            elif refresh_job.should_pause():
+                to_pause_jobs.append(refresh_job)
+        self.log.debug("to_run: {}".format(to_run_jobs))
+        self.log.debug("to_modify: {}".format(to_modify_jobs))
+        self.log.debug("to_pause: {}".format(to_pause_jobs))
+        return to_run_jobs, to_modify_jobs, to_pause_jobs
+
+    def reallocate_for_source(self, source):
+        """Rellocates available throughput to the currently running job
+        in case more/less of it is available."""
+        available_cap = self.get_cap()
+        running_job = self.active_refresh_jobs[source]
+        self.allocate_throughput_to_job(running_job, available_cap)
+
+    def run_all_job_actions(self, to_run_jobs, to_modify_jobs, to_pause_jobs):
+        for job in to_pause_jobs:
+            self.pause_job(job)
+        for job in to_modify_jobs:
+            self.modify_job(job)
+        for job in to_run_jobs:
+            self.run_job(job)
+
+    def delete_inactive_jobs(self):
+        self.active_refresh_jobs = {
+            source: refresh_job for source, refresh_job
+            in self.active_refresh_jobs.items()
+            if refresh_job.is_active()
+        }
+
+    def _should_run_new_job(self, refresh_candidate):
+        source = refresh_candidate.source_name
+        running_job = self.active_refresh_jobs.get(source, None)
+        return (not running_job or
+                running_job.status in COMPLETE_STATUSES or
+                running_job.priority < refresh_candidate.priority)
+
+    def _remove_running_job(self, source):
+        running_job = self.active_refresh_jobs[source]
+        self.total_throughput_being_used -= running_job.throughput
+        # Pause the current running job so that it will stop running,
+        # it will be added to the queue automatically next step
+        if running_job.status not in COMPLETE_STATUSES:
+            self.pause_job(running_job)
+        del self.active_refresh_jobs[source]
+
+    def update_running_jobs_with_refresh(self, refresh_candidate):
+        if self._should_run_new_job(refresh_candidate):
+            source = refresh_candidate.source_name
+            new_refresh_job = RefreshJob(
+                refresh_id=refresh_candidate.refresh_id,
+                cap=(refresh_candidate.avg_rows_per_second_cap or
+                     FullRefreshRunner.DEFAULT_AVG_ROWS_PER_SECOND_CAP),
+                priority=refresh_candidate.priority,
+                status=refresh_candidate.status,
+                source=source
+            )
+            if source in self.active_refresh_jobs:
+                self._remove_running_job(source)
+            self.active_refresh_jobs[source] = new_refresh_job
+
+    def update_running_jobs_with_refresh_candidates(self, refresh_candidates):
+        for source, refresh in refresh_candidates.iteritems():
+            self.log.debug("Constructing running refreshes for {}...".format(
+                source
+            ))
+            self.update_running_jobs_with_refresh(refresh)
+
+    def reallocate_throughput(self):
+        source_names = self.sort_sources()
+        for source in source_names:
+            self.log.debug("Reallocating for {}...".format(
+                source
+            ))
+            self.reallocate_for_source(source)
+
+    def pause_all_running_jobs(self):
+        for _, job in self.active_refresh_jobs.iteritems():
+            # Need to check if there's an actual pid in case
+            # interruption while we are adding jobs
+            if job.pid is not None:
+                self.pause_job(job)
+
+    def get_refreshes_of_statuses(self, statuses):
+        refreshes = []
+        for status in statuses:
+            refreshes += self.schematizer.get_refreshes_by_criteria(
+                self.namespace,
+                status,
+                updated_after=self.last_updated_timestamp
+            )
+        return refreshes
+
+    def get_updated_refreshes(self):
+        # We have to do it this way until the schematizer
+        # is fixed for this call
+        # (TODO: DATAPIPE-2074)
+        statuses = list(INACTIVE_STATUSES)
+        if self.active_refresh_jobs:
+            statuses += list(COMPLETE_STATUSES)
+            statuses.append(RefreshStatus.IN_PROGRESS)
+        return self.get_refreshes_of_statuses(statuses)
+
+    def active_job_has_invalid_status(self, active_job, updated_refresh):
+        return (active_job and
+                active_job.refresh_id == updated_refresh.refresh_id and
+                updated_refresh.status == RefreshStatus.NOT_STARTED)
+
+    def validate_running_job_status(self, active_job, updated_refresh, updated_refreshes):
+        if self.active_job_has_invalid_status(active_job, updated_refresh):
+            self.log.warning(
+                "Discrepency found: active_job has not_started status in"
+                " schematizer. Refresh ID: {} source_name: {}"
+                ". If this warning is found shortly after the refresh is started"
+                " then it's most likely not an issue. "
+                "Removing from updated_refreshes list...".format(
+                    active_job.refresh_id, updated_refresh.source_name
+                )
+            )
+            updated_refreshes.remove(updated_refresh)
+
+    def update_refreshes_status(self, updated_refreshes):
+        for updated_refresh in copy.copy(updated_refreshes):
+            source = updated_refresh.source_name
+            active_job = self.active_refresh_jobs.get(source)
+            if not active_job or active_job.refresh_id != updated_refresh.refresh_id:
+                continue
+            active_job.status = updated_refresh.status
+            self.validate_running_job_status(active_job, updated_refresh, updated_refreshes)
+
+    def step(self):
+        self.set_zombie_refreshes_to_fail()
+        updated_refreshes = self.get_updated_refreshes()
+        self.last_updated_timestamp = self.get_last_updated_timestamp(
+            updated_refreshes
+        )
+        if self.active_refresh_jobs:
+            self.update_refreshes_status(updated_refreshes)
+        refresh_candidates = self.get_refresh_candidates(updated_refreshes)
+        self.update_running_jobs_with_refresh_candidates(refresh_candidates)
+        self.reallocate_throughput()
+        to_run_jobs, to_modify_jobs, to_pause_jobs = self.update_job_actions()
+        self.run_all_job_actions(to_run_jobs, to_modify_jobs, to_pause_jobs)
+        self.delete_inactive_jobs()
 
     def run(self):
         with ZKLock(name="refresh_manager", namespace=self.namespace):
             try:
                 while True:
-                    self.set_zombie_refresh_to_fail()
-                    next_refresh = self.get_next_refresh()
-                    if next_refresh and self._should_run_next_refresh(next_refresh):
-                        self.setup_new_refresh(next_refresh)
+                    self.step()
                     if self._stopping:
                         break
+                    self.log.debug(
+                        "State of active_refresh_jobs: {}".format(
+                            self.active_refresh_jobs
+                        )
+                    )
                     time.sleep(SCHEMATIZER_POLL_FREQUENCY_SECONDS)
             finally:
-                if self.active_refresh['pid'] is not None:
-                    # When the manager goes down, the active refresh is paused.
-                    os.kill(self.active_refresh['pid'], signal.SIGTERM)
+                self.pause_all_running_jobs()
 
 
 if __name__ == '__main__':

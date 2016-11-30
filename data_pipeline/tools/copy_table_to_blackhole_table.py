@@ -19,6 +19,7 @@ from __future__ import unicode_literals
 import os
 import re
 import signal
+import sys
 import time
 from datetime import datetime
 from optparse import OptionGroup
@@ -47,73 +48,19 @@ from data_pipeline.servlib.config_util import load_default_config
 class FullRefreshRunner(Batch, BatchDBMixin):
     """The FullRefreshManager spawns off a child process which executes this
     batch to copy rows from the source table into a black hole table.
-
-    Args:
-        refresh_id (int): Identifies the refresh to be executed.
-        cluster (str): The cluster name of the table to be refreshed.
-        database (str): The database name that the table belongs to.
-        ro_replica (str): The ro replica connection name for this cluster.
-        rw_replica (str): The rw replica connection name for this cluster.
-        config_path (str): Path to the config file containing information
-            to initialize yelp_conn.
-        table_name (str): Name of the table to be refreshed.
-        offset (int): The row number to start the refresh from.
-        batch_size (int): The number of rows to refresh per batch.
-        primary (str): The column name for the primary column of the table.
-        where_clause (str): The where clause that must be satisfied by the
-            rows being refreshed.
-        dry_run (bool): Set to True to execute a dry refresh run.
-        avg_rows_per_second_cap (int): Number of rows we want to complete per second (sleeps in between batches to enforce)
     """
     notify_emails = ['bam+batch@yelp.com']
     is_readonly_batch = False
     DEFAULT_TOPOLOGY_PATH = "/nail/srv/configs/topology.yaml"
     DEFAULT_AVG_ROWS_PER_SECOND_CAP = 50
+    REFRESH_UPDATE_INTERVAL = 25
 
-    def __init__(
-        self,
-        refresh_id=None,
-        cluster=None,
-        database=None,
-        config_path=None,
-        table_name=None,
-        offset=None,
-        batch_size=None,
-        primary=None,
-        where_clause=None,
-        dry_run=False,
-        avg_rows_per_second_cap=None
-    ):
+    def __init__(self):
         super(FullRefreshRunner, self).__init__()
-        self.config_path = config_path
         self._connection_set = None
-        self.refresh_id = refresh_id
-        # Case where the RefreshManager is running the refresh.
-        if self.refresh_id is not None:
-            self.topology_path = self.DEFAULT_TOPOLOGY_PATH
-            signal.signal(signal.SIGTERM, self.handle_terminate)
-            signal.signal(signal.SIGINT, self.handle_interupt)
-            self.db_name = cluster
-            self.database = database
-            if not self.database:
-                raise ValueError("--database must be specified")
-            self.table_name = table_name
-            self.temp_table = '{table}_data_pipeline_refresh'.format(
-                table=self.table_name
-            )
-            self.processed_row_count = offset
-            self.batch_size = batch_size
-            if self.batch_size <= 0:
-                raise ValueError("Batch size should be greater than 0")
-            self.primary_key = primary
-            self.where_clause = where_clause
-            self.dry_run = dry_run
-            self.avg_rows_per_second_cap = avg_rows_per_second_cap
-            if self.avg_rows_per_second_cap is None:
-                self.avg_rows_per_second_cap = self.DEFAULT_AVG_ROWS_PER_SECOND_CAP
-            self.config_path = config_path
+        self.topology_path = self.DEFAULT_TOPOLOGY_PATH
 
-    @cached_property
+    @property
     def schematizer(self):
         return get_schematizer()
 
@@ -153,9 +100,10 @@ class FullRefreshRunner(Batch, BatchDBMixin):
                  '(default: %default).'
         )
         opt_group.add_option(
-            '--primary',
-            dest='primary',
-            help='Required: Comma separated string of primary key column names'
+            # TODO: Grab this data from database (DATAPIPE-2069)
+            '--primary-key',
+            dest='primary_key',
+            help='Required: A single primary key column name (if composite use one).'
         )
         opt_group.add_option(
             '--dry-run',
@@ -202,38 +150,61 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             type='int',
             default=self.DEFAULT_AVG_ROWS_PER_SECOND_CAP
         )
+        opt_group.add_option(
+            '--offset',
+            type='int',
+            default=0,
+            help='The first primary key to start the refresh from (useful for when restarting '
+                 'a paused refresh). (default: %default).'
+        )
+        opt_group.add_option(
+            '--refresh-id',
+            dest="refresh_id",
+            type='int',
+            default=None,
+            help='To be used only when running the runner through the manager, do not use'
+                 ' for manual refreshes. This stores the id of a refresh request retrieved'
+                 ' from the schematizer, and is used for updating refresh status as the'
+                 ' refresh runs'
+        )
         return opt_group
 
     @batch_configure
     def _init_global_state(self):
-        if not self.config_path:
-            self.config_path = self.options.config_path
+        self.config_path = self.options.config_path
         load_default_config(self.config_path)
         self._connection_set = None
-        # Case where refresh batch is run independently.
-        if self.refresh_id is None:
-            if self.options.batch_size <= 0:
-                raise ValueError("Batch size should be greater than 0")
-            self.db_name = self.options.cluster
-            self.database = self.options.database
-            if not self.database:
-                raise ValueError("--database must be specified")
-            self.avg_rows_per_second_cap = self.options.avg_rows_per_second_cap
-            if self.avg_rows_per_second_cap is not None and self.avg_rows_per_second_cap <= 0:
-                raise ValueError("--avg-rows-per-second-cap should be greater than 0")
-            self.table_name = self.options.table_name
-            self.temp_table = '{table}_data_pipeline_refresh'.format(
-                table=self.table_name
-            )
-            self.process_row_start_time = time.time()
-            self.processed_row_count = 0
-            self.batch_size = self.options.batch_size
-            if self.batch_size <= 0:
-                raise ValueError("Batch size should be greater than 0")
-            self.primary_key = self.options.primary
-            self.where_clause = self.options.where_clause
-            self.dry_run = self.options.dry_run
-            self.topology_path = self.options.topology_path
+        self.processed_row_count = 0
+        if self.options.batch_size <= 0:
+            raise ValueError("Batch size should be greater than 0")
+        self.db_name = self.options.cluster
+        self.database = self.options.database
+        if not self.database:
+            raise ValueError("--database must be specified")
+        self.avg_rows_per_second_cap = self.options.avg_rows_per_second_cap
+        if self.avg_rows_per_second_cap is not None and self.avg_rows_per_second_cap <= 0:
+            raise ValueError("--avg-rows-per-second-cap should be greater than 0")
+        self.table_name = self.options.table_name
+        self.temp_table = '{table}_data_pipeline_refresh'.format(
+            table=self.table_name
+        )
+        self.offset = self.options.offset
+        if self.offset < 0:
+            raise ValueError("--offset should be a non-negative number")
+        self.batch_size = self.options.batch_size
+        if self.batch_size <= 0:
+            raise ValueError("Batch size should be greater than 0")
+        if not self.options.primary_key:
+            raise ValueError("--primary-key must be specified")
+        self.primary_key = self.options.primary_key
+        self.where_clause = self.options.where_clause
+        self.dry_run = self.options.dry_run
+        self.topology_path = self.options.topology_path
+        self.refresh_id = self.options.refresh_id
+        self.completed = False
+        if self.refresh_id:
+            signal.signal(signal.SIGTERM, self.handle_terminate)
+            signal.signal(signal.SIGINT, self.handle_interupt)
 
     def setup_connections(self):
         """Creates connections to the mySQL database.
@@ -328,9 +299,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         ))
         self._execute_query(session, refresh_table_create_query)
 
-    def _after_processing_rows(self, session, count):
-        """Commits changes and makes sure replication and throughput cap
-        catches up before moving on.
+    def unlock_tables(self, session):
+        """Commits changes and allows replication to start catching up
         """
         self._commit(session)
 
@@ -346,6 +316,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self._execute_query(session, 'UNLOCK TABLES')
         session.commit()
 
+    def throttle_throughput(self, count):
         with self.rw_conn() as rw_conn:
             self.throttle_to_replication(rw_conn)
 
@@ -396,10 +367,11 @@ class FullRefreshRunner(Batch, BatchDBMixin):
                 temp_table=self.temp_table
             )
             self._execute_query(session, query)
-            self.log.info("Dropped table: {table}".format(table=self.temp_table))
+            self.log.info("Dropping table: {table}".format(table=self.temp_table))
             self._commit(session)
+            self.log.info("Dropped table: {table}".format(table=self.temp_table))
 
-    def setup_transaction(self, session):
+    def lock_tables(self, session):
         self._use_db(session)
         self._execute_query(
             session,
@@ -439,6 +411,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         return select_query
 
     def _get_min_primary_key(self):
+        if self.offset:
+            return self.offset
         select_query = """
         SELECT MIN({pk}) FROM {table}
         """.format(
@@ -474,17 +448,24 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         while min_pk < max_pk:
             self.process_row_start_time = time.time()
             with self.write_session() as session:
-                self.setup_transaction(session)
-                min_batch = min_pk + self.batch_size
-                inserted = self.count_inserted(session, min_pk, min_batch)
-                self.insert_batch(session, min_pk, min_batch)
-                self._after_processing_rows(session, inserted)
-            min_pk = min_batch
+                self.lock_tables(session)
+                batch_max_pk = min_pk + self.batch_size
+                inserted = self.count_inserted(session, min_pk, batch_max_pk)
+                self.insert_batch(session, min_pk, batch_max_pk)
+                self.unlock_tables(session)
+                self.throttle_throughput(inserted)
+            self.offset = batch_max_pk
+            min_pk = batch_max_pk
             self.processed_row_count += inserted
 
         if self.refresh_id:
             # Offset is 0 because it doesn't matter (was a success)
-            self.schematizer.update_refresh(refresh_id=self.refresh_id, status=RefreshStatus.SUCCESS, offset=0)
+            self.completed = True
+            self.schematizer.update_refresh(
+                refresh_id=self.refresh_id,
+                status=RefreshStatus.SUCCESS,
+                offset=0
+            )
 
     def log_info(self):
         elapsed_time = time.time() - self.starttime
@@ -497,21 +478,23 @@ class FullRefreshRunner(Batch, BatchDBMixin):
 
     def handle_interupt(self, signal, frame):
         self.schematizer.update_refresh(
-            self.refresh_id,
-            RefreshStatus.FAILED,
-            self.processed_row_count
+            refresh_id=self.refresh_id,
+            status=RefreshStatus.FAILED,
+            offset=self.offset
         )
         os._exit(1)
 
     def handle_terminate(self, signal, frame):
+        status = RefreshStatus.SUCCESS if self.completed else RefreshStatus.PAUSED
         self.schematizer.update_refresh(
-            self.refresh_id,
-            RefreshStatus.PAUSED,
-            self.processed_row_count
+            refresh_id=self.refresh_id,
+            status=status,
+            offset=self.offset
         )
         os._exit(1)
 
     def run(self):
+        self.log.info("Python Version: {}".format(sys.version_info))
         is_success = True
         try:
             self.initial_action()

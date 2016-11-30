@@ -19,7 +19,7 @@ set -e
 SCRIPTS="data_pipeline_tailer
 data_pipeline_refresh_runner
 data_pipeline_refresh_manager
-data_pipeline_refresh_job
+data_pipeline_refresh_requester
 data_pipeline_compaction_setter
 data_pipeline_introspector"
 

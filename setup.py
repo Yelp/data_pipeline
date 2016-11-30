@@ -41,7 +41,7 @@ setup(
     packages=find_packages(exclude=['tests*', 'benchmarks*']),
     include_package_data=True,
     install_requires=[
-        'bravado>=8.4.0',
+        'bravado>=8.3.0,<8.4.0',
         'cached-property>=0.1.5',
         'cffi>=1.1.2',
         'cryptography<=1.3.4',
@@ -95,7 +95,7 @@ setup(
         'bin/data_pipeline_tailer',
         'bin/data_pipeline_refresh_runner',
         'bin/data_pipeline_refresh_manager',
-        'bin/data_pipeline_refresh_job',
+        'bin/data_pipeline_refresh_requester',
         'bin/data_pipeline_compaction_setter',
         'bin/data_pipeline_introspector'
     ],
