@@ -53,7 +53,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
     is_readonly_batch = False
     DEFAULT_TOPOLOGY_PATH = "/nail/srv/configs/topology.yaml"
     DEFAULT_AVG_ROWS_PER_SECOND_CAP = 50
-    REFRESH_UPDATE_INTERVAL = 25
+    UPDATE_PROGRESS_EVERY_N_BATCHES = 10
 
     def __init__(self):
         super(FullRefreshRunner, self).__init__()
@@ -442,16 +442,22 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         processed_since_last_checkpoint = (
             self.processed_row_count - self.last_checkpoint_processed_row_count
         )
-        checkpoint_marker = self.batch_size * 10
+        checkpoint_marker = self.batch_size * self.UPDATE_PROGRESS_EVERY_N_BATCHES
         return self.refresh_id and processed_since_last_checkpoint > checkpoint_marker
 
     def update_schematizer_progress(self):
-        self.last_checkpoint_processed_row_count = self.processed_row_count
-        self.schematizer.update_refresh(
-            refresh_id=self.refresh_id,
-            status=RefreshStatus.IN_PROGRESS,
-            offset=self.offset
-        )
+        try:
+            self.schematizer.update_refresh(
+                refresh_id=self.refresh_id,
+                status=RefreshStatus.IN_PROGRESS,
+                offset=self.offset
+            )
+            self.last_checkpoint_processed_row_count = self.processed_row_count
+        except Exception as e:
+            self.log.warning(
+                "Unable to update schematizer status, will try again later..."
+                " error: {}".format(e)
+            )
 
     def process_table(self):
         self.log.info(
