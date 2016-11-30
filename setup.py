@@ -57,7 +57,8 @@ setup(
         'PyStaticConfiguration>=0.9.0',
         'simplejson>=2.1.2',
         'swagger_zipkin>=0.1.0',
-        'yelp-avro==1.9.2'
+        'yelp-avro==1.9.2',
+        'yelp-clog==2.2.11'
     ],
     extras_require={
         'tools': [

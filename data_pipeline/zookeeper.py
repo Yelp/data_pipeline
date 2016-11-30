@@ -44,7 +44,7 @@ class ZK(object):
 
     @cached_property
     def ecosystem(self):
-        return open('/nail/etc/ecosystem').read().strip()
+        return open(get_config().ecosystem_file_path).read().strip()
 
     def __init__(self):
         retry_policy = KazooRetry(max_tries=self.max_tries)
