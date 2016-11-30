@@ -53,7 +53,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
     is_readonly_batch = False
     DEFAULT_TOPOLOGY_PATH = "/nail/srv/configs/topology.yaml"
     DEFAULT_AVG_ROWS_PER_SECOND_CAP = 50
-    REFRESH_UPDATE_INTERVAL = 25
+    UPDATE_PROGRESS_EVERY_N_BATCHES = 10
 
     def __init__(self):
         super(FullRefreshRunner, self).__init__()
@@ -174,6 +174,7 @@ class FullRefreshRunner(Batch, BatchDBMixin):
         self.config_path = self.options.config_path
         load_default_config(self.config_path)
         self._connection_set = None
+        self.last_checkpoint_processed_row_count = 0
         self.processed_row_count = 0
         if self.options.batch_size <= 0:
             raise ValueError("Batch size should be greater than 0")
@@ -437,6 +438,27 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             session.commit()
         return max_pk.scalar()
 
+    def should_update_schematizer_progress(self):
+        processed_since_last_checkpoint = (
+            self.processed_row_count - self.last_checkpoint_processed_row_count
+        )
+        checkpoint_marker = self.batch_size * self.UPDATE_PROGRESS_EVERY_N_BATCHES
+        return self.refresh_id and processed_since_last_checkpoint > checkpoint_marker
+
+    def update_schematizer_progress(self):
+        try:
+            self.schematizer.update_refresh(
+                refresh_id=self.refresh_id,
+                status=RefreshStatus.IN_PROGRESS,
+                offset=self.offset
+            )
+            self.last_checkpoint_processed_row_count = self.processed_row_count
+        except Exception as e:
+            self.log.warning(
+                "Unable to update schematizer status, will try again later..."
+                " error: {}".format(e)
+            )
+
     def process_table(self):
         self.log.info(
             "Total rows to be processed: {row_count}".format(
@@ -457,6 +479,8 @@ class FullRefreshRunner(Batch, BatchDBMixin):
             self.offset = batch_max_pk
             min_pk = batch_max_pk
             self.processed_row_count += inserted
+            if self.should_update_schematizer_progress():
+                self.update_schematizer_progress()
 
         if self.refresh_id:
             # Offset is 0 because it doesn't matter (was a success)
