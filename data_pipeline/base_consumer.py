@@ -804,7 +804,11 @@ class BaseConsumer(Client):
             partitioner_cooldown=self.partitioner_cooldown,
             use_group_sha=self.use_group_sha,
             pre_rebalance_callback=self.pre_rebalance_callback,
-            post_rebalance_callback=self._apply_post_rebalance_callback_to_partition
+            post_rebalance_callback=self._apply_post_rebalance_callback_to_partition,
+
+            # TODO(joshszep|DATAPIPE-2143): switch to offset_storage='kafka'
+            # after all consumers are migrated
+            offset_storage='dual',
         )
 
     def _apply_post_rebalance_callback_to_partition(self, partitions):

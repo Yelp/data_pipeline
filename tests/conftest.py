@@ -420,3 +420,17 @@ def schema_ref(schema_ref_dict, schema_ref_defaults):
         schema_ref=schema_ref_dict,
         defaults=schema_ref_defaults
     )
+
+
+@pytest.yield_fixture(autouse=True)
+def reconfigure_config():
+    """Reconfigures the clientlib configs to pick up files from the repo and not point to,
+    file system by default.
+    """
+    with reconfigure(
+        zookeeper_discovery_path='zookeeper_discovery{ecosystem}.yaml',
+        key_location='./',
+        data_pipeline_teams_config_file_path='teams.yaml',
+        ecosystem_file_path='ecosystem'
+    ):
+        yield
