@@ -1,5 +1,6 @@
 # Data Pipeline Clientlib
 
+[![Build Status](https://travis-ci.org/Yelp/data_pipeline.svg?branch=master)](https://travis-ci.org/Yelp/data_pipeline)
 
 What is it?
 -----------
