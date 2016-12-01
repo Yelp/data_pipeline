@@ -228,7 +228,7 @@ class Config(object):
     def zookeeper_discovery_path(self):
         return data_pipeline_conf.read_string(
             'zookeeper_discovery_path',
-            default='zookeeper_discovery{ecosystem}.yaml'
+            default='/nail/etc/zookeeper_discovery/generic/uswest2{ecosystem}.yaml'
         )
 
     @property
@@ -305,7 +305,7 @@ class Config(object):
         unit tests and documentation purpose, please use a different key in production."""
         return data_pipeline_conf.read_string(
             'key_location',
-            default='./'
+            default='/nail/srv/configs/data_pipeline/'
         )
 
     @property
@@ -315,7 +315,7 @@ class Config(object):
         """
         return data_pipeline_conf.read_string(
             'data_pipeline_teams_config_file_path',
-            default='teams.yaml'
+            default='/nail/etc/services/data_pipeline/teams.yaml'
         )
 
     @property
@@ -536,7 +536,7 @@ class Config(object):
     @property
     def ecosystem_file_path(self):
         """Path to the file that specifies the ecosystem."""
-        return data_pipeline_conf.read_string('ecosystem_file_path', "ecosystem")
+        return data_pipeline_conf.read_string('ecosystem_file_path', "/nail/etc/ecosystem")
 
 
 def configure_from_dict(config_dict):
